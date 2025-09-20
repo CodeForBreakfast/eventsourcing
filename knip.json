@@ -4,6 +4,7 @@
   "ignoreDependencies": [
     "@commitlint/cli",
     "@effect/language-service",
+    "@effect/platform",
     "eslint-plugin-*",
     "fast-check",
     "vitest"
