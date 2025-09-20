@@ -1,5 +1,6 @@
 [tools]
 bun = "latest"
+gitleaks = "latest"
 
 [env]
 _.path = ["./node_modules/.bin"]

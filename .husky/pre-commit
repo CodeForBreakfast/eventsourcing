@@ -1,0 +1,13 @@
+# Skip pre-commit checks when running in CI
+if [ "$CI" = "true" ]; then
+  echo "Skipping pre-commit hooks in CI"
+  exit 0
+fi
+
+# Run gitleaks to detect secrets in staged files
+echo "Running gitleaks to detect secrets in staged files..."
+mise exec -- gitleaks protect --staged --verbose
+
+# Run lint-staged to format and lint staged files
+echo "Running lint-staged to format and lint staged files..."
+bunx lint-staged

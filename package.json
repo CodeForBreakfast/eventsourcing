@@ -13,21 +13,43 @@
     "publish:packages": "bun run turbo publish:package",
     "changeset": "changeset",
     "version": "changeset version",
-    "release": "bun run build && changeset publish"
+    "release": "bun run build && changeset publish",
+    "prepare": "husky",
+    "arch:check": "dependency-cruiser packages --validate",
+    "deps:check": "depcheck"
   },
   "workspaces": [
     "packages/*"
   ],
+  "lint-staged": {
+    "*.{js,jsx,ts,tsx,mjs,cjs}": [
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml,css,scss}": [
+      "prettier --write"
+    ]
+  },
   "devDependencies": {
     "@changesets/changelog-github": "^0.5.1",
     "@changesets/cli": "^2.29.7",
+    "@commitlint/cli": "^19.8.1",
+    "@commitlint/config-conventional": "^19.8.1",
     "@effect/language-service": "0.40.0",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
     "@typescript-eslint/parser": "^8.0.0",
+    "depcheck": "^1.4.7",
+    "dependency-cruiser": "^17.0.1",
     "eslint": "^9.0.0",
     "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-compat": "^6.0.2",
+    "eslint-plugin-expect-type": "^0.6.2",
+    "eslint-plugin-functional": "^9.0.2",
+    "eslint-plugin-package-json": "^0.56.3",
     "eslint-plugin-unused-imports": "^4.0.0",
+    "fast-check": "^4.3.0",
+    "husky": "^9.1.7",
+    "lint-staged": "^16.1.6",
     "only-allow": "^1.2.1",
     "prettier": "^3.3.0",
     "turbo": "^2.0.0",
