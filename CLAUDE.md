@@ -1,2 +1,3 @@
 - Always use Bun wherever possible.
 - Always use turbo to run tasks.
+- PR titles must follow conventional commits

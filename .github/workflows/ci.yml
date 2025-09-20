@@ -45,6 +45,9 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-turbo-lint-
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
+      - name: Build dependencies for typecheck
+        run: bun run turbo build --filter='!@codeforbreakfast/eventsourcing-monorepo'
+
       - name: Run typecheck
         run: bun run turbo check
 
