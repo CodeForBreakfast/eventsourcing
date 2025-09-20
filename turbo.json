@@ -1,0 +1,37 @@
+{
+  "$schema": "https://turborepo.org/schema.json",
+  "tasks": {
+    "all": {
+      "dependsOn": [
+        "lint",
+        "test",
+        "build"
+      ]
+    },
+    "typecheck": {
+      "dependsOn": ["^typecheck"]
+    },
+    "check": {
+      "dependsOn": ["^check", "typecheck"]
+    },
+    "build": {
+      "outputs": ["dist/**", "lib/**"],
+      "dependsOn": ["^build"],
+      "inputs": [
+        "src/**",
+        "tsconfig*.json",
+        "package.json"
+      ]
+    },
+    "lint": {
+      "dependsOn": ["check", "^lint"]
+    },
+    "test": {
+      "dependsOn": ["^test", "lint"]
+    },
+    "publish:package": {
+      "dependsOn": ["build"],
+      "cache": false
+    }
+  }
+}

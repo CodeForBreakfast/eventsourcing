@@ -1,0 +1,13 @@
+[build]
+target = "bun"
+entrypoints = ["./src/index.ts"]
+outdir = "./dist"
+format = "esm"
+splitting = false
+sourcemap = "external"
+
+[build.external]
+external = ["effect", "@effect/*", "@codeforbreakfast/*", "pg", "postgres"]
+
+[test]
+preload = ["./test-setup.ts"]

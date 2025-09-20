@@ -1,0 +1,32 @@
+{
+  "name": "@codeforbreakfast/eventsourcing-monorepo",
+  "private": true,
+  "packageManager": "bun@1.2.19",
+  "scripts": {
+    "preinstall": "only-allow bun",
+    "check": "bun run turbo check",
+    "lint": "bun run turbo lint",
+    "build": "turbo build",
+    "test": "bun run turbo test",
+    "all": "bun run turbo all",
+    "clean": "bun run turbo clean",
+    "publish:packages": "bun run turbo publish:package"
+  },
+  "workspaces": [
+    "packages/*"
+  ],
+  "devDependencies": {
+    "@effect/language-service": "0.40.0",
+    "@types/bun": "latest",
+    "@typescript-eslint/eslint-plugin": "^8.0.0",
+    "@typescript-eslint/parser": "^8.0.0",
+    "eslint": "^9.0.0",
+    "eslint-config-prettier": "^9.1.0",
+    "eslint-plugin-unused-imports": "^4.0.0",
+    "only-allow": "^1.2.1",
+    "prettier": "^3.3.0",
+    "turbo": "^2.0.0",
+    "typescript": "^5.6.0",
+    "vitest": "^2.0.0"
+  }
+}
