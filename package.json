@@ -16,7 +16,7 @@
     "release": "bun run build && changeset publish",
     "prepare": "husky",
     "arch:check": "dependency-cruiser packages --validate",
-    "deps:check": "depcheck"
+    "deps:check": "knip"
   },
   "workspaces": [
     "packages/*"
@@ -38,7 +38,6 @@
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "8.44.0",
     "@typescript-eslint/parser": "8.44.0",
-    "depcheck": "^1.4.7",
     "dependency-cruiser": "^17.0.1",
     "eslint": "9.36.0",
     "eslint-config-prettier": "10.1.8",
@@ -49,6 +48,7 @@
     "eslint-plugin-unused-imports": "4.2.0",
     "fast-check": "^4.3.0",
     "husky": "^9.1.7",
+    "knip": "^5.63.1",
     "lint-staged": "^16.1.6",
     "only-allow": "^1.2.1",
     "prettier": "^3.3.0",
