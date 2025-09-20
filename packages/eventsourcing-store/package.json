@@ -50,6 +50,7 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
+    "@effect/platform": "^0.90.10",
     "@effect/sql": "0.44.2",
     "@effect/sql-pg": "0.45.1",
     "@effect/experimental": "0.54.6"
