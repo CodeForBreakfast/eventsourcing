@@ -10,12 +10,16 @@
     "test": "bun run turbo test",
     "all": "bun run turbo all",
     "clean": "bun run turbo clean",
-    "publish:packages": "bun run turbo publish:package"
+    "publish:packages": "bun run turbo publish:package",
+    "changeset": "changeset",
+    "version": "changeset version",
+    "release": "bun run build && changeset publish"
   },
   "workspaces": [
     "packages/*"
   ],
   "devDependencies": {
+    "@changesets/cli": "^2.29.7",
     "@effect/language-service": "0.40.0",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
