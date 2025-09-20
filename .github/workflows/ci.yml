@@ -60,16 +60,16 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
       - name: Build packages
-        run: bun run turbo build
+        run: bun run build
 
       - name: Run typecheck
-        run: bun run turbo check
+        run: bun run check
 
       - name: Run lint
-        run: bun run turbo lint
+        run: bun run lint
 
       - name: Run tests
-        run: bun run turbo test
+        run: bun run test
         env:
           TEST_PG_USERNAME: postgres
           TEST_PG_PASSWORD: postgres
