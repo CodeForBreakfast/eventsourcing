@@ -47,12 +47,13 @@
   },
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
-    "effect": "^3.17.0"
+    "effect": "^3.17.0",
+    "@effect/platform": "^0.90.0"
   },
   "dependencies": {
-    "@effect/sql": "0.24.3",
-    "@effect/sql-pg": "0.24.4",
-    "@effect/experimental": "0.42.1"
+    "@effect/sql": "0.44.2",
+    "@effect/sql-pg": "0.45.1",
+    "@effect/experimental": "0.54.6"
   },
   "devDependencies": {
     "@types/node": "24.5.1",
