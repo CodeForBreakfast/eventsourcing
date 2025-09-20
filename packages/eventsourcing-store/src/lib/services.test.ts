@@ -1,16 +1,12 @@
 import { Effect, Layer, pipe, Stream } from 'effect';
 import { describe, expect, it } from 'bun:test';
-import { EventStreamId, EventStreamPosition } from '../streamTypes';
+import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type {
   EventStoreServiceInterface,
   ProjectionStoreServiceInterface,
   SnapshotStoreServiceInterface,
 } from './services';
-import {
-  EventStoreService,
-  ProjectionStoreService,
-  SnapshotStoreService,
-} from './services';
+import { EventStoreService, ProjectionStoreService, SnapshotStoreService } from './services';
 import { eventStoreError } from './errors';
 
 // Test-specific typed service tags
@@ -60,8 +56,7 @@ describe('Service Definitions', () => {
         write: () => {
           throw new Error('Not implemented');
         },
-        read: (from) =>
-          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
+        read: (from) => Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
         readHistorical: (from) =>
           Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
       };
@@ -69,24 +64,16 @@ describe('Service Definitions', () => {
       // For string events, we'll use the base untyped service
       const EventStoreLive = Layer.succeed(
         EventStoreService,
-        mockEventStore as EventStoreServiceInterface<unknown>,
+        mockEventStore as EventStoreServiceInterface<unknown>
       );
 
       const program = pipe(
         EventStoreService,
-        Effect.flatMap((store) =>
-          store.read({ streamId: 'test' as EventStreamId }),
-        ),
-        Effect.catchTag('EventStoreError', (error) =>
-          Effect.succeed(`Caught: ${error.details}`),
-        ),
+        Effect.flatMap((store) => store.read({ streamId: 'test' as EventStreamId })),
+        Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`))
       );
 
-      const result = await pipe(
-        program,
-        Effect.provide(EventStoreLive),
-        Effect.runPromise,
-      );
+      const result = await pipe(program, Effect.provide(EventStoreLive), Effect.runPromise);
 
       expect(result).toBe('Caught: Not implemented');
     });
@@ -97,10 +84,8 @@ describe('Service Definitions', () => {
         write: () => {
           throw new Error('Not implemented');
         },
-        read: () =>
-          Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
-        readHistorical: () =>
-          Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
+        read: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
+        readHistorical: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
       };
 
       const EventStoreLive = Layer.succeed(MyEventStoreService, mockEventStore);
@@ -111,16 +96,12 @@ describe('Service Definitions', () => {
           store.read({
             streamId: 'test' as EventStreamId,
             eventNumber: 0,
-          } as EventStreamPosition),
+          } as EventStreamPosition)
         ),
-        Effect.map(() => 'Success'),
+        Effect.map(() => 'Success')
       );
 
-      const result = await pipe(
-        program,
-        Effect.provide(EventStoreLive),
-        Effect.runPromise,
-      );
+      const result = await pipe(program, Effect.provide(EventStoreLive), Effect.runPromise);
 
       expect(result).toBe('Success');
     });
@@ -134,38 +115,30 @@ describe('Service Definitions', () => {
 
     it('should work with dependency injection', async () => {
       // UserProjection type is already defined at the top of the file
-      const mockProjectionStore: ProjectionStoreServiceInterface<UserProjection> =
-        {
-          get: (id) =>
-            id === 'user-1'
-              ? Effect.succeed({
-                  id: 'user-1',
-                  name: 'John',
-                  email: 'john@example.com',
-                })
-              : Effect.succeed(null),
-          save: () => Effect.succeed(undefined),
-          delete: () => Effect.succeed(undefined),
-          list: () => Effect.succeed(['user-1', 'user-2']),
-          clear: () => Effect.succeed(undefined),
-        };
+      const mockProjectionStore: ProjectionStoreServiceInterface<UserProjection> = {
+        get: (id) =>
+          id === 'user-1'
+            ? Effect.succeed({
+                id: 'user-1',
+                name: 'John',
+                email: 'john@example.com',
+              })
+            : Effect.succeed(null),
+        save: () => Effect.succeed(undefined),
+        delete: () => Effect.succeed(undefined),
+        list: () => Effect.succeed(['user-1', 'user-2']),
+        clear: () => Effect.succeed(undefined),
+      };
 
-      const ProjectionStoreLive = Layer.succeed(
-        UserProjectionStoreService,
-        mockProjectionStore,
-      );
+      const ProjectionStoreLive = Layer.succeed(UserProjectionStoreService, mockProjectionStore);
 
       const program = pipe(
         UserProjectionStoreService,
         Effect.flatMap((store) => store.get('user-1')),
-        Effect.map((user) => user?.name ?? 'Not found'),
+        Effect.map((user) => user?.name ?? 'Not found')
       );
 
-      const result = await pipe(
-        program,
-        Effect.provide(ProjectionStoreLive),
-        Effect.runPromise,
-      );
+      const result = await pipe(program, Effect.provide(ProjectionStoreLive), Effect.runPromise);
 
       expect(result).toBe('John');
     });
@@ -179,36 +152,28 @@ describe('Service Definitions', () => {
 
     it('should work with dependency injection', async () => {
       // AggregateSnapshot type is already defined at the top of the file, but we'll use a more specific one
-      const mockSnapshotStore: SnapshotStoreServiceInterface<AggregateSnapshot> =
-        {
-          save: () => Effect.succeed(undefined),
-          load: (aggregateId, version) =>
-            aggregateId === 'agg-1'
-              ? Effect.succeed({
-                  version: version ?? 10,
-                  snapshot: { version: 10, state: { active: true } },
-                })
-              : Effect.succeed(null),
-          delete: () => Effect.succeed(undefined),
-          list: () => Effect.succeed([1, 5, 10]),
-        };
+      const mockSnapshotStore: SnapshotStoreServiceInterface<AggregateSnapshot> = {
+        save: () => Effect.succeed(undefined),
+        load: (aggregateId, version) =>
+          aggregateId === 'agg-1'
+            ? Effect.succeed({
+                version: version ?? 10,
+                snapshot: { version: 10, state: { active: true } },
+              })
+            : Effect.succeed(null),
+        delete: () => Effect.succeed(undefined),
+        list: () => Effect.succeed([1, 5, 10]),
+      };
 
-      const SnapshotStoreLive = Layer.succeed(
-        AggregateSnapshotStoreService,
-        mockSnapshotStore,
-      );
+      const SnapshotStoreLive = Layer.succeed(AggregateSnapshotStoreService, mockSnapshotStore);
 
       const program = pipe(
         AggregateSnapshotStoreService,
         Effect.flatMap((store) => store.load('agg-1')),
-        Effect.map((result) => result?.snapshot.version ?? 0),
+        Effect.map((result) => result?.snapshot.version ?? 0)
       );
 
-      const result = await pipe(
-        program,
-        Effect.provide(SnapshotStoreLive),
-        Effect.runPromise,
-      );
+      const result = await pipe(program, Effect.provide(SnapshotStoreLive), Effect.runPromise);
 
       expect(result).toBe(10);
     });
@@ -220,10 +185,8 @@ describe('Service Definitions', () => {
         write: () => {
           throw new Error('Not implemented');
         },
-        read: () =>
-          Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
-        readHistorical: () =>
-          Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
+        read: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
+        readHistorical: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
       } as EventStoreServiceInterface<unknown>);
 
       const ProjectionStoreLive = Layer.succeed(ProjectionStoreService, {
@@ -244,7 +207,7 @@ describe('Service Definitions', () => {
       const AllServicesLive = Layer.mergeAll(
         EventStoreLive,
         ProjectionStoreLive,
-        SnapshotStoreLive,
+        SnapshotStoreLive
       );
 
       const program = Effect.gen(function* () {
@@ -260,11 +223,7 @@ describe('Service Definitions', () => {
         return 'All services available';
       });
 
-      const result = await pipe(
-        program,
-        Effect.provide(AllServicesLive),
-        Effect.runPromise,
-      );
+      const result = await pipe(program, Effect.provide(AllServicesLive), Effect.runPromise);
 
       expect(result).toBe('All services available');
     });

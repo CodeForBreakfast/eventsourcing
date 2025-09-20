@@ -4,7 +4,7 @@ import { describe, expect, it } from 'bun:test';
 import {
   EventStoreError,
   EventStoreConnectionError,
-  StreamEndMovedError,
+  ConcurrencyConflictError,
   ProjectionError,
   SnapshotError,
   WebSocketError,
@@ -14,6 +14,9 @@ import {
   webSocketError,
   isEventSourcingError,
 } from './errors';
+
+// StreamEndMovedError is now an alias for ConcurrencyConflictError
+const StreamEndMovedError = ConcurrencyConflictError;
 
 describe('Event Sourcing Errors', () => {
   describe('EventStoreError', () => {
@@ -37,9 +40,7 @@ describe('Event Sourcing Errors', () => {
     it('should work with Effect error handling', async () => {
       const program = pipe(
         Effect.fail(eventStoreError.read('stream-1', 'Stream not found')),
-        Effect.catchTag('EventStoreError', (error) =>
-          Effect.succeed(`Caught: ${error.details}`),
-        ),
+        Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`))
       );
 
       const result = await Effect.runPromise(program);
@@ -55,14 +56,8 @@ describe('Event Sourcing Errors', () => {
 
   describe('EventStoreConnectionError', () => {
     it('should distinguish retryable and fatal errors', () => {
-      const retryable = connectionError.retryable(
-        'connect',
-        new Error('timeout'),
-      );
-      const fatal = connectionError.fatal(
-        'connect',
-        new Error('invalid config'),
-      );
+      const retryable = connectionError.retryable('connect', new Error('timeout'));
+      const fatal = connectionError.fatal('connect', new Error('invalid config'));
 
       expect(retryable.retryable).toBe(true);
       expect(fatal.retryable).toBe(false);
@@ -89,7 +84,7 @@ describe('Event Sourcing Errors', () => {
         'user-projection',
         'Handler failed',
         42,
-        new Error('parse error'),
+        new Error('parse error')
       );
 
       expect(error.projectionName).toBe('user-projection');
@@ -100,11 +95,7 @@ describe('Event Sourcing Errors', () => {
 
   describe('WebSocketError', () => {
     it('should include connection details', () => {
-      const error = webSocketError.connect(
-        'ws://localhost:8080',
-        'Connection refused',
-        1006,
-      );
+      const error = webSocketError.connect('ws://localhost:8080', 'Connection refused', 1006);
 
       expect(error.operation).toBe('connect');
       expect(error.url).toBe('ws://localhost:8080');
@@ -196,7 +187,7 @@ describe('Event Sourcing Errors', () => {
         expect(error.operation).toBe(operation);
         expect(error.streamId).toBe('test-stream');
         expect(error.details).toBe('test details');
-      },
+      }
     );
   });
 });
