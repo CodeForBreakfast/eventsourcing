@@ -36,15 +36,37 @@ All packages require:
 
 ## Development
 
+### Prerequisites
+
+- Bun
+- Docker (for running tests with PostgreSQL)
+
+### Setup
+
 ```bash
 # Install dependencies
 bun install
+```
 
+### Running Tests
+
+The test suite includes both in-memory and PostgreSQL tests. To run tests:
+
+1. Start the PostgreSQL database:
+```bash
+docker-compose up -d
+```
+
+2. Run tests with environment variables:
+```bash
+TEST_PG_USERNAME=postgres TEST_PG_PASSWORD=postgres TEST_PG_DATABASE=test TEST_PG_HOST=localhost TEST_PG_PORT=5432 bun run test
+```
+
+### Other Commands
+
+```bash
 # Build all packages
 bun run build
-
-# Run tests
-bun run test
 
 # Lint code
 bun run lint

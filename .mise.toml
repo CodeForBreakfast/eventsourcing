@@ -3,3 +3,8 @@ bun = "latest"
 
 [env]
 _.path = ["./node_modules/.bin"]
+TEST_PG_USERNAME = "postgres"
+TEST_PG_PASSWORD = "postgres"
+TEST_PG_DATABASE = "test"
+TEST_PG_HOST = "localhost"
+TEST_PG_PORT = "5432"

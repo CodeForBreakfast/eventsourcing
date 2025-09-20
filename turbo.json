@@ -27,7 +27,14 @@
       "dependsOn": ["check", "^lint"]
     },
     "test": {
-      "dependsOn": ["^test", "lint"]
+      "dependsOn": ["^test", "lint"],
+      "env": [
+        "TEST_PG_USERNAME",
+        "TEST_PG_PASSWORD",
+        "TEST_PG_DATABASE",
+        "TEST_PG_HOST",
+        "TEST_PG_PORT"
+      ]
     },
     "publish:package": {
       "dependsOn": ["build"],
