@@ -4,7 +4,7 @@ node_modules/
 
 # Build outputs
 dist/
-lib/
+/lib/
 *.tsbuildinfo
 
 # Turbo
@@ -37,3 +37,5 @@ coverage/
 .cache/
 tmp/
 temp/
+
+*.local.*
