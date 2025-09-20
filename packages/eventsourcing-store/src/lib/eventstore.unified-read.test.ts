@@ -1,6 +1,6 @@
 import { Effect, pipe, Schema, Layer, Stream } from 'effect';
 import { describe, expect, it } from 'bun:test';
-import { EventStreamId, EventStreamPosition } from '../streamTypes';
+import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type { EventStoreServiceInterface } from './services';
 import * as InMemoryStore from './inMemory/InMemoryStore';
 import { inMemoryEventStore } from './inMemory/inMemoryEventStore';
@@ -33,10 +33,8 @@ describe('EventStore Unified Read API', () => {
       pipe(
         InMemoryStore.make<TestEvent>(),
         Effect.flatMap(inMemoryEventStore),
-        Effect.map(
-          (store) => store as unknown as EventStoreServiceInterface<TestEvent>,
-        ),
-      ),
+        Effect.map((store) => store as unknown as EventStoreServiceInterface<TestEvent>)
+      )
     );
 
   describe('flexible read API', () => {
@@ -58,10 +56,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('third'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read without options (should default to forward from beginning)
             const readEvents: TestEvent[] = [];
@@ -73,10 +68,10 @@ describe('EventStore Unified Read API', () => {
                   Stream.runForEach((event) =>
                     Effect.sync(() => {
                       readEvents.push(event);
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             expect(readEvents).toHaveLength(3);
@@ -84,8 +79,8 @@ describe('EventStore Unified Read API', () => {
             expect(readEvents[1]?.value).toBe('second');
             expect(readEvents[2]?.value).toBe('third');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
 
@@ -107,10 +102,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('third'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read from event number 1 (should skip the first event)
             const readEvents: TestEvent[] = [];
@@ -122,18 +114,18 @@ describe('EventStore Unified Read API', () => {
                   Stream.runForEach((event) =>
                     Effect.sync(() => {
                       readEvents.push(event);
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             expect(readEvents).toHaveLength(2);
             expect(readEvents[0]?.value).toBe('second');
             expect(readEvents[1]?.value).toBe('third');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
 
@@ -156,10 +148,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('fourth'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read up to event number 2 (inclusive)
             const readEvents: TestEvent[] = [];
@@ -171,10 +160,10 @@ describe('EventStore Unified Read API', () => {
                   Stream.runForEach((event) =>
                     Effect.sync(() => {
                       readEvents.push(event);
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             expect(readEvents).toHaveLength(3);
@@ -182,8 +171,8 @@ describe('EventStore Unified Read API', () => {
             expect(readEvents[1]?.value).toBe('second');
             expect(readEvents[2]?.value).toBe('third');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
 
@@ -207,10 +196,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('fifth'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read from event number 1 to 3 (inclusive)
             const readEvents: TestEvent[] = [];
@@ -222,10 +208,10 @@ describe('EventStore Unified Read API', () => {
                   Stream.runForEach((event) =>
                     Effect.sync(() => {
                       readEvents.push(event);
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             expect(readEvents).toHaveLength(3);
@@ -233,8 +219,8 @@ describe('EventStore Unified Read API', () => {
             expect(readEvents[1]?.value).toBe('third');
             expect(readEvents[2]?.value).toBe('fourth');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
 
@@ -257,10 +243,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('fourth'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read backward (should return events in reverse order)
             const readEvents: TestEvent[] = [];
@@ -272,10 +255,10 @@ describe('EventStore Unified Read API', () => {
                   Stream.runForEach((event) =>
                     Effect.sync(() => {
                       readEvents.push(event);
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             expect(readEvents).toHaveLength(4);
@@ -284,8 +267,8 @@ describe('EventStore Unified Read API', () => {
             expect(readEvents[2]?.value).toBe('second');
             expect(readEvents[3]?.value).toBe('first');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
 
@@ -310,10 +293,7 @@ describe('EventStore Unified Read API', () => {
               createTestEvent('sixth'),
             ];
 
-            yield* pipe(
-              Stream.fromIterable(events),
-              Stream.run(store.write(startPos)),
-            );
+            yield* pipe(Stream.fromIterable(events), Stream.run(store.write(startPos)));
 
             // Read with batch size of 2
             const batches: TestEvent[][] = [];
@@ -331,10 +311,10 @@ describe('EventStore Unified Read API', () => {
                         batches.push([...currentBatch]);
                         currentBatch = [];
                       }
-                    }),
-                  ),
-                ),
-              ),
+                    })
+                  )
+                )
+              )
             );
 
             // Add any remaining events as a final batch
@@ -354,8 +334,8 @@ describe('EventStore Unified Read API', () => {
             expect(batches[2]?.[0]?.value).toBe('fifth');
             expect(batches[2]?.[1]?.value).toBe('sixth');
           }),
-          Effect.provide(createTestEventStoreLayer()),
-        ),
+          Effect.provide(createTestEventStoreLayer())
+        )
       );
     });
   });

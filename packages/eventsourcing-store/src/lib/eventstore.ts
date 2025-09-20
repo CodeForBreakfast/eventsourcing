@@ -1,10 +1,5 @@
 import { Effect, ParseResult, Schema, Sink, Stream, pipe } from 'effect';
-import {
-  EventStreamId,
-  EventNumber,
-  EventStreamPosition,
-  beginning,
-} from './streamTypes';
+import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './streamTypes';
 import type { ReadParams } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
 
@@ -24,23 +19,20 @@ export const currentEnd =
                 streamId,
                 eventNumber: count,
               })),
-              Effect.flatMap(Schema.decode(EventStreamPosition)),
-            ),
-          ),
-        ),
-      ),
+              Effect.flatMap(Schema.decode(EventStreamPosition))
+            )
+          )
+        )
+      )
     );
 
-export const positionFromEventNumber = (
-  streamId: EventStreamId,
-  eventNumber: EventNumber,
-) =>
+export const positionFromEventNumber = (streamId: EventStreamId, eventNumber: EventNumber) =>
   pipe(
     {
       streamId,
       eventNumber,
     },
-    Schema.decode(EventStreamPosition),
+    Schema.decode(EventStreamPosition)
   );
 
 /**
@@ -48,7 +40,7 @@ export const positionFromEventNumber = (
  */
 export interface EventStore<TEvent> {
   readonly write: (
-    to: EventStreamPosition,
+    to: EventStreamPosition
   ) => Sink.Sink<
     EventStreamPosition,
     TEvent,
@@ -56,14 +48,14 @@ export interface EventStore<TEvent> {
     ConcurrencyConflictError | ParseResult.ParseError | EventStoreError
   >;
   readonly read: (
-    params: ReadParams | EventStreamPosition,
+    params: ReadParams | EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;
   readonly readHistorical: (
-    params: ReadParams | EventStreamPosition,
+    params: ReadParams | EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
@@ -75,7 +67,9 @@ export interface EventStore<TEvent> {
 export type { EventStoreServiceInterface } from './services';
 export { EventStoreService } from './services';
 // Re-export errors from errors module
-export { ConcurrencyConflictError, StreamEndMovedError } from './errors';
+export { ConcurrencyConflictError } from './errors';
+// StreamEndMovedError is deprecated - re-export as alias for backward compatibility
+export { ConcurrencyConflictError as StreamEndMovedError } from './errors';
 
 // I = string
 // A = event
@@ -86,10 +80,7 @@ export const encodedEventStore =
     pipe(eventstore, (eventstore) => ({
       write: (toPosition: EventStreamPosition) => {
         // Define the expected error type
-        type SinkError =
-          | ConcurrencyConflictError
-          | ParseResult.ParseError
-          | EventStoreError;
+        type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
 
         // Get a new sink by creating a type-safe transformation pipeline
         const originalSink = eventstore.write(toPosition);
@@ -98,7 +89,7 @@ export const encodedEventStore =
         return pipe(
           originalSink,
           // The simplest solution is to use the correct typings and cast
-          Sink.mapInputEffect((a: A) => Schema.encode(schema)(a)),
+          Sink.mapInputEffect((a: A) => Schema.encode(schema)(a))
         ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
       },
       read: (params: ReadParams | EventStreamPosition) =>
@@ -106,19 +97,15 @@ export const encodedEventStore =
           params,
           eventstore.read,
           Effect.map((stream) =>
-            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(
-              stream,
-            ),
-          ),
+            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
+          )
         ),
       readHistorical: (params: ReadParams | EventStreamPosition) =>
         pipe(
           params,
           eventstore.readHistorical,
           Effect.map((stream) =>
-            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(
-              stream,
-            ),
-          ),
+            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
+          )
         ),
     }));

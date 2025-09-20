@@ -11,10 +11,7 @@ export class EventSourcingError extends Data.TaggedError('EventSourcingError')<
   }>
 > {
   static readonly is = (u: unknown): u is EventSourcingError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'EventSourcingError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventSourcingError';
 
   get errorMessage() {
     return `[${this.module}] ${this.code}: ${this.message}${
@@ -34,15 +31,10 @@ export class EventStoreError extends Data.TaggedError('EventStoreError')<
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'EventStoreError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreError';
 }
 
-export class EventStoreConnectionError extends Data.TaggedError(
-  'EventStoreConnectionError',
-)<
+export class EventStoreConnectionError extends Data.TaggedError('EventStoreConnectionError')<
   Readonly<{
     operation: string;
     connectionString?: string;
@@ -52,15 +44,10 @@ export class EventStoreConnectionError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreConnectionError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'EventStoreConnectionError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreConnectionError';
 }
 
-export class EventStoreResourceError extends Data.TaggedError(
-  'EventStoreResourceError',
-)<
+export class EventStoreResourceError extends Data.TaggedError('EventStoreResourceError')<
   Readonly<{
     resource: string;
     operation: string;
@@ -69,15 +56,10 @@ export class EventStoreResourceError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreResourceError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'EventStoreResourceError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreResourceError';
 }
 
-export class ConcurrencyConflictError extends Data.TaggedError(
-  'ConcurrencyConflictError',
-)<
+export class ConcurrencyConflictError extends Data.TaggedError('ConcurrencyConflictError')<
   Readonly<{
     streamId: string;
     expectedVersion: number;
@@ -85,14 +67,8 @@ export class ConcurrencyConflictError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is ConcurrencyConflictError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'ConcurrencyConflictError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ConcurrencyConflictError';
 }
-
-// @deprecated Use ConcurrencyConflictError instead
-export const StreamEndMovedError = ConcurrencyConflictError;
 
 // Projection specific errors
 export class ProjectionError extends Data.TaggedError('ProjectionError')<
@@ -106,15 +82,10 @@ export class ProjectionError extends Data.TaggedError('ProjectionError')<
   }>
 > {
   static readonly is = (u: unknown): u is ProjectionError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'ProjectionError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ProjectionError';
 }
 
-export class ProjectionStateError extends Data.TaggedError(
-  'ProjectionStateError',
-)<
+export class ProjectionStateError extends Data.TaggedError('ProjectionStateError')<
   Readonly<{
     projectionName: string;
     expectedState: string;
@@ -123,10 +94,7 @@ export class ProjectionStateError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is ProjectionStateError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'ProjectionStateError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ProjectionStateError';
 }
 
 // Snapshot specific errors
@@ -141,15 +109,10 @@ export class SnapshotError extends Data.TaggedError('SnapshotError')<
   }>
 > {
   static readonly is = (u: unknown): u is SnapshotError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'SnapshotError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'SnapshotError';
 }
 
-export class SnapshotVersionError extends Data.TaggedError(
-  'SnapshotVersionError',
-)<
+export class SnapshotVersionError extends Data.TaggedError('SnapshotVersionError')<
   Readonly<{
     aggregateId: string;
     expectedVersion: number;
@@ -158,10 +121,7 @@ export class SnapshotVersionError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is SnapshotVersionError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'SnapshotVersionError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'SnapshotVersionError';
 }
 
 // WebSocket transport errors
@@ -177,15 +137,10 @@ export class WebSocketError extends Data.TaggedError('WebSocketError')<
   }>
 > {
   static readonly is = (u: unknown): u is WebSocketError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'WebSocketError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'WebSocketError';
 }
 
-export class WebSocketProtocolError extends Data.TaggedError(
-  'WebSocketProtocolError',
-)<
+export class WebSocketProtocolError extends Data.TaggedError('WebSocketProtocolError')<
   Readonly<{
     expectedProtocol: string;
     actualProtocol?: string;
@@ -194,10 +149,7 @@ export class WebSocketProtocolError extends Data.TaggedError(
   }>
 > {
   static readonly is = (u: unknown): u is WebSocketProtocolError =>
-    typeof u === 'object' &&
-    u !== null &&
-    '_tag' in u &&
-    u._tag === 'WebSocketProtocolError';
+    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'WebSocketProtocolError';
 }
 
 // Type guard helpers
@@ -239,8 +191,7 @@ export const eventStoreError = {
       ...(streamId !== undefined && { streamId }),
       details,
       ...(cause !== undefined && { cause }),
-      recoveryHint:
-        'Ensure the stream is not locked and you have write permissions',
+      recoveryHint: 'Ensure the stream is not locked and you have write permissions',
     }),
   subscribe: (streamId: string | undefined, details: string, cause?: unknown) =>
     new EventStoreError({
@@ -272,12 +223,7 @@ export const connectionError = {
 };
 
 export const projectionError = {
-  build: (
-    projectionName: string,
-    details: string,
-    eventPosition?: number,
-    cause?: unknown,
-  ) =>
+  build: (projectionName: string, details: string, eventPosition?: number, cause?: unknown) =>
     new ProjectionError({
       projectionName,
       operation: 'build',
@@ -286,27 +232,16 @@ export const projectionError = {
       ...(cause !== undefined && { cause }),
       recoveryHint: 'Check the projection definition and event handlers',
     }),
-  rebuild: (
-    projectionName: string,
-    details: string,
-    eventPosition?: number,
-    cause?: unknown,
-  ) =>
+  rebuild: (projectionName: string, details: string, eventPosition?: number, cause?: unknown) =>
     new ProjectionError({
       projectionName,
       operation: 'rebuild',
       details,
       ...(eventPosition !== undefined && { eventPosition }),
       ...(cause !== undefined && { cause }),
-      recoveryHint:
-        'Ensure all events are available and handlers are idempotent',
+      recoveryHint: 'Ensure all events are available and handlers are idempotent',
     }),
-  update: (
-    projectionName: string,
-    details: string,
-    eventPosition?: number,
-    cause?: unknown,
-  ) =>
+  update: (projectionName: string, details: string, eventPosition?: number, cause?: unknown) =>
     new ProjectionError({
       projectionName,
       operation: 'update',
@@ -326,27 +261,16 @@ export const projectionError = {
 };
 
 export const snapshotError = {
-  save: (
-    aggregateId: string,
-    details: string,
-    version?: number,
-    cause?: unknown,
-  ) =>
+  save: (aggregateId: string, details: string, version?: number, cause?: unknown) =>
     new SnapshotError({
       aggregateId,
       operation: 'save',
       details,
       ...(version !== undefined && { version }),
       ...(cause !== undefined && { cause }),
-      recoveryHint:
-        'Ensure the aggregate state is serializable and storage is available',
+      recoveryHint: 'Ensure the aggregate state is serializable and storage is available',
     }),
-  load: (
-    aggregateId: string,
-    details: string,
-    version?: number,
-    cause?: unknown,
-  ) =>
+  load: (aggregateId: string, details: string, version?: number, cause?: unknown) =>
     new SnapshotError({
       aggregateId,
       operation: 'load',
@@ -355,12 +279,7 @@ export const snapshotError = {
       ...(cause !== undefined && { cause }),
       recoveryHint: 'Check if the snapshot exists and is not corrupted',
     }),
-  delete: (
-    aggregateId: string,
-    details: string,
-    version?: number,
-    cause?: unknown,
-  ) =>
+  delete: (aggregateId: string, details: string, version?: number, cause?: unknown) =>
     new SnapshotError({
       aggregateId,
       operation: 'delete',
@@ -372,12 +291,7 @@ export const snapshotError = {
 };
 
 export const webSocketError = {
-  connect: (
-    url: string | undefined,
-    details: string,
-    code?: number,
-    cause?: unknown,
-  ) =>
+  connect: (url: string | undefined, details: string, code?: number, cause?: unknown) =>
     new WebSocketError({
       operation: 'connect',
       ...(url !== undefined && { url }),
@@ -385,15 +299,9 @@ export const webSocketError = {
       ...(code !== undefined && { code }),
       ...(cause !== undefined && { cause }),
       retryable: true,
-      recoveryHint:
-        'Check network connectivity and WebSocket endpoint availability',
+      recoveryHint: 'Check network connectivity and WebSocket endpoint availability',
     }),
-  disconnect: (
-    url: string | undefined,
-    details: string,
-    code?: number,
-    cause?: unknown,
-  ) =>
+  disconnect: (url: string | undefined, details: string, code?: number, cause?: unknown) =>
     new WebSocketError({
       operation: 'disconnect',
       ...(url !== undefined && { url }),
@@ -409,8 +317,7 @@ export const webSocketError = {
       details,
       ...(cause !== undefined && { cause }),
       retryable: true,
-      recoveryHint:
-        'Check if the connection is open and the message format is valid',
+      recoveryHint: 'Check if the connection is open and the message format is valid',
     }),
   receive: (details: string, cause?: unknown) =>
     new WebSocketError({
