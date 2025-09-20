@@ -8,8 +8,8 @@ on:
     branches: [ main ]
 
 jobs:
-  lint:
-    name: Lint
+  build:
+    name: Build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout
@@ -40,13 +40,66 @@ jobs:
         with:
           path: |
             .turbo/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-turbo-lint-${{ github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-build-${{ github.sha }}
           restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-turbo-lint-
+            ${{ runner.os }}-${{ runner.arch }}-turbo-build-
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
-      - name: Build dependencies for typecheck
-        run: bun run turbo build --filter='!@codeforbreakfast/eventsourcing-monorepo'
+      - name: Build packages
+        run: bun run turbo build
+
+      - name: Upload build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-artifacts
+          path: |
+            packages/*/dist
+            packages/*/lib
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    needs: build
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: node-cache
+        with:
+          path: |
+            node_modules
+            ~/.bun
+          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-lint-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-turbo-build-${{ github.sha }}
+            ${{ runner.os }}-${{ runner.arch }}-turbo-lint-
+            ${{ runner.os }}-${{ runner.arch }}-turbo-
 
       - name: Run typecheck
         run: bun run turbo check
@@ -57,7 +110,7 @@ jobs:
   test:
     name: Test
     runs-on: ubuntu-24.04
-    needs: lint
+    needs: build
     services:
       postgres:
         image: postgres:17-alpine
@@ -97,6 +150,12 @@ jobs:
       - name: Install dependencies
         run: bun install
 
+      - name: Download build artifacts
+        uses: actions/download-artifact@v4
+        with:
+          name: build-artifacts
+          path: .
+
       - name: Cache turbo
         uses: actions/cache@v4
         with:
@@ -117,55 +176,3 @@ jobs:
           TEST_PG_HOST: localhost
           TEST_PG_PORT: 5432
 
-  build:
-    name: Build
-    runs-on: ubuntu-24.04
-    needs: test
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Cache node modules
-        uses: actions/cache@v4
-        id: node-cache
-        with:
-          path: |
-            node_modules
-            ~/.bun
-          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Cache turbo
-        uses: actions/cache@v4
-        with:
-          path: |
-            .turbo/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-turbo-build-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-turbo-test-${{ github.sha }}
-            ${{ runner.os }}-${{ runner.arch }}-turbo-build-
-            ${{ runner.os }}-${{ runner.arch }}-turbo-
-
-      - name: Build packages
-        run: bun run turbo build
-
-      - name: Verify build outputs
-        run: |
-          echo "Checking build outputs..."
-          for package in packages/*; do
-            if [ -d "$package/dist" ]; then
-              echo "✓ Found dist in $package"
-            elif [ -d "$package/lib" ]; then
-              echo "✓ Found lib in $package"
-            fi
-          done
