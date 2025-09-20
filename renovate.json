@@ -1,0 +1,72 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:best-practices",
+    ":pinAllExceptPeerDependencies",
+    ":automergeLinters",
+    ":automergeMinor",
+    ":automergeStableNonMajor",
+    "npm:unpublishSafe",
+    ":semanticCommits"
+  ],
+  "lockFileMaintenance": {
+    "enabled": true,
+    "automerge": true,
+    "automergeType": "pr",
+    "schedule": ["before 4am on monday"]
+  },
+  "branchConcurrentLimit": 2,
+  "prHourlyLimit": 0,
+  "internalChecksFilter": "strict",
+  "minimumReleaseAge": "3 days",
+  "postUpdateOptions": ["bunInstall"],
+  "rangeStrategy": "bump",
+  "packageRules": [
+    {
+      "groupName": "effect",
+      "matchPackageNames": ["effect", "@effect/**"],
+      "automerge": false
+    },
+    {
+      "groupName": "changesets",
+      "matchPackageNames": ["@changesets/**"]
+    },
+    {
+      "groupName": "eslint",
+      "matchPackageNames": ["eslint", "eslint-*", "@typescript-eslint/**"]
+    },
+    {
+      "groupName": "commitlint",
+      "matchPackageNames": ["@commitlint/**"]
+    },
+    {
+      "groupName": "types",
+      "matchPackageNames": ["@types/**"],
+      "automerge": true
+    },
+    {
+      "description": "Automatically merge test dependencies",
+      "matchPackageNames": ["vitest", "fast-check"],
+      "matchDepTypes": ["devDependencies"],
+      "automerge": true
+    },
+    {
+      "description": "Pin Docker digests",
+      "matchDatasources": ["docker"],
+      "pinDigests": true
+    },
+    {
+      "description": "Group GitHub Actions",
+      "matchManagers": ["github-actions"],
+      "groupName": "github-actions",
+      "automerge": true
+    }
+  ],
+  "prCreation": "immediate",
+  "dependencyDashboard": true,
+  "dependencyDashboardAutoclose": true,
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "labels": ["security"]
+  }
+}
