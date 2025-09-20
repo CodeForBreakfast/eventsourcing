@@ -83,7 +83,11 @@ jobs:
       - name: Check for unused dependencies
         run: bun run deps:check
 
-      - name: Check for secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      # Gitleaks requires a license for organizations
+      # For now, we run it locally via pre-commit hooks
+      # To enable in CI: add GITLEAKS_LICENSE secret to the repository
+      # - name: Check for secrets
+      #   uses: gitleaks/gitleaks-action@v2
+      #   env:
+      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      #     GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
