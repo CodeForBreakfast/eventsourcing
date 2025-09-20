@@ -32,8 +32,8 @@
   "devDependencies": {
     "@changesets/changelog-github": "0.5.1",
     "@changesets/cli": "2.29.7",
-    "@commitlint/cli": "^19.8.1",
-    "@commitlint/config-conventional": "^19.8.1",
+    "@commitlint/cli": "19.8.1",
+    "@commitlint/config-conventional": "19.8.1",
     "@effect/language-service": "0.40.0",
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "^8.0.0",
