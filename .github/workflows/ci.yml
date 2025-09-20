@@ -1,0 +1,168 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  lint:
+    name: Lint
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: node-cache
+        with:
+          path: |
+            node_modules
+            ~/.bun
+          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-lint-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-turbo-lint-
+            ${{ runner.os }}-${{ runner.arch }}-turbo-
+
+      - name: Run typecheck
+        run: bun run turbo check
+
+      - name: Run lint
+        run: bun run turbo lint
+
+  test:
+    name: Test
+    runs-on: ubuntu-24.04
+    needs: lint
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: node-cache
+        with:
+          path: |
+            node_modules
+            ~/.bun
+          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-test-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-turbo-lint-${{ github.sha }}
+            ${{ runner.os }}-${{ runner.arch }}-turbo-test-
+            ${{ runner.os }}-${{ runner.arch }}-turbo-
+
+      - name: Run tests
+        run: bun run turbo test
+        env:
+          TEST_PG_USERNAME: postgres
+          TEST_PG_PASSWORD: postgres
+          TEST_PG_DATABASE: test
+          TEST_PG_HOST: localhost
+          TEST_PG_PORT: 5432
+
+  build:
+    name: Build
+    runs-on: ubuntu-24.04
+    needs: test
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache node modules
+        uses: actions/cache@v4
+        id: node-cache
+        with:
+          path: |
+            node_modules
+            ~/.bun
+          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
+
+      - name: Install dependencies
+        run: bun install
+
+      - name: Cache turbo
+        uses: actions/cache@v4
+        with:
+          path: |
+            .turbo/cache
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-build-${{ github.sha }}
+          restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-turbo-test-${{ github.sha }}
+            ${{ runner.os }}-${{ runner.arch }}-turbo-build-
+            ${{ runner.os }}-${{ runner.arch }}-turbo-
+
+      - name: Build packages
+        run: bun run turbo build
+
+      - name: Verify build outputs
+        run: |
+          echo "Checking build outputs..."
+          for package in packages/*; do
+            if [ -d "$package/dist" ]; then
+              echo "✓ Found dist in $package"
+            elif [ -d "$package/lib" ]; then
+              echo "✓ Found lib in $package"
+            fi
+          done
