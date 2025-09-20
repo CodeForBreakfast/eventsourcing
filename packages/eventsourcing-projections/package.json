@@ -55,8 +55,8 @@
   "devDependencies": {
     "@types/node": "24.5.1",
     "effect": "^3.17.0",
-    "typescript": "^5.7.0",
-    "vitest": "^3.0.0",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4",
     "eslint": "9.36.0"
   },
   "publishConfig": {
