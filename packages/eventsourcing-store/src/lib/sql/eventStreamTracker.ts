@@ -1,0 +1,79 @@
+import { Effect, HashMap, Layer, Option, SynchronizedRef, pipe } from 'effect';
+import { EventStreamId } from '../streamTypes';
+
+/**
+ * EventStreamTracker service for tracking event ordering and deduplication
+ */
+export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
+  EventStreamTracker,
+  Readonly<{
+    /**
+     * Process an event, ensuring proper ordering and deduplication
+     * Returns Some(event) if the event should be processed, None if it's a duplicate or out of order
+     */
+    processEvent: <T>(
+      streamId: EventStreamId,
+      eventNumber: number,
+      event: T,
+    ) => Effect.Effect<Option.Option<T>, never, never>;
+  }>
+>() {}
+
+/**
+ * Implementation of EventStreamTracker service
+ */
+export const EventStreamTrackerLive = () =>
+  Layer.effect(
+    EventStreamTracker,
+    pipe(
+      SynchronizedRef.make<HashMap.HashMap<EventStreamId, number>>(
+        HashMap.empty<EventStreamId, number>(),
+      ),
+      Effect.map(
+        (
+          lastEventNumbers: SynchronizedRef.SynchronizedRef<
+            HashMap.HashMap<EventStreamId, number>
+          >,
+        ) => ({
+          // Process event, ensuring ordering and deduplication
+          processEvent: <T>(
+            streamId: EventStreamId,
+            eventNumber: number,
+            event: T,
+          ) =>
+            pipe(
+              SynchronizedRef.modify(
+                lastEventNumbers,
+                (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
+                  const currentLastEvent = pipe(
+                    lastEvents,
+                    HashMap.get(streamId),
+                    Option.getOrElse(() => -1),
+                  );
+
+                  // Check if this is a new event we haven't seen
+                  if (eventNumber > currentLastEvent) {
+                    return [
+                      Option.some(event), // Return the event
+                      pipe(lastEvents, HashMap.set(streamId, eventNumber)),
+                    ];
+                  }
+
+                  // Event already processed or out of order
+                  return [Option.none(), lastEvents];
+                },
+              ),
+              Effect.tap((result) =>
+                Option.match(result, {
+                  onNone: () =>
+                    Effect.logDebug(
+                      `Duplicate or out-of-order event skipped: stream=${streamId}, eventNumber=${eventNumber}`,
+                    ),
+                  onSome: () => Effect.succeed(undefined),
+                }),
+              ),
+            ),
+        }),
+      ),
+    ),
+  );
