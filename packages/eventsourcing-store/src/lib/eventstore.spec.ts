@@ -1,7 +1,9 @@
 // Mock implementations for testing
 import { Logger } from 'effect';
 const LoggerLive = Logger.pretty;
-const Id = () => Math.random().toString(36).substring(7);
+const Id = {
+  randomPart: () => Math.random().toString(36).substring(7)
+};
 import { Migrator, SqlError } from '@effect/sql';
 import {
   Chunk,
@@ -18,7 +20,7 @@ import {
   EventStreamId,
   EventStreamPosition,
   beginning,
-} from '../streamTypes';
+} from './streamTypes';
 import { EventStoreError } from './errors';
 import {
   type EventStore,

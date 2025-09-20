@@ -39,11 +39,8 @@ export interface OptimizedStreamHandlerService<TEvent, TStreamId extends string 
 /**
  * Create a Stream service tag factory
  */
-export const OptimizedStreamHandler = <TEvent = unknown, TStreamId extends string = string>(): Context.Tag<
-  any,
-  OptimizedStreamHandlerService<TEvent, TStreamId>
-> =>
-  Effect.Tag("OptimizedStreamHandler") as any;
+export const OptimizedStreamHandler = <TEvent = unknown, TStreamId extends string = string>() =>
+  Context.GenericTag<OptimizedStreamHandlerService<TEvent, TStreamId>>("OptimizedStreamHandler");
 
 /**
  * Create the optimized stream handler with Effect's PubSub

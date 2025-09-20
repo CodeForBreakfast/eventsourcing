@@ -10,4 +10,4 @@ sourcemap = "external"
 external = ["effect", "@effect/*", "@codeforbreakfast/*", "pg", "postgres"]
 
 [test]
-preload = ["./test-setup.ts"]
+# No preload needed
