@@ -40,7 +40,7 @@
       },
       "devDependencies": {
         "@types/node": "24.5.1",
-        "effect": "^3.17.0",
+        "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
         "vitest": "3.2.4",
@@ -57,7 +57,7 @@
       },
       "devDependencies": {
         "@types/node": "24.5.1",
-        "effect": "^3.17.0",
+        "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
         "vitest": "3.2.4",
@@ -70,13 +70,13 @@
       "name": "@codeforbreakfast/eventsourcing-store",
       "version": "0.1.0",
       "dependencies": {
-        "@effect/experimental": "^0.42.0",
-        "@effect/sql": "^0.24.0",
-        "@effect/sql-pg": "^0.24.0",
+        "@effect/experimental": "0.42.1",
+        "@effect/sql": "0.24.3",
+        "@effect/sql-pg": "0.24.4",
       },
       "devDependencies": {
         "@types/node": "24.5.1",
-        "effect": "^3.17.0",
+        "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
         "vitest": "3.2.4",
@@ -93,7 +93,7 @@
       },
       "devDependencies": {
         "@types/node": "24.5.1",
-        "effect": "^3.17.0",
+        "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
         "vitest": "3.2.4",
@@ -568,7 +568,7 @@
 
     "dotenv": ["dotenv@8.6.0", "", {}, "sha512-IrPdXQsk2BbzvCBGBOTmmSH5SodmqZNt4ERAZDmW4CT+tL8VtvinqywuANaFu4bOMWki16nqf0e4oC0QIaDr/g=="],
 
-    "effect": ["effect@3.17.13", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-JMz5oBxs/6mu4FP9Csjub4jYMUwMLrp+IzUmSDVIzn2NoeoyOXMl7x1lghfr3dLKWffWrdnv/d8nFFdgrHXPqw=="],
+    "effect": ["effect@3.17.14", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-VpIZz72+cg3357vLkNHN8CG+Uq2X0QHNv3qkyGInvG3lG5K7Ala1JliGIAdgNvwzaN37J27FuzVD8m0kEiv2Ig=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.222", "", {}, "sha512-gA7psSwSwQRE60CEoLz6JBCQPIxNeuzB2nL8vE03GK/OHxlvykbLyeiumQy1iH5C2f3YbRAZpGCMT12a/9ih9w=="],
 
