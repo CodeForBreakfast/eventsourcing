@@ -5,6 +5,11 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'packages/**'
+      - '.changeset/**'
+      - 'package.json'
+      - 'bun.lockb'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -57,12 +62,30 @@ jobs:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
-      - name: Create Release Pull Request or Publish to npm
-        id: changesets
+      # Only proceed with changesets if this is a version packages merge OR there are changeset files
+      - name: Check for changesets
+        id: check-changesets
+        run: |
+          # Check if commit message indicates a version packages merge
+          if git log -1 --pretty=%B | grep -q "^chore: version packages"; then
+            echo "is_version_merge=true" >> $GITHUB_OUTPUT
+          else
+            echo "is_version_merge=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Check if there are any changeset files
+          if ls .changeset/*.md 2>/dev/null | grep -q .; then
+            echo "has_changesets=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_changesets=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release Pull Request
+        if: steps.check-changesets.outputs.has_changesets == 'true'
+        id: changesets-pr
         uses: changesets/action@v1
         with:
-          # This expects you to have a script called release which does a build for your packages and calls changeset publish
-          publish: bun run release
+          # Don't publish, just create version PR
           version: bun run version
           commit: 'chore: version packages'
           title: 'chore: version packages'
@@ -70,9 +93,19 @@ jobs:
           commitMode: 'github-api'
         env:
           GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
+
+      - name: Publish to npm
+        if: steps.check-changesets.outputs.is_version_merge == 'true'
+        id: changesets-publish
+        uses: changesets/action@v1
+        with:
+          # Only publish, don't create PR
+          publish: bun run release
+        env:
+          GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Send a Slack notification if a publish happens
-        if: steps.changesets.outputs.published == 'true'
+        if: steps.changesets-publish.outputs.published == 'true'
         # You can do something here, like send a notification to Slack or create GitHub releases
         run: echo "A new version of packages was published!"
