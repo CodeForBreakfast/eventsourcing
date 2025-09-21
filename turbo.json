@@ -17,16 +17,47 @@
       "dependsOn": ["^build"],
       "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"]
     },
-    "deps:check": {
-      "dependsOn": ["build"],
+    "//#deps:check": {
+      "dependsOn": [],
       "outputs": [],
       "inputs": [
         "packages/*/src/**/*.ts",
         "packages/*/src/**/*.tsx",
         "packages/*/package.json",
         "knip.json",
-        ".knip.json"
-      ]
+        ".knip.json",
+        "knip.config.*"
+      ],
+      "cache": true
+    },
+    "//#code:check": {
+      "dependsOn": [],
+      "outputs": [],
+      "inputs": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+        "packages/**/*.js",
+        "packages/**/*.mjs",
+        "packages/**/package.json",
+        "knip.json",
+        ".knip.json",
+        "knip.config.*"
+      ],
+      "cache": true
+    },
+    "//#arch:check": {
+      "outputs": [],
+      "inputs": [
+        "packages/**/*.ts",
+        "packages/**/*.tsx",
+        "packages/**/*.js",
+        "packages/**/*.mjs",
+        "packages/**/*.cjs",
+        "packages/**/package.json",
+        ".dependency-cruiser.js",
+        ".dependency-cruiser.json"
+      ],
+      "cache": true
     },
     "lint": {
       "dependsOn": ["check", "^lint"],
@@ -42,7 +73,7 @@
       ]
     },
     "test": {
-      "dependsOn": ["^test", "lint", "deps:check"],
+      "dependsOn": ["^test", "lint", "//#deps:check", "//#arch:check"],
       "outputs": [],
       "inputs": [
         "src/**/*.ts",

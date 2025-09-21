@@ -27,7 +27,7 @@
  */
 
 import { Effect } from 'effect';
-import type { WebSocketEventTransport } from './types';
+import type { WebSocketEventTransport, TransportConfig } from './types';
 
 /**
  * WebSocketEventTransport Service Interface
@@ -48,40 +48,8 @@ export interface WebSocketEventTransportServiceInterface<TEvent = unknown> {
    * @returns A configured transport instance
    */
   readonly createWithConfig: (
-    config: Readonly<TransportConfig>,
+    config: Readonly<TransportConfig>
   ) => Effect.Effect<WebSocketEventTransport<TEvent>>;
-}
-
-/**
- * Transport configuration options
- */
-export interface TransportConfig {
-  /** Maximum number of reconnection attempts */
-  readonly maxReconnectAttempts?: number;
-
-  /** Initial reconnection delay in milliseconds */
-  readonly reconnectDelayMs?: number;
-
-  /** Maximum reconnection delay in milliseconds */
-  readonly maxReconnectDelayMs?: number;
-
-  /** Backoff multiplier for reconnection delays */
-  readonly reconnectBackoffMultiplier?: number;
-
-  /** Connection timeout in milliseconds */
-  readonly connectionTimeoutMs?: number;
-
-  /** Heartbeat interval in milliseconds */
-  readonly heartbeatIntervalMs?: number;
-
-  /** Buffer size for event streams */
-  readonly eventBufferSize?: number;
-
-  /** Enable automatic reconnection */
-  readonly autoReconnect?: boolean;
-
-  /** Enable debug logging */
-  readonly debug?: boolean;
 }
 
 /**
@@ -113,9 +81,7 @@ export const defaultTransportConfig: Required<TransportConfig> = {
  * );
  * ```
  */
-export class WebSocketEventTransportService extends Effect.Tag(
-  'WebSocketEventTransportService',
-)<
+export class WebSocketEventTransportService extends Effect.Tag('WebSocketEventTransportService')<
   WebSocketEventTransportService,
   WebSocketEventTransportServiceInterface<unknown>
 >() {}

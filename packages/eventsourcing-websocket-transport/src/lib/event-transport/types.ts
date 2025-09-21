@@ -5,38 +5,57 @@
  * These types integrate with the existing eventstore infrastructure.
  */
 
-import {
-  Effect,
-  Stream,
-  Data,
-  Schema,
-  Option,
-  HashMap,
-  Queue,
-  Fiber,
-  Array,
-  pipe,
-} from 'effect';
+import { Effect, Stream, Data, Schema, Option, HashMap, Queue, Fiber, Array, pipe } from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
   EventNumber,
 } from '@codeforbreakfast/eventsourcing-store';
 import type { WebSocketUrl, ConnectionStatus } from '../types';
-import type {
-  ConnectedWebSocket,
-  ConnectingWebSocket,
-} from '../webSocketConnection';
-import type { TransportConfig } from './interface';
+import type { ConnectedWebSocket, ConnectingWebSocket } from '../webSocketConnection';
+
+// ============================================================================
+// Transport Configuration
+// ============================================================================
+
+/**
+ * Transport configuration options
+ */
+export interface TransportConfig {
+  /** Maximum number of reconnection attempts */
+  readonly maxReconnectAttempts?: number;
+
+  /** Initial reconnection delay in milliseconds */
+  readonly reconnectDelayMs?: number;
+
+  /** Maximum reconnection delay in milliseconds */
+  readonly maxReconnectDelayMs?: number;
+
+  /** Backoff multiplier for reconnection delays */
+  readonly reconnectBackoffMultiplier?: number;
+
+  /** Connection timeout in milliseconds */
+  readonly connectionTimeoutMs?: number;
+
+  /** Heartbeat interval in milliseconds */
+  readonly heartbeatIntervalMs?: number;
+
+  /** Buffer size for event streams */
+  readonly eventBufferSize?: number;
+
+  /** Enable automatic reconnection */
+  readonly autoReconnect?: boolean;
+
+  /** Enable debug logging */
+  readonly debug?: boolean;
+}
 
 // ============================================================================
 // Error Hierarchy - Specific errors for each failure mode
 // ============================================================================
 
 // Legacy error types (kept for backwards compatibility)
-export class TransportConnectionError extends Data.TaggedError(
-  'TransportConnectionError',
-)<
+export class TransportConnectionError extends Data.TaggedError('TransportConnectionError')<
   Readonly<{
     reason: string;
     code?: string;
@@ -44,9 +63,7 @@ export class TransportConnectionError extends Data.TaggedError(
   }>
 > {}
 
-export class TransportSubscriptionError extends Data.TaggedError(
-  'TransportSubscriptionError',
-)<
+export class TransportSubscriptionError extends Data.TaggedError('TransportSubscriptionError')<
   Readonly<{
     reason: string;
     streamId?: EventStreamId;
@@ -54,9 +71,7 @@ export class TransportSubscriptionError extends Data.TaggedError(
   }>
 > {}
 
-export class TransportCommandError extends Data.TaggedError(
-  'TransportCommandError',
-)<
+export class TransportCommandError extends Data.TaggedError('TransportCommandError')<
   Readonly<{
     reason: string;
     command?: unknown;
@@ -97,11 +112,7 @@ export class CommandError extends Data.TaggedError('CommandError')<
   }>
 > {}
 
-export type TransportError =
-  | NetworkError
-  | ProtocolError
-  | SubscriptionError
-  | CommandError;
+export type TransportError = NetworkError | ProtocolError | SubscriptionError | CommandError;
 
 // Event wrapper that includes stream metadata
 export interface StreamEvent<T> {
@@ -154,9 +165,7 @@ export interface WebSocketEventTransport<TEvent = unknown> {
    * @param url - The WebSocket URL to connect to
    * @returns Effect that completes when connected
    */
-  readonly connect: (
-    url: WebSocketUrl,
-  ) => Effect.Effect<void, TransportConnectionError>;
+  readonly connect: (url: WebSocketUrl) => Effect.Effect<void, TransportConnectionError>;
 
   /**
    * Disconnect from the WebSocket
@@ -172,7 +181,7 @@ export interface WebSocketEventTransport<TEvent = unknown> {
    */
   readonly subscribeToStream: (
     streamId: EventStreamId,
-    options?: SubscriptionOptions,
+    options?: SubscriptionOptions
   ) => Stream.Stream<StreamEvent<TEvent>, TransportSubscriptionError>;
 
   /**
@@ -181,7 +190,7 @@ export interface WebSocketEventTransport<TEvent = unknown> {
    * @returns Stream of events from all subscribed streams
    */
   readonly subscribeToStreams: (
-    subscriptions: Readonly<Array<StreamSubscription>>,
+    subscriptions: Readonly<Array<StreamSubscription>>
   ) => Stream.Stream<StreamEvent<TEvent>, TransportSubscriptionError>;
 
   /**
@@ -190,7 +199,7 @@ export interface WebSocketEventTransport<TEvent = unknown> {
    * @returns Effect with the command result
    */
   readonly sendCommand: <TPayload, TResult>(
-    command: AggregateCommand<TPayload>,
+    command: AggregateCommand<TPayload>
   ) => Effect.Effect<CommandResult<TResult>, TransportCommandError>;
 
   /**
@@ -226,9 +235,7 @@ export const ProtocolMessageSchema = Schema.Union(
     aggregateName: Schema.String,
     commandName: Schema.String,
     payload: Schema.Unknown,
-    metadata: Schema.optional(
-      Schema.Record({ key: Schema.String, value: Schema.Unknown }),
-    ),
+    metadata: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
   }),
   // Server -> Client messages
   Schema.Struct({
@@ -260,29 +267,27 @@ export const ProtocolMessageSchema = Schema.Union(
     code: Schema.String,
     message: Schema.String,
     details: Schema.optional(Schema.Unknown),
-  }),
+  })
 );
 
 export type ProtocolMessage = Schema.Schema.Type<typeof ProtocolMessageSchema>;
 
 // Helper type guards for protocol messages
 export const isEventMessage = (
-  msg: ProtocolMessage,
+  msg: ProtocolMessage
 ): msg is Extract<ProtocolMessage, { type: 'event' }> => msg.type === 'event';
 
 export const isCommandResultMessage = (
-  msg: ProtocolMessage,
-): msg is Extract<ProtocolMessage, { type: 'command_result' }> =>
-  msg.type === 'command_result';
+  msg: ProtocolMessage
+): msg is Extract<ProtocolMessage, { type: 'command_result' }> => msg.type === 'command_result';
 
 export const isErrorMessage = (
-  msg: ProtocolMessage,
+  msg: ProtocolMessage
 ): msg is Extract<ProtocolMessage, { type: 'error' }> => msg.type === 'error';
 
 export const isSubscribedMessage = (
-  msg: ProtocolMessage,
-): msg is Extract<ProtocolMessage, { type: 'subscribed' }> =>
-  msg.type === 'subscribed';
+  msg: ProtocolMessage
+): msg is Extract<ProtocolMessage, { type: 'subscribed' }> => msg.type === 'subscribed';
 
 // ============================================================================
 // Subscription State - Clear lifecycle with no invalid combinations
@@ -381,10 +386,7 @@ export interface TransportConnected<TEvent> {
   readonly _tag: 'transport-connected';
   readonly config: Required<TransportConfig>;
   readonly connection: ConnectedWebSocket;
-  readonly subscriptions: HashMap.HashMap<
-    EventStreamId,
-    SubscriptionState<TEvent>
-  >;
+  readonly subscriptions: HashMap.HashMap<EventStreamId, SubscriptionState<TEvent>>;
   readonly commands: HashMap.HashMap<CommandId, CommandState<unknown, unknown>>;
   readonly receiveLoop: ReceiveLoop;
   readonly connectedAt: Date;
@@ -393,10 +395,7 @@ export interface TransportConnected<TEvent> {
 export interface TransportReconnecting<TEvent> {
   readonly _tag: 'transport-reconnecting';
   readonly config: Required<TransportConfig>;
-  readonly previousSubscriptions: HashMap.HashMap<
-    EventStreamId,
-    SubscriptionActive<TEvent>
-  >;
+  readonly previousSubscriptions: HashMap.HashMap<EventStreamId, SubscriptionActive<TEvent>>;
   readonly pendingCommands: HashMap.HashMap<CommandId, CommandPending<unknown>>;
   readonly attempt: ReconnectAttempt;
   readonly nextRetryAt: Date;
@@ -424,7 +423,7 @@ export interface DisconnectReason {
 
 export const disconnectedToConnecting = (
   state: Readonly<TransportDisconnected>,
-  connection: Readonly<ConnectingWebSocket>,
+  connection: Readonly<ConnectingWebSocket>
 ): TransportConnecting => ({
   _tag: 'transport-connecting',
   config: state.config,
@@ -439,7 +438,7 @@ export const disconnectedToConnecting = (
 export const connectingToConnected = <TEvent>(
   state: Readonly<TransportConnecting>,
   connection: Readonly<ConnectedWebSocket>,
-  receiveLoop: Readonly<ReceiveLoop>,
+  receiveLoop: Readonly<ReceiveLoop>
 ): TransportConnected<TEvent> => ({
   _tag: 'transport-connected',
   config: state.config,
@@ -452,22 +451,17 @@ export const connectingToConnected = <TEvent>(
 
 export const connectedToReconnecting = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  _reason: Readonly<DisconnectReason>,
+  _reason: Readonly<DisconnectReason>
 ): TransportReconnecting<TEvent> => ({
   _tag: 'transport-reconnecting',
   config: state.config,
   previousSubscriptions: pipe(
     state.subscriptions,
-    HashMap.filter(
-      (sub): sub is SubscriptionActive<TEvent> =>
-        sub._tag === 'subscription-active',
-    ),
+    HashMap.filter((sub): sub is SubscriptionActive<TEvent> => sub._tag === 'subscription-active')
   ),
   pendingCommands: pipe(
     state.commands,
-    HashMap.filter(
-      (cmd): cmd is CommandPending<unknown> => cmd._tag === 'command-pending',
-    ),
+    HashMap.filter((cmd): cmd is CommandPending<unknown> => cmd._tag === 'command-pending')
   ),
   attempt: {
     count: 1,
@@ -479,7 +473,7 @@ export const connectedToReconnecting = <TEvent>(
 
 export const reconnectingToConnecting = (
   state: Readonly<TransportReconnecting<unknown>>,
-  connection: Readonly<ConnectingWebSocket>,
+  connection: Readonly<ConnectingWebSocket>
 ): TransportConnecting => ({
   _tag: 'transport-connecting',
   config: state.config,
@@ -493,7 +487,7 @@ export const reconnectingToConnecting = (
 
 export const anyToDisconnected = (
   state: Readonly<TransportState<unknown>>,
-  reason: Readonly<DisconnectReason>,
+  reason: Readonly<DisconnectReason>
 ): TransportDisconnected => ({
   _tag: 'transport-disconnected',
   config: state.config,
@@ -505,29 +499,26 @@ export const anyToDisconnected = (
 // ============================================================================
 
 export const isConnected = <TEvent>(
-  state: TransportState<TEvent>,
+  state: TransportState<TEvent>
 ): state is TransportConnected<TEvent> => state._tag === 'transport-connected';
 
 export const canSendCommands = <TEvent>(
-  state: TransportState<TEvent>,
+  state: TransportState<TEvent>
 ): state is TransportConnected<TEvent> => state._tag === 'transport-connected';
 
 export const hasActiveSubscription = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  streamId: EventStreamId,
+  streamId: EventStreamId
 ): boolean => {
   const sub = HashMap.get(state.subscriptions, streamId);
   return Option.isSome(sub) && sub.value._tag === 'subscription-active';
 };
 
 export const getActiveSubscriptions = <TEvent>(
-  state: Readonly<TransportConnected<TEvent>>,
+  state: Readonly<TransportConnected<TEvent>>
 ): ReadonlyArray<SubscriptionActive<TEvent>> =>
   pipe(
     HashMap.values(state.subscriptions),
     (values) => Array.fromIterable(values),
-    Array.filter(
-      (sub): sub is SubscriptionActive<TEvent> =>
-        sub._tag === 'subscription-active',
-    ),
+    Array.filter((sub): sub is SubscriptionActive<TEvent> => sub._tag === 'subscription-active')
   );
