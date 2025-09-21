@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store-postgres",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "PostgreSQL implementation for event sourcing store",
   "type": "module",
   "main": "./dist/index.js",

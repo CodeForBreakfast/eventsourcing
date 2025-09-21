@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Core types and event store implementations for event sourcing",
   "type": "module",
   "main": "./dist/index.js",
