@@ -1,5 +1,12 @@
 # @codeforbreakfast/eventsourcing-websocket-transport
 
+## 0.3.2
+
+### Patch Changes
+
+- Updated dependencies [[`ee425bf`](https://github.com/CodeForBreakfast/eventsourcing/commit/ee425bf5f0be3e0f6b08f18591ce4b3a13764b76), [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1), [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.0
+
 ## 0.3.1
 
 ### Patch Changes

@@ -1,5 +1,107 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.5.0
+
+### Minor Changes
+
+- [#49](https://github.com/CodeForBreakfast/eventsourcing/pull/49) [`ee425bf`](https://github.com/CodeForBreakfast/eventsourcing/commit/ee425bf5f0be3e0f6b08f18591ce4b3a13764b76) Thanks [@GraemeF](https://github.com/GraemeF)! - Rename EventStore `write` method to `append` for better semantic clarity
+
+  The `write` method on the EventStore interface has been renamed to `append` to more accurately reflect its purpose - events can only be appended to the end of a stream, not written arbitrarily. The method signature and behavior remain the same, with the position parameter used for optimistic concurrency control to detect conflicts.
+
+  ### Breaking Changes
+  - `EventStore.write()` is now `EventStore.append()`
+  - All implementations and usages have been updated accordingly
+
+  ### Migration Guide
+
+  Update all calls from:
+
+  ```typescript
+  eventStore.write(position);
+  ```
+
+  To:
+
+  ```typescript
+  eventStore.append(position);
+  ```
+
+### Patch Changes
+
+- [#47](https://github.com/CodeForBreakfast/eventsourcing/pull/47) [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1) Thanks [@GraemeF](https://github.com/GraemeF)! - feat!: Simplify EventStore API to just read and subscribe methods
+
+  ## Breaking Changes
+
+  ### EventStore Interface Simplified
+
+  The EventStore interface now has just three methods:
+  - `write`: Write events to a stream
+  - `read`: Read historical events only (no live updates)
+  - `subscribe`: Read historical events then continue with live updates
+
+  ### Removed APIs
+  - **Removed `readHistorical` method** - Use `read` instead (it now returns only historical events)
+  - **Removed `ReadParams` and `ReadOptions` types** - Use EventStreamPosition with Stream combinators
+  - **Removed complex parameter overloading** - Methods now have single, clear parameter types
+
+  ## Migration Guide
+
+  ### Reading Historical Events
+
+  ```typescript
+  // Before
+  eventStore.readHistorical({ streamId, eventNumber });
+
+  // After
+  eventStore.read({ streamId, eventNumber });
+  ```
+
+  ### Advanced Operations with Stream Combinators
+
+  ```typescript
+  // Reading a range (before)
+  eventStore.read({
+    streamId,
+    fromEventNumber: 50,
+    toEventNumber: 100,
+  });
+
+  // Reading a range (after)
+  eventStore.read({ streamId, eventNumber: 50 }).pipe(
+    Effect.map(Stream.take(51)) // take events 50-100
+  );
+
+  // Reading in reverse (before)
+  eventStore.read({ streamId, direction: 'backward' });
+
+  // Reading in reverse (after)
+  eventStore
+    .read({ streamId, eventNumber: 0 })
+    .pipe(
+      Effect.map(
+        flow(Stream.runCollect, Effect.map(Chunk.reverse), Effect.flatMap(Stream.fromChunk))
+      )
+    );
+  ```
+
+  ## Benefits
+  - **Clearer API**: Explicit separation between historical reads and live subscriptions
+  - **Simpler types**: No complex union types or parameter overloading
+  - **Better composability**: Leverage Effect's powerful Stream combinators
+  - **Smaller API surface**: Fewer methods to understand and maintain
+
+  ## Notes
+
+  This change removes theoretical optimizations that were never implemented (like database-level filtering for ranges). These can be added back as specialized methods if performance requirements demand it in the future.
+
+- [#47](https://github.com/CodeForBreakfast/eventsourcing/pull/47) [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1) Thanks [@GraemeF](https://github.com/GraemeF)! - Update to work with simplified EventStore API
+  - Updated to use `read()` instead of `readHistorical()` for loading aggregate state
+  - Projections package now correctly maps legacy `readHistorical` calls to new `read()` method
+  - Both packages maintain backward compatibility while using the new simplified API internally
+
+- Updated dependencies [[`ee425bf`](https://github.com/CodeForBreakfast/eventsourcing/commit/ee425bf5f0be3e0f6b08f18591ce4b3a13764b76), [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1), [`73ca9d4`](https://github.com/CodeForBreakfast/eventsourcing/commit/73ca9d44adca717e75edc04b6dd6d02fdd8afbf1)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.0
+
 ## 0.4.1
 
 ### Patch Changes
