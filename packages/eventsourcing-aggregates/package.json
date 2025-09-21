@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-aggregates",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Aggregate patterns for event sourcing with Effect",
   "type": "module",
   "main": "./dist/index.js",
