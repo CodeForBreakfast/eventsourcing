@@ -85,8 +85,7 @@ export function runEventStoreTestSuite<E>(
                   Effect.flatMap((stream) =>
                     pipe(
                       stream,
-                      Stream.take(2), // Take exactly 2 events that were written
-                      Stream.runCollect
+                      Stream.runCollect // No take needed - read only returns historical
                     )
                   )
                 )
@@ -147,8 +146,7 @@ export function runEventStoreTestSuite<E>(
                         Effect.flatMap((stream) =>
                           pipe(
                             stream,
-                            Stream.take(3), // Take exactly 3 events (original 2 + 1 new)
-                            Stream.runCollect
+                            Stream.runCollect // No take needed - read only returns historical
                           )
                         )
                       )
@@ -296,8 +294,7 @@ export function runEventStoreTestSuite<E>(
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,
-                    Stream.take(0), // Take 0 events since stream doesn't exist
-                    Stream.runCollect
+                    Stream.runCollect // No events in non-existent stream
                   )
                 )
               )
@@ -346,8 +343,7 @@ export function runEventStoreTestSuite<E>(
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,
-                    Stream.take(2), // Should get the 2 events we just wrote
-                    Stream.runCollect
+                    Stream.runCollect // No take needed - read only returns historical
                   )
                 )
               )
@@ -362,7 +358,7 @@ export function runEventStoreTestSuite<E>(
         ]);
       });
 
-      it('should be able to read events using readHistorical immediately after writing them', async () => {
+      it('should be able to read historical events immediately after writing them', async () => {
         // Write events to the stream
         await runPromiseWithEventStore(
           pipe(
@@ -376,7 +372,7 @@ export function runEventStoreTestSuite<E>(
           )
         );
 
-        // Immediately try to read using readHistorical (which aggregateRoot.load uses)
+        // Immediately try to read using read (which returns only historical events)
         const eventsRead = await runPromiseWithEventStore(
           pipe(
             FooEventStore,
@@ -384,12 +380,11 @@ export function runEventStoreTestSuite<E>(
               pipe(
                 streamId,
                 Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.readHistorical(position)),
+                Effect.flatMap((position) => eventstore.read(position)),
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,
-                    Stream.take(2), // Should get the 2 events we just wrote
-                    Stream.runCollect
+                    Stream.runCollect // No take needed - read only returns historical
                   )
                 )
               )
@@ -397,7 +392,7 @@ export function runEventStoreTestSuite<E>(
           )
         );
 
-        // Should be able to read the events we just wrote using readHistorical
+        // Should be able to read the events we just wrote
         expect(toArraySafely(eventsRead)).toEqual([
           { bar: 'historical-test-1' },
           { bar: 'historical-test-2' },
@@ -438,7 +433,7 @@ export function runEventStoreTestSuite<E>(
               pipe(
                 streamId,
                 Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
+                Effect.flatMap((position) => eventstore.subscribe(position)),
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,
@@ -510,7 +505,7 @@ export function runEventStoreTestSuite<E>(
               pipe(
                 streamId,
                 Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
+                Effect.flatMap((position) => eventstore.subscribe(position)),
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,
@@ -537,7 +532,7 @@ export function runEventStoreTestSuite<E>(
               pipe(
                 streamId,
                 Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
+                Effect.flatMap((position) => eventstore.subscribe(position)),
                 Effect.flatMap((stream) =>
                   pipe(
                     stream,

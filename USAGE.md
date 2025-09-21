@@ -278,13 +278,25 @@ const enrichedEvent = {
 ### Optimistic Concurrency
 
 ```typescript
-import { EventStore } from '@codeforbreakfast/eventsourcing-store';
+import { EventStore, positionAfter, EventNumber } from '@codeforbreakfast/eventsourcing-store';
+import { Stream } from 'effect';
 
-const writeEvents = EventStore.writeExpectedVersion({
-  streamId: 'user-123',
-  events: [event1, event2],
-  expectedVersion: 5, // Will fail if stream version != 5
-});
+// Write events at a specific position for optimistic concurrency
+const writeEventsWithConcurrency = pipe(
+  Effect.all({
+    eventStore: EventStore,
+    streamId: toStreamId('user-123'),
+  }),
+  Effect.flatMap(({ eventStore, streamId }) =>
+    pipe(
+      // Position after event 5 - will fail if stream has advanced beyond this
+      positionAfter(EventNumber(5))(streamId),
+      Effect.flatMap((position) =>
+        pipe(Stream.fromIterable([event1, event2]), Stream.run(eventStore.write(position)))
+      )
+    )
+  )
+);
 ```
 
 ### Snapshots
@@ -371,8 +383,11 @@ const program = EventStore.read({ streamId: 'user-123' }).pipe(
 // Before (EventStore DB)
 const events = await eventStore.readStreamEvents('user-123');
 
-// After (codeforbreakfast)
+// After (codeforbreakfast) - for historical events only
 const events = await Effect.runPromise(EventStore.read({ streamId: 'user-123' }));
+
+// After (codeforbreakfast) - for historical + live events
+const events = await Effect.runPromise(EventStore.subscribe({ streamId: 'user-123' }));
 ```
 
 ### From Axon Framework

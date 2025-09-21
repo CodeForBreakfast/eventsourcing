@@ -26,7 +26,7 @@ bun add @codeforbreakfast/eventsourcing-store-postgres effect @effect/platform @
 ## Quick Start
 
 ```typescript
-import { Effect, Layer } from 'effect';
+import { Effect, Layer, Stream, pipe } from 'effect';
 import {
   postgresEventStore,
   createConnectionManager,
@@ -90,7 +90,8 @@ const program = pipe(
             ];
 
             return pipe(
-              eventStore.append(position, events),
+              Stream.fromIterable(events),
+              Stream.run(eventStore.write(position)),
               Effect.tap((newPosition) =>
                 Effect.logInfo(`Events written at position: ${JSON.stringify(newPosition)}`)
               ),
@@ -244,7 +245,7 @@ const reliableEventProcessing = pipe(
       Effect.flatMap(({ lastPosition, streamId, eventStore }) =>
         pipe(
           lastPosition ? Effect.succeed(lastPosition) : beginning(streamId),
-          Effect.flatMap((startPosition) => eventStore.read(startPosition)),
+          Effect.flatMap((startPosition) => eventStore.subscribe(startPosition)),
           Effect.flatMap((eventStream) =>
             pipe(
               eventStream,
@@ -282,7 +283,9 @@ const batchWriteEvents = (events: Array<{ streamId: string; events: UserEvent[] 
             Effect.flatMap((stream) =>
               pipe(
                 currentEnd(eventStore)(stream),
-                Effect.flatMap((position) => eventStore.append(position, streamEvents))
+                Effect.flatMap((position) =>
+                  pipe(Stream.fromIterable(streamEvents), Stream.run(eventStore.write(position)))
+                )
               )
             )
           )
@@ -310,7 +313,7 @@ const buildProjectionWithCheckpoints = pipe(
       Effect.flatMap((lastPosition) =>
         pipe(
           lastPosition ? Effect.succeed(lastPosition) : beginning(streamId),
-          Effect.flatMap((startPos) => eventStore.read(startPos)),
+          Effect.flatMap((startPos) => eventStore.subscribe(startPos)),
           Effect.flatMap((eventStream) =>
             pipe(
               eventStream,
@@ -339,7 +342,7 @@ const buildProjectionWithCheckpoints = pipe(
 ### Retry Policies
 
 ```typescript
-import { Schedule } from 'effect';
+import { Schedule, Sink, Stream } from 'effect';
 
 const resilientEventStore = Layer.effect(
   EventStore,
@@ -347,16 +350,24 @@ const resilientEventStore = Layer.effect(
     postgresEventStore<UserEvent>(),
     Effect.map((baseStore) => ({
       ...baseStore,
-      append: (position, events) =>
-        pipe(
-          baseStore.append(position, events),
-          Effect.retry(
-            pipe(Schedule.exponential('1 second', 2.0), Schedule.intersect(Schedule.recurs(3)))
+      write: (position) =>
+        Sink.make((chunks) =>
+          pipe(
+            Stream.fromIterable(chunks.flatten()),
+            Stream.run(baseStore.write(position)),
+            Effect.retry(
+              pipe(Schedule.exponential('1 second', 2.0), Schedule.intersect(Schedule.recurs(3)))
+            )
           )
         ),
       read: (position) =>
         pipe(
           baseStore.read(position),
+          Effect.retry(pipe(Schedule.fixed('500 millis'), Schedule.compose(Schedule.recurs(2))))
+        ),
+      subscribe: (position) =>
+        pipe(
+          baseStore.subscribe(position),
           Effect.retry(pipe(Schedule.fixed('500 millis'), Schedule.compose(Schedule.recurs(2))))
         ),
     }))
@@ -504,7 +515,8 @@ describe('PostgreSQL Event Store', () => {
                           ];
 
                           return pipe(
-                            eventStore.append(position, events),
+                            Stream.fromIterable(events),
+                            Stream.run(eventStore.write(position)),
                             Effect.flatMap(() => eventStore.read(position)),
                             Effect.flatMap(Stream.runCollect),
                             Effect.tap((retrievedEvents) =>

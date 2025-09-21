@@ -14,6 +14,7 @@ import { EventStoreError } from '@codeforbreakfast/eventsourcing-store';
 /**
  * A simplified EventStore interface for projections.
  * This is a subset of the full EventStore interface, containing only what projections need.
+ * Projections only need to read historical events, not subscribe to live updates.
  */
 export interface ProjectionEventStore<TEvent> {
   readonly read: (
@@ -23,23 +24,15 @@ export interface ProjectionEventStore<TEvent> {
     EventStoreError,
     never
   >;
-  readonly readHistorical: (
-    from: EventStreamPosition
-  ) => Effect.Effect<
-    Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
-    EventStoreError,
-    never
-  >;
 }
 
 /**
- * Create a compatible version of EventStore that works with the projections package
+ * Create a projection-specific view of an EventStore
  */
-export const createCompatibleEventStore = <TEvent>(
+export const createProjectionEventStore = <TEvent>(
   original: FullEventStore<TEvent>
 ): ProjectionEventStore<TEvent> => ({
   read: (from: EventStreamPosition) => original.read(from),
-  readHistorical: (from: EventStreamPosition) => original.readHistorical(from),
 });
 
 export { EventNumber, EventStreamId, EventStreamPosition, EventStoreError };

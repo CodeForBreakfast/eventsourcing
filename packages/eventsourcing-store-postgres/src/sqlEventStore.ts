@@ -4,7 +4,6 @@ import {
   EventNumber,
   EventStreamId,
   EventStreamPosition,
-  type ReadParams,
   type EventStore,
   EventStoreError,
   eventStoreError,
@@ -149,30 +148,6 @@ export const EventSubscriptionServicesLive = Layer.mergeAll(
   NotificationInfrastructureLive
 );
 
-// Helper to determine if parameter is ReadParams or EventStreamPosition
-const isEventStreamPosition = (
-  params: ReadParams | EventStreamPosition
-): params is EventStreamPosition => 'eventNumber' in params;
-
-// Helper to apply read options to event rows
-const applyReadOptionsToEvents = (
-  events: readonly EventRow[],
-  options: Readonly<ReadParams>
-): readonly EventRow[] =>
-  pipe(
-    events,
-    // Apply fromEventNumber filter
-    options.fromEventNumber !== undefined
-      ? (evts) => evts.filter((event) => event.event_number >= options.fromEventNumber!)
-      : (evts) => evts,
-    // Apply toEventNumber filter
-    options.toEventNumber !== undefined
-      ? (evts) => evts.filter((event) => event.event_number <= options.toEventNumber!)
-      : (evts) => evts,
-    // Apply direction
-    options.direction === 'backward' ? (evts) => [...evts].reverse() : (evts) => evts
-  );
-
 /**
  * Create a SQL-based EventStore with subscription support and PostgreSQL LISTEN/NOTIFY
  */
@@ -308,156 +283,83 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           >;
         },
         read: (
-          params: ReadParams | EventStreamPosition
+          from: EventStreamPosition
         ): Effect.Effect<
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
           never
         > => {
-          if (isEventStreamPosition(params)) {
-            // Legacy EventStreamPosition behavior - maintain live streaming
-            return pipe(
-              // Start PostgreSQL LISTEN for this stream
-              notificationListener.listen(params.streamId),
-              Effect.flatMap(() =>
-                // Establish live subscription SECOND to receive bridged notifications
-                subscriptionManager.subscribeToStream(params.streamId)
-              ),
-              Effect.flatMap((liveStream) =>
-                pipe(
-                  // Then get historical events
-                  eventRows.selectAllEventsInStream(params.streamId),
-                  Effect.map((events: readonly EventRow[]) => {
-                    const filteredEvents = events
-                      .filter(
-                        (event: Readonly<EventRow>) => event.event_number >= params.eventNumber
-                      )
-                      .map((event: Readonly<EventRow>) => event.event_payload);
-                    return Stream.fromIterable(filteredEvents);
-                  }),
-                  Effect.map((historicalStream) =>
-                    // Combine historical events with live stream (PostgreSQL notifications handled by layer)
-                    pipe(historicalStream, Stream.concat(liveStream))
-                  )
-                )
-              ),
-              Effect.map((stream) =>
-                Stream.mapError(stream, (error) =>
-                  eventStoreError.read(
-                    params.streamId,
-                    `Failed to read events from stream: ${String(error)}`,
-                    error
-                  )
-                )
-              ),
-              Effect.mapError((error) =>
+          // Read returns only historical events - no live updates
+          return pipe(
+            eventRows.selectAllEventsInStream(from.streamId),
+            Effect.map((events: readonly EventRow[]) => {
+              const filteredEvents = events
+                .filter((event: Readonly<EventRow>) => event.event_number >= from.eventNumber)
+                .map((event: Readonly<EventRow>) => event.event_payload);
+              return Stream.fromIterable(filteredEvents);
+            }),
+            Effect.map((stream) =>
+              Stream.mapError(stream, (error) =>
                 eventStoreError.read(
-                  params.streamId,
-                  `Failed to read events from stream: ${String(error)}`,
+                  from.streamId,
+                  `Failed to read historical events: ${String(error)}`,
                   error
                 )
               )
-            );
-          }
-          // New ReadParams behavior - historical only with options
-          return pipe(
-            eventRows.selectAllEventsInStream(params.streamId),
-            Effect.map((events: readonly EventRow[]) => {
-              const filteredEvents = applyReadOptionsToEvents(events, params);
-              const eventPayloads = filteredEvents.map(
-                (event: Readonly<EventRow>) => event.event_payload
-              );
-
-              // Apply batch size if specified
-              return params.batchSize
-                ? pipe(
-                    // Create batches functionally
-                    (() => {
-                      const batchSize = params.batchSize;
-                      return Array.from(
-                        { length: Math.ceil(eventPayloads.length / batchSize) },
-                        (_, i) => eventPayloads.slice(i * batchSize, (i + 1) * batchSize)
-                      );
-                    })(),
-                    Stream.fromIterable,
-                    Stream.flatMap((batch) => Stream.fromIterable(batch))
-                  )
-                : Stream.fromIterable(eventPayloads);
-            }),
+            ),
             Effect.mapError((error) =>
               eventStoreError.read(
-                params.streamId,
-                `Failed to read events with options: ${String(error)}`,
+                from.streamId,
+                `Failed to read historical events: ${String(error)}`,
                 error
               )
             )
           );
         },
-        readHistorical: (
-          params: ReadParams | EventStreamPosition
+        subscribe: (
+          from: EventStreamPosition
         ): Effect.Effect<
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
           never
         > => {
-          if (isEventStreamPosition(params)) {
-            // Legacy EventStreamPosition behavior
-            return pipe(
-              // Get only historical events without live subscription
-              eventRows.selectAllEventsInStream(params.streamId),
-              Effect.map((events: readonly EventRow[]) => {
-                const filteredEvents = events
-                  .filter((event: Readonly<EventRow>) => event.event_number >= params.eventNumber)
-                  .map((event: Readonly<EventRow>) => event.event_payload);
-                return Stream.fromIterable(filteredEvents);
-              }),
-              Effect.map((stream) =>
-                Stream.mapError(stream, (error) =>
-                  eventStoreError.read(
-                    params.streamId,
-                    `Failed to read historical events: ${String(error)}`,
-                    error
-                  )
+          // Subscribe returns historical events + live updates
+          return pipe(
+            // Start PostgreSQL LISTEN for this stream
+            notificationListener.listen(from.streamId),
+            Effect.flatMap(() =>
+              // Establish live subscription SECOND to receive bridged notifications
+              subscriptionManager.subscribeToStream(from.streamId)
+            ),
+            Effect.flatMap((liveStream) =>
+              pipe(
+                // Then get historical events
+                eventRows.selectAllEventsInStream(from.streamId),
+                Effect.map((events: readonly EventRow[]) => {
+                  const filteredEvents = events
+                    .filter((event: Readonly<EventRow>) => event.event_number >= from.eventNumber)
+                    .map((event: Readonly<EventRow>) => event.event_payload);
+                  return Stream.fromIterable(filteredEvents);
+                }),
+                Effect.map((historicalStream) =>
+                  // Combine historical events with live stream (PostgreSQL notifications handled by layer)
+                  pipe(historicalStream, Stream.concat(liveStream))
                 )
-              ),
-              Effect.mapError((error) =>
+              )
+            ),
+            Effect.map((stream) =>
+              Stream.mapError(stream, (error) =>
                 eventStoreError.read(
-                  params.streamId,
-                  `Failed to read historical events: ${String(error)}`,
+                  from.streamId,
+                  `Failed to subscribe to stream: ${String(error)}`,
                   error
                 )
               )
-            );
-          }
-          // New ReadParams behavior with options
-          return pipe(
-            eventRows.selectAllEventsInStream(params.streamId),
-            Effect.map((events: readonly EventRow[]) => {
-              const filteredEvents = applyReadOptionsToEvents(events, params);
-              const eventPayloads = filteredEvents.map(
-                (event: Readonly<EventRow>) => event.event_payload
-              );
-
-              // Apply batch size if specified
-              return params.batchSize
-                ? pipe(
-                    // Create batches functionally
-                    (() => {
-                      const batchSize = params.batchSize;
-                      return Array.from(
-                        { length: Math.ceil(eventPayloads.length / batchSize) },
-                        (_, i) => eventPayloads.slice(i * batchSize, (i + 1) * batchSize)
-                      );
-                    })(),
-                    Stream.fromIterable,
-                    Stream.flatMap((batch) => Stream.fromIterable(batch))
-                  )
-                : Stream.fromIterable(eventPayloads);
-            }),
+            ),
             Effect.mapError((error) =>
               eventStoreError.read(
-                params.streamId,
-                `Failed to read historical events with options: ${String(error)}`,
+                from.streamId,
+                `Failed to subscribe to stream: ${String(error)}`,
                 error
               )
             )

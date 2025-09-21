@@ -24,7 +24,7 @@ bun add @codeforbreakfast/eventsourcing-store effect
 ## Quick Start
 
 ```typescript
-import { Effect, pipe } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import {
   inMemoryEventStore,
   toStreamId,
@@ -57,12 +57,14 @@ const writeEvents = (eventStore: EventStore<UserEvent>) => (userId: string, even
     Effect.flatMap((streamId) =>
       pipe(
         beginning(streamId),
-        Effect.flatMap((position) => eventStore.append(position, events))
+        Effect.flatMap((position) =>
+          pipe(Stream.fromIterable(events), Stream.run(eventStore.write(position)))
+        )
       )
     )
   );
 
-// Example: Reading events from a stream
+// Example: Reading historical events from a stream
 const readUserEvents = (eventStore: EventStore<UserEvent>) => (userId: string) =>
   pipe(
     toStreamId(userId),
@@ -117,18 +119,28 @@ The main service interface for reading and writing events:
 
 ```typescript
 interface EventStore<TEvent> {
+  readonly write: (
+    to: EventStreamPosition
+  ) => Sink.Sink<
+    EventStreamPosition,
+    TEvent,
+    TEvent,
+    ConcurrencyConflictError | ParseResult.ParseError | EventStoreError
+  >;
+
   readonly read: (
-    position: EventStreamPosition
+    from: EventStreamPosition
   ) => Effect.Effect<Stream.Stream<TEvent>, EventStoreError>;
-  readonly readHistorical: (
-    position: EventStreamPosition
+
+  readonly subscribe: (
+    from: EventStreamPosition
   ) => Effect.Effect<Stream.Stream<TEvent>, EventStoreError>;
-  readonly append: (
-    position: EventStreamPosition,
-    events: TEvent[]
-  ) => Effect.Effect<EventStreamPosition, EventStoreError | ConcurrencyConflictError>;
 }
 ```
+
+- `write`: Write events to a stream at a specific position
+- `read`: Read historical events only (no live updates)
+- `subscribe`: Read historical events then continue with live updates
 
 ### Stream Types
 

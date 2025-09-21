@@ -26,7 +26,7 @@ import { CommandContext } from './commandInitiator';
 /**
  * Represents the state of an aggregate at a particular point in time
  * This replaces the Projection type to keep aggregates focused on write-side concerns
- * @since 1.0.0
+ * @since 0.4.0
  */
 export interface AggregateState<TData> {
   readonly nextEventNumber: EventNumber;
@@ -35,7 +35,7 @@ export interface AggregateState<TData> {
 
 /**
  * Options for committing events to an aggregate
- * @since 1.0.0
+ * @since 0.4.0
  */
 export interface CommitOptions {
   readonly id: string;
@@ -49,7 +49,7 @@ export interface CommitOptions {
  * The function is curried with the service tag first for dependency injection,
  * allowing beautiful pipe composition patterns.
  *
- * @since 1.0.0
+ * @since 0.4.0
  * @example
  * ```typescript
  * // Basic usage
@@ -117,7 +117,7 @@ const commit =
 /**
  * Creates an aggregate root with event sourcing capabilities
  *
- * @since 1.0.0
+ * @since 0.4.0
  * @example
  * ```typescript
  * import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
@@ -174,7 +174,7 @@ export const createAggregateRoot = <TId extends string, TEvent, TState, TCommand
           id,
           toStreamId,
           Effect.flatMap(beginning),
-          Effect.flatMap((position: EventStreamPosition) => eventStore.readHistorical(position)),
+          Effect.flatMap((position: EventStreamPosition) => eventStore.read(position)),
           Effect.flatMap((stream) =>
             pipe(
               stream,
@@ -229,7 +229,7 @@ export type EventMetadata = typeof EventMetadata.Type;
 /**
  * Creates event metadata with timestamp and originator information
  *
- * @since 1.0.0
+ * @since 0.4.0
  * @example
  * ```typescript
  * const metadata = await Effect.runPromise(eventMetadata());
@@ -260,7 +260,7 @@ export const eventMetadata = () =>
 /**
  * Creates a schema for domain events with type, metadata, and data fields
  *
- * @since 1.0.0
+ * @since 0.4.0
  * @example
  * ```typescript
  * const UserCreatedEvent = eventSchema(

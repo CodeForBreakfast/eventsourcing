@@ -1,12 +1,12 @@
 import { Effect, ParseResult, Schema, Sink, Stream, pipe } from 'effect';
 import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './streamTypes';
-import type { ReadParams, EventStore } from './services';
+import type { EventStore } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
 
 /**
  * Gets the current end position of a stream
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { currentEnd } from '@codeforbreakfast/eventsourcing-store';
@@ -26,7 +26,7 @@ export const currentEnd =
       beginning(streamId),
       Effect.flatMap((startPos) =>
         pipe(
-          eventStore.readHistorical(startPos),
+          eventStore.read(startPos), // Use read for historical events only
           Effect.flatMap((stream) =>
             pipe(
               stream,
@@ -45,7 +45,7 @@ export const currentEnd =
 /**
  * Creates an EventStreamPosition from a stream ID and event number
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { positionFromEventNumber } from '@codeforbreakfast/eventsourcing-store';
@@ -81,7 +81,7 @@ export { ConcurrencyConflictError as StreamEndMovedError } from './errors';
 /**
  * Creates an event store that encodes/decodes events using a schema
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { encodedEventStore } from '@codeforbreakfast/eventsourcing-store';
@@ -118,18 +118,18 @@ export const encodedEventStore =
           Sink.mapInputEffect((a: A) => Schema.encode(schema)(a))
         ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
       },
-      read: (params: ReadParams | EventStreamPosition) =>
+      read: (from: EventStreamPosition) =>
         pipe(
-          params,
+          from,
           eventstore.read,
           Effect.map((stream) =>
             Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
           )
         ),
-      readHistorical: (params: ReadParams | EventStreamPosition) =>
+      subscribe: (from: EventStreamPosition) =>
         pipe(
-          params,
-          eventstore.readHistorical,
+          from,
+          eventstore.subscribe,
           Effect.map((stream) =>
             Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
           )
