@@ -1,4 +1,4 @@
-import { Effect, Stream, Duration, Scope, pipe } from 'effect';
+import { Effect, Stream, Duration, Scope } from 'effect';
 import {
   TransportConnectionError,
   TransportPublishError,
@@ -68,40 +68,36 @@ export interface ConnectedTransport<TData = unknown, TStreamId = string, R = nev
 }
 
 /**
- * Transport factory function that creates a connected transport within a scope.
+ * Creates a connected transport within a scope.
  * The connection is established during acquire and cleaned up during release.
  * This makes it impossible to use transport methods without being connected.
+ *
+ * @example
+ * ```typescript
+ * // Create a transport factory with config baked in
+ * const createMyTransport = (config: TransportConfig) =>
+ *   Effect.acquireRelease(
+ *     // Acquire: establish connection
+ *     establishConnection(config),
+ *     // Release: cleanup
+ *     (connection) => closeConnection(connection)
+ *   );
+ *
+ * // Use it in a scoped context
+ * const program = Effect.scoped(
+ *   pipe(
+ *     createMyTransport(config),
+ *     Effect.flatMap((transport) =>
+ *       transport.publish("stream-1", { hello: "world" })
+ *     )
+ *   )
+ * );
+ * ```
  */
-export type Transport<TData = unknown, TStreamId = string, R = never> = (
+export type CreateTransport<TData = unknown, TStreamId = string, R = never> = (
   config: TransportConfig
 ) => Effect.Effect<
   ConnectedTransport<TData, TStreamId, R>,
   TransportConnectionError,
   R | Scope.Scope
 >;
-
-/**
- * Helper function to use a transport within a scoped operation.
- * Automatically handles connection lifecycle with Effect.acquireRelease.
- *
- * @example
- * ```typescript
- * const program = Effect.gen(function* (_) {
- *   const result = yield* _(
- *     withTransport(myTransport, config, (transport) =>
- *       pipe(
- *         transport.publish("stream-1", { hello: "world" }),
- *         Effect.flatMap(() => transport.health)
- *       )
- *     )
- *   );
- *   return result;
- * });
- * ```
- */
-export const withTransport = <TData, TStreamId, R, A, E>(
-  transport: Transport<TData, TStreamId, R>,
-  config: TransportConfig,
-  f: (connected: ConnectedTransport<TData, TStreamId, R>) => Effect.Effect<A, E, R>
-): Effect.Effect<A, E | TransportConnectionError, R | Scope.Scope> =>
-  pipe(transport(config), Effect.flatMap(f));

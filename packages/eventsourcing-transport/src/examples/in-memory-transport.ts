@@ -1,11 +1,10 @@
-import { Effect, Stream, Duration, pipe, Ref } from 'effect';
+import { Effect, Stream, pipe, Ref, Duration } from 'effect';
 import {
   ConnectedTransport,
-  Transport,
+  CreateTransport,
   TransportConfig,
   StreamMessage,
   TransportHealth,
-  withTransport,
 } from '../types.js';
 import { TransportPublishError, TransportSubscriptionError } from '../errors.js';
 
@@ -28,7 +27,11 @@ interface InMemoryStore {
   readonly connectedAt?: Date;
 }
 
-const makeInMemoryTransport = (): Transport<unknown, string, never> => (_config) =>
+/**
+ * Creates an in-memory transport factory.
+ * Config is provided when creating the transport instance.
+ */
+const createInMemoryTransport: CreateTransport<unknown, string, never> = (_config) =>
   pipe(
     Ref.make<InMemoryStore>({
       streams: new Map(),
@@ -230,33 +233,38 @@ const createConnectedTransport = (
 /**
  * Example usage demonstrating the connection-gated pattern
  */
-export const exampleUsage = Effect.gen(function* (_) {
-  const transport = makeInMemoryTransport();
-
-  const config: TransportConfig = {
+export const exampleUsage = pipe(
+  createInMemoryTransport({
     url: 'in-memory://localhost',
     retryAttempts: 3,
     timeout: Duration.seconds(5),
-  };
-
-  // This is now impossible to misuse - you can't call publish/subscribe
-  // without being connected, and cleanup happens automatically
-  const result = yield* _(
-    withTransport(transport, config, (connectedTransport) =>
-      pipe(
-        connectedTransport.publish('test-stream', { hello: 'world' }),
-        Effect.flatMap(() => connectedTransport.health),
-        Effect.flatMap((health) =>
-          Effect.succeed({
-            published: true,
-            connected: health.connected,
-          })
-        )
-      )
+  }),
+  Effect.flatMap((transport) =>
+    pipe(
+      transport.publish('test-stream', { hello: 'world' }),
+      Effect.flatMap(() => transport.health),
+      Effect.map((health) => ({
+        published: true,
+        connected: health.connected,
+      }))
     )
-  );
+  ),
+  Effect.scoped // Ensures connection cleanup
+);
 
-  return result;
-});
+// Example of using in a service with dependency injection
+export const makeInMemoryTransportService = (config: TransportConfig) =>
+  Effect.gen(function* (_) {
+    // Config is baked in at service creation time
+    const transport = yield* _(createInMemoryTransport(config));
 
-export { makeInMemoryTransport };
+    return {
+      sendMessage: (streamId: string, data: unknown) => transport.publish(streamId, data),
+
+      streamEvents: (streamId: string) => transport.subscribe(streamId),
+
+      checkHealth: () => transport.health,
+    };
+  });
+
+export { createInMemoryTransport };

@@ -1,7 +1,7 @@
 import { Effect, Stream, Duration, pipe, Schema, Scope } from 'effect';
 import {
   ConnectedRawTransport,
-  RawTransport,
+  CreateRawTransport,
   SchemaTransportConfig,
   RawWireMessage,
   makeSchemaTransport,
@@ -33,120 +33,117 @@ interface WebSocketConnection {
   readonly connectedAt: Date;
 }
 
-const makeWebSocketRawTransport =
-  (): RawTransport<never> =>
-  <TWireFormat>(config: SchemaTransportConfig<any, TWireFormat>) =>
-    pipe(
-      Effect.acquireRelease(
-        // Acquire: Establish WebSocket connection
-        Effect.async<WebSocketConnection, TransportConnectionError>((resume) => {
-          const socket = new WebSocket(config.url);
-          let isConnected = false;
+const createWebSocketRawTransport: CreateRawTransport<never> = <TWireFormat>(
+  config: SchemaTransportConfig<any, TWireFormat>
+) =>
+  pipe(
+    Effect.acquireRelease(
+      // Acquire: Establish WebSocket connection
+      Effect.async<WebSocketConnection, TransportConnectionError>((resume) => {
+        const socket = new WebSocket(config.url);
+        let isConnected = false;
 
-          const connection: WebSocketConnection = {
-            socket,
-            messageHandlers: new Map(),
-            metrics: {
-              messagesPublished: 0,
-              messagesReceived: 0,
-              activeSubscriptions: 0,
-              connectionAttempts: 1,
-              errors: 0,
-            },
-            connectedAt: new Date(),
-          };
+        const connection: WebSocketConnection = {
+          socket,
+          messageHandlers: new Map(),
+          metrics: {
+            messagesPublished: 0,
+            messagesReceived: 0,
+            activeSubscriptions: 0,
+            connectionAttempts: 1,
+            errors: 0,
+          },
+          connectedAt: new Date(),
+        };
 
-          socket.onopen = () => {
-            if (!isConnected) {
-              isConnected = true;
-              resume(Effect.succeed(connection));
-            }
-          };
+        socket.onopen = () => {
+          if (!isConnected) {
+            isConnected = true;
+            resume(Effect.succeed(connection));
+          }
+        };
 
-          socket.onerror = (error) => {
-            if (!isConnected) {
-              isConnected = true;
-              resume(
-                Effect.fail(
-                  new TransportConnectionError({
-                    message: `WebSocket connection failed: ${error}`,
-                    retryable: true,
-                  })
-                )
-              );
-            }
-          };
+        socket.onerror = (error) => {
+          if (!isConnected) {
+            isConnected = true;
+            resume(
+              Effect.fail(
+                new TransportConnectionError({
+                  message: `WebSocket connection failed: ${error}`,
+                  retryable: true,
+                })
+              )
+            );
+          }
+        };
 
-          socket.onmessage = (event) => {
-            try {
-              const data = JSON.parse(event.data);
-              const { streamId, wireData, position, timestamp, metadata } = data;
+        socket.onmessage = (event) => {
+          try {
+            const data = JSON.parse(event.data);
+            const { streamId, wireData, position, timestamp, metadata } = data;
 
-              const message: RawWireMessage<string> = {
-                streamId,
-                wireData,
-                position,
-                timestamp: new Date(timestamp),
-                metadata,
-              };
+            const message: RawWireMessage<string> = {
+              streamId,
+              wireData,
+              position,
+              timestamp: new Date(timestamp),
+              metadata,
+            };
 
-              const handlers = connection.messageHandlers.get(streamId) ?? new Set();
-              handlers.forEach((handler) => handler(message));
+            const handlers = connection.messageHandlers.get(streamId) ?? new Set();
+            handlers.forEach((handler) => handler(message));
 
-              connection.metrics.messagesReceived++;
-            } catch (error) {
-              connection.metrics.errors++;
-              console.error('Failed to parse WebSocket message:', error);
-            }
-          };
+            connection.metrics.messagesReceived++;
+          } catch (error) {
+            connection.metrics.errors++;
+            console.error('Failed to parse WebSocket message:', error);
+          }
+        };
 
-          // Timeout handling
-          const timeoutId = setTimeout(() => {
-            if (!isConnected) {
-              isConnected = true;
-              socket.close();
-              resume(
-                Effect.fail(
-                  new TransportConnectionError({
-                    message: 'WebSocket connection timeout',
-                    retryable: true,
-                  })
-                )
-              );
-            }
-          }, Duration.toMillis(config.timeout));
+        // Timeout handling
+        const timeoutId = setTimeout(() => {
+          if (!isConnected) {
+            isConnected = true;
+            socket.close();
+            resume(
+              Effect.fail(
+                new TransportConnectionError({
+                  message: 'WebSocket connection timeout',
+                  retryable: true,
+                })
+              )
+            );
+          }
+        }, Duration.toMillis(config.timeout));
 
-          return Effect.sync(() => {
-            clearTimeout(timeoutId);
-            if (
-              socket.readyState === WebSocket.CONNECTING ||
-              socket.readyState === WebSocket.OPEN
-            ) {
-              socket.close();
-            }
-          });
-        }),
-        // Release: Clean up WebSocket connection
-        (connection) =>
-          Effect.sync(() => {
-            connection.messageHandlers.clear();
-            if (connection.socket.readyState === WebSocket.OPEN) {
-              connection.socket.close();
-            }
-          })
-      ),
-      Effect.map(
-        (connection) =>
-          createConnectedRawTransport(connection) as unknown as ConnectedRawTransport<
-            TWireFormat,
-            never
-          >
-      )
-    ) as Effect.Effect<
-      ConnectedRawTransport<TWireFormat, never>,
-      TransportConnectionError,
-      Scope.Scope
-    >;
+        return Effect.sync(() => {
+          clearTimeout(timeoutId);
+          if (socket.readyState === WebSocket.CONNECTING || socket.readyState === WebSocket.OPEN) {
+            socket.close();
+          }
+        });
+      }),
+      // Release: Clean up WebSocket connection
+      (connection) =>
+        Effect.sync(() => {
+          connection.messageHandlers.clear();
+          if (connection.socket.readyState === WebSocket.OPEN) {
+            connection.socket.close();
+          }
+        })
+    ),
+    Effect.map(
+      (connection) =>
+        createConnectedRawTransport(connection) as unknown as ConnectedRawTransport<
+          TWireFormat,
+          never
+        >
+    )
+  ) as Effect.Effect<
+    ConnectedRawTransport<TWireFormat, never>,
+    TransportConnectionError,
+    Scope.Scope
+  >;
 
 const createConnectedRawTransport = (
   connection: WebSocketConnection
@@ -263,50 +260,48 @@ const createConnectedRawTransport = (
 /**
  * Example usage with schema transport built on top of the raw WebSocket transport
  */
-export const exampleSchemaUsage = Effect.gen(function* (_) {
-  const rawTransport = makeWebSocketRawTransport();
+export const exampleSchemaUsage = pipe(
+  Effect.gen(function* (_) {
+    // Define a message schema
+    const messageSchema = Schema.Struct({
+      type: Schema.String,
+      payload: Schema.Unknown,
+      userId: Schema.optional(Schema.String),
+    });
 
-  // Define a message schema
-  const messageSchema = Schema.Struct({
-    type: Schema.String,
-    payload: Schema.Unknown,
-    userId: Schema.optional(Schema.String),
-  });
+    type MessageType = Schema.Schema.Type<typeof messageSchema>;
 
-  type MessageType = Schema.Schema.Type<typeof messageSchema>;
+    // Create schema transport with raw transport baked in
+    const createSchemaTransport = makeSchemaTransport<MessageType>(createWebSocketRawTransport);
 
-  const schemaTransport = makeSchemaTransport<MessageType>(rawTransport);
+    const config: SchemaTransportConfig<MessageType, string> = {
+      url: 'ws://localhost:8080/events',
+      retryAttempts: 3,
+      timeout: Duration.seconds(10),
+      codec: Codecs.json(messageSchema),
+    };
 
-  const config: SchemaTransportConfig<MessageType, string> = {
-    url: 'ws://localhost:8080/events',
-    retryAttempts: 3,
-    timeout: Duration.seconds(10),
-    codec: Codecs.json(messageSchema),
-  };
+    // Config is now provided at creation time, not connection time
+    const connectedTransport = yield* _(createSchemaTransport(config));
 
-  // This demonstrates the full type-safe, connection-gated pattern
-  const result = yield* _(
-    schemaTransport(config),
-    Effect.flatMap((connectedTransport) =>
-      pipe(
-        connectedTransport.publish('user-events', {
-          type: 'user-login',
-          payload: { sessionId: 'abc123' },
-          userId: 'user-456',
-        }),
-        Effect.flatMap(() => connectedTransport.health),
-        Effect.flatMap((health) =>
-          Effect.succeed({
-            published: true,
-            connected: health.connected,
-            uptime: health.uptime,
-          })
-        )
-      )
-    )
-  );
+    // Use the transport - it's already connected
+    yield* _(
+      connectedTransport.publish('user-events', {
+        type: 'user-login',
+        payload: { sessionId: 'abc123' },
+        userId: 'user-456',
+      })
+    );
 
-  return result;
-});
+    const health = yield* _(connectedTransport.health);
 
-export { makeWebSocketRawTransport };
+    return {
+      published: true,
+      connected: health.connected,
+      uptime: health.uptime,
+    };
+  }),
+  Effect.scoped // Connection cleanup happens automatically
+);
+
+export { createWebSocketRawTransport };
