@@ -1,8 +1,8 @@
 ---
-'@codeforbreakfast/eventsourcing-store': major
-'@codeforbreakfast/eventsourcing-projections': major
-'@codeforbreakfast/eventsourcing-aggregates': major
-'@codeforbreakfast/eventsourcing-websocket-transport': major
+'@codeforbreakfast/eventsourcing-store': minor
+'@codeforbreakfast/eventsourcing-projections': minor
+'@codeforbreakfast/eventsourcing-aggregates': minor
+'@codeforbreakfast/eventsourcing-websocket-transport': minor
 ---
 
 ## Breaking Changes: API Standardization and Service Pattern Improvements
