@@ -10,11 +10,12 @@ import {
 // EventStore service interface - Simplified API
 export interface EventStore<TEvent> {
   /**
-   * Write events to a stream at a specific position
-   * @param to The position in the stream to write to
-   * @returns A sink that writes events and returns the new stream position
+   * Append events to the end of a stream at a specific position
+   * @param to The expected position in the stream (used for optimistic concurrency control)
+   * @returns A sink that appends events and returns the new stream position
+   * @throws {ConcurrencyConflictError} If the stream position doesn't match the expected position
    */
-  readonly write: (
+  readonly append: (
     to: EventStreamPosition
   ) => Sink.Sink<
     EventStreamPosition,

@@ -14,7 +14,7 @@ export const makeInMemoryEventStore = <T>(
   store: Readonly<InMemoryStore.InMemoryStore<T>>
 ): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
-    write: (to: EventStreamPosition) =>
+    append: (to: EventStreamPosition) =>
       Sink.foldChunksEffect(
         to,
         () => true,

@@ -292,7 +292,7 @@ const writeEventsWithConcurrency = pipe(
       // Position after event 5 - will fail if stream has advanced beyond this
       positionAfter(EventNumber(5))(streamId),
       Effect.flatMap((position) =>
-        pipe(Stream.fromIterable([event1, event2]), Stream.run(eventStore.write(position)))
+        pipe(Stream.fromIterable([event1, event2]), Stream.run(eventStore.append(position)))
       )
     )
   )

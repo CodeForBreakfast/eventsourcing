@@ -1,7 +1,7 @@
 ---
-'@codeforbreakfast/eventsourcing-store': major
-'@codeforbreakfast/eventsourcing-store-postgres': major
-'@codeforbreakfast/eventsourcing-projections': major
+'@codeforbreakfast/eventsourcing-store': minor
+'@codeforbreakfast/eventsourcing-store-postgres': minor
+'@codeforbreakfast/eventsourcing-projections': minor
 '@codeforbreakfast/eventsourcing-aggregates': patch
 ---
 
