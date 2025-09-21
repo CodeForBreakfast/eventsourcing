@@ -9,6 +9,8 @@ export {
   makeInMemoryEventStore,
   makeSubscribableInMemoryEventStore,
   type SubscribableEventStore,
+  InMemoryStore,
+  make as makeInMemoryStore,
 } from './lib/inMemory';
 
 // Streaming utilities
