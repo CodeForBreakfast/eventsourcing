@@ -34,9 +34,8 @@
     },
     "packages/eventsourcing-aggregates": {
       "name": "@codeforbreakfast/eventsourcing-aggregates",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
-        "@codeforbreakfast/eventsourcing-projections": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
       "devDependencies": {
@@ -52,7 +51,7 @@
     },
     "packages/eventsourcing-projections": {
       "name": "@codeforbreakfast/eventsourcing-projections",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
@@ -69,8 +68,24 @@
     },
     "packages/eventsourcing-store": {
       "name": "@codeforbreakfast/eventsourcing-store",
-      "version": "0.1.0",
+      "version": "0.2.0",
+      "devDependencies": {
+        "@types/node": "24.5.2",
+        "effect": "3.17.14",
+        "eslint": "9.36.0",
+        "typescript": "5.9.2",
+        "vitest": "3.2.4",
+      },
+      "peerDependencies": {
+        "@effect/platform": "^0.90.0",
+        "effect": "^3.17.0",
+      },
+    },
+    "packages/eventsourcing-store-postgres": {
+      "name": "@codeforbreakfast/eventsourcing-store-postgres",
+      "version": "0.2.0",
       "dependencies": {
+        "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@effect/experimental": "0.54.6",
         "@effect/sql": "0.44.2",
         "@effect/sql-pg": "0.45.1",
@@ -89,7 +104,7 @@
     },
     "packages/eventsourcing-websocket-transport": {
       "name": "@codeforbreakfast/eventsourcing-websocket-transport",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
@@ -157,6 +172,8 @@
     "@codeforbreakfast/eventsourcing-projections": ["@codeforbreakfast/eventsourcing-projections@workspace:packages/eventsourcing-projections"],
 
     "@codeforbreakfast/eventsourcing-store": ["@codeforbreakfast/eventsourcing-store@workspace:packages/eventsourcing-store"],
+
+    "@codeforbreakfast/eventsourcing-store-postgres": ["@codeforbreakfast/eventsourcing-store-postgres@workspace:packages/eventsourcing-store-postgres"],
 
     "@codeforbreakfast/eventsourcing-websocket-transport": ["@codeforbreakfast/eventsourcing-websocket-transport@workspace:packages/eventsourcing-websocket-transport"],
 

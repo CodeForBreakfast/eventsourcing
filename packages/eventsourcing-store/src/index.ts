@@ -8,7 +8,7 @@ export * from './lib/eventstore';
 export {
   inMemoryEventStore,
   enhancedInMemoryEventStore,
-  type EnhancedEventStore
+  type EnhancedEventStore,
 } from './lib/inMemory';
 
 // Streaming utilities
@@ -17,14 +17,10 @@ export {
   OptimizedStreamHandlerLive,
   makeOptimizedStreamHandler,
   StreamingError,
-  type OptimizedStreamHandlerService
+  type OptimizedStreamHandlerService,
 } from './lib/streaming';
 
-// SQL/PostgreSQL implementation
-export {
-  PostgresLive,
-  PgConfiguration,
-  PgConfigurationLive,
-  PgLive,
-  type PgConfigurationInterface
-} from './lib/sql';
+// Testing utilities
+export * from './lib/testing/eventstore-test-suite';
+
+// Note: SQL/PostgreSQL implementation moved to @codeforbreakfast/eventsourcing-store-postgres

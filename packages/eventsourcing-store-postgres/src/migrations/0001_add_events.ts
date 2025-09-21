@@ -1,5 +1,5 @@
-import { SqlClient } from "@effect/sql";
-import { Effect } from "effect";
+import { SqlClient } from '@effect/sql';
+import { Effect } from 'effect';
 
 export default Effect.flatMap(
   SqlClient.SqlClient,
@@ -10,5 +10,5 @@ export default Effect.flatMap(
       event_payload varchar NOT NULL,
       PRIMARY KEY (stream_id, event_number)
     )
-  `,
+  `
 );

@@ -12,15 +12,19 @@ This monorepo contains the following packages:
 
 ### [@codeforbreakfast/eventsourcing-store](./packages/eventsourcing-store)
 
-Core event sourcing types and storage implementations including SQL and in-memory stores.
+Core event sourcing types, interfaces, and in-memory storage implementation. This is the foundation package that defines the EventStore interface and provides an in-memory implementation for development and testing.
+
+### [@codeforbreakfast/eventsourcing-store-postgres](./packages/eventsourcing-store-postgres)
+
+PostgreSQL implementation of the EventStore interface. Includes SQL migrations, connection management, and LISTEN/NOTIFY support for real-time event streaming.
 
 ### [@codeforbreakfast/eventsourcing-aggregates](./packages/eventsourcing-aggregates)
 
-Aggregate root patterns for domain-driven design with event sourcing.
+Aggregate root patterns for domain-driven design with event sourcing. Focuses purely on write-side concerns and command handling.
 
 ### [@codeforbreakfast/eventsourcing-projections](./packages/eventsourcing-projections)
 
-Read-side projection building from event streams.
+Read-side projection building from event streams. Handles the transformation of events into read models.
 
 ### [@codeforbreakfast/eventsourcing-websocket-transport](./packages/eventsourcing-websocket-transport)
 
@@ -29,10 +33,19 @@ Real-time WebSocket transport for event streaming.
 ## Installation
 
 ```bash
-# Install individual packages as needed
+# Core package with interfaces and in-memory implementation
 npm install @codeforbreakfast/eventsourcing-store
+
+# PostgreSQL storage implementation (optional)
+npm install @codeforbreakfast/eventsourcing-store-postgres
+
+# Aggregate patterns for write-side
 npm install @codeforbreakfast/eventsourcing-aggregates
+
+# Projection patterns for read-side
 npm install @codeforbreakfast/eventsourcing-projections
+
+# WebSocket transport for real-time events
 npm install @codeforbreakfast/eventsourcing-websocket-transport
 ```
 

@@ -1,6 +1,6 @@
 import { PgClient } from '@effect/sql-pg';
 import { Duration, Effect, Layer, Schedule, pipe } from 'effect';
-import { EventStoreConnectionError, connectionError } from '../errors';
+import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
 
 // Extended PgClient type with direct query access
 interface PgClientWithQuery extends PgClient.PgClient {
@@ -15,11 +15,7 @@ interface ConnectionManagerService {
   /**
    * Get dedicated connection for LISTEN operations
    */
-  getListenConnection: Effect.Effect<
-    PgClient.PgClient,
-    EventStoreConnectionError,
-    never
-  >;
+  getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
 
   /**
    * Execute health check on listening connection
@@ -44,20 +40,15 @@ export class ConnectionManager extends Effect.Tag('ConnectionManager')<
 const createListenConnection = pipe(
   PgClient.PgClient,
   // Add debug logging
-  Effect.tap(() =>
-    Effect.logDebug('PostgreSQL notification listener connection established'),
-  ),
+  Effect.tap(() => Effect.logDebug('PostgreSQL notification listener connection established')),
   Effect.tapError((error) =>
     Effect.logError('Failed to establish notification listener connection', {
       error,
-    }),
+    })
   ),
   Effect.mapError((error) =>
-    connectionError.retryable(
-      'establish notification listener connection',
-      error,
-    ),
-  ),
+    connectionError.retryable('establish notification listener connection', error)
+  )
 );
 
 /**
@@ -74,29 +65,18 @@ export const ConnectionManagerLive = Layer.effect(
         Effect.succeed(listenConnection),
         Effect.flatMap((client) =>
           Effect.tryPromise({
-            try: () =>
-              (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
+            try: () => (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
             catch: (error) => error,
-          }),
+          })
         ),
-        Effect.tap(() =>
-          Effect.logDebug(
-            'PostgreSQL notification listener health check passed',
-          ),
-        ),
+        Effect.tap(() => Effect.logDebug('PostgreSQL notification listener health check passed')),
         Effect.tapError((error) =>
-          Effect.logError(
-            'PostgreSQL notification listener health check failed',
-            { error },
-          ),
+          Effect.logError('PostgreSQL notification listener health check failed', { error })
         ),
         Effect.mapError((error) =>
-          connectionError.retryable(
-            'health check notification listener',
-            error,
-          ),
+          connectionError.retryable('health check notification listener', error)
         ),
-        Effect.as(undefined),
+        Effect.as(undefined)
       ),
 
       shutdown: pipe(
@@ -105,24 +85,17 @@ export const ConnectionManagerLive = Layer.effect(
           Effect.tryPromise({
             try: () => (client as PgClientWithQuery).end(),
             catch: (error) => error,
-          }),
+          })
         ),
-        Effect.tap(() =>
-          Effect.logInfo('PostgreSQL notification listener connection closed'),
-        ),
+        Effect.tap(() => Effect.logInfo('PostgreSQL notification listener connection closed')),
         Effect.tapError((error) =>
-          Effect.logError(
-            'Failed to close PostgreSQL notification listener connection',
-            { error },
-          ),
+          Effect.logError('Failed to close PostgreSQL notification listener connection', { error })
         ),
-        Effect.mapError((error) =>
-          connectionError.fatal('shutdown notification listener', error),
-        ),
-        Effect.as(undefined),
+        Effect.mapError((error) => connectionError.fatal('shutdown notification listener', error)),
+        Effect.as(undefined)
       ),
-    })),
-  ),
+    }))
+  )
 );
 
 /**
@@ -130,14 +103,14 @@ export const ConnectionManagerLive = Layer.effect(
  */
 // Skip health check as it's causing issues
 export const withConnectionHealth = <A, E, R>(
-  effect: Effect.Effect<A, E, R>,
+  effect: Effect.Effect<A, E, R>
 ): Effect.Effect<A, E, R> =>
   pipe(
     effect,
     Effect.retry(
       pipe(
         Schedule.exponential(Duration.millis(100), 1.5),
-        Schedule.whileOutput((d) => Duration.toMillis(d) < 60000), // Max 1 minute delay
-      ),
-    ),
+        Schedule.whileOutput((d) => Duration.toMillis(d) < 60000) // Max 1 minute delay
+      )
+    )
   );

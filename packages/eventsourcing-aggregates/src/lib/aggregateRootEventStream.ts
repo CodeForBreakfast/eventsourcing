@@ -6,10 +6,6 @@ import {
   beginning,
 } from '@codeforbreakfast/eventsourcing-store';
 import {
-  type Projection,
-  createCompatibleEventStore,
-} from '@codeforbreakfast/eventsourcing-projections';
-import {
   Chunk,
   Clock,
   Context,
@@ -26,6 +22,16 @@ import {
 const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
 import { CommandContext } from './commandInitiator';
+
+/**
+ * Represents the state of an aggregate at a particular point in time
+ * This replaces the Projection type to keep aggregates focused on write-side concerns
+ * @since 1.0.0
+ */
+export interface AggregateState<TData> {
+  readonly nextEventNumber: EventNumber;
+  readonly data: Option.Option<TData>;
+}
 
 /**
  * Options for committing events to an aggregate
@@ -155,17 +161,16 @@ export const createAggregateRoot = <TId extends string, TEvent, TState, TCommand
   tag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>,
   commands: TCommands
 ) => ({
-  new: (): Projection<TState> => ({
+  new: (): AggregateState<TState> => ({
     nextEventNumber: 0,
     data: Option.none(),
   }),
   load: (id: string) =>
     pipe(
       tag,
-      Effect.map(createCompatibleEventStore),
       Effect.flatMap((eventStore) =>
         pipe(
-          // Create a read-only projection loader using the eventStore
+          // Create a read-only aggregate loader using the eventStore
           id,
           toStreamId,
           Effect.flatMap(beginning),
