@@ -2,7 +2,20 @@
  * WebSocket Event Transport using Effect primitives
  */
 
-import { Effect, Stream, PubSub, Schema, Ref, pipe, HashMap, Option, Queue, Fiber } from 'effect';
+import {
+  Effect,
+  Stream,
+  PubSub,
+  Schema,
+  Ref,
+  pipe,
+  HashMap,
+  Option,
+  Queue,
+  Fiber,
+  Scope,
+  Layer,
+} from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
@@ -73,6 +86,31 @@ export const ProtocolMessage = Schema.Union(
 );
 
 type ProtocolMessage = Schema.Schema.Type<typeof ProtocolMessage>;
+
+// ============================================================================
+// Event Transport Interface
+// ============================================================================
+
+export interface EventTransport<TEvent> {
+  readonly subscribe: (
+    streamId: EventStreamId,
+    position?: EventStreamPosition
+  ) => Effect.Effect<Stream.Stream<StreamEvent<TEvent>, never, never>, never, never>;
+  readonly sendCommand: <TPayload, TResult>(
+    command: AggregateCommand<TPayload>
+  ) => Effect.Effect<CommandResult<TResult>, never, never>;
+  readonly disconnect: () => Effect.Effect<void, never, never>;
+}
+
+/**
+ * Service tag for EventTransport.
+ * Allows clients to depend on the transport abstraction without knowing
+ * whether it's WebSocket, HTTP, or any other implementation.
+ */
+export class EventTransportService extends Effect.Tag('@eventsourcing/EventTransport')<
+  EventTransportService,
+  EventTransport<unknown>
+>() {}
 
 // ============================================================================
 // WebSocket Event Transport Implementation
@@ -261,8 +299,13 @@ const disconnect =
 
 /**
  * Creates a WebSocket event transport for event sourcing.
+ * Returns an EventTransport implementation that clients can use without
+ * knowing about the underlying WebSocket details.
  */
-export const makeEventTransport = <TEvent>(url: string, eventSchema: Schema.Schema<TEvent>) =>
+export const makeEventTransport = <TEvent>(
+  url: string,
+  eventSchema: Schema.Schema<TEvent>
+): Effect.Effect<EventTransport<TEvent>, never, Scope.Scope> =>
   pipe(
     createWebSocket(url),
     Effect.tap(waitForConnection),
@@ -285,3 +328,11 @@ export const makeEventTransport = <TEvent>(url: string, eventSchema: Schema.Sche
     ),
     Effect.scoped // Automatic cleanup on scope exit
   );
+
+/**
+ * Creates a Layer that provides EventTransportService with WebSocket implementation.
+ * This allows clients to use the transport via dependency injection without
+ * knowing about the WebSocket implementation details.
+ */
+export const EventTransportLive = (url: string, eventSchema: Schema.Schema<unknown>) =>
+  Layer.scoped(EventTransportService, makeEventTransport(url, eventSchema));
