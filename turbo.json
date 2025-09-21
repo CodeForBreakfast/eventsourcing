@@ -5,21 +5,53 @@
       "dependsOn": ["lint", "test", "build"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"]
+      "dependsOn": ["^typecheck"],
+      "outputs": ["tsconfig.tsbuildinfo"],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json"]
     },
     "check": {
       "dependsOn": ["^check", "typecheck"]
     },
     "build": {
-      "outputs": ["dist/**", "lib/**"],
+      "outputs": ["dist/**", "*.tsbuildinfo"],
       "dependsOn": ["^build"],
-      "inputs": ["src/**", "tsconfig*.json", "package.json"]
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"]
+    },
+    "deps:check": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "inputs": [
+        "packages/*/src/**/*.ts",
+        "packages/*/src/**/*.tsx",
+        "packages/*/package.json",
+        "knip.json",
+        ".knip.json"
+      ]
     },
     "lint": {
-      "dependsOn": ["check", "^lint"]
+      "dependsOn": ["check", "^lint"],
+      "outputs": [],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "*.config.js",
+        "*.config.ts",
+        "tsconfig*.json",
+        ".eslintrc*",
+        "package.json"
+      ]
     },
     "test": {
-      "dependsOn": ["^test", "lint"],
+      "dependsOn": ["^test", "lint", "deps:check"],
+      "outputs": [],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "vitest.config.*",
+        "package.json"
+      ],
       "env": [
         "TEST_PG_USERNAME",
         "TEST_PG_PASSWORD",

@@ -22,9 +22,9 @@ export interface ReadParams extends ReadOptions {
 }
 
 // EventStore service interface
-export interface EventStoreServiceInterface<TEvent> {
+export interface EventStore<TEvent> {
   readonly write: (
-    to: EventStreamPosition,
+    to: EventStreamPosition
   ) => Sink.Sink<
     EventStreamPosition,
     TEvent,
@@ -32,14 +32,14 @@ export interface EventStoreServiceInterface<TEvent> {
     ConcurrencyConflictError | ParseResult.ParseError | EventStoreError
   >;
   readonly read: (
-    params: ReadParams | EventStreamPosition,
+    params: ReadParams | EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;
   readonly readHistorical: (
-    params: ReadParams | EventStreamPosition,
+    params: ReadParams | EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
@@ -50,47 +50,41 @@ export interface EventStoreServiceInterface<TEvent> {
 // Create EventStore service tag - generic version must be created per use case
 export class EventStoreService extends Effect.Tag('@eventsourcing/EventStore')<
   EventStoreService,
-  EventStoreServiceInterface<unknown>
+  EventStore<unknown>
 >() {}
 
 // Projection Store service interface
-export interface ProjectionStoreServiceInterface<TState> {
+export interface ProjectionStore<TState> {
   readonly get: (id: string) => Effect.Effect<TState | null, ProjectionError>;
-  readonly save: (
-    id: string,
-    state: TState,
-  ) => Effect.Effect<void, ProjectionError>;
+  readonly save: (id: string, state: TState) => Effect.Effect<void, ProjectionError>;
   readonly delete: (id: string) => Effect.Effect<void, ProjectionError>;
   readonly list: () => Effect.Effect<readonly string[], ProjectionError>;
   readonly clear: () => Effect.Effect<void, ProjectionError>;
 }
 
-export class ProjectionStoreService extends Effect.Tag(
-  '@eventsourcing/ProjectionStore',
-)<ProjectionStoreService, ProjectionStoreServiceInterface<unknown>>() {}
+export class ProjectionStoreService extends Effect.Tag('@eventsourcing/ProjectionStore')<
+  ProjectionStoreService,
+  ProjectionStore<unknown>
+>() {}
 
 // Snapshot Store service interface
-export interface SnapshotStoreServiceInterface<TSnapshot> {
+export interface SnapshotStore<TSnapshot> {
   readonly save: (
     aggregateId: string,
     version: number,
-    snapshot: TSnapshot,
+    snapshot: TSnapshot
   ) => Effect.Effect<void, SnapshotError>;
   readonly load: (
     aggregateId: string,
-    version?: number,
-  ) => Effect.Effect<
-    { version: number; snapshot: TSnapshot } | null,
-    SnapshotError
-  >;
+    version?: number
+  ) => Effect.Effect<{ version: number; snapshot: TSnapshot } | null, SnapshotError>;
   readonly delete: (aggregateId: string) => Effect.Effect<void, SnapshotError>;
-  readonly list: (
-    aggregateId: string,
-  ) => Effect.Effect<readonly number[], SnapshotError>;
+  readonly list: (aggregateId: string) => Effect.Effect<readonly number[], SnapshotError>;
 }
 
-export class SnapshotStoreService extends Effect.Tag(
-  '@eventsourcing/SnapshotStore',
-)<SnapshotStoreService, SnapshotStoreServiceInterface<unknown>>() {}
+export class SnapshotStoreService extends Effect.Tag('@eventsourcing/SnapshotStore')<
+  SnapshotStoreService,
+  SnapshotStore<unknown>
+>() {}
 
 // Note: EventStore type is exported from eventstore.ts for backward compatibility

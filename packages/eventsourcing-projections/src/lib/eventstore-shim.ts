@@ -7,24 +7,24 @@ import {
   EventNumber,
   EventStreamId,
   EventStreamPosition,
-  type EventStore as OriginalEventStore,
+  type EventStore as FullEventStore,
 } from '@codeforbreakfast/eventsourcing-store';
 import { EventStoreError } from '@codeforbreakfast/eventsourcing-store';
 
 /**
- * A wrapper around the EventStore interface that matches the type parameter expectations
- * of the projections package.
+ * A simplified EventStore interface for projections.
+ * This is a subset of the full EventStore interface, containing only what projections need.
  */
-export interface EventStore<TEvent> {
+export interface ProjectionEventStore<TEvent> {
   readonly read: (
-    from: EventStreamPosition,
+    from: EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;
   readonly readHistorical: (
-    from: EventStreamPosition,
+    from: EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
@@ -36,8 +36,8 @@ export interface EventStore<TEvent> {
  * Create a compatible version of EventStore that works with the projections package
  */
 export const createCompatibleEventStore = <TEvent>(
-  original: OriginalEventStore<TEvent>,
-): EventStore<TEvent> => ({
+  original: FullEventStore<TEvent>
+): ProjectionEventStore<TEvent> => ({
   read: (from: EventStreamPosition) => original.read(from),
   readHistorical: (from: EventStreamPosition) => original.readHistorical(from),
 });

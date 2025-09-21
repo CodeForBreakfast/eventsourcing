@@ -1,7 +1,7 @@
 import { Effect, pipe, Schema, Layer, Stream } from 'effect';
 import { describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
-import type { EventStoreServiceInterface } from './services';
+import type { EventStore } from './services';
 import * as InMemoryStore from './inMemory/InMemoryStore';
 import { inMemoryEventStore } from './inMemory/inMemoryEventStore';
 
@@ -16,7 +16,7 @@ type TestEvent = Schema.Schema.Type<typeof TestEvent>;
 // Create a typed EventStore service tag for tests
 class TestEventStoreService extends Effect.Tag('TestEventStore')<
   TestEventStoreService,
-  EventStoreServiceInterface<TestEvent>
+  EventStore<TestEvent>
 >() {}
 
 // Sample event for testing
@@ -33,7 +33,7 @@ describe('EventStore Unified Read API', () => {
       pipe(
         InMemoryStore.make<TestEvent>(),
         Effect.flatMap(inMemoryEventStore),
-        Effect.map((store) => store as unknown as EventStoreServiceInterface<TestEvent>)
+        Effect.map((store) => store as unknown as EventStore<TestEvent>)
       )
     );
 
