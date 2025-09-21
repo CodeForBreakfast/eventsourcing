@@ -1,4 +1,4 @@
-import { Effect, Stream, Duration, pipe, Schema } from 'effect';
+import { Effect, Stream, Duration, pipe, Schema, Scope } from 'effect';
 import {
   ConnectedRawTransport,
   RawTransport,
@@ -33,8 +33,9 @@ interface WebSocketConnection {
   readonly connectedAt: Date;
 }
 
-const makeWebSocketRawTransport = (): RawTransport<string, never> => ({
-  makeConnected: (config) =>
+const makeWebSocketRawTransport =
+  (): RawTransport<never> =>
+  <TWireFormat>(config: SchemaTransportConfig<any, TWireFormat>) =>
     pipe(
       Effect.acquireRelease(
         // Acquire: Establish WebSocket connection
@@ -134,9 +135,18 @@ const makeWebSocketRawTransport = (): RawTransport<string, never> => ({
             }
           })
       ),
-      Effect.map((connection) => createConnectedRawTransport(connection))
-    ),
-});
+      Effect.map(
+        (connection) =>
+          createConnectedRawTransport(connection) as unknown as ConnectedRawTransport<
+            TWireFormat,
+            never
+          >
+      )
+    ) as Effect.Effect<
+      ConnectedRawTransport<TWireFormat, never>,
+      TransportConnectionError,
+      Scope.Scope
+    >;
 
 const createConnectedRawTransport = (
   connection: WebSocketConnection
@@ -255,7 +265,6 @@ const createConnectedRawTransport = (
  */
 export const exampleSchemaUsage = Effect.gen(function* (_) {
   const rawTransport = makeWebSocketRawTransport();
-  const schemaTransport = makeSchemaTransport(rawTransport);
 
   // Define a message schema
   const messageSchema = Schema.Struct({
@@ -266,6 +275,8 @@ export const exampleSchemaUsage = Effect.gen(function* (_) {
 
   type MessageType = Schema.Schema.Type<typeof messageSchema>;
 
+  const schemaTransport = makeSchemaTransport<MessageType>(rawTransport);
+
   const config: SchemaTransportConfig<MessageType, string> = {
     url: 'ws://localhost:8080/events',
     retryAttempts: 3,
@@ -275,16 +286,16 @@ export const exampleSchemaUsage = Effect.gen(function* (_) {
 
   // This demonstrates the full type-safe, connection-gated pattern
   const result = yield* _(
-    (schemaTransport as any).makeConnected(config),
-    Effect.flatMap((connectedTransport: any) =>
+    schemaTransport(config),
+    Effect.flatMap((connectedTransport) =>
       pipe(
         connectedTransport.publish('user-events', {
           type: 'user-login',
           payload: { sessionId: 'abc123' },
           userId: 'user-456',
         }),
-        Effect.flatMap(() => connectedTransport.health as Effect.Effect<TransportHealth, any, any>),
-        Effect.flatMap((health: TransportHealth) =>
+        Effect.flatMap(() => connectedTransport.health),
+        Effect.flatMap((health) =>
           Effect.succeed({
             published: true,
             connected: health.connected,

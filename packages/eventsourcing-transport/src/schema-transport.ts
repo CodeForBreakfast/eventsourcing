@@ -83,18 +83,16 @@ export interface ConnectedRawTransport<TWireFormat, R = never> {
 }
 
 /**
- * Raw transport factory interface that creates a connected raw transport within a scope.
+ * Raw transport factory function that creates a connected raw transport within a scope.
  * The connection is established during acquire and cleaned up during release.
  */
-export interface RawTransport<TWireFormat, R = never> {
-  readonly makeConnected: (
-    config: SchemaTransportConfig<any, TWireFormat>
-  ) => Effect.Effect<
-    ConnectedRawTransport<TWireFormat, R>,
-    TransportConnectionError,
-    R | Scope.Scope
-  >;
-}
+export type RawTransport<R = never> = <TWireFormat>(
+  config: SchemaTransportConfig<any, TWireFormat>
+) => Effect.Effect<
+  ConnectedRawTransport<TWireFormat, R>,
+  TransportConnectionError,
+  R | Scope.Scope
+>;
 
 /**
  * Connected schema-aware transport - only available after successful connection.
@@ -130,31 +128,30 @@ export interface ConnectedSchemaTransport<TMessage, TStreamId = string, R = neve
 }
 
 /**
- * Schema transport factory interface that creates a connected schema transport within a scope.
+ * Schema transport factory function that creates a connected schema transport within a scope.
  * Built on top of a raw transport with automatic encoding/decoding.
  * The connection is established during acquire and cleaned up during release.
  */
-export interface SchemaTransport<TMessage, TStreamId = string, R = never> {
-  readonly makeConnected: (
-    config: SchemaTransportConfig<TMessage, any>
-  ) => Effect.Effect<
-    ConnectedSchemaTransport<TMessage, TStreamId, R>,
-    TransportConnectionError,
-    R | Scope.Scope
-  >;
-}
+export type SchemaTransport<TMessage, TStreamId = string, R = never> = <TWireFormat>(
+  config: SchemaTransportConfig<TMessage, TWireFormat>
+) => Effect.Effect<
+  ConnectedSchemaTransport<TMessage, TStreamId, R>,
+  TransportConnectionError,
+  R | Scope.Scope
+>;
 
 /**
  * Creates a schema-aware transport from a raw transport implementation.
  * Handles all encoding/decoding automatically using the provided codec.
  * Uses Effect.acquireRelease to ensure proper connection lifecycle management.
  */
-export const makeSchemaTransport = <TMessage, TWireFormat, TStreamId = string, R = never>(
-  rawTransport: RawTransport<TWireFormat, R>
-): SchemaTransport<TMessage, TStreamId, R> => ({
-  makeConnected: (config) =>
+export const makeSchemaTransport =
+  <TMessage, TStreamId = string, R = never>(
+    rawTransport: RawTransport<R>
+  ): SchemaTransport<TMessage, TStreamId, R> =>
+  <TWireFormat>(config: SchemaTransportConfig<TMessage, TWireFormat>) =>
     pipe(
-      rawTransport.makeConnected(config),
+      rawTransport(config),
       Effect.map((connectedRaw) => ({
         publish: (streamId, message, metadata) =>
           pipe(
@@ -201,8 +198,7 @@ export const makeSchemaTransport = <TMessage, TWireFormat, TStreamId = string, R
         health: connectedRaw.health,
         metrics: connectedRaw.metrics,
       }))
-    ),
-});
+    );
 
 /**
  * Helper function to use a schema transport within a scoped operation.
@@ -223,12 +219,12 @@ export const makeSchemaTransport = <TMessage, TWireFormat, TStreamId = string, R
  * });
  * ```
  */
-export const withSchemaTransport = <TMessage, TStreamId, R, A, E>(
+export const withSchemaTransport = <TMessage, TStreamId, TWireFormat, R, A, E>(
   transport: SchemaTransport<TMessage, TStreamId, R>,
-  config: SchemaTransportConfig<TMessage, any>,
+  config: SchemaTransportConfig<TMessage, TWireFormat>,
   f: (connected: ConnectedSchemaTransport<TMessage, TStreamId, R>) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | TransportConnectionError, R | Scope.Scope> =>
-  pipe(transport.makeConnected(config), Effect.flatMap(f));
+  pipe(transport(config), Effect.flatMap(f));
 
 /**
  * Common codec implementations for different wire formats

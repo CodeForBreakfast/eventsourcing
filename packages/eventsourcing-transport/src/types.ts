@@ -68,19 +68,17 @@ export interface ConnectedTransport<TData = unknown, TStreamId = string, R = nev
 }
 
 /**
- * Transport factory interface that creates a connected transport within a scope.
+ * Transport factory function that creates a connected transport within a scope.
  * The connection is established during acquire and cleaned up during release.
  * This makes it impossible to use transport methods without being connected.
  */
-export interface Transport<TData = unknown, TStreamId = string, R = never> {
-  readonly makeConnected: (
-    config: TransportConfig
-  ) => Effect.Effect<
-    ConnectedTransport<TData, TStreamId, R>,
-    TransportConnectionError,
-    R | Scope.Scope
-  >;
-}
+export type Transport<TData = unknown, TStreamId = string, R = never> = (
+  config: TransportConfig
+) => Effect.Effect<
+  ConnectedTransport<TData, TStreamId, R>,
+  TransportConnectionError,
+  R | Scope.Scope
+>;
 
 /**
  * Helper function to use a transport within a scoped operation.
@@ -106,4 +104,4 @@ export const withTransport = <TData, TStreamId, R, A, E>(
   config: TransportConfig,
   f: (connected: ConnectedTransport<TData, TStreamId, R>) => Effect.Effect<A, E, R>
 ): Effect.Effect<A, E | TransportConnectionError, R | Scope.Scope> =>
-  pipe(transport.makeConnected(config), Effect.flatMap(f));
+  pipe(transport(config), Effect.flatMap(f));

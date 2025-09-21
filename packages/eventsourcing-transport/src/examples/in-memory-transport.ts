@@ -28,50 +28,48 @@ interface InMemoryStore {
   readonly connectedAt?: Date;
 }
 
-const makeInMemoryTransport = (): Transport<unknown, string, never> => ({
-  makeConnected: (_config) =>
-    pipe(
-      Ref.make<InMemoryStore>({
-        streams: new Map(),
-        subscribers: new Map(),
-        metrics: {
-          messagesPublished: 0,
-          messagesReceived: 0,
-          activeSubscriptions: 0,
-          connectionAttempts: 0,
-          errors: 0,
-        },
-        connected: false,
-      }),
-      Effect.flatMap((storeRef) =>
-        Effect.acquireRelease(
-          // Acquire: Update store and create transport
+const makeInMemoryTransport = (): Transport<unknown, string, never> => (_config) =>
+  pipe(
+    Ref.make<InMemoryStore>({
+      streams: new Map(),
+      subscribers: new Map(),
+      metrics: {
+        messagesPublished: 0,
+        messagesReceived: 0,
+        activeSubscriptions: 0,
+        connectionAttempts: 0,
+        errors: 0,
+      },
+      connected: false,
+    }),
+    Effect.flatMap((storeRef) =>
+      Effect.acquireRelease(
+        // Acquire: Update store and create transport
+        pipe(
+          Ref.update(storeRef, (store) => ({
+            ...store,
+            connected: true,
+            connectedAt: new Date(),
+            metrics: {
+              ...store.metrics,
+              connectionAttempts: store.metrics.connectionAttempts + 1,
+            },
+          })),
+          Effect.map(() => createConnectedTransport(storeRef))
+        ),
+        // Release: Clean up connection
+        (_connectedTransport) =>
           pipe(
             Ref.update(storeRef, (store) => ({
               ...store,
-              connected: true,
-              connectedAt: new Date(),
-              metrics: {
-                ...store.metrics,
-                connectionAttempts: store.metrics.connectionAttempts + 1,
-              },
+              connected: false,
+              subscribers: new Map(),
             })),
-            Effect.map(() => createConnectedTransport(storeRef))
-          ),
-          // Release: Clean up connection
-          (_connectedTransport) =>
-            pipe(
-              Ref.update(storeRef, (store) => ({
-                ...store,
-                connected: false,
-                subscribers: new Map(),
-              })),
-              Effect.asVoid
-            )
-        )
+            Effect.asVoid
+          )
       )
-    ),
-});
+    )
+  );
 
 const createConnectedTransport = (
   storeRef: Ref.Ref<InMemoryStore>
