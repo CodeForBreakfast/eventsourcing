@@ -1,6 +1,6 @@
 import { Effect, ParseResult, Schema, Sink, Stream, pipe } from 'effect';
 import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './streamTypes';
-import type { ReadParams, EventStore } from './services';
+import type { EventStore } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
 
 /**
@@ -26,7 +26,7 @@ export const currentEnd =
       beginning(streamId),
       Effect.flatMap((startPos) =>
         pipe(
-          eventStore.readHistorical(startPos),
+          eventStore.read(startPos), // Use read for historical events only
           Effect.flatMap((stream) =>
             pipe(
               stream,
@@ -118,18 +118,18 @@ export const encodedEventStore =
           Sink.mapInputEffect((a: A) => Schema.encode(schema)(a))
         ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
       },
-      read: (params: ReadParams | EventStreamPosition) =>
+      read: (from: EventStreamPosition) =>
         pipe(
-          params,
+          from,
           eventstore.read,
           Effect.map((stream) =>
             Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
           )
         ),
-      readHistorical: (params: ReadParams | EventStreamPosition) =>
+      subscribe: (from: EventStreamPosition) =>
         pipe(
-          params,
-          eventstore.readHistorical,
+          from,
+          eventstore.subscribe,
           Effect.map((stream) =>
             Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
           )

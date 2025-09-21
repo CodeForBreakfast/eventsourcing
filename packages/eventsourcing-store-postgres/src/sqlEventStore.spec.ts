@@ -84,7 +84,7 @@ describe('PostgreSQL Horizontal Scaling', () => {
         Effect.flatMap((eventstore: EventStore<FooEvent>) =>
           pipe(
             // Subscribe from the beginning
-            eventstore.read(streamBeginning),
+            eventstore.subscribe(streamBeginning),
             Effect.flatMap((stream) =>
               pipe(
                 stream,

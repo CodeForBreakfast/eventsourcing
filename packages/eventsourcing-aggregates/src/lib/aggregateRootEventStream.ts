@@ -174,7 +174,7 @@ export const createAggregateRoot = <TId extends string, TEvent, TState, TCommand
           id,
           toStreamId,
           Effect.flatMap(beginning),
-          Effect.flatMap((position: EventStreamPosition) => eventStore.readHistorical(position)),
+          Effect.flatMap((position: EventStreamPosition) => eventStore.read(position)),
           Effect.flatMap((stream) =>
             pipe(
               stream,

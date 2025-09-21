@@ -7,22 +7,13 @@ import {
   ProjectionError,
 } from './errors';
 
-// ReadOptions for unified EventStore read API
-export interface ReadOptions {
-  readonly fromEventNumber?: number;
-  readonly toEventNumber?: number;
-  readonly direction?: 'forward' | 'backward';
-  readonly batchSize?: number;
-}
-
-// Extended read parameters for flexible event stream reading
-export interface ReadParams extends ReadOptions {
-  readonly streamId: EventStreamId;
-  readonly fromEventNumber?: number;
-}
-
-// EventStore service interface
+// EventStore service interface - Simplified API
 export interface EventStore<TEvent> {
+  /**
+   * Write events to a stream at a specific position
+   * @param to The position in the stream to write to
+   * @returns A sink that writes events and returns the new stream position
+   */
   readonly write: (
     to: EventStreamPosition
   ) => Sink.Sink<
@@ -31,20 +22,54 @@ export interface EventStore<TEvent> {
     TEvent,
     ConcurrencyConflictError | ParseResult.ParseError | EventStoreError
   >;
+
+  /**
+   * Read historical events from a stream starting at a position
+   * This returns only events that have already been written - no live updates
+   * Use Stream combinators for filtering, pagination, reverse order, etc.
+   * @param from The position in the stream to start reading from
+   * @returns A stream of historical events
+   */
   readonly read: (
-    params: ReadParams | EventStreamPosition
+    from: EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;
-  readonly readHistorical: (
-    params: ReadParams | EventStreamPosition
+
+  /**
+   * Subscribe to a stream for both historical and live events
+   * Returns all historical events from the given position, then continues with live updates
+   * @param from The position in the stream to start reading from
+   * @returns A stream of historical events followed by live updates
+   */
+  readonly subscribe: (
+    from: EventStreamPosition
   ) => Effect.Effect<
     Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;
+}
+
+// Legacy types kept for migration period - mark as deprecated
+/**
+ * @deprecated Use Stream combinators instead of ReadOptions
+ */
+export interface ReadOptions {
+  readonly fromEventNumber?: number;
+  readonly toEventNumber?: number;
+  readonly direction?: 'forward' | 'backward';
+  readonly batchSize?: number;
+}
+
+/**
+ * @deprecated Use EventStreamPosition with Stream combinators instead
+ */
+export interface ReadParams extends ReadOptions {
+  readonly streamId: EventStreamId;
+  readonly fromEventNumber?: number;
 }
 
 // Create EventStore service tag - generic version must be created per use case
