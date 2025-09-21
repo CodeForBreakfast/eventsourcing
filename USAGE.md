@@ -92,9 +92,18 @@ const EventStoreLive = SqlEventStore.Live.pipe(
 
 ### 3. Create an Aggregate
 
+> **Note: Aggregate Command Pattern**
+>
+> Commands in this library follow a functional pattern where:
+>
+> - Commands are functions that take domain parameters (not aggregate IDs)
+> - Commands return a function that accepts the current state
+> - The aggregate ID is only needed when loading and committing
+> - This separation allows commands to focus on business logic without infrastructure concerns
+
 ```typescript
 import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
-import { Schema, Effect } from 'effect';
+import { Schema, Effect, Option, Chunk } from 'effect';
 
 // Define aggregate state
 interface UserState {
@@ -104,83 +113,88 @@ interface UserState {
   registered: boolean;
 }
 
-// Define commands
-const RegisterUser = Schema.Struct({
-  userId: Schema.String,
-  email: Schema.String,
-});
+// Create aggregate root with event application and commands
+const UserAggregate = createAggregateRoot(
+  // ID schema
+  Schema.String,
 
-const UpdateProfile = Schema.Struct({
-  userId: Schema.String,
-  name: Schema.String,
-});
+  // Apply function: reduces events to state
+  (state: Option.Option<UserState>) => (event: UserEvent) => {
+    const current = Option.getOrElse(state, () => ({
+      userId: '',
+      email: '',
+      registered: false,
+    }));
 
-// Create aggregate root
-const UserAggregate = createAggregateRoot<UserEvent, UserState>({
-  eventSchema: Schema.Union(UserRegistered, UserProfileUpdated),
-
-  applyEvent: (state, event) => {
     switch (event.type) {
       case 'UserRegistered':
-        return {
-          ...state,
+        return Effect.succeed({
+          ...current,
           userId: event.userId,
           email: event.email,
           registered: true,
-        };
+        });
       case 'UserProfileUpdated':
-        return {
-          ...state,
+        return Effect.succeed({
+          ...current,
           name: event.name,
-        };
+        });
       default:
-        return state;
+        return Effect.succeed(current);
     }
   },
 
-  initialState: () => ({
-    userId: '',
-    email: '',
-    registered: false,
-  }),
+  // Event store tag for dependency injection
+  UserEventStore,
 
-  commands: {
-    register: (command: typeof RegisterUser.Type) =>
+  // Commands: functions that take parameters and return a state transformer
+  {
+    register: (userId: string, email: string) => (state: Option.Option<UserState>) =>
       Effect.gen(function* () {
-        const state = yield* aggregateRoot.getState();
-
-        if (state.registered) {
+        if (Option.isSome(state) && state.value.registered) {
           return yield* Effect.fail(new Error('User already registered'));
         }
 
-        yield* aggregateRoot.emit(
-          UserRegistered.make({
-            type: 'UserRegistered',
-            userId: command.userId,
-            email: command.email,
-            registeredAt: new Date(),
-          })
-        );
+        // Commands return a Chunk of events to be emitted
+        return Chunk.of({
+          type: 'UserRegistered' as const,
+          userId,
+          email,
+          registeredAt: new Date(),
+        });
       }),
 
-    updateProfile: (command: typeof UpdateProfile.Type) =>
+    updateProfile: (name: string) => (state: Option.Option<UserState>) =>
       Effect.gen(function* () {
-        const state = yield* aggregateRoot.getState();
-
-        if (!state.registered) {
+        if (Option.isNone(state) || !state.value.registered) {
           return yield* Effect.fail(new Error('User not registered'));
         }
 
-        yield* aggregateRoot.emit(
-          UserProfileUpdated.make({
-            type: 'UserProfileUpdated',
-            userId: command.userId,
-            name: command.name,
-            updatedAt: new Date(),
-          })
-        );
+        return Chunk.of({
+          type: 'UserProfileUpdated' as const,
+          userId: state.value.userId,
+          name,
+          updatedAt: new Date(),
+        });
       }),
-  },
+  }
+);
+
+// Using the aggregate
+const program = Effect.gen(function* () {
+  const userId = 'user-123';
+
+  // Load the aggregate (returns state and next event number)
+  const loaded = yield* UserAggregate.load(userId);
+
+  // Execute a command against the state
+  const events = yield* pipe(
+    loaded.data, // The current state (Option<UserState>)
+    UserAggregate.commands.register(userId, 'test@example.com')
+  );
+
+  // Commit the events with explicit ID and event number
+  yield* UserAggregate.commit(userId, loaded.nextEventNumber)(events);
 });
 ```
 
@@ -321,25 +335,33 @@ const snapshot = Effect.gen(function* () {
 ## Testing
 
 ```typescript
-import { TestClock, Effect } from 'effect';
+import { TestClock, Effect, pipe } from 'effect';
 import { InMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 
 describe('UserAggregate', () => {
   it('should register user', async () => {
     const program = Effect.gen(function* () {
-      const aggregate = yield* UserAggregate.load('user-123');
+      const userId = 'user-123';
 
-      yield* aggregate.register({
-        userId: 'user-123',
-        email: 'test@example.com',
+      // Load aggregate to get initial state
+      const loaded = yield* UserAggregate.load(userId);
+
+      // Execute command to get events
+      const events = yield* pipe(
+        loaded.data,
+        UserAggregate.commands.register(userId, 'test@example.com')
+      );
+
+      // Commit the events
+      yield* UserAggregate.commit(userId, loaded.nextEventNumber)(events);
+
+      // Read back from event store to verify
+      const storedEvents = yield* EventStore.read({
+        streamId: userId,
       });
 
-      const events = yield* EventStore.read({
-        streamId: 'user-123',
-      });
-
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe('UserRegistered');
+      expect(storedEvents).toHaveLength(1);
+      expect(storedEvents[0].type).toBe('UserRegistered');
     });
 
     await Effect.runPromise(
