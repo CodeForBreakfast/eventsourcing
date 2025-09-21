@@ -214,12 +214,6 @@ export const createAggregateRoot = <TId extends string, TEvent, TState, TCommand
   commands,
 });
 
-/**
- * @deprecated Use createAggregateRoot instead
- * @since 1.0.0
- */
-export const aggregateRoot = createAggregateRoot;
-
 export const EventOriginatorId = Schema.Union(PersonId);
 
 export const EventMetadata = Schema.Struct({

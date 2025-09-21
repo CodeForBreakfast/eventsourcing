@@ -90,7 +90,7 @@ const EventStoreLive = SqlEventStore.Live.pipe(
 ### 3. Create an Aggregate
 
 ```typescript
-import { aggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { Schema, Effect } from 'effect';
 
 // Define aggregate state
@@ -113,7 +113,7 @@ const UpdateProfile = Schema.Struct({
 });
 
 // Create aggregate root
-const UserAggregate = aggregateRoot<UserEvent, UserState>({
+const UserAggregate = createAggregateRoot<UserEvent, UserState>({
   eventSchema: Schema.Union(UserRegistered, UserProfileUpdated),
 
   applyEvent: (state, event) => {

@@ -17,6 +17,11 @@
       "dependsOn": ["^build"],
       "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"]
     },
+    "deps:check": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "package.json", "knip.json", ".knip.json"]
+    },
     "lint": {
       "dependsOn": ["check", "^lint"],
       "outputs": [],
@@ -31,7 +36,7 @@
       ]
     },
     "test": {
-      "dependsOn": ["^test", "lint"],
+      "dependsOn": ["^test", "lint", "deps:check"],
       "outputs": [],
       "inputs": [
         "src/**/*.ts",
