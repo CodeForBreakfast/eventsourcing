@@ -57,10 +57,11 @@ import {
   createAggregateRoot,
   AggregateState,
   CommandContext,
+  CommandContextTest,
   eventSchema,
   eventMetadata,
 } from '@codeforbreakfast/eventsourcing-aggregates';
-import { makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { EventStore, makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 
 // 1. Define your aggregate ID schema
 const UserId = Schema.String.pipe(Schema.brand('UserId'));
@@ -91,30 +92,33 @@ interface UserState {
 }
 
 // 4. Create the event application function
-const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) =>
-  Effect.gen(function* () {
-    switch (event.type) {
-      case 'UserRegistered':
-        return {
-          userId: event.data.userId,
-          email: event.data.email,
-          name: event.data.name,
-          isActive: true,
-        };
+const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) => {
+  switch (event.type) {
+    case 'UserRegistered':
+      return Effect.succeed({
+        userId: event.data.userId,
+        email: event.data.email,
+        name: event.data.name,
+        isActive: true,
+      });
 
-      case 'UserEmailUpdated':
-        if (Option.isNone(state)) {
-          return yield* Effect.fail(new Error('Cannot update email: user does not exist'));
-        }
-        return {
-          ...state.value,
-          email: event.data.newEmail,
-        };
+    case 'UserEmailUpdated':
+      return pipe(
+        state,
+        Option.match({
+          onNone: () => Effect.fail(new Error('Cannot update email: user does not exist')),
+          onSome: (currentState) =>
+            Effect.succeed({
+              ...currentState,
+              email: event.data.newEmail,
+            }),
+        })
+      );
 
-      default:
-        return yield* Effect.fail(new Error(`Unknown event type: ${(event as any).type}`));
-    }
-  });
+    default:
+      return Effect.fail(new Error(`Unknown event type: ${(event as any).type}`));
+  }
+};
 
 // 5. Create event store tag
 class UserEventStore extends Context.Tag('UserEventStore')<
@@ -122,34 +126,49 @@ class UserEventStore extends Context.Tag('UserEventStore')<
   EventStore<UserEvent>
 >() {}
 
-// 6. Define command handlers
-const registerUser = (userId: UserId, email: string, name: string) =>
-  Effect.gen(function* () {
-    const metadata = yield* eventMetadata();
+// 6. Define command handlers that return functions taking state
+const registerUser =
+  (userId: UserId, email: string, name: string) => (currentState: AggregateState<UserState>) =>
+    pipe(
+      currentState.data,
+      Option.match({
+        onSome: () => Effect.fail(new Error('User already exists')),
+        onNone: () =>
+          pipe(
+            eventMetadata(),
+            Effect.map((metadata) =>
+              Chunk.of({
+                type: 'UserRegistered' as const,
+                metadata,
+                data: { userId, email, name },
+              } satisfies UserEvent)
+            )
+          ),
+      })
+    );
 
-    return {
-      type: 'UserRegistered' as const,
-      metadata,
-      data: { userId, email, name },
-    } satisfies UserEvent;
-  });
-
-const updateUserEmail =
-  (userId: UserId, newEmail: string) => (currentState: AggregateState<UserState>) =>
-    Effect.gen(function* () {
-      if (Option.isNone(currentState.data)) {
-        return yield* Effect.fail(new Error('User not found'));
-      }
-
-      const metadata = yield* eventMetadata();
-      const oldEmail = currentState.data.value.email;
-
-      return {
-        type: 'UserEmailUpdated' as const,
-        metadata,
-        data: { userId, oldEmail, newEmail },
-      } satisfies UserEvent;
-    });
+const updateUserEmail = (newEmail: string) => (currentState: AggregateState<UserState>) =>
+  pipe(
+    currentState.data,
+    Option.match({
+      onNone: () => Effect.fail(new Error('User not found')),
+      onSome: (state) =>
+        pipe(
+          eventMetadata(),
+          Effect.map((metadata) =>
+            Chunk.of({
+              type: 'UserEmailUpdated' as const,
+              metadata,
+              data: {
+                userId: state.userId,
+                oldEmail: state.email,
+                newEmail,
+              },
+            } satisfies UserEvent)
+          )
+        ),
+    })
+  );
 
 // 7. Create the aggregate root
 const UserAggregate = createAggregateRoot(UserId, applyUserEvent, UserEventStore, {
@@ -158,45 +177,50 @@ const UserAggregate = createAggregateRoot(UserId, applyUserEvent, UserEventStore
 });
 
 // 8. Usage example
-const program = Effect.gen(function* () {
-  // Create a new user
-  const newUser = UserAggregate.new();
-  console.log('New user state:', newUser);
-
+const program = pipe(
   // Load an existing user (returns empty state if not found)
-  const existingUser = yield* UserAggregate.load('user-123');
-  console.log('Loaded user:', existingUser);
-
-  // Generate events
-  const registrationEvent = yield* UserAggregate.commands.registerUser(
-    'user-123' as UserId,
-    'john@example.com',
-    'John Doe'
-  );
-
-  // Commit events to store
-  yield* UserAggregate.commit({
-    id: 'user-123',
-    eventNumber: existingUser.nextEventNumber,
-    events: Chunk.of(registrationEvent),
-  });
-
-  // Load updated state
-  const updatedUser = yield* UserAggregate.load('user-123');
-  console.log('User after registration:', updatedUser);
-
-  // Update email
-  const emailUpdateEvent = yield* UserAggregate.commands.updateUserEmail(
-    'user-123' as UserId,
-    'john.doe@newdomain.com'
-  )(updatedUser);
-
-  yield* UserAggregate.commit({
-    id: 'user-123',
-    eventNumber: updatedUser.nextEventNumber,
-    events: Chunk.of(emailUpdateEvent),
-  });
-});
+  UserAggregate.load('user-123'),
+  Effect.tap((state) => Effect.log(`Loaded user state: ${JSON.stringify(state)}`)),
+  Effect.flatMap((existingUser) => {
+    // Create a new user if one doesn't exist
+    if (Option.isNone(existingUser.data)) {
+      return pipe(
+        // Generate registration events using the command handler
+        UserAggregate.commands.registerUser(
+          'user-123' as UserId,
+          'john@example.com',
+          'John Doe'
+        )(existingUser),
+        Effect.flatMap((events) =>
+          // Commit events to store
+          UserAggregate.commit({
+            id: 'user-123',
+            eventNumber: existingUser.nextEventNumber,
+            events,
+          })
+        ),
+        Effect.flatMap(() => UserAggregate.load('user-123')),
+        Effect.tap((state) => Effect.log(`User after registration: ${JSON.stringify(state)}`))
+      );
+    }
+    return Effect.succeed(existingUser);
+  }),
+  Effect.flatMap((userState) =>
+    // Update the user's email
+    pipe(
+      UserAggregate.commands.updateUserEmail('john.doe@newdomain.com')(userState),
+      Effect.flatMap((events) =>
+        UserAggregate.commit({
+          id: 'user-123',
+          eventNumber: userState.nextEventNumber,
+          events,
+        })
+      ),
+      Effect.flatMap(() => UserAggregate.load('user-123')),
+      Effect.tap((state) => Effect.log(`User after email update: ${JSON.stringify(state)}`))
+    )
+  )
+);
 
 // Run with dependencies
 const runnable = pipe(
@@ -269,11 +293,14 @@ Track command execution metadata:
 ```typescript
 import { CommandContext, CommandContextTest } from '@codeforbreakfast/eventsourcing-aggregates';
 
-const myCommand = Effect.gen(function* () {
-  const context = yield* CommandContext;
-  const initiatorId = yield* context.getInitiatorId;
-  // Use initiator information...
-});
+const myCommand = pipe(
+  CommandContext,
+  Effect.flatMap((context) => context.getInitiatorId),
+  Effect.map((initiatorId) => {
+    // Use initiator information...
+    return initiatorId;
+  })
+);
 
 // Provide context for testing
 const testLayer = CommandContextTest(Option.some('test-user-id' as any));
@@ -286,11 +313,14 @@ Track the current user executing commands:
 ```typescript
 import { CurrentUser } from '@codeforbreakfast/eventsourcing-aggregates';
 
-const userAwareCommand = Effect.gen(function* () {
-  const currentUserService = yield* CurrentUser;
-  const currentUser = currentUserService.getCurrentUser();
-  // currentUser is Option.Option<PersonId>
-});
+const userAwareCommand = pipe(
+  CurrentUser,
+  Effect.flatMap((currentUserService) => currentUserService.getCurrentUser()),
+  Effect.map((currentUser) => {
+    // currentUser is Option.Option<PersonId>
+    return currentUser;
+  })
+);
 ```
 
 ### Event Metadata Generation
@@ -300,18 +330,16 @@ Automatically generate event metadata with timestamps and originator:
 ```typescript
 import { eventMetadata } from '@codeforbreakfast/eventsourcing-aggregates';
 
-const createEvent = Effect.gen(function* () {
-  const metadata = yield* eventMetadata();
-  // metadata: { occurredAt: Date, originator?: PersonId }
-
-  return {
+const createEvent = pipe(
+  eventMetadata(),
+  Effect.map((metadata) => ({
     type: 'SomethingHappened',
     metadata,
     data: {
       /* your event data */
     },
-  };
-});
+  }))
+);
 ```
 
 ## Advanced Patterns
@@ -320,72 +348,86 @@ const createEvent = Effect.gen(function* () {
 
 ```typescript
 const transferMoney =
-  (fromAccountId: string, toAccountId: string, amount: number) =>
-  (currentState: AggregateState<BankAccountState>) =>
-    Effect.gen(function* () {
-      if (Option.isNone(currentState.data)) {
-        return yield* Effect.fail(new Error('Account not found'));
-      }
+  (toAccountId: string, amount: number) => (currentState: AggregateState<BankAccountState>) =>
+    pipe(
+      currentState.data,
+      Option.match({
+        onNone: () => Effect.fail(new Error('Account not found')),
+        onSome: (account) => {
+          // Validate business rules
+          if (account.balance < amount) {
+            return Effect.fail(new Error('Insufficient funds'));
+          }
+          if (amount <= 0) {
+            return Effect.fail(new Error('Transfer amount must be positive'));
+          }
 
-      const account = currentState.data.value;
-
-      if (account.balance < amount) {
-        return yield* Effect.fail(new Error('Insufficient funds'));
-      }
-
-      if (amount <= 0) {
-        return yield* Effect.fail(new Error('Transfer amount must be positive'));
-      }
-
-      const metadata = yield* eventMetadata();
-
-      return {
-        type: 'MoneyTransferred' as const,
-        metadata,
-        data: { fromAccountId, toAccountId, amount },
-      };
-    });
+          // Generate event with metadata
+          return pipe(
+            eventMetadata(),
+            Effect.map((metadata) =>
+              Chunk.of({
+                type: 'MoneyTransferred' as const,
+                metadata,
+                data: {
+                  fromAccountId: account.accountId,
+                  toAccountId,
+                  amount,
+                },
+              })
+            )
+          );
+        },
+      })
+    );
 ```
 
 ### Complex Event Application
 
 ```typescript
 const applyBankAccountEvent =
-  (state: Option.Option<BankAccountState>) => (event: BankAccountEvent) =>
-    Effect.gen(function* () {
-      switch (event.type) {
-        case 'AccountOpened':
-          if (Option.isSome(state)) {
-            return yield* Effect.fail(new Error('Account already exists'));
-          }
-          return {
-            accountId: event.data.accountId,
-            balance: event.data.initialDeposit,
-            isActive: true,
-            transactions: [],
-          };
+  (state: Option.Option<BankAccountState>) => (event: BankAccountEvent) => {
+    switch (event.type) {
+      case 'AccountOpened':
+        return pipe(
+          state,
+          Option.match({
+            onSome: () => Effect.fail(new Error('Account already exists')),
+            onNone: () =>
+              Effect.succeed({
+                accountId: event.data.accountId,
+                balance: event.data.initialDeposit,
+                isActive: true,
+                transactions: [],
+              }),
+          })
+        );
 
-        case 'MoneyTransferred':
-          if (Option.isNone(state)) {
-            return yield* Effect.fail(new Error('Account does not exist'));
-          }
-          return {
-            ...state.value,
-            balance: state.value.balance - event.data.amount,
-            transactions: [
-              ...state.value.transactions,
-              {
-                type: 'transfer',
-                amount: event.data.amount,
-                timestamp: event.metadata.occurredAt,
-              },
-            ],
-          };
+      case 'MoneyTransferred':
+        return pipe(
+          state,
+          Option.match({
+            onNone: () => Effect.fail(new Error('Account does not exist')),
+            onSome: (currentState) =>
+              Effect.succeed({
+                ...currentState,
+                balance: currentState.balance - event.data.amount,
+                transactions: [
+                  ...currentState.transactions,
+                  {
+                    type: 'transfer',
+                    amount: event.data.amount,
+                    timestamp: event.metadata.occurredAt,
+                  },
+                ],
+              }),
+          })
+        );
 
-        default:
-          return yield* Effect.fail(new Error(`Unknown event: ${(event as any).type}`));
-      }
-    });
+      default:
+        return Effect.fail(new Error(`Unknown event: ${(event as any).type}`));
+    }
+  };
 ```
 
 ### Testing Aggregates
@@ -397,24 +439,38 @@ import { describe, it, expect } from 'vitest';
 
 describe('UserAggregate', () => {
   it('should register a new user', async () => {
-    const program = Effect.gen(function* () {
-      // Test command generation
-      const event = yield* UserAggregate.commands.registerUser(
-        'test-user' as UserId,
-        'test@example.com',
-        'Test User'
-      );
-
-      expect(event.type).toBe('UserRegistered');
-      expect(event.data.email).toBe('test@example.com');
-
-      // Test event application
-      const initialState = UserAggregate.new();
-      const newState = yield* applyUserEvent(initialState.data)(event);
-
-      expect(newState.email).toBe('test@example.com');
-      expect(newState.isActive).toBe(true);
-    });
+    const program = pipe(
+      // Start with a new aggregate
+      Effect.succeed(UserAggregate.new()),
+      Effect.flatMap((state) =>
+        pipe(
+          // Generate registration events
+          UserAggregate.commands.registerUser(
+            'test-user' as UserId,
+            'test@example.com',
+            'Test User'
+          )(state),
+          Effect.tap((events) => {
+            const event = Chunk.unsafeHead(events);
+            expect(event.type).toBe('UserRegistered');
+            expect(event.data.email).toBe('test@example.com');
+            return Effect.unit;
+          }),
+          Effect.flatMap((events) =>
+            // Apply the event to test state transformation
+            pipe(
+              Chunk.unsafeHead(events),
+              applyUserEvent(state.data),
+              Effect.tap((newState) => {
+                expect(newState.email).toBe('test@example.com');
+                expect(newState.isActive).toBe(true);
+                return Effect.unit;
+              })
+            )
+          )
+        )
+      )
+    );
 
     await Effect.runPromise(
       pipe(program, Effect.provide(CommandContextTest(Option.some('test-initiator' as any))))
@@ -422,28 +478,29 @@ describe('UserAggregate', () => {
   });
 
   it('should prevent duplicate registration', async () => {
-    const program = Effect.gen(function* () {
-      const existingState: AggregateState<UserState> = {
-        nextEventNumber: 1,
-        data: Option.some({
-          userId: 'existing-user' as UserId,
-          email: 'existing@example.com',
-          name: 'Existing User',
-          isActive: true,
-        }),
-      };
+    const existingState: AggregateState<UserState> = {
+      nextEventNumber: 1,
+      data: Option.some({
+        userId: 'existing-user' as UserId,
+        email: 'existing@example.com',
+        name: 'Existing User',
+        isActive: true,
+      }),
+    };
 
-      // This should fail because user already exists
-      const result = yield* Effect.either(
-        UserAggregate.commands.registerUser(
-          'existing-user' as UserId,
-          'duplicate@example.com',
-          'Duplicate User'
-        )
-      );
-
-      expect(result._tag).toBe('Left'); // Should fail
-    });
+    const program = pipe(
+      // Try to register a user that already exists
+      UserAggregate.commands.registerUser(
+        'existing-user' as UserId,
+        'duplicate@example.com',
+        'Duplicate User'
+      )(existingState),
+      Effect.either,
+      Effect.tap((result) => {
+        expect(result._tag).toBe('Left'); // Should fail
+        return Effect.unit;
+      })
+    );
 
     await Effect.runPromise(
       pipe(program, Effect.provide(CommandContextTest(Option.some('test-initiator' as any))))
