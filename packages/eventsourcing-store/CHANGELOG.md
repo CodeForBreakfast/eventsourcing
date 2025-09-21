@@ -1,5 +1,32 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.6.5
+
+### Patch Changes
+
+- [#62](https://github.com/CodeForBreakfast/eventsourcing/pull/62) [`ecd91f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/ecd91f3a05de08f82752ddf8f6f5c6d5238cec78) Thanks [@GraemeF](https://github.com/GraemeF)! - Export InMemoryStore class and make function for testing support
+
+  The `InMemoryStore` class and `make` function (exported as `makeInMemoryStore`) are now available from the main package exports. This allows users to create in-memory event stores for testing scenarios without needing to access internal module paths.
+
+  ## New exports
+  - `InMemoryStore` - The class for managing in-memory event storage
+  - `makeInMemoryStore` - Factory function to create a new InMemoryStore instance
+
+  ## Example usage
+
+  ```typescript
+  import { Effect } from 'effect';
+  import {
+    InMemoryStore,
+    makeInMemoryStore,
+    makeInMemoryEventStore,
+  } from '@codeforbreakfast/eventsourcing-store';
+
+  // Create an in-memory store for testing
+  const store = await Effect.runPromise(makeInMemoryStore<MyEventType>());
+  const eventStore = await Effect.runPromise(makeInMemoryEventStore(store));
+  ```
+
 ## 0.6.4
 
 ### Patch Changes
