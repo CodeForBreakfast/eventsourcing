@@ -40,7 +40,7 @@
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.5.1",
+        "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
@@ -57,7 +57,7 @@
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.5.1",
+        "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
@@ -76,7 +76,7 @@
         "@effect/sql-pg": "0.45.1",
       },
       "devDependencies": {
-        "@types/node": "24.5.1",
+        "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
@@ -94,7 +94,7 @@
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.5.1",
+        "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
@@ -408,7 +408,7 @@
 
     "@types/json-schema": ["@types/json-schema@7.0.15", "", {}, "sha512-5+fP8P8MFNC+AyZCDxrB2pkZFPGzqQWUzpSeuuVLvm8VMcorNYavBqoFcxK8bQz4Qsbn4oUEEem4wDLfcysGHA=="],
 
-    "@types/node": ["@types/node@24.5.1", "", { "dependencies": { "undici-types": "~7.12.0" } }, "sha512-/SQdmUP2xa+1rdx7VwB9yPq8PaKej8TD5cQ+XfKDPWWC+VDJU4rvVVagXqKUzhKjtFoNA8rXDJAkCxQPAe00+Q=="],
+    "@types/node": ["@types/node@24.5.2", "", { "dependencies": { "undici-types": "~7.12.0" } }, "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ=="],
 
     "@types/react": ["@types/react@19.1.13", "", { "dependencies": { "csstype": "^3.0.2" } }, "sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ=="],
 
