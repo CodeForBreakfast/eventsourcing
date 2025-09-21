@@ -14,6 +14,6 @@ description: Start a new piece of work on main
 You will then be ready to start a new piece of work. Once you are ready to commit changes:
 
 1. Create a new feature branch: `git checkout -b feat/your-feature-name`
-2. Create a changeset describing the changes from a consumer's point of view. What does someone using this package need to know about the changes?
+2. If the changes will affect the published packages, create a changeset file describing the changes from a consumer's point of view. What does someone using this package need to know about the changes?
 3. ONLY THEN commit changes with an appropriate message including prefix "type($1):", where "type" is one of feat, improve, perf, docs, test, refactor, ci, fix, chore, build, or maintain (as appropriate).
 4. Push the branch to origin
