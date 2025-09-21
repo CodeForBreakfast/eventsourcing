@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-websocket-transport",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "Real-time WebSocket transport for event sourcing with Effect - Stream events to browsers and clients with type-safe, resilient real-time communication",
   "type": "module",
   "main": "./dist/index.js",
@@ -63,7 +63,7 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "^0.6.1"
   },
   "devDependencies": {
     "@types/node": "24.5.2",

@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-projections
 
+## 0.4.2
+
+### Patch Changes
+
+- Fix workspace protocol in dependencies
+
+  Replace workspace:\* with proper version constraints to fix npm installation issues
+
 ## 0.4.1
 
 ### Patch Changes

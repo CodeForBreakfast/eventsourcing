@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.5.2
+
+### Patch Changes
+
+- Fix workspace protocol in dependencies
+
+  Replace workspace:\* with proper version constraints to fix npm installation issues
+
 ## 0.5.1
 
 ### Patch Changes

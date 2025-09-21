@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-aggregates",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Type-safe aggregate root patterns for event sourcing with Effect - Build bulletproof domain models with functional composition and immutable state management",
   "type": "module",
   "main": "./dist/index.js",
@@ -60,7 +60,7 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "^0.6.1"
   },
   "devDependencies": {
     "@types/node": "24.5.2",

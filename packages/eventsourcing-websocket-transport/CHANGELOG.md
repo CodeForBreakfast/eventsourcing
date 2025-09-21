@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-websocket-transport
 
+## 0.3.4
+
+### Patch Changes
+
+- Fix workspace protocol in dependencies
+
+  Replace workspace:\* with proper version constraints to fix npm installation issues
+
 ## 0.3.3
 
 ### Patch Changes
