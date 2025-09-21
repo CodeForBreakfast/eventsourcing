@@ -5,6 +5,8 @@ description: Start a new piece of work on main
 
 ## Your task
 
+IMPORTANT: Do not discard any local changes. It is possible that the command is being run in order to prepare to commit them.
+
 1. Run `git fetch` to ensure you have the latest from origin
 2. Change to main branch if not already on it: `git checkout main`
 3. Pull latest changes: `git pull origin main`

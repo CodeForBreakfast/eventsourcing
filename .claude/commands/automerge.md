@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git status), Bash(git branch), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git pull), Bash(git branch -d:*), Bash(gh pr list), Bash(gh pr create:*), Bash(gh pr merge:*), Bash(gh pr checks:*), Bash(gh pr view:*), Bash(gh pr status)
+allowed-tools: Bash(git status:*), Bash(git branch:*), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git pull:*) Bash(gh pr:*)
 description: Commit changes, create/update PR, enable automerge, and wait for merge
 ---
 
@@ -10,7 +10,7 @@ This command automates the entire process of getting changes merged into main:
 1. **Check current git status** - Determine if there are uncommitted changes
 2. **Handle uncommitted changes** (if any):
    - Check if already on a feature branch, if not create one
-   - Stage and commit all changes with an appropriate commit message and changeset (if applicable)
+   - Stage and commit all changes with an appropriate commit message and, IF there are end-user visible changes, a changeset file
    - Push the branch to origin
 3. **Check for existing PR**:
    - If PR already exists for current branch, ensure it's up to date
