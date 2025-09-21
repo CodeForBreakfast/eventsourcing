@@ -1,7 +1,7 @@
 ---
-'@codeforbreakfast/eventsourcing-store': patch
-'@codeforbreakfast/eventsourcing-store-postgres': patch
-'@codeforbreakfast/eventsourcing-aggregates': patch
+'@codeforbreakfast/eventsourcing-store': minor
+'@codeforbreakfast/eventsourcing-store-postgres': minor
+'@codeforbreakfast/eventsourcing-aggregates': minor
 ---
 
 Refactored package boundaries for better separation of concerns
