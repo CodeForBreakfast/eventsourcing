@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git status), Bash(git branch), Bash(git checkout -b:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git checkout main), Bash(git pull), Bash(git branch -d:*), Bash(gh pr list), Bash(gh pr create:*), Bash(gh pr merge:*), Bash(gh pr checks:*), Bash(gh pr view:*), Bash(gh pr status)
+allowed-tools: Bash(git status), Bash(git branch), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git pull), Bash(git branch -d:*), Bash(gh pr list), Bash(gh pr create:*), Bash(gh pr merge:*), Bash(gh pr checks:*), Bash(gh pr view:*), Bash(gh pr status)
 description: Commit changes, create/update PR, enable automerge, and wait for merge
 ---
 
