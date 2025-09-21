@@ -1,5 +1,5 @@
-import { Logger, Effect, Layer, Schema, Stream, pipe } from 'effect';
-import { beforeEach, describe, expect, it } from 'bun:test';
+import { Logger, Effect, Layer, Schema, Stream, pipe, ParseResult } from 'effect';
+import { describe, expect, it } from 'bun:test';
 import {
   runEventStoreTestSuite,
   FooEventStore,
@@ -7,6 +7,7 @@ import {
   beginning,
   type EventStore,
   encodedEventStore,
+  EventStoreError,
 } from '@codeforbreakfast/eventsourcing-store';
 import {
   sqlEventStore,
@@ -59,11 +60,15 @@ describe('PostgreSQL Horizontal Scaling', () => {
     const instance1Layer = createPostgresLayer();
     const instance2Layer = createPostgresLayer();
 
-    const runWithInstance1 = <A>(effect: Effect.Effect<A, any, FooEventStore>): Promise<A> => {
+    const runWithInstance1 = <A>(
+      effect: Effect.Effect<A, ParseResult.ParseError | EventStoreError, FooEventStore>
+    ): Promise<A> => {
       return pipe(effect, Effect.provide(instance1Layer), Effect.runPromise);
     };
 
-    const runWithInstance2 = <A>(effect: Effect.Effect<A, any, FooEventStore>): Promise<A> => {
+    const runWithInstance2 = <A>(
+      effect: Effect.Effect<A, ParseResult.ParseError | EventStoreError, FooEventStore>
+    ): Promise<A> => {
       return pipe(effect, Effect.provide(instance2Layer), Effect.runPromise);
     };
 
@@ -86,7 +91,6 @@ describe('PostgreSQL Horizontal Scaling', () => {
                 Stream.take(2), // Expect 2 events to be written by instance 1
                 Stream.tap((event) =>
                   Effect.sync(() => {
-                    // eslint-disable-next-line functional/immutable-data
                     receivedEvents.push(event);
                   })
                 ),
