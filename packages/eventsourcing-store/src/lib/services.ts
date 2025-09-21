@@ -1,5 +1,5 @@
 import { Effect, ParseResult, Sink, Stream } from 'effect';
-import { EventStreamId, EventStreamPosition } from './streamTypes';
+import { EventStreamPosition } from './streamTypes';
 import {
   EventStoreError,
   ConcurrencyConflictError,
