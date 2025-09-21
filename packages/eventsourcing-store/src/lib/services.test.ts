@@ -53,8 +53,7 @@ describe('Service Definitions', () => {
           throw new Error('Not implemented');
         },
         read: (from) => Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
-        readHistorical: (from) =>
-          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
+        subscribe: (from) => Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
       };
 
       // For string events, we'll use the base untyped service
@@ -81,7 +80,7 @@ describe('Service Definitions', () => {
           throw new Error('Not implemented');
         },
         read: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
-        readHistorical: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
+        subscribe: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
       };
 
       const EventStoreLive = Layer.succeed(MyEventStoreService, mockEventStore);
@@ -182,7 +181,7 @@ describe('Service Definitions', () => {
           throw new Error('Not implemented');
         },
         read: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
-        readHistorical: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
+        subscribe: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
       } as EventStoreServiceInterface<unknown>);
 
       const ProjectionStoreLive = Layer.succeed(ProjectionStoreService, {

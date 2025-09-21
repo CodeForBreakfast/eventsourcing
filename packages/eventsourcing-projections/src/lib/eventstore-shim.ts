@@ -24,27 +24,15 @@ export interface ProjectionEventStore<TEvent> {
     EventStoreError,
     never
   >;
-  /**
-   * @deprecated Use 'read' instead - it now returns only historical events
-   */
-  readonly readHistorical: (
-    from: EventStreamPosition
-  ) => Effect.Effect<
-    Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
-    EventStoreError,
-    never
-  >;
 }
 
 /**
- * Create a compatible version of EventStore that works with the projections package
+ * Create a projection-specific view of an EventStore
  */
-export const createCompatibleEventStore = <TEvent>(
+export const createProjectionEventStore = <TEvent>(
   original: FullEventStore<TEvent>
 ): ProjectionEventStore<TEvent> => ({
   read: (from: EventStreamPosition) => original.read(from),
-  // For backward compatibility, map readHistorical to read (both return historical only now)
-  readHistorical: (from: EventStreamPosition) => original.read(from),
 });
 
 export { EventNumber, EventStreamId, EventStreamPosition, EventStoreError };

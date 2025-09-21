@@ -53,25 +53,6 @@ export interface EventStore<TEvent> {
   >;
 }
 
-// Legacy types kept for migration period - mark as deprecated
-/**
- * @deprecated Use Stream combinators instead of ReadOptions
- */
-export interface ReadOptions {
-  readonly fromEventNumber?: number;
-  readonly toEventNumber?: number;
-  readonly direction?: 'forward' | 'backward';
-  readonly batchSize?: number;
-}
-
-/**
- * @deprecated Use EventStreamPosition with Stream combinators instead
- */
-export interface ReadParams extends ReadOptions {
-  readonly streamId: EventStreamId;
-  readonly fromEventNumber?: number;
-}
-
 // Create EventStore service tag - generic version must be created per use case
 export class EventStoreService extends Effect.Tag('@eventsourcing/EventStore')<
   EventStoreService,
