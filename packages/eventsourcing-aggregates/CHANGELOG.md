@@ -1,5 +1,27 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.5.2
+
+### Patch Changes
+
+- [#57](https://github.com/CodeForBreakfast/eventsourcing/pull/57) [`10bc57b`](https://github.com/CodeForBreakfast/eventsourcing/commit/10bc57b88b396f9536d0ec3afa670f41991b181c) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix workspace protocol dependencies in published packages
+
+  The published packages incorrectly included `workspace:*` protocol in their dependencies, making them impossible to install outside the monorepo. This was caused by changesets not supporting Bun's workspace protocol.
+
+  The fix updates the release workflow to:
+  1. Run `bun update` after versioning to resolve workspace references
+  2. Use `bun publish` directly instead of `changeset publish`
+  3. Run `changeset tag` to create git tags after publishing
+
+  This ensures published packages have proper version constraints instead of workspace protocols.
+
+- [#55](https://github.com/CodeForBreakfast/eventsourcing/pull/55) [`527cedc`](https://github.com/CodeForBreakfast/eventsourcing/commit/527cedca43b67ab4c32d330b5e2bca8acf90574b) Thanks [@GraemeF](https://github.com/GraemeF)! - Test patch release to verify changeset publish handles workspace protocol correctly
+
+  This patch verifies that the changeset publish process properly replaces workspace:\* with actual version numbers when publishing to npm.
+
+- Updated dependencies [[`10bc57b`](https://github.com/CodeForBreakfast/eventsourcing/commit/10bc57b88b396f9536d0ec3afa670f41991b181c)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.2
+
 ## 0.5.1
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Type-safe event sourcing store with Effect integration - Build resilient, functional event-driven systems with composable error handling and streaming",
   "type": "module",
   "main": "./dist/index.js",
