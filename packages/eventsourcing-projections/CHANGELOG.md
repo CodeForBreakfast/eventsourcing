@@ -1,5 +1,21 @@
 # @codeforbreakfast/eventsourcing-projections
 
+## 0.3.0
+
+### Minor Changes
+
+- [#43](https://github.com/CodeForBreakfast/eventsourcing/pull/43) [`7f00d80`](https://github.com/CodeForBreakfast/eventsourcing/commit/7f00d801375c785f41e3fad325ad98c60892028b) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved npm documentation and discoverability:
+  - Added comprehensive README documentation for all packages
+  - Enhanced package.json descriptions to highlight Effect integration
+  - Added Effect-focused keywords for better npm search visibility
+  - Included usage examples and getting started guides
+  - Fixed all code examples to use idiomatic Effect patterns
+
+### Patch Changes
+
+- Updated dependencies [[`7f00d80`](https://github.com/CodeForBreakfast/eventsourcing/commit/7f00d801375c785f41e3fad325ad98c60892028b)]:
+  - @codeforbreakfast/eventsourcing-store@0.4.0
+
 ## 0.2.1
 
 ### Patch Changes
