@@ -1,4 +1,4 @@
-import { Effect, Stream, Duration, Schema, pipe, ParseResult } from 'effect';
+import { Effect, Stream, Duration, Schema, pipe, ParseResult, Scope } from 'effect';
 import {
   TransportConnectionError,
   TransportPublishError,
@@ -47,13 +47,21 @@ export interface SchemaTransportConfig<TMessage, TWireFormat> {
 }
 
 /**
- * Raw transport interface that handles wire-level communication.
- * Implementers only deal with their specific wire format (string, binary, etc).
- * Schema encoding/decoding is handled at this layer.
+ * Raw wire message format for transport layer
  */
-export interface RawTransport<TWireFormat, R = never> {
-  readonly connect: () => Effect.Effect<void, TransportConnectionError, R>;
+export interface RawWireMessage<TWireFormat> {
+  readonly streamId: string;
+  readonly wireData: TWireFormat;
+  readonly position?: number;
+  readonly timestamp: Date;
+  readonly metadata?: Record<string, unknown>;
+}
 
+/**
+ * Connected raw transport interface - only available after successful connection.
+ * Handles wire-level communication in a specific format (string, binary, etc).
+ */
+export interface ConnectedRawTransport<TWireFormat, R = never> {
   readonly publishRaw: (
     streamId: string,
     wireData: TWireFormat,
@@ -63,50 +71,41 @@ export interface RawTransport<TWireFormat, R = never> {
   readonly subscribeRaw: (
     streamId: string,
     options?: SubscriptionOptions
-  ) => Stream.Stream<
-    {
-      readonly streamId: string;
-      readonly wireData: TWireFormat;
-      readonly position?: number;
-      readonly timestamp: Date;
-      readonly metadata?: Record<string, unknown>;
-    },
-    TransportSubscriptionError,
-    R
-  >;
+  ) => Stream.Stream<RawWireMessage<TWireFormat>, TransportSubscriptionError, R>;
 
   readonly subscribeMultipleRaw: (
     streamIds: readonly string[],
     options?: SubscriptionOptions
-  ) => Stream.Stream<
-    {
-      readonly streamId: string;
-      readonly wireData: TWireFormat;
-      readonly position?: number;
-      readonly timestamp: Date;
-      readonly metadata?: Record<string, unknown>;
-    },
-    TransportSubscriptionError,
-    R
-  >;
+  ) => Stream.Stream<RawWireMessage<TWireFormat>, TransportSubscriptionError, R>;
 
   readonly health: Effect.Effect<TransportHealth, TransportConnectionError, R>;
   readonly metrics: Effect.Effect<TransportMetrics, TransportConnectionError, R>;
-  readonly close: () => Effect.Effect<void, TransportConnectionError, R>;
 }
 
 /**
- * Schema-aware transport that provides type-safe message handling.
- * Built on top of a raw transport with automatic encoding/decoding.
+ * Raw transport factory interface that creates a connected raw transport within a scope.
+ * The connection is established during acquire and cleaned up during release.
  */
-export interface SchemaTransport<TMessage, TStreamId = string, R = never> {
-  readonly connect: () => Effect.Effect<void, TransportConnectionError, R>;
+export interface RawTransport<TWireFormat, R = never> {
+  readonly makeConnected: (
+    config: SchemaTransportConfig<any, TWireFormat>
+  ) => Effect.Effect<
+    ConnectedRawTransport<TWireFormat, R>,
+    TransportConnectionError,
+    R | Scope.Scope
+  >;
+}
 
+/**
+ * Connected schema-aware transport - only available after successful connection.
+ * Provides type-safe message handling with automatic encoding/decoding.
+ */
+export interface ConnectedSchemaTransport<TMessage, TStreamId = string, R = never> {
   readonly publish: (
     streamId: TStreamId,
     message: TMessage,
     metadata?: Record<string, unknown>
-  ) => Effect.Effect<void, TransportPublishError | ParseResult.ParseError | Error, R | any>;
+  ) => Effect.Effect<void, TransportPublishError | ParseResult.ParseError | Error, R>;
 
   readonly subscribe: (
     streamId: TStreamId,
@@ -114,7 +113,7 @@ export interface SchemaTransport<TMessage, TStreamId = string, R = never> {
   ) => Stream.Stream<
     ProtocolMessage<TMessage, TStreamId>,
     TransportSubscriptionError | ParseResult.ParseError | Error,
-    R | any
+    R
   >;
 
   readonly subscribeMultiple: (
@@ -123,67 +122,113 @@ export interface SchemaTransport<TMessage, TStreamId = string, R = never> {
   ) => Stream.Stream<
     ProtocolMessage<TMessage, TStreamId>,
     TransportSubscriptionError | ParseResult.ParseError | Error,
-    R | any
+    R
   >;
 
   readonly health: Effect.Effect<TransportHealth, TransportConnectionError, R>;
   readonly metrics: Effect.Effect<TransportMetrics, TransportConnectionError, R>;
-  readonly close: () => Effect.Effect<void, TransportConnectionError, R>;
+}
+
+/**
+ * Schema transport factory interface that creates a connected schema transport within a scope.
+ * Built on top of a raw transport with automatic encoding/decoding.
+ * The connection is established during acquire and cleaned up during release.
+ */
+export interface SchemaTransport<TMessage, TStreamId = string, R = never> {
+  readonly makeConnected: (
+    config: SchemaTransportConfig<TMessage, any>
+  ) => Effect.Effect<
+    ConnectedSchemaTransport<TMessage, TStreamId, R>,
+    TransportConnectionError,
+    R | Scope.Scope
+  >;
 }
 
 /**
  * Creates a schema-aware transport from a raw transport implementation.
  * Handles all encoding/decoding automatically using the provided codec.
+ * Uses Effect.acquireRelease to ensure proper connection lifecycle management.
  */
 export const makeSchemaTransport = <TMessage, TWireFormat, TStreamId = string, R = never>(
-  rawTransport: RawTransport<TWireFormat, R>,
-  codec: TransportCodec<TMessage, TWireFormat>
+  rawTransport: RawTransport<TWireFormat, R>
 ): SchemaTransport<TMessage, TStreamId, R> => ({
-  connect: rawTransport.connect,
-  health: rawTransport.health,
-  metrics: rawTransport.metrics,
-  close: rawTransport.close,
-
-  publish: (streamId, message, metadata) =>
+  makeConnected: (config) =>
     pipe(
-      codec.encode(message),
-      Effect.flatMap((wireData) => rawTransport.publishRaw(String(streamId), wireData, metadata))
-    ),
+      rawTransport.makeConnected(config),
+      Effect.map((connectedRaw) => ({
+        publish: (streamId, message, metadata) =>
+          pipe(
+            config.codec.encode(message),
+            Effect.flatMap((wireData) =>
+              connectedRaw.publishRaw(String(streamId), wireData, metadata)
+            )
+          ),
 
-  subscribe: (streamId, options) =>
-    pipe(
-      rawTransport.subscribeRaw(String(streamId), options),
-      Stream.mapEffect((rawMessage) =>
-        pipe(
-          codec.decode(rawMessage.wireData),
-          Effect.map((payload) => ({
-            streamId: streamId,
-            payload,
-            position: rawMessage.position,
-            timestamp: rawMessage.timestamp,
-            metadata: rawMessage.metadata,
-          }))
-        )
-      )
-    ),
+        subscribe: (streamId, options) =>
+          pipe(
+            connectedRaw.subscribeRaw(String(streamId), options),
+            Stream.mapEffect((rawMessage) =>
+              pipe(
+                config.codec.decode(rawMessage.wireData),
+                Effect.map((payload) => ({
+                  streamId: streamId,
+                  payload,
+                  position: rawMessage.position,
+                  timestamp: rawMessage.timestamp,
+                  metadata: rawMessage.metadata,
+                }))
+              )
+            )
+          ),
 
-  subscribeMultiple: (streamIds, options) =>
-    pipe(
-      rawTransport.subscribeMultipleRaw(streamIds.map(String), options),
-      Stream.mapEffect((rawMessage) =>
-        pipe(
-          codec.decode(rawMessage.wireData),
-          Effect.map((payload) => ({
-            streamId: streamIds.find((id) => String(id) === rawMessage.streamId)!,
-            payload,
-            position: rawMessage.position,
-            timestamp: rawMessage.timestamp,
-            metadata: rawMessage.metadata,
-          }))
-        )
-      )
+        subscribeMultiple: (streamIds, options) =>
+          pipe(
+            connectedRaw.subscribeMultipleRaw(streamIds.map(String), options),
+            Stream.mapEffect((rawMessage) =>
+              pipe(
+                config.codec.decode(rawMessage.wireData),
+                Effect.map((payload) => ({
+                  streamId: streamIds.find((id) => String(id) === rawMessage.streamId)!,
+                  payload,
+                  position: rawMessage.position,
+                  timestamp: rawMessage.timestamp,
+                  metadata: rawMessage.metadata,
+                }))
+              )
+            )
+          ),
+
+        health: connectedRaw.health,
+        metrics: connectedRaw.metrics,
+      }))
     ),
 });
+
+/**
+ * Helper function to use a schema transport within a scoped operation.
+ * Automatically handles connection lifecycle with Effect.acquireRelease.
+ *
+ * @example
+ * ```typescript
+ * const program = Effect.gen(function* (_) {
+ *   const result = yield* _(
+ *     withSchemaTransport(mySchemaTransport, config, (transport) =>
+ *       pipe(
+ *         transport.publish("stream-1", { hello: "world" }),
+ *         Effect.flatMap(() => transport.health)
+ *       )
+ *     )
+ *   );
+ *   return result;
+ * });
+ * ```
+ */
+export const withSchemaTransport = <TMessage, TStreamId, R, A, E>(
+  transport: SchemaTransport<TMessage, TStreamId, R>,
+  config: SchemaTransportConfig<TMessage, any>,
+  f: (connected: ConnectedSchemaTransport<TMessage, TStreamId, R>) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | TransportConnectionError, R | Scope.Scope> =>
+  pipe(transport.makeConnected(config), Effect.flatMap(f));
 
 /**
  * Common codec implementations for different wire formats

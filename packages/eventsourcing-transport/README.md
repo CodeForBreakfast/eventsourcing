@@ -1,18 +1,31 @@
 # @codeforbreakfast/eventsourcing-transport
 
-Universal transport abstractions for event sourcing with Effect - Define transport-agnostic interfaces for real-time communication.
+Universal transport abstractions for event sourcing with Effect - Connection-gated, type-safe interfaces for real-time communication.
 
 ## Overview
 
-This package provides a universal transport abstraction that can be implemented by any transport mechanism (WebSocket, HTTP, Server-Sent Events, gRPC streams, etc.) while maintaining type safety and Effect composition patterns.
+This package provides connection-gated transport abstractions that make it impossible to use transport methods without being connected. It supports multiple abstraction levels (raw, schema-aware) and can be implemented by any transport mechanism (WebSocket, HTTP, Server-Sent Events, gRPC streams, etc.) while maintaining full type safety and Effect composition patterns.
 
 ## Core Concepts
 
-### Transport Interface
+### Connection-Gated Pattern
+
+The transport interface uses a connection-gated pattern where methods are only available on a connected transport:
 
 ```typescript
+// Transport factory creates connected transports
 interface Transport<TData = unknown, TStreamId = string, R = never> {
-  readonly connect: () => Effect.Effect<void, TransportConnectionError, R>;
+  readonly makeConnected: (
+    config: TransportConfig
+  ) => Effect.Effect<
+    ConnectedTransport<TData, TStreamId, R>,
+    TransportConnectionError,
+    R | Scope.Scope
+  >;
+}
+
+// Connected transport provides the actual operations
+interface ConnectedTransport<TData = unknown, TStreamId = string, R = never> {
   readonly publish: (
     streamId: TStreamId,
     data: TData,
@@ -22,13 +35,8 @@ interface Transport<TData = unknown, TStreamId = string, R = never> {
     streamId: TStreamId,
     options?: SubscriptionOptions
   ) => Stream.Stream<StreamMessage<TData, TStreamId>, TransportSubscriptionError, R>;
-  readonly subscribeMultiple: (
-    streamIds: readonly TStreamId[],
-    options?: SubscriptionOptions
-  ) => Stream.Stream<StreamMessage<TData, TStreamId>, TransportSubscriptionError, R>;
   readonly health: Effect.Effect<TransportHealth, TransportConnectionError, R>;
   readonly metrics: Effect.Effect<TransportMetrics, TransportConnectionError, R>;
-  readonly close: () => Effect.Effect<void, TransportConnectionError, R>;
 }
 ```
 
@@ -48,41 +56,69 @@ interface StreamMessage<TData = unknown, TStreamId = string> {
 
 ### Resource Management
 
-Use the `makeTransport` helper for proper resource lifecycle management:
+The connection-gated pattern ensures proper resource lifecycle management using `Effect.acquireRelease`:
 
 ```typescript
-const managedTransport = makeTransport(createWebSocketTransport, config);
+// Using the helper function
+const program = withTransport(myTransport, config, (connected) =>
+  pipe(
+    connected.publish('stream-1', { data: 'hello' }),
+    Effect.flatMap(() => connected.subscribe('stream-1')),
+    Stream.runDrain
+  )
+);
 ```
 
-This ensures the transport is properly closed when the Effect scope is released.
+This pattern guarantees:
 
-## Implementation Example
+- Connection is established before any operations
+- Transport is properly closed when the scope ends
+- Impossible to use transport methods without being connected
+
+## Usage Examples
+
+### Basic Transport Usage
 
 ```typescript
-import { Transport, makeTransport, TransportConfig } from '@codeforbreakfast/eventsourcing-transport';
+import { withTransport } from '@codeforbreakfast/eventsourcing-transport';
 
-// Implement your specific transport
-const createMyTransport = (config: TransportConfig): Effect.Effect<Transport<MyData, MyStreamId>, TransportConnectionError> =>
-  Effect.gen(function* (_) {
-    // Your transport implementation
-    return {
-      connect: () => /* connect logic */,
-      publish: (streamId, data) => /* publish logic */,
-      subscribe: (streamId, options) => /* subscribe logic */,
-      // ... other methods
-    };
-  });
-
-// Use with resource management
 const program = Effect.gen(function* (_) {
-  const transport = yield* _(makeTransport(createMyTransport, config));
+  return yield* _(
+    withTransport(myTransport, config, (transport) =>
+      Effect.gen(function* (_) {
+        // Transport is guaranteed to be connected here
+        yield* _(transport.publish('stream-1', { hello: 'world' }));
 
-  // Use the transport
-  yield* _(transport.publish("stream-1", { data: "hello" }));
+        const health = yield* _(transport.health);
+        console.log(`Connected: ${health.connected}`);
 
-  const events = transport.subscribe("stream-1");
-  yield* _(Stream.runDrain(events));
+        return 'Success!';
+      })
+    )
+  );
+  // Transport automatically closed here
 });
+```
+
+### Schema-Aware Transport
+
+```typescript
+import { withSchemaTransport, Codecs } from '@codeforbreakfast/eventsourcing-transport';
+import { Schema } from '@effect/schema';
+
+const EventSchema = Schema.Struct({
+  type: Schema.String,
+  aggregateId: Schema.String,
+  data: Schema.Unknown,
+});
+
+const program = withSchemaTransport(myRawTransport, Codecs.json(EventSchema), config, (transport) =>
+  transport.publish('events', {
+    type: 'UserCreated', // Type-safe!
+    aggregateId: 'user-123',
+    data: { name: 'John' },
+  })
+);
 ```
 
 ## Error Handling
@@ -100,6 +136,35 @@ The package provides a comprehensive error hierarchy:
 - `TStreamId` - The type of stream identifiers (e.g., `EventStreamId` for event sourcing)
 - `R` - Effect requirements (dependencies needed by the transport)
 
-## Universal Design
+## Architecture Layers
 
-This abstraction separates transport-specific concerns (connection management, protocol details) from universal patterns (publish/subscribe, health monitoring, resource cleanup) allowing the same high-level logic to work with any transport implementation.
+The package provides multiple abstraction layers:
+
+### 1. Basic Transport
+
+High-level interface for simple publish/subscribe patterns with connection gating.
+
+### 2. Raw Transport
+
+Low-level interface for wire communication (strings, binary, etc.) with connection gating.
+
+### 3. Schema Transport
+
+Type-safe layer that composes raw transports with schema-based codecs for automatic encoding/decoding.
+
+## Key Features
+
+- **Connection-Gated**: Impossible to use transport methods without being connected
+- **Type-Safe**: Full TypeScript support with generic type parameters
+- **Schema-Aware**: Optional schema validation with Effect Schema
+- **Composable**: Works with Effect's composition patterns
+- **Resource-Safe**: Automatic cleanup with Effect.acquireRelease
+- **Multi-Layer**: Different abstraction levels for different use cases
+
+## Implementation Examples
+
+See the `examples/` directory for complete implementations:
+
+- `in-memory-transport.ts` - Reference in-memory implementation
+- `websocket-raw-transport.ts` - WebSocket with schema layer
+- `README.md` - Migration guide and best practices

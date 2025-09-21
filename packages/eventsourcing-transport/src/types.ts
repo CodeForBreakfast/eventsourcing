@@ -1,4 +1,4 @@
-import { Effect, Stream, Duration } from 'effect';
+import { Effect, Stream, Duration, Scope, pipe } from 'effect';
 import {
   TransportConnectionError,
   TransportPublishError,
@@ -40,9 +40,12 @@ export interface TransportConfig {
   readonly timeout: Duration.Duration;
 }
 
-export interface Transport<TData = unknown, TStreamId = string, R = never> {
-  readonly connect: () => Effect.Effect<void, TransportConnectionError, R>;
-
+/**
+ * Connected transport interface - only available after successful connection.
+ * This interface represents a transport that is guaranteed to be connected
+ * and ready for use. Methods on this interface can be called safely.
+ */
+export interface ConnectedTransport<TData = unknown, TStreamId = string, R = never> {
   readonly publish: (
     streamId: TStreamId,
     data: TData,
@@ -62,6 +65,45 @@ export interface Transport<TData = unknown, TStreamId = string, R = never> {
   readonly health: Effect.Effect<TransportHealth, TransportConnectionError, R>;
 
   readonly metrics: Effect.Effect<TransportMetrics, TransportConnectionError, R>;
-
-  readonly close: () => Effect.Effect<void, TransportConnectionError, R>;
 }
+
+/**
+ * Transport factory interface that creates a connected transport within a scope.
+ * The connection is established during acquire and cleaned up during release.
+ * This makes it impossible to use transport methods without being connected.
+ */
+export interface Transport<TData = unknown, TStreamId = string, R = never> {
+  readonly makeConnected: (
+    config: TransportConfig
+  ) => Effect.Effect<
+    ConnectedTransport<TData, TStreamId, R>,
+    TransportConnectionError,
+    R | Scope.Scope
+  >;
+}
+
+/**
+ * Helper function to use a transport within a scoped operation.
+ * Automatically handles connection lifecycle with Effect.acquireRelease.
+ *
+ * @example
+ * ```typescript
+ * const program = Effect.gen(function* (_) {
+ *   const result = yield* _(
+ *     withTransport(myTransport, config, (transport) =>
+ *       pipe(
+ *         transport.publish("stream-1", { hello: "world" }),
+ *         Effect.flatMap(() => transport.health)
+ *       )
+ *     )
+ *   );
+ *   return result;
+ * });
+ * ```
+ */
+export const withTransport = <TData, TStreamId, R, A, E>(
+  transport: Transport<TData, TStreamId, R>,
+  config: TransportConfig,
+  f: (connected: ConnectedTransport<TData, TStreamId, R>) => Effect.Effect<A, E, R>
+): Effect.Effect<A, E | TransportConnectionError, R | Scope.Scope> =>
+  pipe(transport.makeConnected(config), Effect.flatMap(f));
