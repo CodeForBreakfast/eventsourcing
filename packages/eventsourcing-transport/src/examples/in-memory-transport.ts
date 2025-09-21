@@ -28,51 +28,53 @@ interface InMemoryStore {
 }
 
 /**
- * Creates an in-memory transport factory.
- * Config is provided when creating the transport instance.
+ * Creates an in-memory transport factory with config curried.
+ * Returns a function that creates the transport when called.
  */
-const createInMemoryTransport: CreateTransport<unknown, string, never> = (_config) =>
-  pipe(
-    Ref.make<InMemoryStore>({
-      streams: new Map(),
-      subscribers: new Map(),
-      metrics: {
-        messagesPublished: 0,
-        messagesReceived: 0,
-        activeSubscriptions: 0,
-        connectionAttempts: 0,
-        errors: 0,
-      },
-      connected: false,
-    }),
-    Effect.flatMap((storeRef) =>
-      Effect.acquireRelease(
-        // Acquire: Update store and create transport
-        pipe(
-          Ref.update(storeRef, (store) => ({
-            ...store,
-            connected: true,
-            connectedAt: new Date(),
-            metrics: {
-              ...store.metrics,
-              connectionAttempts: store.metrics.connectionAttempts + 1,
-            },
-          })),
-          Effect.map(() => createConnectedTransport(storeRef))
-        ),
-        // Release: Clean up connection
-        (_connectedTransport) =>
+const makeInMemoryTransport =
+  (_config?: TransportConfig): CreateTransport<unknown, string, never> =>
+  () =>
+    pipe(
+      Ref.make<InMemoryStore>({
+        streams: new Map(),
+        subscribers: new Map(),
+        metrics: {
+          messagesPublished: 0,
+          messagesReceived: 0,
+          activeSubscriptions: 0,
+          connectionAttempts: 0,
+          errors: 0,
+        },
+        connected: false,
+      }),
+      Effect.flatMap((storeRef) =>
+        Effect.acquireRelease(
+          // Acquire: Update store and create transport
           pipe(
             Ref.update(storeRef, (store) => ({
               ...store,
-              connected: false,
-              subscribers: new Map(),
+              connected: true,
+              connectedAt: new Date(),
+              metrics: {
+                ...store.metrics,
+                connectionAttempts: store.metrics.connectionAttempts + 1,
+              },
             })),
-            Effect.asVoid
-          )
+            Effect.map(() => createConnectedTransport(storeRef))
+          ),
+          // Release: Clean up connection
+          (_connectedTransport) =>
+            pipe(
+              Ref.update(storeRef, (store) => ({
+                ...store,
+                connected: false,
+                subscribers: new Map(),
+              })),
+              Effect.asVoid
+            )
+        )
       )
-    )
-  );
+    );
 
 const createConnectedTransport = (
   storeRef: Ref.Ref<InMemoryStore>
@@ -234,11 +236,11 @@ const createConnectedTransport = (
  * Example usage demonstrating the connection-gated pattern
  */
 export const exampleUsage = pipe(
-  createInMemoryTransport({
+  makeInMemoryTransport({
     url: 'in-memory://localhost',
     retryAttempts: 3,
     timeout: Duration.seconds(5),
-  }),
+  })(),
   Effect.flatMap((transport) =>
     pipe(
       transport.publish('test-stream', { hello: 'world' }),
@@ -256,7 +258,8 @@ export const exampleUsage = pipe(
 export const makeInMemoryTransportService = (config: TransportConfig) =>
   Effect.gen(function* (_) {
     // Config is baked in at service creation time
-    const transport = yield* _(createInMemoryTransport(config));
+    const createTransport = makeInMemoryTransport(config);
+    const transport = yield* _(createTransport());
 
     return {
       sendMessage: (streamId: string, data: unknown) => transport.publish(streamId, data),
@@ -267,4 +270,5 @@ export const makeInMemoryTransportService = (config: TransportConfig) =>
     };
   });
 
-export { createInMemoryTransport };
+// Export only the factory - no redundant aliases
+export { makeInMemoryTransport };

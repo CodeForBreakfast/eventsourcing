@@ -85,11 +85,10 @@ export interface ConnectedRawTransport<TWireFormat, R = never> {
 /**
  * Creates a connected raw transport within a scope.
  * The connection is established during acquire and cleaned up during release.
- * Config is provided when creating the transport instance.
+ * Implementations are free to curry their own config parameters before
+ * returning this function signature.
  */
-export type CreateRawTransport<R = never> = <TWireFormat>(
-  config: SchemaTransportConfig<any, TWireFormat>
-) => Effect.Effect<
+export type CreateRawTransport<TWireFormat, R = never> = () => Effect.Effect<
   ConnectedRawTransport<TWireFormat, R>,
   TransportConnectionError,
   R | Scope.Scope
@@ -132,11 +131,15 @@ export interface ConnectedSchemaTransport<TMessage, TStreamId = string, R = neve
  * Creates a connected schema transport within a scope.
  * Built on top of a raw transport with automatic encoding/decoding.
  * The connection is established during acquire and cleaned up during release.
- * Config is provided when creating the transport instance.
+ * Implementations are free to curry their own config parameters before
+ * returning this function signature.
  */
-export type CreateSchemaTransport<TMessage, TStreamId = string, R = never> = <TWireFormat>(
-  config: SchemaTransportConfig<TMessage, TWireFormat>
-) => Effect.Effect<
+export type CreateSchemaTransport<
+  TMessage,
+  _TWireFormat,
+  TStreamId = string,
+  R = never,
+> = () => Effect.Effect<
   ConnectedSchemaTransport<TMessage, TStreamId, R>,
   TransportConnectionError,
   R | Scope.Scope
@@ -145,19 +148,20 @@ export type CreateSchemaTransport<TMessage, TStreamId = string, R = never> = <TW
 /**
  * Creates a schema-aware transport from a raw transport implementation.
  * Handles all encoding/decoding automatically using the provided codec.
- * Config is provided at transport creation time.
+ * Both the raw transport and codec are curried before returning the transport creator.
  */
 export const makeSchemaTransport =
-  <TMessage, TStreamId = string, R = never>(
-    createRawTransport: CreateRawTransport<R>
-  ): CreateSchemaTransport<TMessage, TStreamId, R> =>
-  <TWireFormat>(config: SchemaTransportConfig<TMessage, TWireFormat>) =>
+  <TMessage, TWireFormat, TStreamId = string, R = never>(
+    createRawTransport: CreateRawTransport<TWireFormat, R>,
+    codec: TransportCodec<TMessage, TWireFormat>
+  ): CreateSchemaTransport<TMessage, TWireFormat, TStreamId, R> =>
+  () =>
     pipe(
-      createRawTransport(config),
+      createRawTransport(),
       Effect.map((connectedRaw) => ({
         publish: (streamId, message, metadata) =>
           pipe(
-            config.codec.encode(message),
+            codec.encode(message),
             Effect.flatMap((wireData) =>
               connectedRaw.publishRaw(String(streamId), wireData, metadata)
             )
@@ -168,7 +172,7 @@ export const makeSchemaTransport =
             connectedRaw.subscribeRaw(String(streamId), options),
             Stream.mapEffect((rawMessage) =>
               pipe(
-                config.codec.decode(rawMessage.wireData),
+                codec.decode(rawMessage.wireData),
                 Effect.map((payload) => ({
                   streamId: streamId,
                   payload,
@@ -185,7 +189,7 @@ export const makeSchemaTransport =
             connectedRaw.subscribeMultipleRaw(streamIds.map(String), options),
             Stream.mapEffect((rawMessage) =>
               pipe(
-                config.codec.decode(rawMessage.wireData),
+                codec.decode(rawMessage.wireData),
                 Effect.map((payload) => ({
                   streamId: streamIds.find((id) => String(id) === rawMessage.streamId)!,
                   payload,

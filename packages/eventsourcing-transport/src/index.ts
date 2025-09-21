@@ -7,5 +7,5 @@ export * from './schema-transport.js';
 export * from './transport.js';
 
 // Example implementations for reference
-export { createInMemoryTransport } from './examples/in-memory-transport.js';
-export { createWebSocketRawTransport } from './examples/websocket-raw-transport.js';
+export { makeInMemoryTransport } from './examples/in-memory-transport.js';
+export { makeWebSocketRawTransport } from './examples/websocket-raw-transport.js';

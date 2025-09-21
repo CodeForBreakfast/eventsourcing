@@ -72,10 +72,13 @@ export interface ConnectedTransport<TData = unknown, TStreamId = string, R = nev
  * The connection is established during acquire and cleaned up during release.
  * This makes it impossible to use transport methods without being connected.
  *
+ * Implementations are free to curry their own config parameters before
+ * returning this function signature.
+ *
  * @example
  * ```typescript
- * // Create a transport factory with config baked in
- * const createMyTransport = (config: TransportConfig) =>
+ * // Create a transport factory with config curried
+ * const makeMyTransport = (config: MyTransportConfig) => () =>
  *   Effect.acquireRelease(
  *     // Acquire: establish connection
  *     establishConnection(config),
@@ -86,7 +89,7 @@ export interface ConnectedTransport<TData = unknown, TStreamId = string, R = nev
  * // Use it in a scoped context
  * const program = Effect.scoped(
  *   pipe(
- *     createMyTransport(config),
+ *     makeMyTransport(config)(),
  *     Effect.flatMap((transport) =>
  *       transport.publish("stream-1", { hello: "world" })
  *     )
@@ -94,9 +97,7 @@ export interface ConnectedTransport<TData = unknown, TStreamId = string, R = nev
  * );
  * ```
  */
-export type CreateTransport<TData = unknown, TStreamId = string, R = never> = (
-  config: TransportConfig
-) => Effect.Effect<
+export type CreateTransport<TData = unknown, TStreamId = string, R = never> = () => Effect.Effect<
   ConnectedTransport<TData, TStreamId, R>,
   TransportConnectionError,
   R | Scope.Scope
