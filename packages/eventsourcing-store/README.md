@@ -167,14 +167,14 @@ import { inMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 const eventStoreLayer = inMemoryEventStore<MyEvent>();
 ```
 
-### Enhanced In-Memory Store
+### Subscribable In-Memory Store
 
 Includes additional features like stream tracking:
 
 ```typescript
-import { enhancedInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { makeSubscribableInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 
-const enhancedLayer = enhancedInMemoryEventStore<MyEvent>();
+const subscribableLayer = makeSubscribableInMemoryEventStore<MyEvent>();
 ```
 
 ## Utility Functions
