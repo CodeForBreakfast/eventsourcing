@@ -107,7 +107,7 @@ const commit =
             pipe(
               options.events as Chunk.Chunk<TEvent>,
               Stream.fromChunk,
-              Stream.run(eventstore.write(position))
+              Stream.run(eventstore.append(position))
             )
           )
         )

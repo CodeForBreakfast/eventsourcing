@@ -1,6 +1,6 @@
 ---
-'@codeforbreakfast/eventsourcing-store': major
-'@codeforbreakfast/eventsourcing-store-postgres': major
+'@codeforbreakfast/eventsourcing-store': minor
+'@codeforbreakfast/eventsourcing-store-postgres': minor
 ---
 
 Simplified EventStore API to have just two core methods for reading events

@@ -51,14 +51,14 @@ type UserEvent = UserRegistered | UserEmailUpdated;
 const eventStoreLayer = inMemoryEventStore<UserEvent>();
 
 // Example: Writing events to a stream
-const writeEvents = (eventStore: EventStore<UserEvent>) => (userId: string, events: UserEvent[]) =>
+const appendEvents = (eventStore: EventStore<UserEvent>) => (userId: string, events: UserEvent[]) =>
   pipe(
     toStreamId(userId),
     Effect.flatMap((streamId) =>
       pipe(
         beginning(streamId),
         Effect.flatMap((position) =>
-          pipe(Stream.fromIterable(events), Stream.run(eventStore.write(position)))
+          pipe(Stream.fromIterable(events), Stream.run(eventStore.append(position)))
         )
       )
     )
@@ -95,7 +95,7 @@ const program = pipe(
       EventStore,
       Effect.flatMap((eventStore) =>
         pipe(
-          writeEvents(eventStore)(userId, events),
+          appendEvents(eventStore)(userId, events),
           Effect.flatMap(() => readUserEvents(eventStore)(userId)),
           Effect.map((collectedEvents) => {
             console.log('Events:', collectedEvents);
@@ -138,7 +138,7 @@ interface EventStore<TEvent> {
 }
 ```
 
-- `write`: Write events to a stream at a specific position
+- `append`: Append events to the end of a stream at a specific position (used for optimistic concurrency control)
 - `read`: Read historical events only (no live updates)
 - `subscribe`: Read historical events then continue with live updates
 

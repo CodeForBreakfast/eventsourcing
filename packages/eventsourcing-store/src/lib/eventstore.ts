@@ -104,12 +104,12 @@ export const encodedEventStore =
   <A, I>(schema: Schema.Schema<A, I>) =>
   (eventstore: Readonly<EventStore<I>>): EventStore<A> =>
     pipe(eventstore, (eventstore) => ({
-      write: (toPosition: EventStreamPosition) => {
+      append: (toPosition: EventStreamPosition) => {
         // Define the expected error type
         type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
 
         // Get a new sink by creating a type-safe transformation pipeline
-        const originalSink = eventstore.write(toPosition);
+        const originalSink = eventstore.append(toPosition);
 
         // Use mapInputEffect to handle input transformation
         return pipe(

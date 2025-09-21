@@ -114,7 +114,7 @@ describe('PostgreSQL Horizontal Scaling', () => {
         Effect.flatMap((eventstore: EventStore<FooEvent>) =>
           pipe(
             Stream.make({ bar: 'cross-instance-event-1' }, { bar: 'cross-instance-event-2' }),
-            Stream.run(eventstore.write(streamBeginning))
+            Stream.run(eventstore.append(streamBeginning))
           )
         )
       )

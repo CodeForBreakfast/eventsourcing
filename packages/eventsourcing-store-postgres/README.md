@@ -91,7 +91,7 @@ const program = pipe(
 
             return pipe(
               Stream.fromIterable(events),
-              Stream.run(eventStore.write(position)),
+              Stream.run(eventStore.append(position)),
               Effect.tap((newPosition) =>
                 Effect.logInfo(`Events written at position: ${JSON.stringify(newPosition)}`)
               ),
@@ -272,7 +272,7 @@ const reliableEventProcessing = pipe(
 Efficiently process multiple events:
 
 ```typescript
-const batchWriteEvents = (events: Array<{ streamId: string; events: UserEvent[] }>) =>
+const batchAppendEvents = (events: Array<{ streamId: string; events: UserEvent[] }>) =>
   pipe(
     EventStore,
     Effect.flatMap((eventStore) =>
@@ -284,7 +284,7 @@ const batchWriteEvents = (events: Array<{ streamId: string; events: UserEvent[] 
               pipe(
                 currentEnd(eventStore)(stream),
                 Effect.flatMap((position) =>
-                  pipe(Stream.fromIterable(streamEvents), Stream.run(eventStore.write(position)))
+                  pipe(Stream.fromIterable(streamEvents), Stream.run(eventStore.append(position)))
                 )
               )
             )
@@ -408,7 +408,7 @@ const eventStoreMetrics = pipe(
   EventStore,
   Effect.map((eventStore) => {
     // Track event write latency
-    const writeLatency = Metrics.histogram('eventstore_write_latency_ms');
+    const appendLatency = Metrics.histogram('eventstore_append_latency_ms');
 
     // Track events written
     const eventsWritten = Metrics.counter('eventstore_events_written_total');
@@ -516,7 +516,7 @@ describe('PostgreSQL Event Store', () => {
 
                           return pipe(
                             Stream.fromIterable(events),
-                            Stream.run(eventStore.write(position)),
+                            Stream.run(eventStore.append(position)),
                             Effect.flatMap(() => eventStore.read(position)),
                             Effect.flatMap(Stream.runCollect),
                             Effect.tap((retrievedEvents) =>

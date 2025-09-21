@@ -211,7 +211,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
       // Define an EventStore implementation
       const eventStore: EventStore<string> = {
-        write: (to: EventStreamPosition) => {
+        append: (to: EventStreamPosition) => {
           const sink = Sink.foldEffect(
             to,
             () => true,

@@ -52,7 +52,7 @@ describe('Simplified EventStore API', () => {
                 { bar: 'event2', index: 1 },
                 { bar: 'event3', index: 2 }
               ),
-              Stream.run(store.write(startPos))
+              Stream.run(store.append(startPos))
             )
           )
         )
@@ -83,7 +83,7 @@ describe('Simplified EventStore API', () => {
           Effect.flatMap((store) =>
             pipe(
               Stream.make({ bar: 'event4', index: 3 }, { bar: 'event5', index: 4 }),
-              Stream.run(store.write(endPos))
+              Stream.run(store.append(endPos))
             )
           )
         )
@@ -135,7 +135,7 @@ describe('Simplified EventStore API', () => {
           Effect.flatMap((store) =>
             pipe(
               Stream.make({ bar: 'historical1', index: 0 }, { bar: 'historical2', index: 1 }),
-              Stream.run(store.write(startPos))
+              Stream.run(store.append(startPos))
             )
           )
         )
@@ -164,7 +164,7 @@ describe('Simplified EventStore API', () => {
                         { bar: 'live2', index: 3 },
                         { bar: 'live3', index: 4 }
                       ),
-                      Stream.run(store.write(currentPos))
+                      Stream.run(store.append(currentPos))
                     );
                   })
                 )
@@ -213,7 +213,7 @@ describe('Simplified EventStore API', () => {
                 { bar: 'event1', index: 1 },
                 { bar: 'event2', index: 2 }
               ),
-              Stream.run(store.write(startPos))
+              Stream.run(store.append(startPos))
             )
           )
         )
@@ -237,7 +237,7 @@ describe('Simplified EventStore API', () => {
                     const currentPos: EventStreamPosition = { streamId, eventNumber: 3 };
                     return pipe(
                       Stream.make({ bar: 'new1', index: 3 }, { bar: 'new2', index: 4 }),
-                      Stream.run(store.write(currentPos))
+                      Stream.run(store.append(currentPos))
                     );
                   })
                 )
@@ -288,7 +288,7 @@ describe('Simplified EventStore API', () => {
                 { bar: 'd', index: 3 },
                 { bar: 'e', index: 4 }
               ),
-              Stream.run(store.write(startPos))
+              Stream.run(store.append(startPos))
             )
           )
         )

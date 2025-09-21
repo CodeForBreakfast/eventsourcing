@@ -63,7 +63,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'baz' }, { bar: 'qux' }),
-                Stream.run(eventstore.write(streamBeginning))
+                Stream.run(eventstore.append(streamBeginning))
               )
             )
           )
@@ -107,7 +107,7 @@ export function runEventStoreTestSuite<E>(
               Effect.flatMap((eventstore: EventStore<FooEvent>) =>
                 pipe(
                   Stream.make({ bar: 'foo' }),
-                  Stream.run(eventstore.write(streamBeginning)),
+                  Stream.run(eventstore.append(streamBeginning)),
                   Effect.flip,
                   Effect.map((error) => {
                     expect(error).toBeInstanceOf(StreamEndMovedError);
@@ -125,7 +125,7 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                pipe(Stream.make({ bar: 'foo' }), Stream.run(eventstore.write(result)))
+                pipe(Stream.make({ bar: 'foo' }), Stream.run(eventstore.append(result)))
               )
             )
           );
@@ -197,7 +197,7 @@ export function runEventStoreTestSuite<E>(
                 Effect.flatMap((eventstore: EventStore<FooEvent>) =>
                   pipe(
                     Stream.make({ bar: 'oh-oh' }),
-                    Stream.run(eventstore.write(result)),
+                    Stream.run(eventstore.append(result)),
                     Effect.flip,
                     Effect.map((error) => {
                       expect(error).toBeInstanceOf(StreamEndMovedError);
@@ -220,7 +220,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     Stream.make({ bar: 'baz' }, { bar: 'qux' }),
                     Stream.run(
-                      eventstore.write(
+                      eventstore.append(
                         pipe(
                           secondStreamId,
                           Effect.flatMap(beginning),
@@ -266,7 +266,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'foo' }),
-                Stream.run(eventstore.write(emptyStreamWrongEnd)),
+                Stream.run(eventstore.append(emptyStreamWrongEnd)),
                 Effect.flip,
                 Effect.map((error) => {
                   expect(error).toBeInstanceOf(StreamEndMovedError);
@@ -325,7 +325,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'immediate-test-1' }, { bar: 'immediate-test-2' }),
-                Stream.run(eventstore.write(streamBeginning))
+                Stream.run(eventstore.append(streamBeginning))
               )
             )
           )
@@ -366,7 +366,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'historical-test-1' }, { bar: 'historical-test-2' }),
-                Stream.run(eventstore.write(streamBeginning))
+                Stream.run(eventstore.append(streamBeginning))
               )
             )
           )
@@ -419,7 +419,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'initial-event' }),
-                Stream.run(eventstore.write(streamBeginning))
+                Stream.run(eventstore.append(streamBeginning))
               )
             )
           )
@@ -473,7 +473,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'live-event-1' }, { bar: 'live-event-2' }),
-                Stream.run(eventstore.write(nextPosition))
+                Stream.run(eventstore.append(nextPosition))
               )
             )
           )
@@ -561,7 +561,7 @@ export function runEventStoreTestSuite<E>(
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
               pipe(
                 Stream.make({ bar: 'multi-subscriber-event' }),
-                Stream.run(eventstore.write(streamBeginning))
+                Stream.run(eventstore.append(streamBeginning))
               )
             )
           )
