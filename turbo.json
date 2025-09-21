@@ -20,7 +20,14 @@
     "deps:check": {
       "dependsOn": ["build"],
       "outputs": [],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "package.json", "knip.json", ".knip.json"]
+      "inputs": [
+        "packages/*/src/**/*.ts",
+        "packages/*/src/**/*.tsx",
+        "packages/*/package.json",
+        "knip.json",
+        ".knip.json"
+      ],
+      "cache": false
     },
     "lint": {
       "dependsOn": ["check", "^lint"],
