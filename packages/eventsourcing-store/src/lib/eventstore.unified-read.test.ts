@@ -3,7 +3,7 @@ import { describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type { EventStore } from './services';
 import * as InMemoryStore from './inMemory/InMemoryStore';
-import { inMemoryEventStore } from './inMemory/inMemoryEventStore';
+import { makeInMemoryEventStore } from './inMemory/inMemoryEventStore';
 
 // Test event schema
 const TestEvent = Schema.Struct({
@@ -32,7 +32,7 @@ describe('EventStore Unified Read API', () => {
       TestEventStoreService,
       pipe(
         InMemoryStore.make<TestEvent>(),
-        Effect.flatMap(inMemoryEventStore),
+        Effect.flatMap(makeInMemoryEventStore),
         Effect.map((store) => store as unknown as EventStore<TestEvent>)
       )
     );

@@ -43,13 +43,13 @@ const applyReadOptions = <T>(
       : (s) => s
   );
 
-export interface EnhancedEventStore<T> extends EventStore<T> {
+export interface SubscribableEventStore<T> extends EventStore<T> {
   readonly subscribeToStream: (
     streamId: EventStreamPosition['streamId']
   ) => Effect.Effect<Stream.Stream<T, never>, EventStoreError, Scope.Scope>;
 }
 
-export const inMemoryEventStore = <T>(
+export const makeInMemoryEventStore = <T>(
   store: Readonly<InMemoryStore.InMemoryStore<T>>
 ): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
@@ -101,11 +101,11 @@ export const inMemoryEventStore = <T>(
     },
   });
 
-export const enhancedInMemoryEventStore = <T>(
+export const makeSubscribableInMemoryEventStore = <T>(
   store: Readonly<InMemoryStore.InMemoryStore<T>>
-): Effect.Effect<EnhancedEventStore<T>, never, never> =>
+): Effect.Effect<SubscribableEventStore<T>, never, never> =>
   pipe(
-    inMemoryEventStore(store),
+    makeInMemoryEventStore(store),
     Effect.map((baseStore) => ({
       ...baseStore,
       subscribeToStream: (streamId: EventStreamPosition['streamId']) =>

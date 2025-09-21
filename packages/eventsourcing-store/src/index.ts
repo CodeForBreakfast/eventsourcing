@@ -6,18 +6,18 @@ export * from './lib/eventstore';
 
 // In-memory implementation
 export {
-  inMemoryEventStore,
-  enhancedInMemoryEventStore,
-  type EnhancedEventStore,
+  makeInMemoryEventStore,
+  makeSubscribableInMemoryEventStore,
+  type SubscribableEventStore,
 } from './lib/inMemory';
 
 // Streaming utilities
 export {
-  OptimizedStreamHandler,
-  OptimizedStreamHandlerLive,
-  makeOptimizedStreamHandler,
+  StreamHandler,
+  StreamHandlerLive,
+  makeStreamHandler,
   StreamingError,
-  type OptimizedStreamHandlerService,
+  type StreamHandlerService,
 } from './lib/streaming';
 
 // Testing utilities

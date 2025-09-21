@@ -1,2 +1,2 @@
-export * from './OptimizedStreamHandler';
+export * from './StreamHandler';
 export * from './connectionManager';
