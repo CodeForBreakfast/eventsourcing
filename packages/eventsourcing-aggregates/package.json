@@ -1,7 +1,7 @@
 {
   "name": "@codeforbreakfast/eventsourcing-aggregates",
   "version": "0.3.0",
-  "description": "Aggregate patterns for event sourcing with Effect",
+  "description": "Type-safe aggregate root patterns for event sourcing with Effect - Build bulletproof domain models with functional composition and immutable state management",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -28,12 +28,22 @@
   },
   "keywords": [
     "event-sourcing",
-    "cqrs",
     "aggregates",
+    "aggregate-root",
+    "cqrs",
     "domain-driven-design",
     "ddd",
     "effect",
-    "functional-programming"
+    "effect-ts",
+    "functional-programming",
+    "fp",
+    "typescript",
+    "type-safe",
+    "immutable",
+    "domain-modeling",
+    "event-driven",
+    "composable",
+    "state-management"
   ],
   "author": "Code for Breakfast",
   "license": "MIT",

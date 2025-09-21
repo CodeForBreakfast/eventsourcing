@@ -1,7 +1,7 @@
 {
   "name": "@codeforbreakfast/eventsourcing-projections",
   "version": "0.2.1",
-  "description": "Projection patterns for event sourcing with Effect",
+  "description": "Functional event projections and read models with Effect - Transform event streams into queryable views with type-safe, composable projection builders",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -28,12 +28,22 @@
   },
   "keywords": [
     "event-sourcing",
-    "cqrs",
     "projections",
     "read-model",
+    "cqrs",
     "event-processing",
+    "event-streaming",
     "effect",
-    "functional-programming"
+    "effect-ts",
+    "functional-programming",
+    "fp",
+    "typescript",
+    "type-safe",
+    "streaming",
+    "view-models",
+    "query-models",
+    "composable",
+    "event-handlers"
   ],
   "author": "Code for Breakfast",
   "license": "MIT",
