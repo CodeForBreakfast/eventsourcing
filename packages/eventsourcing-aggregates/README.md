@@ -51,8 +51,6 @@ import {
 
 ## Quick Start
 
-Here's how to build a proper aggregate using the actual API:
-
 ```typescript
 import { Effect, Schema, Option, Chunk, Context, pipe } from 'effect';
 import {
