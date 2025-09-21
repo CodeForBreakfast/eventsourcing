@@ -69,13 +69,11 @@ type UserId = typeof UserId.Type;
 
 // 2. Define your domain events using eventSchema
 const UserRegisteredEvent = eventSchema(Schema.Literal('UserRegistered'), {
-  userId: UserId,
   email: Schema.String,
   name: Schema.String,
 });
 
 const UserEmailUpdatedEvent = eventSchema(Schema.Literal('UserEmailUpdated'), {
-  userId: UserId,
   oldEmail: Schema.String,
   newEmail: Schema.String,
 });
@@ -84,19 +82,19 @@ const UserEvent = Schema.Union(UserRegisteredEvent, UserEmailUpdatedEvent);
 type UserEvent = typeof UserEvent.Type;
 
 // 3. Define your aggregate state
+// Note: Aggregate state doesn't need to store its own ID - that's implicit from the stream
 interface UserState {
-  userId: UserId;
   email: string;
   name: string;
   isActive: boolean;
 }
 
 // 4. Create the event application function
+// Events don't contain aggregate IDs - the ID comes from the event stream
 const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) => {
   switch (event.type) {
     case 'UserRegistered':
       return Effect.succeed({
-        userId: event.data.userId,
         email: event.data.email,
         name: event.data.name,
         isActive: true,
@@ -127,25 +125,25 @@ class UserEventStore extends Context.Tag('UserEventStore')<
 >() {}
 
 // 6. Define command handlers that return functions taking state
-const registerUser =
-  (userId: UserId, email: string, name: string) => (currentState: AggregateState<UserState>) =>
-    pipe(
-      currentState.data,
-      Option.match({
-        onSome: () => Effect.fail(new Error('User already exists')),
-        onNone: () =>
-          pipe(
-            eventMetadata(),
-            Effect.map((metadata) =>
-              Chunk.of({
-                type: 'UserRegistered' as const,
-                metadata,
-                data: { userId, email, name },
-              } satisfies UserEvent)
-            )
-          ),
-      })
-    );
+// Note: Commands don't need userId for existing aggregates - it's implicit from the stream
+const registerUser = (email: string, name: string) => (currentState: AggregateState<UserState>) =>
+  pipe(
+    currentState.data,
+    Option.match({
+      onSome: () => Effect.fail(new Error('User already exists')),
+      onNone: () =>
+        pipe(
+          eventMetadata(),
+          Effect.map((metadata) =>
+            Chunk.of({
+              type: 'UserRegistered' as const,
+              metadata,
+              data: { email, name },
+            } satisfies UserEvent)
+          )
+        ),
+    })
+  );
 
 const updateUserEmail = (newEmail: string) => (currentState: AggregateState<UserState>) =>
   pipe(
@@ -160,7 +158,6 @@ const updateUserEmail = (newEmail: string) => (currentState: AggregateState<User
               type: 'UserEmailUpdated' as const,
               metadata,
               data: {
-                userId: state.userId,
                 oldEmail: state.email,
                 newEmail,
               },
@@ -177,29 +174,27 @@ const UserAggregate = createAggregateRoot(UserId, applyUserEvent, UserEventStore
 });
 
 // 8. Usage example
+const userId = 'user-123' as UserId; // The aggregate ID is only used for loading/committing
+
 const program = pipe(
   // Load an existing user (returns empty state if not found)
-  UserAggregate.load('user-123'),
+  UserAggregate.load(userId),
   Effect.tap((state) => Effect.log(`Loaded user state: ${JSON.stringify(state)}`)),
   Effect.flatMap((existingUser) => {
     // Create a new user if one doesn't exist
     if (Option.isNone(existingUser.data)) {
       return pipe(
         // Generate registration events using the command handler
-        UserAggregate.commands.registerUser(
-          'user-123' as UserId,
-          'john@example.com',
-          'John Doe'
-        )(existingUser),
+        UserAggregate.commands.registerUser('john@example.com', 'John Doe')(existingUser),
         Effect.flatMap((events) =>
-          // Commit events to store
+          // Commit events to store with the aggregate ID
           UserAggregate.commit({
-            id: 'user-123',
+            id: userId,
             eventNumber: existingUser.nextEventNumber,
             events,
           })
         ),
-        Effect.flatMap(() => UserAggregate.load('user-123')),
+        Effect.flatMap(() => UserAggregate.load(userId)),
         Effect.tap((state) => Effect.log(`User after registration: ${JSON.stringify(state)}`))
       );
     }
@@ -211,12 +206,12 @@ const program = pipe(
       UserAggregate.commands.updateUserEmail('john.doe@newdomain.com')(userState),
       Effect.flatMap((events) =>
         UserAggregate.commit({
-          id: 'user-123',
+          id: userId,
           eventNumber: userState.nextEventNumber,
           events,
         })
       ),
-      Effect.flatMap(() => UserAggregate.load('user-123')),
+      Effect.flatMap(() => UserAggregate.load(userId)),
       Effect.tap((state) => Effect.log(`User after email update: ${JSON.stringify(state)}`))
     )
   )
@@ -363,6 +358,7 @@ const transferMoney =
           }
 
           // Generate event with metadata
+          // Note: fromAccountId is implicit from the stream, not in the event
           return pipe(
             eventMetadata(),
             Effect.map((metadata) =>
@@ -370,7 +366,6 @@ const transferMoney =
                 type: 'MoneyTransferred' as const,
                 metadata,
                 data: {
-                  fromAccountId: account.accountId,
                   toAccountId,
                   amount,
                 },
@@ -395,7 +390,7 @@ const applyBankAccountEvent =
             onSome: () => Effect.fail(new Error('Account already exists')),
             onNone: () =>
               Effect.succeed({
-                accountId: event.data.accountId,
+                // Note: accountId is NOT in the event - it's implicit from the stream
                 balance: event.data.initialDeposit,
                 isActive: true,
                 transactions: [],
@@ -445,11 +440,7 @@ describe('UserAggregate', () => {
       Effect.flatMap((state) =>
         pipe(
           // Generate registration events
-          UserAggregate.commands.registerUser(
-            'test-user' as UserId,
-            'test@example.com',
-            'Test User'
-          )(state),
+          UserAggregate.commands.registerUser('test@example.com', 'Test User')(state),
           Effect.tap((events) => {
             const event = Chunk.unsafeHead(events);
             expect(event.type).toBe('UserRegistered');
@@ -481,7 +472,6 @@ describe('UserAggregate', () => {
     const existingState: AggregateState<UserState> = {
       nextEventNumber: 1,
       data: Option.some({
-        userId: 'existing-user' as UserId,
         email: 'existing@example.com',
         name: 'Existing User',
         isActive: true,
@@ -490,11 +480,7 @@ describe('UserAggregate', () => {
 
     const program = pipe(
       // Try to register a user that already exists
-      UserAggregate.commands.registerUser(
-        'existing-user' as UserId,
-        'duplicate@example.com',
-        'Duplicate User'
-      )(existingState),
+      UserAggregate.commands.registerUser('duplicate@example.com', 'Duplicate User')(existingState),
       Effect.either,
       Effect.tap((result) => {
         expect(result._tag).toBe('Left'); // Should fail

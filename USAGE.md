@@ -46,16 +46,15 @@ bun add effect
 import { Schema } from 'effect';
 
 // Define your domain events
+// Note: Events don't contain aggregate IDs - those come from the event stream
 export const UserRegistered = Schema.Struct({
   type: Schema.Literal('UserRegistered'),
-  userId: Schema.String,
   email: Schema.String,
   registeredAt: Schema.Date,
 });
 
 export const UserProfileUpdated = Schema.Struct({
   type: Schema.Literal('UserProfileUpdated'),
-  userId: Schema.String,
   name: Schema.String,
   updatedAt: Schema.Date,
 });
@@ -106,8 +105,8 @@ import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates'
 import { Schema, Effect, Option, Chunk, pipe } from 'effect';
 
 // Define aggregate state
+// Note: Aggregate state doesn't need to store its own ID - that's implicit from the stream
 interface UserState {
-  userId: string;
   email: string;
   name?: string;
   registered: boolean;
@@ -123,7 +122,6 @@ const UserAggregate = createAggregateRoot(
     pipe(
       state,
       Option.getOrElse(() => ({
-        userId: '',
         email: '',
         registered: false,
       })),
@@ -132,7 +130,6 @@ const UserAggregate = createAggregateRoot(
           case 'UserRegistered':
             return Effect.succeed({
               ...current,
-              userId: event.userId,
               email: event.email,
               registered: true,
             });
@@ -151,8 +148,9 @@ const UserAggregate = createAggregateRoot(
   UserEventStore,
 
   // Commands: functions that take parameters and return a state transformer
+  // Note: Commands don't include aggregate IDs - those are implicit from the stream
   {
-    register: (userId: string, email: string) => (state: Option.Option<UserState>) =>
+    register: (email: string) => (state: Option.Option<UserState>) =>
       pipe(
         state,
         Option.match({
@@ -160,7 +158,6 @@ const UserAggregate = createAggregateRoot(
             Effect.succeed(
               Chunk.of({
                 type: 'UserRegistered' as const,
-                userId,
                 email,
                 registeredAt: new Date(),
               })
@@ -171,7 +168,6 @@ const UserAggregate = createAggregateRoot(
               : Effect.succeed(
                   Chunk.of({
                     type: 'UserRegistered' as const,
-                    userId,
                     email,
                     registeredAt: new Date(),
                   })
@@ -191,7 +187,6 @@ const UserAggregate = createAggregateRoot(
               : Effect.succeed(
                   Chunk.of({
                     type: 'UserProfileUpdated' as const,
-                    userId: s.userId,
                     name,
                     updatedAt: new Date(),
                   })
@@ -203,14 +198,22 @@ const UserAggregate = createAggregateRoot(
 );
 
 // Using the aggregate
+const userId = 'user-123'; // The aggregate ID is only used for loading/committing
+
 const program = pipe(
-  UserAggregate.load('user-123'),
+  UserAggregate.load(userId),
   Effect.flatMap((loaded) =>
     pipe(
-      // Execute command on the loaded state
-      UserAggregate.commands.register('user-123', 'test@example.com')(loaded.data),
-      // Commit the resulting events
-      Effect.flatMap(UserAggregate.commit('user-123', loaded.nextEventNumber))
+      // Execute command on the loaded state (no ID needed in command)
+      UserAggregate.commands.register('test@example.com')(loaded.data),
+      // Commit the resulting events with the aggregate ID
+      Effect.flatMap((events) =>
+        UserAggregate.commit({
+          id: userId,
+          eventNumber: loaded.nextEventNumber,
+          events,
+        })
+      )
     )
   )
 );
@@ -225,7 +228,7 @@ import { projection } from '@codeforbreakfast/eventsourcing-projections';
 // Define projection state with immutable array
 interface UserListProjection {
   readonly users: ReadonlyArray<{
-    readonly userId: string;
+    readonly userId: string; // This comes from the stream ID, not the event
     readonly email: string;
     readonly name?: string;
   }>;
@@ -237,14 +240,15 @@ const userListProjection = projection<UserEvent, UserListProjection>({
 
   initialState: { users: [] },
 
-  applyEvent: (state, event) => {
+  applyEvent: (state, event, streamId) => {
+    // Note: streamId tells us which user aggregate this event belongs to
     switch (event.type) {
       case 'UserRegistered':
         return {
           users: pipe(
             state.users,
             ReadonlyArray.append({
-              userId: event.userId,
+              userId: streamId, // Use the stream ID as the user ID
               email: event.email,
             })
           ),
@@ -253,7 +257,7 @@ const userListProjection = projection<UserEvent, UserListProjection>({
         return {
           users: pipe(
             state.users,
-            ReadonlyArray.map((u) => (u.userId === event.userId ? { ...u, name: event.name } : u))
+            ReadonlyArray.map((u) => (u.userId === streamId ? { ...u, name: event.name } : u))
           ),
         };
       default:
@@ -370,10 +374,16 @@ describe('UserAggregate', () => {
       UserAggregate.load(userId),
       Effect.flatMap((loaded) =>
         pipe(
-          // Execute command to get events
-          UserAggregate.commands.register(userId, 'test@example.com')(loaded.data),
-          // Commit the events
-          Effect.flatMap(UserAggregate.commit(userId, loaded.nextEventNumber)),
+          // Execute command to get events (no userId in command)
+          UserAggregate.commands.register('test@example.com')(loaded.data),
+          // Commit the events with the aggregate ID
+          Effect.flatMap((events) =>
+            UserAggregate.commit({
+              id: userId,
+              eventNumber: loaded.nextEventNumber,
+              events,
+            })
+          ),
           // Read back from event store to verify
           Effect.flatMap(() =>
             EventStore.read({
@@ -454,12 +464,12 @@ public void handle(RegisterUserCommand cmd) {
 }
 
 // After (codeforbreakfast)
-register: (cmd) => (state) =>
+register: (email) => (state) =>
   pipe(
     UserRegistered.make({
       type: "UserRegistered",
-      userId: cmd.userId,
-      email: cmd.email,
+      email,
+      registeredAt: new Date(),
     }),
     Chunk.of,
     Effect.succeed
