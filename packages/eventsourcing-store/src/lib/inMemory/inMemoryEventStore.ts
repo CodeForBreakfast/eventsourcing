@@ -1,26 +1,23 @@
 import { Chunk, Effect, Scope, Sink, Stream, pipe } from 'effect';
 import { EventStreamPosition } from '../streamTypes';
-import type { ReadParams } from '../services';
-import { type EventStore } from '../eventstore';
+import type { ReadParams, EventStore } from '../services';
 import { eventStoreError, EventStoreError } from '../errors';
 import * as InMemoryStore from './InMemoryStore';
 
 // Helper to determine if parameter is ReadParams or EventStreamPosition
 const isEventStreamPosition = (
-  params: ReadParams | EventStreamPosition,
+  params: ReadParams | EventStreamPosition
 ): params is EventStreamPosition => 'eventNumber' in params;
 
 // Helper to apply read options to a stream
 const applyReadOptions = <T>(
   stream: Readonly<Stream.Stream<T, never, never>>,
-  options: Readonly<ReadParams>,
+  options: Readonly<ReadParams>
 ): Stream.Stream<T, never, never> =>
   pipe(
     stream,
     // Apply fromEventNumber filter
-    options.fromEventNumber !== undefined
-      ? Stream.drop(options.fromEventNumber)
-      : (s) => s,
+    options.fromEventNumber !== undefined ? Stream.drop(options.fromEventNumber) : (s) => s,
     // Apply toEventNumber filter
     options.toEventNumber !== undefined
       ? Stream.take(options.toEventNumber - (options.fromEventNumber ?? 0) + 1)
@@ -32,7 +29,7 @@ const applyReadOptions = <T>(
             s,
             Stream.runCollect,
             Effect.map((chunk) => Stream.fromIterable(Chunk.reverse(chunk))),
-            Stream.unwrap,
+            Stream.unwrap
           )
       : (s) => s,
     // Apply batch size if specified
@@ -41,26 +38,26 @@ const applyReadOptions = <T>(
           pipe(
             s,
             Stream.grouped(options.batchSize!),
-            Stream.flatMap((chunk) => Stream.fromIterable(chunk)),
+            Stream.flatMap((chunk) => Stream.fromIterable(chunk))
           )
-      : (s) => s,
+      : (s) => s
   );
 
 export interface EnhancedEventStore<T> extends EventStore<T> {
   readonly subscribeToStream: (
-    streamId: EventStreamPosition['streamId'],
+    streamId: EventStreamPosition['streamId']
   ) => Effect.Effect<Stream.Stream<T, never>, EventStoreError, Scope.Scope>;
 }
 
 export const inMemoryEventStore = <T>(
-  store: Readonly<InMemoryStore.InMemoryStore<T>>,
-) =>
+  store: Readonly<InMemoryStore.InMemoryStore<T>>
+): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
     write: (to: EventStreamPosition) =>
       Sink.foldChunksEffect(
         to,
         () => true,
-        (end, chunk: Chunk.Chunk<T>) => pipe(chunk, store.append(end)),
+        (end, chunk: Chunk.Chunk<T>) => pipe(chunk, store.append(end))
       ),
     read: (params: ReadParams | EventStreamPosition) => {
       if (isEventStreamPosition(params)) {
@@ -69,8 +66,8 @@ export const inMemoryEventStore = <T>(
           params.streamId,
           store.get,
           Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-            pipe(stream, Stream.drop(params.eventNumber)),
-          ),
+            pipe(stream, Stream.drop(params.eventNumber))
+          )
         );
       }
       // New ReadParams behavior with options
@@ -78,8 +75,8 @@ export const inMemoryEventStore = <T>(
         params.streamId,
         store.getHistorical,
         Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-          applyReadOptions(stream, params),
-        ),
+          applyReadOptions(stream, params)
+        )
       );
     },
     readHistorical: (params: ReadParams | EventStreamPosition) => {
@@ -89,8 +86,8 @@ export const inMemoryEventStore = <T>(
           params.streamId,
           store.getHistorical,
           Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-            pipe(stream, Stream.drop(params.eventNumber)),
-          ),
+            pipe(stream, Stream.drop(params.eventNumber))
+          )
         );
       }
       // New ReadParams behavior with options
@@ -98,15 +95,15 @@ export const inMemoryEventStore = <T>(
         params.streamId,
         store.getHistorical,
         Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-          applyReadOptions(stream, params),
-        ),
+          applyReadOptions(stream, params)
+        )
       );
     },
   });
 
 export const enhancedInMemoryEventStore = <T>(
-  store: Readonly<InMemoryStore.InMemoryStore<T>>,
-) =>
+  store: Readonly<InMemoryStore.InMemoryStore<T>>
+): Effect.Effect<EnhancedEventStore<T>, never, never> =>
   pipe(
     inMemoryEventStore(store),
     Effect.map((baseStore) => ({
@@ -118,9 +115,9 @@ export const enhancedInMemoryEventStore = <T>(
             eventStoreError.subscribe(
               streamId,
               `Failed to subscribe to stream: ${String(error)}`,
-              error,
-            ),
-          ),
+              error
+            )
+          )
         ),
-    })),
+    }))
   );

@@ -1,26 +1,8 @@
 import { SqlClient, SqlResolver } from '@effect/sql';
-import {
-  Effect,
-  Layer,
-  ParseResult,
-  Schema,
-  Sink,
-  Stream,
-  identity,
-  pipe,
-} from 'effect';
-import {
-  EventNumber,
-  EventStreamId,
-  EventStreamPosition,
-} from '../streamTypes';
-import type { ReadParams } from '../services';
-import { type EventStore } from '../eventstore';
-import {
-  EventStoreError,
-  eventStoreError,
-  ConcurrencyConflictError,
-} from '../errors';
+import { Effect, Layer, ParseResult, Schema, Sink, Stream, identity, pipe } from 'effect';
+import { EventNumber, EventStreamId, EventStreamPosition } from '../streamTypes';
+import type { ReadParams, EventStore } from '../services';
+import { EventStoreError, eventStoreError, ConcurrencyConflictError } from '../errors';
 import { ConnectionManagerLive } from './connectionManager';
 import { EventStreamTrackerLive } from './eventStreamTracker';
 import {
@@ -36,14 +18,12 @@ import {
 
 // Define the EventRowService interface
 interface EventRowServiceInterface {
-  readonly insert: (
-    row: Readonly<EventRow>,
-  ) => Effect.Effect<EventRow, unknown, never>;
+  readonly insert: (row: Readonly<EventRow>) => Effect.Effect<EventRow, unknown, never>;
   readonly selectAllEventsInStream: (
-    streamId: EventStreamId,
+    streamId: EventStreamId
   ) => Effect.Effect<EventRow[], unknown, never>;
   readonly selectAllEvents: (
-    nullValue: Schema.Schema.Type<typeof Schema.Null>,
+    nullValue: Schema.Schema.Type<typeof Schema.Null>
   ) => Effect.Effect<EventRow[], unknown, never>;
 }
 
@@ -75,20 +55,17 @@ export const makeEventRowService: Effect.Effect<
             RETURNING events.*
       `,
         }),
-        selectAllEventsInStream: SqlResolver.grouped(
-          'SelectAllEventRowsInStream',
-          {
-            Request: EventStreamId,
-            RequestGroupKey: identity,
-            Result: EventRow,
-            ResultGroupKey: (row) => row.stream_id,
-            execute: (ids) => sql`
+        selectAllEventsInStream: SqlResolver.grouped('SelectAllEventRowsInStream', {
+          Request: EventStreamId,
+          RequestGroupKey: identity,
+          Result: EventRow,
+          ResultGroupKey: (row) => row.stream_id,
+          execute: (ids) => sql`
             SELECT * FROM events
             WHERE ${sql.in('stream_id', ids)}
             ORDER BY event_number
       `,
-          },
-        ),
+        }),
         selectAllEvents: SqlResolver.grouped('SelectAllEventRows', {
           Request: Schema.Null,
           RequestGroupKey: identity,
@@ -109,26 +86,23 @@ export const makeEventRowService: Effect.Effect<
           insert: insertEventRow.execute,
           selectAllEventsInStream: selectAllEventsInStream.execute,
           selectAllEvents: selectAllEvents.execute,
-        }),
+        })
       ),
       Effect.mapError((error) =>
         eventStoreError.write(
           undefined,
           `Failed to initialize event row service: ${String(error)}`,
-          error,
-        ),
-      ),
-    ),
-  ),
+          error
+        )
+      )
+    )
+  )
 );
 
 /**
  * Layer that provides EventRowService
  */
-export const EventRowServiceLive = Layer.effect(
-  EventRowService,
-  makeEventRowService,
-);
+export const EventRowServiceLive = Layer.effect(EventRowService, makeEventRowService);
 
 /**
  * Database infrastructure layer - provides core database connectivity
@@ -141,7 +115,7 @@ export const DatabaseInfrastructureLive = ConnectionManagerLive;
  * Depends on database infrastructure for connection management
  */
 export const EventTrackingLive = EventStreamTrackerLive().pipe(
-  Layer.provide(DatabaseInfrastructureLive),
+  Layer.provide(DatabaseInfrastructureLive)
 );
 
 /**
@@ -155,7 +129,7 @@ export const SubscriptionManagementLive = SubscriptionManagerLive;
  * Depends on database infrastructure for connection management
  */
 export const NotificationInfrastructureLive = NotificationListenerLive.pipe(
-  Layer.provide(DatabaseInfrastructureLive),
+  Layer.provide(DatabaseInfrastructureLive)
 );
 
 /**
@@ -165,35 +139,31 @@ export const NotificationInfrastructureLive = NotificationListenerLive.pipe(
 export const EventSubscriptionServicesLive = Layer.mergeAll(
   SubscriptionManagementLive,
   EventTrackingLive,
-  NotificationInfrastructureLive,
+  NotificationInfrastructureLive
 );
 
 // Helper to determine if parameter is ReadParams or EventStreamPosition
 const isEventStreamPosition = (
-  params: ReadParams | EventStreamPosition,
+  params: ReadParams | EventStreamPosition
 ): params is EventStreamPosition => 'eventNumber' in params;
 
 // Helper to apply read options to event rows
 const applyReadOptionsToEvents = (
   events: readonly EventRow[],
-  options: Readonly<ReadParams>,
+  options: Readonly<ReadParams>
 ): readonly EventRow[] =>
   pipe(
     events,
     // Apply fromEventNumber filter
     options.fromEventNumber !== undefined
-      ? (evts) =>
-          evts.filter((event) => event.event_number >= options.fromEventNumber!)
+      ? (evts) => evts.filter((event) => event.event_number >= options.fromEventNumber!)
       : (evts) => evts,
     // Apply toEventNumber filter
     options.toEventNumber !== undefined
-      ? (evts) =>
-          evts.filter((event) => event.event_number <= options.toEventNumber!)
+      ? (evts) => evts.filter((event) => event.event_number <= options.toEventNumber!)
       : (evts) => evts,
     // Apply direction
-    options.direction === 'backward'
-      ? (evts) => [...evts].reverse()
-      : (evts) => evts,
+    options.direction === 'backward' ? (evts) => [...evts].reverse() : (evts) => evts
   );
 
 /**
@@ -202,12 +172,8 @@ const applyReadOptionsToEvents = (
 export const makeSqlEventStoreWithSubscriptionManager = (
   subscriptionManager: SubscriptionManagerService,
   notificationListener: Readonly<{
-    listen: (
-      streamId: EventStreamId,
-    ) => Effect.Effect<void, EventStoreError, never>;
-    unlisten: (
-      streamId: EventStreamId,
-    ) => Effect.Effect<void, EventStoreError, never>;
+    listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     notifications: Stream.Stream<
       { streamId: EventStreamId; payload: NotificationPayload },
       EventStoreError,
@@ -215,7 +181,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
     >;
     start: Effect.Effect<void, EventStoreError, never>;
     stop: Effect.Effect<void, EventStoreError, never>;
-  }>,
+  }>
 ): Effect.Effect<EventStore<string>, EventStoreError, EventRowService> => {
   return pipe(
     EventRowService,
@@ -228,7 +194,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       // Start the notification bridge: consume notifications and publish to subscribers
       pipe(
         Effect.logInfo(
-          'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager',
+          'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
         ),
         Effect.flatMap(() =>
           pipe(
@@ -240,32 +206,25 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                 notificationListener.notifications,
                 Stream.tap(({ streamId, payload }) =>
                   pipe(
-                    Effect.logDebug(
-                      `Bridging notification for stream ${streamId}`,
-                      { payload },
-                    ),
+                    Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
                     Effect.flatMap(() =>
-                      subscriptionManager.publishEvent(
-                        streamId,
-                        payload.event_payload,
-                      ),
+                      subscriptionManager.publishEvent(streamId, payload.event_payload)
                     ),
                     Effect.catchAll((error) =>
-                      Effect.logError(
-                        `Failed to bridge notification for stream ${streamId}`,
-                        { error },
-                      ),
-                    ),
-                  ),
+                      Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
+                        error,
+                      })
+                    )
+                  )
                 ),
                 Stream.runDrain,
                 Effect.fork, // Run in background
-                Effect.asVoid,
-              ),
-            ),
-          ),
-        ),
-      ),
+                Effect.asVoid
+              )
+            )
+          )
+        )
+      )
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
       // Define an EventStore implementation
@@ -298,7 +257,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                           expectedVersion: end.eventNumber,
                           actualVersion: (last ?? -1) + 1,
                           streamId: end.streamId,
-                        }),
+                        })
                       );
                 }),
                 Effect.flatMap((end: EventStreamPosition) =>
@@ -306,7 +265,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                     event_number: end.eventNumber,
                     stream_id: end.streamId,
                     event_payload: payload,
-                  }),
+                  })
                 ),
                 Effect.map((row: Readonly<EventRow>) => ({
                   streamId: row.stream_id,
@@ -316,11 +275,11 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                   // Notify subscribers about the new event
                   pipe(
                     subscriptionManager.publishEvent(end.streamId, payload),
-                    Effect.catchAll(() => Effect.succeed(undefined)), // Don't fail if notification fails
-                  ),
+                    Effect.catchAll(() => Effect.succeed(undefined)) // Don't fail if notification fails
+                  )
                 ),
                 Effect.tapError((error) =>
-                  Effect.logError('Error writing to event store', { error }),
+                  Effect.logError('Error writing to event store', { error })
                 ),
                 Effect.mapError(
                   () =>
@@ -328,10 +287,10 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                       expectedVersion: end.eventNumber,
                       actualVersion: -1,
                       streamId: end.streamId,
-                    }),
+                    })
                 ),
-                Effect.flatMap(Schema.decode(EventStreamPosition)),
-              ),
+                Effect.flatMap(Schema.decode(EventStreamPosition))
+              )
           );
 
           return sink as Sink.Sink<
@@ -342,7 +301,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           >;
         },
         read: (
-          params: ReadParams | EventStreamPosition,
+          params: ReadParams | EventStreamPosition
         ): Effect.Effect<
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
@@ -355,7 +314,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               notificationListener.listen(params.streamId),
               Effect.flatMap(() =>
                 // Establish live subscription SECOND to receive bridged notifications
-                subscriptionManager.subscribeToStream(params.streamId),
+                subscriptionManager.subscribeToStream(params.streamId)
               ),
               Effect.flatMap((liveStream) =>
                 pipe(
@@ -364,34 +323,33 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                   Effect.map((events: readonly EventRow[]) => {
                     const filteredEvents = events
                       .filter(
-                        (event: Readonly<EventRow>) =>
-                          event.event_number >= params.eventNumber,
+                        (event: Readonly<EventRow>) => event.event_number >= params.eventNumber
                       )
                       .map((event: Readonly<EventRow>) => event.event_payload);
                     return Stream.fromIterable(filteredEvents);
                   }),
                   Effect.map((historicalStream) =>
                     // Combine historical events with live stream (PostgreSQL notifications handled by layer)
-                    pipe(historicalStream, Stream.concat(liveStream)),
-                  ),
-                ),
+                    pipe(historicalStream, Stream.concat(liveStream))
+                  )
+                )
               ),
               Effect.map((stream) =>
                 Stream.mapError(stream, (error) =>
                   eventStoreError.read(
                     params.streamId,
                     `Failed to read events from stream: ${String(error)}`,
-                    error,
-                  ),
-                ),
+                    error
+                  )
+                )
               ),
               Effect.mapError((error) =>
                 eventStoreError.read(
                   params.streamId,
                   `Failed to read events from stream: ${String(error)}`,
-                  error,
-                ),
-              ),
+                  error
+                )
+              )
             );
           }
           // New ReadParams behavior - historical only with options
@@ -400,7 +358,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
             Effect.map((events: readonly EventRow[]) => {
               const filteredEvents = applyReadOptionsToEvents(events, params);
               const eventPayloads = filteredEvents.map(
-                (event: Readonly<EventRow>) => event.event_payload,
+                (event: Readonly<EventRow>) => event.event_payload
               );
 
               // Apply batch size if specified
@@ -411,15 +369,11 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                       const batchSize = params.batchSize;
                       return Array.from(
                         { length: Math.ceil(eventPayloads.length / batchSize) },
-                        (_, i) =>
-                          eventPayloads.slice(
-                            i * batchSize,
-                            (i + 1) * batchSize,
-                          ),
+                        (_, i) => eventPayloads.slice(i * batchSize, (i + 1) * batchSize)
                       );
                     })(),
                     Stream.fromIterable,
-                    Stream.flatMap((batch) => Stream.fromIterable(batch)),
+                    Stream.flatMap((batch) => Stream.fromIterable(batch))
                   )
                 : Stream.fromIterable(eventPayloads);
             }),
@@ -427,13 +381,13 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               eventStoreError.read(
                 params.streamId,
                 `Failed to read events with options: ${String(error)}`,
-                error,
-              ),
-            ),
+                error
+              )
+            )
           );
         },
         readHistorical: (
-          params: ReadParams | EventStreamPosition,
+          params: ReadParams | EventStreamPosition
         ): Effect.Effect<
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
@@ -446,10 +400,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               eventRows.selectAllEventsInStream(params.streamId),
               Effect.map((events: readonly EventRow[]) => {
                 const filteredEvents = events
-                  .filter(
-                    (event: Readonly<EventRow>) =>
-                      event.event_number >= params.eventNumber,
-                  )
+                  .filter((event: Readonly<EventRow>) => event.event_number >= params.eventNumber)
                   .map((event: Readonly<EventRow>) => event.event_payload);
                 return Stream.fromIterable(filteredEvents);
               }),
@@ -458,17 +409,17 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                   eventStoreError.read(
                     params.streamId,
                     `Failed to read historical events: ${String(error)}`,
-                    error,
-                  ),
-                ),
+                    error
+                  )
+                )
               ),
               Effect.mapError((error) =>
                 eventStoreError.read(
                   params.streamId,
                   `Failed to read historical events: ${String(error)}`,
-                  error,
-                ),
-              ),
+                  error
+                )
+              )
             );
           }
           // New ReadParams behavior with options
@@ -477,7 +428,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
             Effect.map((events: readonly EventRow[]) => {
               const filteredEvents = applyReadOptionsToEvents(events, params);
               const eventPayloads = filteredEvents.map(
-                (event: Readonly<EventRow>) => event.event_payload,
+                (event: Readonly<EventRow>) => event.event_payload
               );
 
               // Apply batch size if specified
@@ -488,15 +439,11 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                       const batchSize = params.batchSize;
                       return Array.from(
                         { length: Math.ceil(eventPayloads.length / batchSize) },
-                        (_, i) =>
-                          eventPayloads.slice(
-                            i * batchSize,
-                            (i + 1) * batchSize,
-                          ),
+                        (_, i) => eventPayloads.slice(i * batchSize, (i + 1) * batchSize)
                       );
                     })(),
                     Stream.fromIterable,
-                    Stream.flatMap((batch) => Stream.fromIterable(batch)),
+                    Stream.flatMap((batch) => Stream.fromIterable(batch))
                   )
                 : Stream.fromIterable(eventPayloads);
             }),
@@ -504,15 +451,15 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               eventStoreError.read(
                 params.streamId,
                 `Failed to read historical events with options: ${String(error)}`,
-                error,
-              ),
-            ),
+                error
+              )
+            )
           );
         },
       };
 
       return eventStore;
-    }),
+    })
   );
 };
 
@@ -536,17 +483,10 @@ export const SqlEventStoreLive = Layer.effect(
       notificationListener: NotificationListener,
     }),
     Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-      makeSqlEventStoreWithSubscriptionManager(
-        subscriptionManager,
-        notificationListener,
-      ),
-    ),
-  ),
-).pipe(
-  Layer.provide(
-    Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive),
-  ),
-);
+      makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
+    )
+  )
+).pipe(Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive)));
 
 /**
  * Backward-compatible function - requires SubscriptionManager and NotificationListener in context
@@ -562,9 +502,6 @@ export const sqlEventStore = (): Effect.Effect<
       notificationListener: NotificationListener,
     }),
     Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-      makeSqlEventStoreWithSubscriptionManager(
-        subscriptionManager,
-        notificationListener,
-      ),
-    ),
+      makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
+    )
   );

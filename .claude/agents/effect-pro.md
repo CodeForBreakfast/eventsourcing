@@ -1,6 +1,6 @@
 ---
 name: effect-pro
-description: Elite TypeScript and Effect library expert. Masters Effect's pipe-based composition, immutable state management with Ref/HashMap, and advanced TypeScript type features. Creates robust, type-safe functional applications with proper error handling and resource management.
+description: Elite TypeScript and Effect library expert. Use PROACTIVELY for most coding work. Masters Effect's pipe-based composition, immutable state management with Ref/HashMap, and advanced TypeScript type features. Creates robust, type-safe functional applications with proper error handling and resource management.
 tools: Read, Write, Edit, Bash
 model: inherit
 color: purple

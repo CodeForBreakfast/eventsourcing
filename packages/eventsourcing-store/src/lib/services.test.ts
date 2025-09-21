@@ -1,28 +1,24 @@
 import { Effect, Layer, pipe, Stream } from 'effect';
 import { describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
-import type {
-  EventStoreServiceInterface,
-  ProjectionStoreServiceInterface,
-  SnapshotStoreServiceInterface,
-} from './services';
+import type { EventStore, ProjectionStore, SnapshotStore } from './services';
 import { EventStoreService, ProjectionStoreService, SnapshotStoreService } from './services';
 import { eventStoreError } from './errors';
 
 // Test-specific typed service tags
 class MyEventStoreService extends Effect.Tag('TestEventStore')<
   MyEventStoreService,
-  EventStoreServiceInterface<MyEvent>
+  EventStore<MyEvent>
 >() {}
 
 class UserProjectionStoreService extends Effect.Tag('TestProjectionStore')<
   UserProjectionStoreService,
-  ProjectionStoreServiceInterface<UserProjection>
+  ProjectionStore<UserProjection>
 >() {}
 
 class AggregateSnapshotStoreService extends Effect.Tag('TestSnapshotStore')<
   AggregateSnapshotStoreService,
-  SnapshotStoreServiceInterface<AggregateSnapshot>
+  SnapshotStore<AggregateSnapshot>
 >() {}
 
 // Test types
