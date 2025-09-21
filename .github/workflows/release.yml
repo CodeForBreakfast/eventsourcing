@@ -5,6 +5,13 @@ on:
   push:
     branches:
       - main
+    paths:
+      - 'packages/**'
+      - '.changeset/**'
+      - 'package.json'
+      - 'bun.lockb'
+      - 'pnpm-lock.yaml'
+      - 'turbo.json'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
