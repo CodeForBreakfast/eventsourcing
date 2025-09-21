@@ -19,13 +19,16 @@ If you know Effect, you already know how to use this library.
 Install the packages you need:
 
 ```bash
-# Core event store functionality
+# Core event store functionality (interfaces + in-memory)
 bun add @codeforbreakfast/eventsourcing-store
 
-# Aggregate root patterns
+# PostgreSQL implementation (if needed)
+bun add @codeforbreakfast/eventsourcing-store-postgres
+
+# Aggregate root patterns (write-side)
 bun add @codeforbreakfast/eventsourcing-aggregates
 
-# Projection patterns
+# Projection patterns (read-side)
 bun add @codeforbreakfast/eventsourcing-projections
 
 # WebSocket transport for real-time streaming
@@ -70,8 +73,8 @@ import { InMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 // For development/testing - use in-memory store
 const EventStoreLive = InMemoryEventStore.Live;
 
-// For production - use SQL store
-import { SqlEventStore } from '@codeforbreakfast/eventsourcing-store';
+// For production - use PostgreSQL store
+import { SqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
 import { PgClient } from '@effect/sql-pg';
 
 const EventStoreLive = SqlEventStore.Live.pipe(

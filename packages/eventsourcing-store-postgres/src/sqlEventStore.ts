@@ -1,8 +1,15 @@
 import { SqlClient, SqlResolver } from '@effect/sql';
 import { Effect, Layer, ParseResult, Schema, Sink, Stream, identity, pipe } from 'effect';
-import { EventNumber, EventStreamId, EventStreamPosition } from '../streamTypes';
-import type { ReadParams, EventStore } from '../services';
-import { EventStoreError, eventStoreError, ConcurrencyConflictError } from '../errors';
+import {
+  EventNumber,
+  EventStreamId,
+  EventStreamPosition,
+  type ReadParams,
+  type EventStore,
+  EventStoreError,
+  eventStoreError,
+  ConcurrencyConflictError,
+} from '@codeforbreakfast/eventsourcing-store';
 import { ConnectionManagerLive } from './connectionManager';
 import { EventStreamTrackerLive } from './eventStreamTracker';
 import {

@@ -36,7 +36,7 @@ export const PgLive = pipe(
       port,
     });
   }),
-  Layer.unwrapEffect,
+  Layer.unwrapEffect
 );
 
 export const makePgConfigurationLive = (prefix: string) =>
@@ -51,7 +51,7 @@ export const makePgConfigurationLive = (prefix: string) =>
           Config.string('HOST'),
           Config.integer('PORT'),
         ]),
-        prefix,
+        prefix
       ),
       Effect.map(([username, password, database, host, port]) => ({
         username,
@@ -59,8 +59,8 @@ export const makePgConfigurationLive = (prefix: string) =>
         database,
         host,
         port,
-      })),
-    ),
+      }))
+    )
   );
 
 export const PgConfigurationLive = makePgConfigurationLive('PG');
