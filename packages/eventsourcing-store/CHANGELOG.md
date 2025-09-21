@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.6.1
+
+### Patch Changes
+
+- Fix workspace protocol dependencies in published packages
+
+  The published packages incorrectly included workspace:\* protocol in their dependencies, making them impossible to install outside the monorepo. This patch ensures proper version numbers are used in published packages.
+
 ## 0.6.0
 
 ### Minor Changes
