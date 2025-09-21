@@ -26,8 +26,7 @@
         "packages/*/package.json",
         "knip.json",
         ".knip.json"
-      ],
-      "cache": false
+      ]
     },
     "lint": {
       "dependsOn": ["check", "^lint"],
