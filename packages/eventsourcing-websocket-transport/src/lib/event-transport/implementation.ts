@@ -41,11 +41,9 @@ import type {
   CommandPending,
   CommandState,
   ReceiveLoop,
-} from './types';
-import type {
   TransportConfig,
-  WebSocketEventTransportServiceInterface,
-} from './interface';
+} from './types';
+import type { WebSocketEventTransportServiceInterface } from './interface';
 import type { ConnectedWebSocket } from '../webSocketConnection';
 import { SendError, createWebSocketConnection } from '../webSocketConnection';
 import {
@@ -65,10 +63,7 @@ import {
   isConnected,
   canSendCommands,
 } from './types';
-import {
-  defaultTransportConfig,
-  WebSocketEventTransportService,
-} from './interface';
+import { defaultTransportConfig, WebSocketEventTransportService } from './interface';
 
 // ============================================================================
 // Command ID generation
@@ -77,16 +72,14 @@ import {
 const generateCommandId = (): Effect.Effect<CommandId> =>
   pipe(
     Random.nextInt,
-    Effect.map((n) => `cmd-${Date.now()}-${n.toString(36)}` as CommandId),
+    Effect.map((n) => `cmd-${Date.now()}-${n.toString(36)}` as CommandId)
   );
 
 // ============================================================================
 // Subscription position helpers
 // ============================================================================
 
-const subscriptionOptionsToStart = (
-  options?: SubscriptionOptions,
-): SubscriptionStartPosition =>
+const subscriptionOptionsToStart = (options?: SubscriptionOptions): SubscriptionStartPosition =>
   options?.fromPosition
     ? { _tag: 'from-position', position: options.fromPosition }
     : options?.fromEnd
@@ -99,7 +92,7 @@ const subscriptionOptionsToStart = (
 
 const processEventMessage = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  message: Readonly<ProtocolMessage & { type: 'event' }>,
+  message: Readonly<ProtocolMessage & { type: 'event' }>
 ): Effect.Effect<TransportConnected<TEvent>> =>
   Effect.gen(function* (_) {
     const streamId = message.streamId as EventStreamId;
@@ -137,15 +130,12 @@ const processEventMessage = <TEvent>(
 
 const processSubscribedMessage = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  message: Readonly<ProtocolMessage & { type: 'subscribed' }>,
+  message: Readonly<ProtocolMessage & { type: 'subscribed' }>
 ): TransportConnected<TEvent> => {
   const streamId = message.streamId as EventStreamId;
   const subscription = HashMap.get(state.subscriptions, streamId);
 
-  if (
-    Option.isNone(subscription) ||
-    subscription.value._tag !== 'subscription-requested'
-  ) {
+  if (Option.isNone(subscription) || subscription.value._tag !== 'subscription-requested') {
     return state;
   }
 
@@ -165,7 +155,7 @@ const processSubscribedMessage = <TEvent>(
 
 const processCommandResultMessage = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  message: Readonly<ProtocolMessage & { type: 'command_result' }>,
+  message: Readonly<ProtocolMessage & { type: 'command_result' }>
 ): Effect.Effect<TransportConnected<TEvent>> =>
   Effect.gen(function* (_) {
     const commandId = message.id as CommandId;
@@ -183,7 +173,7 @@ const processCommandResultMessage = <TEvent>(
         position: {
           streamId: command.value.command.aggregateId as EventStreamId,
           eventNumber: message.position,
-        }
+        },
       }),
     };
 
@@ -197,25 +187,19 @@ const processCommandResultMessage = <TEvent>(
 
 const processProtocolMessage = <TEvent>(
   state: Readonly<TransportConnected<TEvent>>,
-  message: Readonly<ProtocolMessage>,
+  message: Readonly<ProtocolMessage>
 ): Effect.Effect<TransportConnected<TEvent>> =>
   Match.value(message).pipe(
     Match.when(isEventMessage, (msg) => processEventMessage(state, msg)),
-    Match.when(isSubscribedMessage, (msg) =>
-      Effect.succeed(processSubscribedMessage(state, msg)),
-    ),
-    Match.when(isCommandResultMessage, (msg) =>
-      processCommandResultMessage(state, msg),
-    ),
+    Match.when(isSubscribedMessage, (msg) => Effect.succeed(processSubscribedMessage(state, msg))),
+    Match.when(isCommandResultMessage, (msg) => processCommandResultMessage(state, msg)),
     Match.when(isErrorMessage, (msg) =>
       Effect.gen(function* (_) {
-        yield* _(
-          Effect.logError(`Protocol error: ${msg.code} - ${msg.message}`),
-        );
+        yield* _(Effect.logError(`Protocol error: ${msg.code} - ${msg.message}`));
         return state;
-      }),
+      })
     ),
-    Match.orElse(() => Effect.succeed(state)),
+    Match.orElse(() => Effect.succeed(state))
   );
 
 // ============================================================================
@@ -224,7 +208,7 @@ const processProtocolMessage = <TEvent>(
 
 const startReceiveLoop = <TEvent>(
   connection: Readonly<ConnectedWebSocket>,
-  stateRef: Readonly<Ref.Ref<TransportState<TEvent>>>,
+  stateRef: Readonly<Ref.Ref<TransportState<TEvent>>>
 ): Effect.Effect<ReceiveLoop, NetworkError> =>
   Effect.gen(function* (_) {
     const rawStream = connection.receive();
@@ -238,8 +222,8 @@ const startReceiveLoop = <TEvent>(
             url: connection.info.url,
             ...(e._tag === 'ReceiveError' && e.reason !== undefined && { code: e.reason }),
             retriable: true,
-          }),
-      ),
+          })
+      )
     );
 
     const fiber = yield* _(
@@ -262,20 +246,20 @@ const startReceiveLoop = <TEvent>(
                     new ProtocolError({
                       message: 'Failed to decode message',
                       received: data,
-                    }),
+                    })
                 ),
                 Effect.flatMap((msg) => processProtocolMessage(state, msg)),
                 Effect.flatMap((newState) => Ref.set(stateRef, newState)),
                 Effect.catchAll((error) =>
-                  Effect.logError(`Message processing error: ${String(error)}`),
-                ),
-              ),
+                  Effect.logError(`Message processing error: ${String(error)}`)
+                )
+              )
             );
-          }),
+          })
         ),
         Stream.runDrain,
-        Effect.fork,
-      ),
+        Effect.fork
+      )
     );
 
     return { stream, fiber };
@@ -284,7 +268,7 @@ const startReceiveLoop = <TEvent>(
 const sendSubscribeMessage = (
   connection: Readonly<ConnectedWebSocket>,
   streamId: EventStreamId,
-  start: Readonly<SubscriptionStartPosition>,
+  start: Readonly<SubscriptionStartPosition>
 ): Effect.Effect<void, NetworkError> =>
   pipe(
     Effect.try(() =>
@@ -293,22 +277,20 @@ const sendSubscribeMessage = (
         streamId: streamId as string,
         position: Match.value(start).pipe(
           Match.when({ _tag: 'from-position' }, (s) => s.position.eventNumber),
-          Match.orElse(() => undefined),
+          Match.orElse(() => undefined)
         ),
         fromEnd: start._tag === 'from-end',
-      } satisfies ProtocolMessage),
+      } satisfies ProtocolMessage)
     ),
-    Effect.flatMap((data) =>
-      connection.send(data as import('../types').OutgoingMessage),
-    ),
+    Effect.flatMap((data) => connection.send(data as import('../types').OutgoingMessage)),
     Effect.mapError(
       (e) =>
         new NetworkError({
           url: connection.info.url,
           code: e instanceof SendError ? e.reason : String(e),
           retriable: true,
-        }),
-    ),
+        })
+    )
   );
 
 // ============================================================================
@@ -317,7 +299,7 @@ const sendSubscribeMessage = (
 
 const createTransportImplementation = <TEvent>(
   stateRef: Ref.Ref<TransportState<TEvent>>,
-  statusQueue: Queue.Queue<ConnectionStatus>,
+  statusQueue: Queue.Queue<ConnectionStatus>
 ): WebSocketEventTransport<TEvent> => ({
   connect: (url: WebSocketUrl) =>
     Effect.gen(function* (_) {
@@ -336,19 +318,14 @@ const createTransportImplementation = <TEvent>(
               const connection = yield* _(createWebSocketConnection());
               const connecting = yield* _(connection.connect(url));
 
-              yield* _(
-                Ref.set(
-                  stateRef,
-                  disconnectedToConnecting(disconnected, connecting),
-                ),
-              );
+              yield* _(Ref.set(stateRef, disconnectedToConnecting(disconnected, connecting)));
 
               yield* _(
                 Queue.offer(statusQueue, {
                   _tag: 'connecting',
                   url,
                   attemptNumber: 1,
-                }),
+                })
               );
 
               const connected = yield* _(
@@ -360,25 +337,19 @@ const createTransportImplementation = <TEvent>(
                         url,
                         ...(e.code !== undefined && { code: e.code }),
                         retriable: true,
-                      }),
-                  ),
-                ),
+                      })
+                  )
+                )
               );
 
-              const receiveLoop = yield* _(
-                startReceiveLoop(connected, stateRef),
-              );
+              const receiveLoop = yield* _(startReceiveLoop(connected, stateRef));
 
               const currentState = yield* _(Ref.get(stateRef));
               if (currentState._tag !== 'transport-connecting') {
                 return;
               }
 
-              const newState = connectingToConnected<TEvent>(
-                currentState,
-                connected,
-                receiveLoop,
-              );
+              const newState = connectingToConnected<TEvent>(currentState, connected, receiveLoop);
 
               yield* _(Ref.set(stateRef, newState));
 
@@ -386,12 +357,12 @@ const createTransportImplementation = <TEvent>(
                 Queue.offer(statusQueue, {
                   _tag: 'connected',
                   info: connected.info,
-                }),
+                })
               );
-            }),
+            })
           ),
-          Match.orElse(() => Effect.void),
-        ),
+          Match.orElse(() => Effect.void)
+        )
       );
     }).pipe(
       Effect.mapError((e) =>
@@ -404,8 +375,8 @@ const createTransportImplementation = <TEvent>(
           : new TransportConnectionError({
               url,
               reason: String(e),
-            }),
-      ),
+            })
+      )
     ),
 
   disconnect: () =>
@@ -424,23 +395,23 @@ const createTransportImplementation = <TEvent>(
                   stateRef,
                   anyToDisconnected(state as TransportState<unknown>, {
                     code: 'user-requested',
-                  }) as TransportState<TEvent>,
-                ),
+                  }) as TransportState<TEvent>
+                )
               );
 
               yield* _(Queue.offer(statusQueue, { _tag: 'disconnected' }));
-            }),
+            })
           ),
-          Match.orElse(() => Effect.void),
-        ),
+          Match.orElse(() => Effect.void)
+        )
       );
     }).pipe(
       Effect.mapError(
         () =>
           new TransportConnectionError({
             reason: 'Disconnect failed',
-          }),
-      ),
+          })
+      )
     ),
 
   subscribeToStream: (streamId: EventStreamId, options?: SubscriptionOptions) =>
@@ -454,8 +425,8 @@ const createTransportImplementation = <TEvent>(
               new TransportSubscriptionError({
                 streamId,
                 reason: 'Not connected',
-              }),
-            ),
+              })
+            )
           );
         }
 
@@ -477,7 +448,7 @@ const createTransportImplementation = <TEvent>(
               ...s,
               subscriptions: HashMap.set(s.subscriptions, streamId, requested),
             };
-          }),
+          })
         );
 
         yield* _(
@@ -487,9 +458,9 @@ const createTransportImplementation = <TEvent>(
                 new TransportSubscriptionError({
                   streamId,
                   reason: e.message,
-                }),
-            ),
-          ),
+                })
+            )
+          )
         );
 
         // Wait for subscription confirmation, then update state with queue
@@ -503,10 +474,7 @@ const createTransportImplementation = <TEvent>(
                 if (!isConnected(s)) return s;
 
                 const sub = HashMap.get(s.subscriptions, streamId);
-                if (
-                  Option.isNone(sub) ||
-                  sub.value._tag !== 'subscription-requested'
-                ) {
+                if (Option.isNone(sub) || sub.value._tag !== 'subscription-requested') {
                   return s;
                 }
 
@@ -522,27 +490,23 @@ const createTransportImplementation = <TEvent>(
                   ...s,
                   subscriptions: HashMap.set(s.subscriptions, streamId, active),
                 };
-              }),
+              })
             );
-          }),
+          })
         );
 
         return Stream.fromQueue(queue);
-      }),
+      })
     ),
 
   subscribeToStreams: (subscriptions: Readonly<Array<StreamSubscription>>) =>
     pipe(
       subscriptions,
       Array.map((sub) => {
-        const transport = createTransportImplementation<TEvent>(
-          stateRef,
-          statusQueue,
-        );
+        const transport = createTransportImplementation<TEvent>(stateRef, statusQueue);
         return transport.subscribeToStream(sub.streamId, sub.options);
       }),
-      (streams) =>
-        Stream.mergeAll(streams, { concurrency: subscriptions.length }),
+      (streams) => Stream.mergeAll(streams, { concurrency: subscriptions.length })
     ),
 
   sendCommand: <TPayload, TResult>(command: AggregateCommand<TPayload>) =>
@@ -556,8 +520,8 @@ const createTransportImplementation = <TEvent>(
               aggregateId: command.aggregateId,
               command,
               reason: 'Not connected',
-            }),
-          ),
+            })
+          )
         );
       }
 
@@ -577,13 +541,9 @@ const createTransportImplementation = <TEvent>(
           if (!isConnected(s)) return s;
           return {
             ...s,
-            commands: HashMap.set(
-              s.commands,
-              commandId,
-              pending as CommandState<unknown, unknown>,
-            ),
+            commands: HashMap.set(s.commands, commandId, pending as CommandState<unknown, unknown>),
           };
-        }),
+        })
       );
 
       const message: ProtocolMessage = {
@@ -600,7 +560,7 @@ const createTransportImplementation = <TEvent>(
         pipe(
           Effect.try(() => JSON.stringify(message)),
           Effect.flatMap((data) =>
-            state.connection.send(data as import('../types').OutgoingMessage),
+            state.connection.send(data as import('../types').OutgoingMessage)
           ),
           Effect.mapError(
             (e) =>
@@ -608,9 +568,9 @@ const createTransportImplementation = <TEvent>(
                 aggregateId: command.aggregateId,
                 command,
                 reason: String(e),
-              }),
-          ),
-        ),
+              })
+          )
+        )
       );
 
       const result = yield* _(
@@ -623,9 +583,9 @@ const createTransportImplementation = <TEvent>(
                 aggregateId: command.aggregateId,
                 command,
                 reason: 'Command timeout',
-              }),
-          ),
-        ),
+              })
+          )
+        )
       );
 
       return result;
@@ -641,7 +601,7 @@ const createTransportImplementation = <TEvent>(
 // ============================================================================
 
 export const createWebSocketEventTransport = <TEvent = unknown>(
-  config?: TransportConfig,
+  config?: TransportConfig
 ): Effect.Effect<WebSocketEventTransport<TEvent>> =>
   Effect.gen(function* (_) {
     const statusQueue = yield* _(Queue.unbounded<ConnectionStatus>());
@@ -666,5 +626,5 @@ export const createWebSocketEventTransportService = <
 export const WebSocketEventTransportServiceLive = <TEvent = unknown>() =>
   Layer.effect(
     WebSocketEventTransportService,
-    Effect.succeed(createWebSocketEventTransportService<TEvent>()),
+    Effect.succeed(createWebSocketEventTransportService<TEvent>())
   );
