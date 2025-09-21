@@ -49,6 +49,14 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
+      # Generate a GitHub App token for verified commits
+      - name: Generate GitHub App Token
+        id: github-app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.RELEASE_APP_ID }}
+          private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
@@ -56,10 +64,12 @@ jobs:
           # This expects you to have a script called release which does a build for your packages and calls changeset publish
           publish: bun run release
           version: bun run version
-          commit: "chore: version packages"
-          title: "chore: version packages"
+          commit: 'chore: version packages'
+          title: 'chore: version packages'
+          # Use GitHub API for verified commits
+          commitMode: 'github-api'
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
           NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Send a Slack notification if a publish happens
