@@ -1,5 +1,12 @@
 # @codeforbreakfast/eventsourcing-store-postgres
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [[`21ee4c2`](https://github.com/CodeForBreakfast/eventsourcing/commit/21ee4c2a65805f30eccdea64df0843a963af3e8a)]:
+  - @codeforbreakfast/eventsourcing-store@0.5.0
+
 ## 0.4.0
 
 ### Minor Changes
