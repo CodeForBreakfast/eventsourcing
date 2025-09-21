@@ -46,16 +46,15 @@ bun add effect
 import { Schema } from 'effect';
 
 // Define your domain events
+// Note: Events don't contain aggregate IDs - those come from the event stream
 export const UserRegistered = Schema.Struct({
   type: Schema.Literal('UserRegistered'),
-  userId: Schema.String,
   email: Schema.String,
   registeredAt: Schema.Date,
 });
 
 export const UserProfileUpdated = Schema.Struct({
   type: Schema.Literal('UserProfileUpdated'),
-  userId: Schema.String,
   name: Schema.String,
   updatedAt: Schema.Date,
 });
@@ -92,135 +91,173 @@ const EventStoreLive = SqlEventStore.Live.pipe(
 
 ### 3. Create an Aggregate
 
+> **Note: Aggregate Command Pattern**
+>
+> Commands in this library follow a functional pattern where:
+>
+> - Commands are functions that take domain parameters (not aggregate IDs)
+> - Commands return a function that accepts the current state
+> - The aggregate ID is only needed when loading and committing
+> - This separation allows commands to focus on business logic without infrastructure concerns
+
 ```typescript
 import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
-import { Schema, Effect } from 'effect';
+import { Schema, Effect, Option, Chunk, pipe } from 'effect';
 
 // Define aggregate state
+// Note: Aggregate state doesn't need to store its own ID - that's implicit from the stream
 interface UserState {
-  userId: string;
   email: string;
   name?: string;
   registered: boolean;
 }
 
-// Define commands
-const RegisterUser = Schema.Struct({
-  userId: Schema.String,
-  email: Schema.String,
-});
+// Create aggregate root with event application and commands
+const UserAggregate = createAggregateRoot(
+  // ID schema
+  Schema.String,
 
-const UpdateProfile = Schema.Struct({
-  userId: Schema.String,
-  name: Schema.String,
-});
-
-// Create aggregate root
-const UserAggregate = createAggregateRoot<UserEvent, UserState>({
-  eventSchema: Schema.Union(UserRegistered, UserProfileUpdated),
-
-  applyEvent: (state, event) => {
-    switch (event.type) {
-      case 'UserRegistered':
-        return {
-          ...state,
-          userId: event.userId,
-          email: event.email,
-          registered: true,
-        };
-      case 'UserProfileUpdated':
-        return {
-          ...state,
-          name: event.name,
-        };
-      default:
-        return state;
-    }
-  },
-
-  initialState: () => ({
-    userId: '',
-    email: '',
-    registered: false,
-  }),
-
-  commands: {
-    register: (command: typeof RegisterUser.Type) =>
-      Effect.gen(function* () {
-        const state = yield* aggregateRoot.getState();
-
-        if (state.registered) {
-          return yield* Effect.fail(new Error('User already registered'));
+  // Apply function: reduces events to state
+  (state: Option.Option<UserState>) => (event: UserEvent) =>
+    pipe(
+      state,
+      Option.getOrElse(() => ({
+        email: '',
+        registered: false,
+      })),
+      (current) => {
+        switch (event.type) {
+          case 'UserRegistered':
+            return Effect.succeed({
+              ...current,
+              email: event.email,
+              registered: true,
+            });
+          case 'UserProfileUpdated':
+            return Effect.succeed({
+              ...current,
+              name: event.name,
+            });
+          default:
+            return Effect.succeed(current);
         }
+      }
+    ),
 
-        yield* aggregateRoot.emit(
-          UserRegistered.make({
-            type: 'UserRegistered',
-            userId: command.userId,
-            email: command.email,
-            registeredAt: new Date(),
-          })
-        );
-      }),
+  // Event store tag for dependency injection
+  UserEventStore,
 
-    updateProfile: (command: typeof UpdateProfile.Type) =>
-      Effect.gen(function* () {
-        const state = yield* aggregateRoot.getState();
+  // Commands: functions that take parameters and return a state transformer
+  // Note: Commands don't include aggregate IDs - those are implicit from the stream
+  {
+    register: (email: string) => (state: Option.Option<UserState>) =>
+      pipe(
+        state,
+        Option.match({
+          onNone: () =>
+            Effect.succeed(
+              Chunk.of({
+                type: 'UserRegistered' as const,
+                email,
+                registeredAt: new Date(),
+              })
+            ),
+          onSome: (s) =>
+            s.registered
+              ? Effect.fail(new Error('User already registered'))
+              : Effect.succeed(
+                  Chunk.of({
+                    type: 'UserRegistered' as const,
+                    email,
+                    registeredAt: new Date(),
+                  })
+                ),
+        }),
+        Effect.flatten
+      ),
 
-        if (!state.registered) {
-          return yield* Effect.fail(new Error('User not registered'));
-        }
+    updateProfile: (name: string) => (state: Option.Option<UserState>) =>
+      pipe(
+        state,
+        Option.match({
+          onNone: () => Effect.fail(new Error('User not registered')),
+          onSome: (s) =>
+            !s.registered
+              ? Effect.fail(new Error('User not registered'))
+              : Effect.succeed(
+                  Chunk.of({
+                    type: 'UserProfileUpdated' as const,
+                    name,
+                    updatedAt: new Date(),
+                  })
+                ),
+        }),
+        Effect.flatten
+      ),
+  }
+);
 
-        yield* aggregateRoot.emit(
-          UserProfileUpdated.make({
-            type: 'UserProfileUpdated',
-            userId: command.userId,
-            name: command.name,
-            updatedAt: new Date(),
-          })
-        );
-      }),
-  },
-});
+// Using the aggregate
+const userId = 'user-123'; // The aggregate ID is only used for loading/committing
+
+const program = pipe(
+  UserAggregate.load(userId),
+  Effect.flatMap((loaded) =>
+    pipe(
+      // Execute command on the loaded state (no ID needed in command)
+      UserAggregate.commands.register('test@example.com')(loaded.data),
+      // Commit the resulting events with the aggregate ID
+      Effect.flatMap((events) =>
+        UserAggregate.commit({
+          id: userId,
+          eventNumber: loaded.nextEventNumber,
+          events,
+        })
+      )
+    )
+  )
+);
 ```
 
 ### 4. Build Projections
 
 ```typescript
-import { Effect } from 'effect';
+import { Effect, pipe, ReadonlyArray } from 'effect';
 import { projection } from '@codeforbreakfast/eventsourcing-projections';
 
-// Define projection state
+// Define projection state with immutable array
 interface UserListProjection {
-  users: Array<{
-    userId: string;
-    email: string;
-    name?: string;
+  readonly users: ReadonlyArray<{
+    readonly userId: string; // This comes from the stream ID, not the event
+    readonly email: string;
+    readonly name?: string;
   }>;
 }
 
-// Create projection
+// Create projection with pure transformations
 const userListProjection = projection<UserEvent, UserListProjection>({
   streamId: 'all-users',
 
   initialState: { users: [] },
 
-  applyEvent: (state, event) => {
+  applyEvent: (state, event, streamId) => {
+    // Note: streamId tells us which user aggregate this event belongs to
     switch (event.type) {
       case 'UserRegistered':
         return {
-          users: [
-            ...state.users,
-            {
-              userId: event.userId,
+          users: pipe(
+            state.users,
+            ReadonlyArray.append({
+              userId: streamId, // Use the stream ID as the user ID
               email: event.email,
-            },
-          ],
+            })
+          ),
         };
       case 'UserProfileUpdated':
         return {
-          users: state.users.map((u) =>
-            u.userId === event.userId ? { ...u, name: event.name } : u
+          users: pipe(
+            state.users,
+            ReadonlyArray.map((u) => (u.userId === streamId ? { ...u, name: event.name } : u))
           ),
         };
       default:
@@ -230,10 +267,12 @@ const userListProjection = projection<UserEvent, UserListProjection>({
 });
 
 // Use projection
-const program = Effect.gen(function* () {
-  const projection = yield* userListProjection.load();
-  console.log('Current users:', projection.data.users);
-});
+const program = pipe(
+  userListProjection.load(),
+  Effect.tap((projection) =>
+    Effect.sync(() => console.log('Current users:', projection.data.users))
+  )
+);
 ```
 
 ### 5. Real-time Event Streaming with WebSockets
@@ -303,47 +342,67 @@ const writeEventsWithConcurrency = pipe(
 
 ```typescript
 // Save aggregate state periodically
-const snapshot = Effect.gen(function* () {
-  const state = yield* aggregateRoot.getState();
-  const version = yield* aggregateRoot.getVersion();
-
-  if (version % 10 === 0) {
-    // Every 10 events
-    yield* SnapshotStore.save({
-      aggregateId: state.userId,
-      version,
-      state,
-    });
-  }
-});
+const snapshot = pipe(
+  Effect.all({
+    state: aggregateRoot.getState(),
+    version: aggregateRoot.getVersion(),
+  }),
+  Effect.flatMap(({ state, version }) =>
+    version % 10 === 0
+      ? // Every 10 events, save snapshot
+        SnapshotStore.save({
+          aggregateId: state.userId,
+          version,
+          state,
+        })
+      : Effect.unit
+  )
+);
 ```
 
 ## Testing
 
 ```typescript
-import { TestClock, Effect } from 'effect';
-import { InMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { TestClock, Effect, pipe, Layer } from 'effect';
+import { EventStore, InMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 
 describe('UserAggregate', () => {
   it('should register user', async () => {
-    const program = Effect.gen(function* () {
-      const aggregate = yield* UserAggregate.load('user-123');
+    const userId = 'user-123';
 
-      yield* aggregate.register({
-        userId: 'user-123',
-        email: 'test@example.com',
-      });
-
-      const events = yield* EventStore.read({
-        streamId: 'user-123',
-      });
-
-      expect(events).toHaveLength(1);
-      expect(events[0].type).toBe('UserRegistered');
-    });
+    const program = pipe(
+      UserAggregate.load(userId),
+      Effect.flatMap((loaded) =>
+        pipe(
+          // Execute command to get events (no userId in command)
+          UserAggregate.commands.register('test@example.com')(loaded.data),
+          // Commit the events with the aggregate ID
+          Effect.flatMap((events) =>
+            UserAggregate.commit({
+              id: userId,
+              eventNumber: loaded.nextEventNumber,
+              events,
+            })
+          ),
+          // Read back from event store to verify
+          Effect.flatMap(() =>
+            EventStore.read({
+              streamId: userId,
+            })
+          ),
+          // Assert on the stored events
+          Effect.tap((storedEvents) =>
+            Effect.sync(() => {
+              expect(storedEvents).toHaveLength(1);
+              expect(storedEvents[0].type).toBe('UserRegistered');
+            })
+          )
+        )
+      )
+    );
 
     await Effect.runPromise(
-      program.pipe(Effect.provide(InMemoryEventStore.Live), Effect.provide(TestClock.layer))
+      pipe(program, Effect.provide(Layer.merge(InMemoryEventStore.Live, TestClock.layer)))
     );
   });
 });
@@ -351,14 +410,19 @@ describe('UserAggregate', () => {
 
 ## Error Handling
 
-All operations return Effect types with typed errors:
+All operations return Effect types with typed errors using Data.TaggedError:
 
 ```typescript
-import { EventStoreError } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, pipe } from 'effect';
+import { EventStore, EventStoreError } from '@codeforbreakfast/eventsourcing-store';
 
-const program = EventStore.read({ streamId: 'user-123' }).pipe(
+const program = pipe(
+  EventStore.read({ streamId: 'user-123' }),
   Effect.catchTag('EventStoreError', (error) =>
-    Effect.log(`Failed to read events: ${error.message}`)
+    pipe(
+      Effect.log(`Failed to read events: ${error.message}`),
+      Effect.as([]) // Return empty array as fallback
+    )
   ),
   Effect.catchTag(
     'StreamNotFoundError',
@@ -400,13 +464,16 @@ public void handle(RegisterUserCommand cmd) {
 }
 
 // After (codeforbreakfast)
-register: (cmd) => Effect.gen(function* () {
-  yield* aggregateRoot.emit(UserRegistered.make({
-    type: "UserRegistered",
-    userId: cmd.userId,
-    email: cmd.email,
-  }));
-})
+register: (email) => (state) =>
+  pipe(
+    UserRegistered.make({
+      type: "UserRegistered",
+      email,
+      registeredAt: new Date(),
+    }),
+    Chunk.of,
+    Effect.succeed
+  )
 ```
 
 ## License
