@@ -24,7 +24,7 @@
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "publish:package": "bun publish --access public",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "event-sourcing",
