@@ -127,8 +127,8 @@ const createWebSocket = (url: string) =>
       })
   );
 
-const waitForConnection = (ws: WebSocket) =>
-  Effect.async<void>((resume) => {
+const waitForConnection = (ws: WebSocket): Effect.Effect<void, Error> =>
+  Effect.async<void, Error>((resume) => {
     if (ws.readyState === WebSocket.OPEN) {
       resume(Effect.succeed(void 0));
     } else {
@@ -151,11 +151,11 @@ const processEventMessage =
   <TEvent>(eventSchema: Schema.Schema<TEvent>, eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>) =>
   (msg: Extract<ProtocolMessage, { type: 'event' }>) =>
     pipe(
-      Schema.decode(eventSchema)(msg.event),
+      Schema.decode(eventSchema)(msg.event as TEvent),
       Effect.map((event) => ({
         streamId: msg.streamId as EventStreamId,
-        eventNumber: msg.eventNumber as EventNumber,
-        position: msg.position as EventStreamPosition,
+        eventNumber: msg.eventNumber as unknown as EventNumber,
+        position: msg.position as unknown as EventStreamPosition,
         event,
         timestamp: new Date(msg.timestamp),
       })),
@@ -249,15 +249,21 @@ const subscribe =
     );
 
 const sendCommand =
-  (ws: WebSocket, pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>) =>
+  (
+    ws: WebSocket,
+    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
+  ) =>
   <TPayload, TResult>(command: AggregateCommand<TPayload>) =>
     pipe(
       Effect.all({
-        id: Effect.sync(() => crypto.randomUUID()),
+        id: Effect.sync(() => crypto.randomUUID() as string),
         resultQueue: Queue.unbounded<CommandResult<TResult>>(),
       }),
       Effect.tap(({ id, resultQueue }) =>
-        Ref.update(pendingCommands, HashMap.set(id, resultQueue as Queue.Queue<CommandResult>))
+        Ref.update(
+          pendingCommands,
+          HashMap.set(id, resultQueue as Queue.Queue<CommandResult<unknown>>)
+        )
       ),
       Effect.tap(({ id }) =>
         sendMessage(ws)({
@@ -269,7 +275,7 @@ const sendCommand =
       Effect.flatMap(({ id, resultQueue }) =>
         pipe(
           Queue.take(resultQueue),
-          Effect.tap(() => Ref.update(pendingCommands, HashMap.remove(id))),
+          Effect.tap(() => Ref.update(pendingCommands, HashMap.remove(id as string))),
           Effect.map((result) => result as CommandResult<TResult>)
         )
       )
@@ -308,7 +314,7 @@ export const makeEventTransport = <TEvent>(
 ): Effect.Effect<EventTransport<TEvent>, never, Scope.Scope> =>
   pipe(
     createWebSocket(url),
-    Effect.tap(waitForConnection),
+    Effect.tap((ws) => waitForConnection(ws).pipe(Effect.orDie)),
     Effect.flatMap((ws) =>
       pipe(
         Effect.all({
