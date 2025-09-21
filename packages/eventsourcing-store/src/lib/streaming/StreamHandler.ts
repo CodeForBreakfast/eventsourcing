@@ -9,9 +9,9 @@ export class StreamingError extends Data.TaggedError('StreamingError')<{
 }> {}
 
 /**
- * Interface for optimized event streaming
+ * Interface for event streaming
  */
-export interface OptimizedStreamHandlerService<TEvent, TStreamId extends string = string> {
+export interface StreamHandlerService<TEvent, TStreamId extends string = string> {
   /**
    * Subscribe to events for a specific stream
    */
@@ -45,13 +45,13 @@ export interface OptimizedStreamHandlerService<TEvent, TStreamId extends string 
  * Note: Using Context.GenericTag here because Effect.Tag doesn't support generic parameters
  * This is a valid use case for GenericTag with complex generic types
  */
-export const OptimizedStreamHandler = <TEvent = unknown, TStreamId extends string = string>() =>
-  Context.GenericTag<OptimizedStreamHandlerService<TEvent, TStreamId>>('OptimizedStreamHandler');
+export const StreamHandler = <TEvent = unknown, TStreamId extends string = string>() =>
+  Context.GenericTag<StreamHandlerService<TEvent, TStreamId>>('StreamHandler');
 
 /**
- * Create the optimized stream handler with Effect's PubSub
+ * Create the stream handler with Effect's PubSub
  */
-export const makeOptimizedStreamHandler = <TEvent, TStreamId extends string = string>() =>
+export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =>
   pipe(
     // Create references to our handler state
     Effect.all([Ref.make(new Map<string, PubSub.PubSub<TEvent>>()), Ref.make(0)]),
@@ -94,7 +94,7 @@ export const makeOptimizedStreamHandler = <TEvent, TStreamId extends string = st
       };
 
       // Create the handler implementation
-      const handler: OptimizedStreamHandlerService<TEvent, TStreamId> = {
+      const handler: StreamHandlerService<TEvent, TStreamId> = {
         subscribeToStream: (streamId) =>
           Effect.catchAll(
             pipe(
@@ -158,12 +158,9 @@ export const makeOptimizedStreamHandler = <TEvent, TStreamId extends string = st
   );
 
 /**
- * Live Layer implementation of the OptimizedStreamHandler
+ * Live Layer implementation of the StreamHandler
  */
-export const OptimizedStreamHandlerLive = <
-  TEvent = unknown,
-  TStreamId extends string = string,
->() => {
-  const Tag = OptimizedStreamHandler<TEvent, TStreamId>();
-  return Layer.effect(Tag, makeOptimizedStreamHandler<TEvent, TStreamId>());
+export const StreamHandlerLive = <TEvent = unknown, TStreamId extends string = string>() => {
+  const Tag = StreamHandler<TEvent, TStreamId>();
+  return Layer.effect(Tag, makeStreamHandler<TEvent, TStreamId>());
 };

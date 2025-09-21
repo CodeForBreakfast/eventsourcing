@@ -1,13 +1,13 @@
 import { Effect, pipe } from 'effect';
 import { describe, expect, it } from 'bun:test';
-import { OptimizedStreamHandler, OptimizedStreamHandlerLive } from './OptimizedStreamHandler';
+import { StreamHandler, StreamHandlerLive } from './StreamHandler';
 
-describe('OptimizedStreamHandler', () => {
+describe('StreamHandler', () => {
   // Single minimal test to ensure the module loads
   it('should create a handler implementation', async () => {
     // Create the tag and layer for testing
-    const TestStreamHandler = OptimizedStreamHandler<string, string>();
-    const TestStreamHandlerLive = OptimizedStreamHandlerLive<string, string>();
+    const TestStreamHandler = StreamHandler<string, string>();
+    const TestStreamHandlerLive = StreamHandlerLive<string, string>();
 
     const program = pipe(
       TestStreamHandler,
