@@ -6,7 +6,7 @@ import { EventStoreError, ConcurrencyConflictError } from './errors';
 /**
  * Gets the current end position of a stream
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { currentEnd } from '@codeforbreakfast/eventsourcing-store';
@@ -45,7 +45,7 @@ export const currentEnd =
 /**
  * Creates an EventStreamPosition from a stream ID and event number
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { positionFromEventNumber } from '@codeforbreakfast/eventsourcing-store';
@@ -81,7 +81,7 @@ export { ConcurrencyConflictError as StreamEndMovedError } from './errors';
 /**
  * Creates an event store that encodes/decodes events using a schema
  *
- * @since 1.0.0
+ * @since 0.5.0
  * @example
  * ```typescript
  * import { encodedEventStore } from '@codeforbreakfast/eventsourcing-store';

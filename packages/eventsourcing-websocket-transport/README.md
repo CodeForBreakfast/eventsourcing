@@ -102,7 +102,7 @@ const program = pipe(
   Effect.flatMap(({ eventStore, streamId }) =>
     pipe(
       beginning(streamId),
-      Effect.flatMap((position) => eventStore.read(position)),
+      Effect.flatMap((position) => eventStore.subscribe(position)),
       Effect.flatMap(broadcastEvents)
     )
   ),
@@ -352,7 +352,7 @@ const broadcastUserEvents = (userId: string, connection: WebSocketConnection<Use
     Effect.flatMap(({ eventStore, streamId }) =>
       pipe(
         beginning(streamId),
-        Effect.flatMap((position) => eventStore.read(position)),
+        Effect.flatMap((position) => eventStore.subscribe(position)),
         Effect.map((eventStream) => createUserSpecificStream(userId, eventStream)),
         Effect.flatMap((userStream) =>
           pipe(
@@ -687,7 +687,7 @@ const integrateWithEventStore = pipe(
   Effect.flatMap(({ eventStore, webSocketService, streamId }) =>
     pipe(
       beginning(streamId),
-      Effect.flatMap((position) => eventStore.read(position)),
+      Effect.flatMap((position) => eventStore.subscribe(position)),
       Effect.flatMap((eventStream) => {
         const connections = new Set<WebSocketConnection<UserEvent>>();
 
