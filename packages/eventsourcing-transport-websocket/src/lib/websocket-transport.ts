@@ -270,10 +270,10 @@ const connectWebSocket = (
   Effect.acquireRelease(
     pipe(
       createInitialState(),
-      Effect.tap((stateRef) => updateConnectionState(stateRef, 'connecting')),
       Effect.flatMap((stateRef) =>
         pipe(
-          createWebSocketConnection(url, stateRef),
+          updateConnectionState(stateRef, 'connecting'),
+          Effect.flatMap(() => createWebSocketConnection(url, stateRef)),
           Effect.as(createConnectedTransport(stateRef))
         )
       )
