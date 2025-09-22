@@ -5,7 +5,7 @@
  * Uses Effect.acquireRelease for Scope-based lifecycle management.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, pipe, Layer } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, PubSub, Chunk, pipe, Layer } from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -21,7 +21,8 @@ import {
 interface WebSocketInternalState {
   readonly socket: WebSocket | null;
   readonly connectionState: ConnectionState;
-  readonly connectionStateQueue: Queue.Queue<ConnectionState>;
+  readonly connectionStatePubSub: PubSub.PubSub<ConnectionState>;
+  readonly stateHistory: Chunk.Chunk<ConnectionState>;
   readonly subscribers: Set<Queue.Queue<TransportMessage>>;
 }
 
@@ -41,15 +42,11 @@ const createConnectionStateStream = (
       Ref.get(stateRef),
       Effect.flatMap((state) =>
         pipe(
-          Queue.unbounded<ConnectionState>(),
-          Effect.tap((stateQueue) => Queue.offer(stateQueue, state.connectionState)),
-          Effect.flatMap((stateQueue) =>
-            pipe(
-              Stream.fromQueue(state.connectionStateQueue),
-              Stream.runForEach((newState) => Queue.offer(stateQueue, newState)),
-              Effect.fork,
-              Effect.as(Stream.fromQueue(stateQueue))
-            )
+          // Subscribe to future updates
+          PubSub.subscribe(state.connectionStatePubSub),
+          Effect.map((queue) =>
+            // Provide historical states first, then future updates
+            Stream.concat(Stream.fromChunk(state.stateHistory), Stream.fromQueue(queue))
           )
         )
       ),
@@ -136,9 +133,10 @@ const updateConnectionState = (
     Ref.update(stateRef, (state) => ({
       ...state,
       connectionState: newState,
+      stateHistory: Chunk.append(state.stateHistory, newState),
     })),
     Effect.flatMap(() => Ref.get(stateRef)),
-    Effect.flatMap((state) => Queue.offer(state.connectionStateQueue, newState))
+    Effect.flatMap((state) => PubSub.publish(state.connectionStatePubSub, newState))
   );
 
 const handleIncomingMessage = (
@@ -184,7 +182,6 @@ const createWebSocketConnection = (
             Ref.update(stateRef, (state) => ({
               ...state,
               socket,
-              connectionState: 'connected' as ConnectionState,
             })),
             Effect.flatMap(() => updateConnectionState(stateRef, 'connected'))
           )
@@ -227,12 +224,13 @@ const createWebSocketConnection = (
 
 const createInitialState = (): Effect.Effect<Ref.Ref<WebSocketInternalState>, never, never> =>
   pipe(
-    Queue.unbounded<ConnectionState>(),
-    Effect.flatMap((connectionStateQueue) => {
+    PubSub.unbounded<ConnectionState>(),
+    Effect.flatMap((connectionStatePubSub) => {
       const initialState: WebSocketInternalState = {
         socket: null,
         connectionState: 'connecting',
-        connectionStateQueue,
+        connectionStatePubSub,
+        stateHistory: Chunk.empty<ConnectionState>(),
         subscribers: new Set(),
       };
       return Ref.make(initialState);
@@ -255,7 +253,8 @@ const cleanupConnection = (
           Ref.update(stateRef, (s) => ({
             socket: null,
             connectionState: 'disconnected' as ConnectionState,
-            connectionStateQueue: s.connectionStateQueue,
+            connectionStatePubSub: s.connectionStatePubSub,
+            stateHistory: s.stateHistory,
             subscribers: new Set<Queue.Queue<TransportMessage>>(),
           }))
         )

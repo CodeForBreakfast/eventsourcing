@@ -45,21 +45,7 @@ interface ServerState {
 const createClientConnectionStateStream = (
   clientState: ClientState
 ): Stream.Stream<ConnectionState, never, never> =>
-  Stream.unwrapScoped(
-    pipe(
-      Queue.unbounded<ConnectionState>(),
-      Effect.tap((stateQueue) => Queue.offer(stateQueue, clientState.connectionState)),
-      Effect.flatMap((stateQueue) =>
-        pipe(
-          Stream.fromQueue(clientState.connectionStateQueue),
-          Stream.runForEach((newState) => Queue.offer(stateQueue, newState)),
-          Effect.fork,
-          Effect.as(Stream.fromQueue(stateQueue))
-        )
-      ),
-      Effect.orDie
-    )
-  );
+  Stream.fromQueue(clientState.connectionStateQueue);
 
 const publishMessageToClient =
   (clientState: ClientState) =>
