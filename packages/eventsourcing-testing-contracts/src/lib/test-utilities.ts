@@ -5,7 +5,21 @@
  * and test data generators for event sourcing testing scenarios.
  */
 
-import { Effect, Stream, Layer, Data, pipe, Chunk, Ref, Duration, Fiber, Scope } from 'effect';
+import {
+  Effect,
+  Stream,
+  Layer,
+  Data,
+  pipe,
+  Chunk,
+  Ref,
+  Duration,
+  Fiber,
+  Scope,
+  Schema,
+  Brand,
+  Either,
+} from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
@@ -17,16 +31,21 @@ import type {
   StreamEvent,
   CommandError,
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import { TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import type {
   TransportMessage,
-  ConnectionState,
   TransportTestContext,
   ConnectedTransportTestInterface,
 } from './test-layer-interfaces.js';
+import { TransportMessageSchema } from './test-layer-interfaces.js';
+import type { ConnectionState } from './test-layer-interfaces.js';
 
 // ============================================================================
 // Test Data Generators
 // ============================================================================
+
+type TestId = string & Brand.Brand<'TestId'>;
+const TestId = Brand.nominal<TestId>();
 
 /**
  * Generates unique stream IDs for testing
@@ -37,8 +56,8 @@ export const generateStreamId = (prefix = 'test-stream'): EventStreamId =>
 /**
  * Generates unique command IDs for testing
  */
-export const generateCommandId = (): string =>
-  `cmd-${Math.random().toString(36).substring(7)}-${Date.now()}`;
+export const generateCommandId = (): TestId =>
+  `cmd-${Math.random().toString(36).substring(7)}-${Date.now()}` as TestId;
 
 /**
  * Generates unique message IDs for testing
@@ -99,7 +118,7 @@ export const createTestStreamEvent = <TEvent>(
 });
 
 /**
- * Creates a test transport message aligned with transport contracts
+ * Creates a test transport message with schema validation
  */
 export const createTestTransportMessage = <TPayload = unknown>(
   payload: TPayload,
@@ -108,12 +127,16 @@ export const createTestTransportMessage = <TPayload = unknown>(
     type?: string;
     metadata?: Record<string, unknown>;
   }
-): TransportMessage => ({
-  id: options?.id || generateMessageId(),
-  type: options?.type || 'test-message',
-  payload,
-  ...(options?.metadata && { metadata: options.metadata }),
-});
+): Effect.Effect<TransportMessage, Error, never> => {
+  const messageInput = {
+    id: options?.id || generateMessageId(),
+    type: options?.type || 'test-message',
+    payload,
+    ...(options?.metadata && { metadata: options.metadata }),
+  };
+
+  return Schema.decodeUnknown(TransportMessageSchema)(messageInput);
+};
 
 /**
  * Generates a sequence of test events
@@ -198,7 +221,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
   Effect.gen(function* () {
     const globalState = yield* Ref.make<MockTransportState>({
       isConnected: false,
-      connectionState: 'disconnected',
+      connectionState: 'disconnected' as ConnectionState,
       messages: [],
       subscribers: [],
       bufferedMessages: [],
@@ -211,12 +234,22 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
 
     const createConnectedTransport = (
       url: string
-    ): Effect.Effect<ConnectedTransportTestInterface, Error, Scope.Scope> =>
+    ): Effect.Effect<ConnectedTransportTestInterface, TransportError, Scope.Scope> =>
       Effect.gen(function* () {
-        // Validate URL (basic check)
-        if (url.startsWith('invalid://')) {
-          yield* Effect.fail(new Error(`Invalid URL: ${url}`));
-        }
+        // Validate URL using schema-based validation
+        const UrlSchema = Schema.String.pipe(Schema.startsWith('test://'));
+
+        yield* pipe(
+          Schema.decodeUnknown(UrlSchema)(url),
+          Effect.catchAll(() =>
+            Effect.fail(
+              new TransportError({
+                message: `Invalid URL: ${url}`,
+                cause: new Error('URL must start with test://'),
+              })
+            )
+          )
+        );
 
         // Create connection state stream
         const connectionStateRef = yield* Ref.make<ConnectionState>('connected');
@@ -247,18 +280,20 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
           }>
         >([]);
 
-        const publish = (message: TransportMessage): Effect.Effect<void, Error, never> =>
+        const publish = (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
           Effect.gen(function* () {
             const currentState = yield* Ref.get(globalState);
 
             if (!currentState.isConnected) {
-              yield* Effect.fail(new Error('Transport not connected'));
+              yield* Effect.fail(
+                new TransportError({
+                  message: 'Transport not connected',
+                })
+              );
             }
 
-            // Validate message ID (empty ID should fail)
-            if (!message.id || message.id.trim() === '') {
-              yield* Effect.fail(new Error('Message ID cannot be empty'));
-            }
+            // Message is already validated by schema at creation time
+            // No defensive checks needed - invalid states are unrepresentable
 
             // Add to main message queue
             yield* Ref.update(messageQueue, (messages) => [...messages, message]);
@@ -266,13 +301,14 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
             // Distribute to all active subscriptions
             const subs = yield* Ref.get(subscriptionStreams);
             for (const sub of subs) {
-              try {
-                if (!sub.filter || sub.filter(message)) {
-                  yield* Ref.update(sub.queue, (messages) => [...messages, message]);
-                }
-              } catch (error) {
-                // Silently skip messages that cause filter errors
-                // This matches typical transport behavior
+              const filterResult = pipe(
+                Effect.try(() => !sub.filter || sub.filter(message)),
+                Effect.catchAll(() => Effect.succeed(false))
+              );
+
+              const shouldAdd = yield* filterResult;
+              if (shouldAdd) {
+                yield* Ref.update(sub.queue, (messages) => [...messages, message]);
               }
             }
 
@@ -289,7 +325,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
 
         const subscribe = (
           filter?: (msg: TransportMessage) => boolean
-        ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never> =>
+        ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
           Effect.gen(function* () {
             const subscriptionId = generateMessageId();
             const subscriptionQueue = yield* Ref.make<TransportMessage[]>([]);
@@ -338,7 +374,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
         };
       });
 
-    const simulateDisconnect = (): Effect.Effect<void> =>
+    const simulateDisconnect = (): Effect.Effect<void, never, never> =>
       Ref.update(globalState, (s) => ({
         ...s,
         isConnected: false,
@@ -349,7 +385,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
         },
       }));
 
-    const simulateReconnect = (): Effect.Effect<void> =>
+    const simulateReconnect = (): Effect.Effect<void, never, never> =>
       Ref.update(globalState, (s) => ({
         ...s,
         isConnected: true,
@@ -358,7 +394,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
         bufferedMessages: [],
       }));
 
-    const getBufferedMessageCount = (): Effect.Effect<number> =>
+    const getBufferedMessageCount = (): Effect.Effect<number, never, never> =>
       pipe(
         Ref.get(globalState),
         Effect.map((s) => s.bufferedMessages.length)
@@ -391,10 +427,14 @@ export interface MockDomainState {
  */
 export const createMockDomainContext = (): Effect.Effect<
   {
-    readonly processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult>;
-    readonly getEventCount: (streamId: EventStreamId) => Effect.Effect<number>;
-    readonly getLastEventNumber: (streamId: EventStreamId) => Effect.Effect<EventNumber>;
-    readonly reset: () => Effect.Effect<void>;
+    readonly processCommand: (
+      command: AggregateCommand
+    ) => Effect.Effect<CommandResult, never, never>;
+    readonly getEventCount: (streamId: EventStreamId) => Effect.Effect<number, never, never>;
+    readonly getLastEventNumber: (
+      streamId: EventStreamId
+    ) => Effect.Effect<EventNumber, never, never>;
+    readonly reset: () => Effect.Effect<void, never, never>;
   },
   never,
   never
@@ -405,7 +445,9 @@ export const createMockDomainContext = (): Effect.Effect<
       processedCommands: [],
     });
 
-    const processCommand = (command: AggregateCommand): Effect.Effect<CommandResult> =>
+    const processCommand = (
+      command: AggregateCommand
+    ): Effect.Effect<CommandResult, never, never> =>
       Effect.gen(function* () {
         const currentState = yield* Ref.get(state);
         const { streamId, eventNumber: expectedVersion } = command.aggregate.position;
@@ -413,28 +455,27 @@ export const createMockDomainContext = (): Effect.Effect<
         const stream = currentState.streams.get(streamId);
         const currentVersion = stream?.lastEventNumber || (0 as EventNumber);
 
+        // Define business rule schemas for type-safe validation
+        const AmountPayloadSchema = Schema.Struct({
+          amount: Schema.Number.pipe(Schema.greaterThanOrEqualTo(0)),
+        });
+
         // Simulate optimistic concurrency control
         if (expectedVersion !== currentVersion) {
-          return {
-            _tag: 'Left',
-            left: createMockCommandError(
+          return Either.left(
+            createMockCommandError(
               `Optimistic concurrency violation. Expected version ${expectedVersion}, got ${currentVersion}`
-            ),
-          } as any;
+            )
+          );
         }
 
-        // Simulate business rule validation
+        // Simulate business rule validation using schemas
         if (command.payload && typeof command.payload === 'object' && command.payload !== null) {
-          const payloadObj = command.payload as Record<string, unknown>;
-          const hasAmount = 'amount' in payloadObj;
-          if (hasAmount) {
-            const amount = payloadObj.amount;
-            if (typeof amount === 'number' && amount < 0) {
-              return {
-                _tag: 'Left',
-                left: createMockCommandError('Negative amounts not allowed'),
-              } as any;
-            }
+          const payloadResult = Schema.decodeUnknownEither(AmountPayloadSchema)(command.payload);
+          if (payloadResult._tag === 'Left') {
+            return Either.left(
+              createMockCommandError('Invalid payload: negative amounts not allowed')
+            );
           }
         }
 
@@ -454,28 +495,27 @@ export const createMockDomainContext = (): Effect.Effect<
           processedCommands: [...s.processedCommands, command],
         }));
 
-        return {
-          _tag: 'Right',
-          right: {
-            streamId,
-            eventNumber: newEventNumber,
-          },
-        } as any;
+        return Either.right({
+          streamId,
+          eventNumber: newEventNumber,
+        });
       });
 
-    const getEventCount = (streamId: EventStreamId): Effect.Effect<number> =>
+    const getEventCount = (streamId: EventStreamId): Effect.Effect<number, never, never> =>
       pipe(
         Ref.get(state),
         Effect.map((s) => s.streams.get(streamId)?.events.length || 0)
       );
 
-    const getLastEventNumber = (streamId: EventStreamId): Effect.Effect<EventNumber> =>
+    const getLastEventNumber = (
+      streamId: EventStreamId
+    ): Effect.Effect<EventNumber, never, never> =>
       pipe(
         Ref.get(state),
         Effect.map((s) => s.streams.get(streamId)?.lastEventNumber || (0 as EventNumber))
       );
 
-    const reset = (): Effect.Effect<void> =>
+    const reset = (): Effect.Effect<void, never, never> =>
       Ref.set(state, {
         streams: new Map(),
         processedCommands: [],
@@ -518,30 +558,29 @@ export const waitForCondition = (
 /**
  * Asserts that an effect fails with a specific error
  */
-export const expectError = <E>(
-  effect: Effect.Effect<unknown, E>,
+export const expectError = <A, E, R>(
+  effect: Effect.Effect<A, E, R>,
   predicate: (error: E) => boolean
-): Effect.Effect<void, never> =>
+): Effect.Effect<void, never, R> =>
   pipe(
     effect,
     Effect.flip,
-    Effect.tap((error) =>
+    Effect.flatMap((error) =>
       predicate(error)
         ? Effect.void
-        : Effect.fail(new Error(`Error does not match predicate: ${error}`))
+        : Effect.fail(new Error(`Error does not match predicate: ${String(error)}`))
     ),
-    Effect.asVoid,
     Effect.catchAll(() => Effect.void)
   );
 
 /**
  * Collects all values from a stream with timeout
  */
-export const collectStreamWithTimeout = <T>(
-  stream: Stream.Stream<T, never, never>,
+export const collectStreamWithTimeout = <T, E, R>(
+  stream: Stream.Stream<T, E, R>,
   count: number,
   timeoutMs = 5000
-): Effect.Effect<ReadonlyArray<T>, Error> =>
+): Effect.Effect<ReadonlyArray<T>, Error | E, R> =>
   pipe(
     stream,
     Stream.take(count),
@@ -563,10 +602,10 @@ export const createTestLayer = (): Layer.Layer<
   {
     transport: TransportTestContext;
     domain: {
-      processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult>;
-      getEventCount: (streamId: EventStreamId) => Effect.Effect<number>;
-      getLastEventNumber: (streamId: EventStreamId) => Effect.Effect<EventNumber>;
-      reset: () => Effect.Effect<void>;
+      processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult, never, never>;
+      getEventCount: (streamId: EventStreamId) => Effect.Effect<number, never, never>;
+      getLastEventNumber: (streamId: EventStreamId) => Effect.Effect<EventNumber, never, never>;
+      reset: () => Effect.Effect<void, never, never>;
     };
   },
   never,
@@ -588,7 +627,9 @@ export const TestScenarios = {
   /**
    * Tests basic command processing flow
    */
-  basicCommandFlow: (processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult>) =>
+  basicCommandFlow: (
+    processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult, never, never>
+  ) =>
     Effect.gen(function* () {
       const command = createTestCommand({ action: 'test', value: 42 });
       const result = yield* processCommand(command);
@@ -599,7 +640,7 @@ export const TestScenarios = {
    * Tests optimistic concurrency control
    */
   optimisticConcurrency: (
-    processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult>
+    processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult, never, never>
   ) =>
     Effect.gen(function* () {
       const streamId = generateStreamId();

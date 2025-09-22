@@ -5,7 +5,7 @@
  * Validates message delivery mechanics only.
  */
 
-import { Effect, Stream, pipe, Chunk, Duration, Fiber } from 'effect';
+import { Effect, Stream, pipe, Chunk, Duration, Fiber, Schema } from 'effect';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import type {
   TransportMessage,
@@ -15,6 +15,7 @@ import type {
   ConnectedTransportTestInterface,
   ConnectionState,
 } from './test-layer-interfaces.js';
+import { TransportMessageSchema } from './test-layer-interfaces.js';
 
 /**
  * REQUIRED: Core transport contract tests.
@@ -135,13 +136,13 @@ export const runTransportContractTests: TransportTestRunner = (
             Effect.gen(function* () {
               const transport = yield* context.createConnectedTransport('test://localhost');
 
-              const message: TransportMessage = {
+              const messageInput = {
                 id: 'test-1',
                 type: 'test-message',
                 payload: { content: 'hello world' },
               };
 
-              // Should not throw
+              const message = yield* Schema.decodeUnknown(TransportMessageSchema)(messageInput);
               yield* transport.publish(message);
             })
           )
@@ -349,14 +350,15 @@ export const runTransportContractTests: TransportTestRunner = (
             Effect.gen(function* () {
               const transport = yield* context.createConnectedTransport('test://localhost');
 
-              const complexFilter = (msg: TransportMessage) => {
-                const payload = msg.payload as any;
-                return (
-                  msg.type === 'filtered-test' &&
-                  payload?.priority === 'high' &&
-                  typeof payload?.value === 'number' &&
-                  payload.value > 10
-                );
+              const FilteredPayloadSchema = Schema.Struct({
+                priority: Schema.Literal('high'),
+                value: Schema.Number.pipe(Schema.greaterThan(10)),
+              });
+
+              const complexFilter = (msg: TransportMessage): boolean => {
+                if (msg.type !== 'filtered-test') return false;
+                const parseResult = Schema.decodeUnknownEither(FilteredPayloadSchema)(msg.payload);
+                return parseResult._tag === 'Right';
               };
 
               const filteredMessages = yield* pipe(
@@ -507,10 +509,17 @@ export const runTransportContractTests: TransportTestRunner = (
                 const messages = yield* Fiber.join(orderedMessages);
                 expect(messages).toHaveLength(5);
 
-                // Verify ordering
-                messages.forEach((msg, index) => {
-                  expect((msg.payload as any).sequence).toBe(index);
+                // Verify ordering with proper schema validation
+                const SequencePayloadSchema = Schema.Struct({
+                  sequence: Schema.Number,
                 });
+
+                for (let i = 0; i < messages.length; i++) {
+                  const msg = messages[i];
+                  if (!msg) continue; // Safety check
+                  const decoded = yield* Schema.decodeUnknown(SequencePayloadSchema)(msg.payload);
+                  expect(decoded.sequence).toBe(i);
+                }
               })
             )
           );
