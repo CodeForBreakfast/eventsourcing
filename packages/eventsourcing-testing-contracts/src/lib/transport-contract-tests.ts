@@ -1,20 +1,8 @@
 /**
- * LAYER 1: Transport Contract Tests
+ * Transport Contract Tests
  *
- * Tests ONLY pure message delivery mechanics. NO event sourcing concepts.
- * These tests validate that a transport can reliably deliver messages between endpoints.
- *
- * WHAT IS TESTED:
- * - Message delivery (publish/subscribe)
- * - Connection management (connect/disconnect)
- * - Error handling (network failures, malformed messages)
- * - Optional features (reconnection, buffering, ordering)
- *
- * WHAT IS NOT TESTED:
- * - Event sourcing semantics
- * - Command/event concepts
- * - Business logic
- * - Domain invariants
+ * Tests transport interface compliance with transport-contracts.
+ * Validates message delivery mechanics only.
  */
 
 import { Effect, Stream, pipe, Chunk, Duration, Fiber } from 'effect';
@@ -555,7 +543,9 @@ export const runTransportContractTests: TransportTestRunner = (
               Effect.gen(function* () {
                 const transport = yield* testContext.createConnectedTransport('test://localhost');
 
-                yield* testContext.simulateDisconnect();
+                if (testContext.simulateDisconnect) {
+                  yield* testContext.simulateDisconnect();
+                }
 
                 // Monitor state changes during reconnection
                 const stateChanges: ConnectionState[] = [];
@@ -569,7 +559,9 @@ export const runTransportContractTests: TransportTestRunner = (
                 );
 
                 yield* Effect.sleep(Duration.millis(50));
-                yield* testContext.simulateReconnect();
+                if (testContext.simulateReconnect) {
+                  yield* testContext.simulateReconnect();
+                }
 
                 yield* Effect.sleep(Duration.millis(100));
                 yield* Fiber.interrupt(monitoring);

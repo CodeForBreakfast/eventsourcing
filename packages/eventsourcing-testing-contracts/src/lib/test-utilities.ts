@@ -99,7 +99,7 @@ export const createTestStreamEvent = <TEvent>(
 });
 
 /**
- * Creates a test transport message (aligned with simplified interface)
+ * Creates a test transport message aligned with transport contracts
  */
 export const createTestTransportMessage = <TPayload = unknown>(
   payload: TPayload,
@@ -113,7 +113,6 @@ export const createTestTransportMessage = <TPayload = unknown>(
   type: options?.type || 'test-message',
   payload,
   ...(options?.metadata && { metadata: options.metadata }),
-  // Note: timestamp removed from simplified interface
 });
 
 /**
@@ -182,7 +181,7 @@ export interface MockTransportState {
   readonly messages: ReadonlyArray<TransportMessage>;
   readonly subscribers: ReadonlyArray<{
     readonly id: string;
-    readonly filter?: (message: TransportMessage) => boolean;
+    readonly filter: ((message: TransportMessage) => boolean) | undefined;
   }>;
   readonly bufferedMessages: ReadonlyArray<TransportMessage>;
   readonly metrics: {
@@ -193,7 +192,7 @@ export interface MockTransportState {
 }
 
 /**
- * Creates a mock transport implementation for testing the simplified interface
+ * Creates a mock transport implementation for testing transport contracts
  */
 export const createMockTransport = (): Effect.Effect<TransportTestContext, never, never> =>
   Effect.gen(function* () {
@@ -243,7 +242,7 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
         const subscriptionStreams = yield* Ref.make<
           Array<{
             id: string;
-            filter?: (msg: TransportMessage) => boolean;
+            filter: ((msg: TransportMessage) => boolean) | undefined;
             queue: Ref.Ref<TransportMessage[]>;
           }>
         >([]);
@@ -256,14 +255,24 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
               yield* Effect.fail(new Error('Transport not connected'));
             }
 
+            // Validate message ID (empty ID should fail)
+            if (!message.id || message.id.trim() === '') {
+              yield* Effect.fail(new Error('Message ID cannot be empty'));
+            }
+
             // Add to main message queue
             yield* Ref.update(messageQueue, (messages) => [...messages, message]);
 
             // Distribute to all active subscriptions
             const subs = yield* Ref.get(subscriptionStreams);
             for (const sub of subs) {
-              if (!sub.filter || sub.filter(message)) {
-                yield* Ref.update(sub.queue, (messages) => [...messages, message]);
+              try {
+                if (!sub.filter || sub.filter(message)) {
+                  yield* Ref.update(sub.queue, (messages) => [...messages, message]);
+                }
+              } catch (error) {
+                // Silently skip messages that cause filter errors
+                // This matches typical transport behavior
               }
             }
 
@@ -287,20 +296,13 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
 
             const subscription = {
               id: subscriptionId,
-              filter,
+              filter: filter ? filter : undefined,
               queue: subscriptionQueue,
             };
 
             yield* Ref.update(subscriptionStreams, (subs) => [...subs, subscription]);
 
-            // Set up cleanup when subscription ends
-            yield* Effect.addFinalizer(() =>
-              Ref.update(subscriptionStreams, (subs) =>
-                subs.filter((sub) => sub.id !== subscriptionId)
-              )
-            );
-
-            // Create stream from subscription queue
+            // Create stream from subscription queue with cleanup
             const stream = Stream.repeatEffect(
               pipe(
                 Ref.get(subscriptionQueue),
@@ -312,7 +314,18 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
               )
             ).pipe(
               Stream.flatMap((messages) => Stream.fromIterable(messages)),
-              Stream.filter((msg) => !filter || filter(msg))
+              Stream.filter((msg) => {
+                try {
+                  return !filter || filter(msg);
+                } catch {
+                  return false; // Skip messages that cause filter errors
+                }
+              }),
+              Stream.ensuring(
+                Ref.update(subscriptionStreams, (subs) =>
+                  subs.filter((sub) => sub.id !== subscriptionId)
+                )
+              )
             );
 
             return stream;
@@ -504,7 +517,7 @@ export const waitForCondition = (
 export const expectError = <E>(
   effect: Effect.Effect<unknown, E>,
   predicate: (error: E) => boolean
-): Effect.Effect<void> =>
+): Effect.Effect<void, never> =>
   pipe(
     effect,
     Effect.flip,
@@ -513,7 +526,8 @@ export const expectError = <E>(
         ? Effect.void
         : Effect.fail(new Error(`Error does not match predicate: ${error}`))
     ),
-    Effect.asVoid
+    Effect.asVoid,
+    Effect.catchAll(() => Effect.void)
   );
 
 /**

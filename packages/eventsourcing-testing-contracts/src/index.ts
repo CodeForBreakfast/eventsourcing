@@ -68,11 +68,7 @@ export { runIntegrationTestSuite } from './lib/integration-test-suite.js';
 // DOCUMENTATION AND GUIDANCE
 // ============================================================================
 
-export {
-  ExampleImplementations,
-  BestPractices,
-  TroubleshootingGuide,
-} from './lib/testing-strategy-guide.js';
+// Documentation exports removed - these are implemented by individual transport packages
 
 // ============================================================================
 // TEST UTILITIES AND HELPERS

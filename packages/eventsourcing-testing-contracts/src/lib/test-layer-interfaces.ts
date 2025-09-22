@@ -11,32 +11,27 @@ import type {
   AggregateCommand,
   CommandResult,
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import type { ConnectionState as CoreConnectionState } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
 // LAYER 1: TRANSPORT TESTS (REQUIRED for transport implementers)
 // =============================================================================
 
 /**
- * Pure message transport interface - aligned with simplified transport-contracts.
- * Tests raw message delivery mechanics only.
+ * Transport message for testing - uses plain string for simplicity
+ * (no branded types in tests to avoid complexity)
  */
 export interface TransportMessage {
-  readonly id: string; // Using plain string in tests for simplicity (no branded types in tests)
+  readonly id: string;
   readonly type: string;
   readonly payload: unknown;
   readonly metadata?: Record<string, unknown>;
-  // Note: timestamp removed from simplified interface
 }
 
 /**
- * Connection state matching the simplified transport interface
+ * Connection state from transport contracts
  */
-export type ConnectionState =
-  | 'disconnected'
-  | 'connecting'
-  | 'connected'
-  | 'reconnecting'
-  | 'error';
+export type ConnectionState = CoreConnectionState;
 
 /**
  * Transport test context for testing the simplified ConnectedTransport interface.
