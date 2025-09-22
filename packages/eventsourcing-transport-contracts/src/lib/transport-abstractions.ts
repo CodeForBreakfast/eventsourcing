@@ -6,7 +6,7 @@
  * message transport, connection management, and stream operations.
  */
 
-import { Effect, Stream, Scope, Data, Brand, Context } from 'effect';
+import { Effect, Stream, Scope, Data, Context, Brand } from 'effect';
 
 // ============================================================================
 // Branded Types
@@ -50,7 +50,6 @@ export interface TransportMessage<TPayload = unknown> {
   readonly type: string;
   readonly payload: TPayload;
   readonly metadata?: Record<string, unknown>;
-  readonly timestamp?: Date;
 }
 
 /**
@@ -64,50 +63,22 @@ export type ConnectionState =
   | 'error';
 
 /**
- * Connection management operations
+ * A fully connected transport that handles all transport operations.
+ * This type can ONLY exist after a successful connection.
+ *
+ * Lifecycle is managed via Effect's Scope - when the scope closes,
+ * the transport disconnects automatically via acquireRelease.
  */
-export interface ConnectionManager {
-  readonly connect: () => Effect.Effect<void, ConnectionError, never>;
-  readonly disconnect: () => Effect.Effect<void, never, never>;
-  readonly isConnected: () => Effect.Effect<boolean, never, never>;
-  readonly getState: () => Effect.Effect<ConnectionState, never, never>;
-}
+export interface ConnectedTransport<TMessage extends TransportMessage = TransportMessage> {
+  // Connection state monitoring
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 
-/**
- * Message publishing operations
- */
-export interface MessagePublisher<TMessage extends TransportMessage = TransportMessage> {
+  // Message operations
   readonly publish: (message: TMessage) => Effect.Effect<void, TransportError, never>;
-}
-
-/**
- * Message subscription operations using Effect's Stream
- */
-export interface MessageSubscriber<TMessage extends TransportMessage = TransportMessage> {
   readonly subscribe: (
     filter?: (message: TMessage) => boolean
   ) => Effect.Effect<Stream.Stream<TMessage, never, never>, TransportError, never>;
 }
-
-/**
- * Request/Response pattern for transport
- */
-export interface RequestResponse<TRequest = unknown, TResponse = unknown> {
-  readonly request: (
-    request: TRequest,
-    timeoutMs?: number
-  ) => Effect.Effect<TResponse, TransportError, never>;
-}
-
-/**
- * A fully connected transport that combines all transport operations.
- * This type can ONLY exist after a successful connection.
- */
-export interface ConnectedTransport<TMessage extends TransportMessage = TransportMessage>
-  extends ConnectionManager,
-    MessagePublisher<TMessage>,
-    MessageSubscriber<TMessage>,
-    RequestResponse {}
 
 // ============================================================================
 // Service Definitions
@@ -115,7 +86,13 @@ export interface ConnectedTransport<TMessage extends TransportMessage = Transpor
 
 /**
  * Service interface for creating transport connections.
- * Implementations handle protocol negotiation and connection setup.
+ *
+ * The connect method should use Effect.acquireRelease to ensure proper cleanup:
+ * - Acquire: establish connection, create transport
+ * - Release: disconnect, cleanup resources
+ *
+ * The Scope requirement ensures the transport is automatically
+ * disconnected when the scope closes.
  */
 export interface TransportConnectorService<TMessage extends TransportMessage = TransportMessage> {
   readonly connect: (

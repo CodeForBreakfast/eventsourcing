@@ -20,10 +20,6 @@ export {
 export type {
   TransportMessage,
   ConnectionState,
-  ConnectionManager,
-  MessagePublisher,
-  MessageSubscriber,
-  RequestResponse,
   ConnectedTransport,
   TransportConnectorService,
 } from './lib/transport-abstractions.js';

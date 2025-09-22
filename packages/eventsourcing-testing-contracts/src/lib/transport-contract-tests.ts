@@ -110,7 +110,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: 'test-1',
           type: 'test-message',
           payload: { content: 'hello world' },
-          timestamp: new Date(),
         };
 
         // Should not throw
@@ -123,37 +122,31 @@ export const runTransportContractTests: TransportTestRunner = (
             id: 'string-msg',
             type: 'test',
             payload: 'simple string',
-            timestamp: new Date(),
           },
           {
             id: 'number-msg',
             type: 'test',
             payload: 42,
-            timestamp: new Date(),
           },
           {
             id: 'boolean-msg',
             type: 'test',
             payload: true,
-            timestamp: new Date(),
           },
           {
             id: 'object-msg',
             type: 'test',
             payload: { nested: { data: [1, 2, 3] } },
-            timestamp: new Date(),
           },
           {
             id: 'array-msg',
             type: 'test',
             payload: [{ a: 1 }, { b: 2 }],
-            timestamp: new Date(),
           },
           {
             id: 'null-msg',
             type: 'test',
             payload: null,
-            timestamp: new Date(),
           },
         ];
 
@@ -167,7 +160,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: 'meta-msg',
           type: 'test-message',
           payload: { content: 'test' },
-          timestamp: new Date(),
           metadata: {
             source: 'test-suite',
             priority: 'high',
@@ -185,7 +177,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: 'disconnected-msg',
           type: 'test',
           payload: 'should fail',
-          timestamp: new Date(),
         };
 
         const result = await Effect.runPromise(
@@ -229,7 +220,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: 'sub-test-1',
           type: 'subscription-test',
           payload: { data: 'received' },
-          timestamp: new Date(),
         };
 
         await Effect.runPromise(context.publish(testMessage));
@@ -277,10 +267,10 @@ export const runTransportContractTests: TransportTestRunner = (
 
         // Send mixed messages
         const messages = [
-          { id: '1', type: 'type-a', payload: 'a1', timestamp: new Date() },
-          { id: '2', type: 'type-b', payload: 'b1', timestamp: new Date() },
-          { id: '3', type: 'type-a', payload: 'a2', timestamp: new Date() },
-          { id: '4', type: 'type-b', payload: 'b2', timestamp: new Date() },
+          { id: '1', type: 'type-a', payload: 'a1' },
+          { id: '2', type: 'type-b', payload: 'b1' },
+          { id: '3', type: 'type-a', payload: 'a2' },
+          { id: '4', type: 'type-b', payload: 'b2' },
         ];
 
         for (const msg of messages) {
@@ -329,31 +319,26 @@ export const runTransportContractTests: TransportTestRunner = (
             id: '1',
             type: 'filtered-test',
             payload: { priority: 'high', value: 15 },
-            timestamp: new Date(),
           }, // Should match
           {
             id: '2',
             type: 'filtered-test',
             payload: { priority: 'low', value: 20 },
-            timestamp: new Date(),
           }, // Should not match (priority)
           {
             id: '3',
             type: 'filtered-test',
             payload: { priority: 'high', value: 5 },
-            timestamp: new Date(),
           }, // Should not match (value)
           {
             id: '4',
             type: 'other-test',
             payload: { priority: 'high', value: 25 },
-            timestamp: new Date(),
           }, // Should not match (type)
           {
             id: '5',
             type: 'filtered-test',
             payload: { priority: 'high', value: 30 },
-            timestamp: new Date(),
           }, // Should match
         ];
 
@@ -396,7 +381,6 @@ export const runTransportContractTests: TransportTestRunner = (
             id: 'no-match',
             type: 'different-type',
             payload: 'test',
-            timestamp: new Date(),
           })
         );
 
@@ -407,45 +391,6 @@ export const runTransportContractTests: TransportTestRunner = (
     });
 
     // OPTIONAL FEATURE TESTS
-    if (features?.supportsRequestResponse) {
-      describe('OPTIONAL: Request-Response Pattern', () => {
-        beforeEach(async () => {
-          await Effect.runPromise(context.connect());
-        });
-
-        it('should support request-response with timeout', async () => {
-          const request: TransportMessage = {
-            id: 'req-1',
-            type: 'request',
-            payload: { query: 'ping' },
-            timestamp: new Date(),
-          };
-
-          const response = await Effect.runPromise(context.request(request, 1000));
-          expect(response).toBeDefined();
-          expect(response.type).toBe('response');
-        });
-
-        it('should timeout on no response', async () => {
-          const request: TransportMessage = {
-            id: 'timeout-req',
-            type: 'no-response-expected',
-            payload: { query: 'timeout-test' },
-            timestamp: new Date(),
-          };
-
-          const result = await Effect.runPromise(
-            pipe(
-              context.request(request, 100),
-              Effect.map(() => 'success' as const),
-              Effect.catchAll(() => Effect.succeed('timeout' as const))
-            )
-          );
-
-          expect(result).toBe('timeout');
-        });
-      });
-    }
 
     if (features?.guaranteesMessageOrdering) {
       describe('OPTIONAL: Message Ordering', () => {
@@ -479,7 +424,6 @@ export const runTransportContractTests: TransportTestRunner = (
                 id: `order-${i}`,
                 type: 'order-test',
                 payload: { sequence: i },
-                timestamp: new Date(),
               })
             );
           }
@@ -503,7 +447,6 @@ export const runTransportContractTests: TransportTestRunner = (
             id: 'buffered-1',
             type: 'buffer-test',
             payload: 'buffered message',
-            timestamp: new Date(),
           };
 
           // This should buffer the message rather than fail
@@ -519,7 +462,6 @@ export const runTransportContractTests: TransportTestRunner = (
             id: 'buffered-delivery',
             type: 'delivery-test',
             payload: 'will be delivered later',
-            timestamp: new Date(),
           };
 
           await Effect.runPromise(context.publish(bufferedMessage));
@@ -599,7 +541,6 @@ export const runTransportContractTests: TransportTestRunner = (
               id: 'before-disconnect',
               type: 'reconnect-test',
               payload: 'before',
-              timestamp: new Date(),
             })
           );
 
@@ -614,7 +555,6 @@ export const runTransportContractTests: TransportTestRunner = (
               id: 'after-reconnect',
               type: 'reconnect-test',
               payload: 'after',
-              timestamp: new Date(),
             })
           );
 
@@ -635,19 +575,16 @@ export const runTransportContractTests: TransportTestRunner = (
             id: '',
             type: 'malformed',
             payload: 'empty id',
-            timestamp: new Date(),
           },
           {
             id: 'valid-id',
             type: '',
             payload: 'empty type',
-            timestamp: new Date(),
           },
           {
             id: 'circular-ref',
             type: 'test',
             payload: {},
-            timestamp: new Date(),
           },
         ];
 
@@ -676,7 +613,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: 'large-message',
           type: 'size-test',
           payload: { data: largePayload },
-          timestamp: new Date(),
         };
 
         const result = await Effect.runPromise(
@@ -698,7 +634,6 @@ export const runTransportContractTests: TransportTestRunner = (
           id: `burst-${i}`,
           type: 'burst-test',
           payload: { index: i },
-          timestamp: new Date(),
         }));
 
         // Send all messages rapidly

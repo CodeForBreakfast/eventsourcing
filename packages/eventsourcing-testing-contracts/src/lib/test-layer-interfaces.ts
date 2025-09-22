@@ -21,10 +21,9 @@ import type {
  * Tests raw message delivery mechanics only.
  */
 export interface TransportMessage {
-  readonly id: string;
+  readonly id: string; // Using plain string in tests for simplicity
   readonly type: string;
   readonly payload: unknown;
-  readonly timestamp: Date;
   readonly metadata?: Record<string, unknown>;
 }
 
@@ -43,10 +42,6 @@ export interface TransportTestContext {
   readonly subscribe: (
     filter?: (msg: TransportMessage) => boolean
   ) => Effect.Effect<Stream.Stream<TransportMessage>>;
-  readonly request: (
-    message: TransportMessage,
-    timeoutMs: number
-  ) => Effect.Effect<TransportMessage>;
 
   // State inspection
   readonly getConnectionState: () => Effect.Effect<
@@ -69,7 +64,6 @@ export interface TransportFeatures {
   readonly supportsBackpressure?: boolean;
   readonly guaranteesMessageOrdering?: boolean;
   readonly supportsMultiplexing?: boolean;
-  readonly supportsRequestResponse?: boolean;
 }
 
 // =============================================================================

@@ -5,7 +5,7 @@
  * and test data generators for event sourcing testing scenarios.
  */
 
-import { Effect, Stream, Layer, Data, pipe, Chunk, Ref, Duration } from 'effect';
+import { Effect, Stream, Layer, Data, pipe, Chunk, Ref, Duration, Fiber } from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
@@ -266,9 +266,6 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
         )
       );
 
-    const request = <T, R>(request: T, timeout?: Duration.Duration): Effect.Effect<R, Error> =>
-      Effect.fail(new Error('Mock request not implemented'));
-
     const simulateDisconnect = (): Effect.Effect<void> =>
       Ref.update(state, (s) => ({
         ...s,
@@ -309,7 +306,6 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
       isConnected,
       subscribe,
       publish,
-      request,
       simulateDisconnect,
       simulateReconnect,
       getConnectionState,
