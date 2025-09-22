@@ -210,24 +210,6 @@
         "effect": "^3.17.0",
       },
     },
-    "packages/eventsourcing-websocket-transport": {
-      "name": "@codeforbreakfast/eventsourcing-websocket-transport",
-      "version": "0.3.4",
-      "dependencies": {
-        "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "@effect/platform": "^0.90.10",
-      },
-      "devDependencies": {
-        "@types/node": "24.5.2",
-        "effect": "3.17.14",
-        "eslint": "9.36.0",
-        "typescript": "5.9.2",
-        "vitest": "3.2.4",
-      },
-      "peerDependencies": {
-        "effect": "^3.17.0",
-      },
-    },
   },
   "packages": {
     "@altano/repository-tools": ["@altano/repository-tools@2.0.1", "", {}, "sha512-YE/52CkFtb+YtHPgbWPai7oo5N9AKnMuP5LM+i2AG7G1H2jdYBCO1iDnkDE3dZ3C1MIgckaF+d5PNRulgt0bdw=="],
@@ -295,8 +277,6 @@
     "@codeforbreakfast/eventsourcing-transport-websocket": ["@codeforbreakfast/eventsourcing-transport-websocket@workspace:packages/eventsourcing-transport-websocket"],
 
     "@codeforbreakfast/eventsourcing-websocket": ["@codeforbreakfast/eventsourcing-websocket@workspace:packages/eventsourcing-websocket"],
-
-    "@codeforbreakfast/eventsourcing-websocket-transport": ["@codeforbreakfast/eventsourcing-websocket-transport@workspace:packages/eventsourcing-websocket-transport"],
 
     "@commitlint/cli": ["@commitlint/cli@19.8.1", "", { "dependencies": { "@commitlint/format": "^19.8.1", "@commitlint/lint": "^19.8.1", "@commitlint/load": "^19.8.1", "@commitlint/read": "^19.8.1", "@commitlint/types": "^19.8.1", "tinyexec": "^1.0.0", "yargs": "^17.0.0" }, "bin": { "commitlint": "./cli.js" } }, "sha512-LXUdNIkspyxrlV6VDHWBmCZRtkEVRpBKxi2Gtw3J54cGWhLCTouVD/Q6ZSaSvd2YaDObWK8mDjrz3TIKtaQMAA=="],
 
