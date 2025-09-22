@@ -15,12 +15,12 @@ export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-tran
 export type {
   TransportMessage,
   ConnectionState,
-  ConnectedTransport,
-  TransportConnectorInterface,
-  ConnectedTransportInterface,
   TransportError,
   ConnectionError,
   MessageParseError,
   MessageId,
   TransportId,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
+
+// Re-export client namespace
+export { Client } from '@codeforbreakfast/eventsourcing-transport-contracts';

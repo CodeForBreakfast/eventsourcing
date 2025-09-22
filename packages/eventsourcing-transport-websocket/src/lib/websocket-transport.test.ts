@@ -13,9 +13,12 @@ import type {
   ConnectionState,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import type { ConnectedTransport } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import {
+  Client,
+  makeMessageId,
+  TransportError,
+} from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { WebSocketConnector } from './websocket-transport.js';
-import { makeMessageId, TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
 // Mock WebSocket Implementation
@@ -195,11 +198,11 @@ function MockWebSocket(url: string): MockWebSocketInstance {
 // =============================================================================
 
 /**
- * Adapter that converts ConnectedTransport to ConnectedTransportTestInterface.
+ * Adapter that converts Client.Transport to ConnectedTransportTestInterface.
  * Handles the MessageId branding difference between the interfaces.
  */
 function adaptConnectedTransport(
-  transport: ConnectedTransport<
+  transport: Client.Transport<
     import('@codeforbreakfast/eventsourcing-transport-contracts').TransportMessage
   >
 ): ConnectedTransportTestInterface {

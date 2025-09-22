@@ -19,7 +19,7 @@ import {
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
   type TransportMessage,
-  type ConnectedTransport,
+  Client,
   TransportError,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import {
@@ -59,7 +59,7 @@ const createTestProtocolContext = (): ProtocolContext =>
 
 const createMockConnectedTransport = (): Effect.Effect<
   {
-    transport: ConnectedTransport<TransportMessage>;
+    transport: Client.Transport<TransportMessage>;
     mockState: Ref.Ref<MockTransportState>;
   },
   never,
@@ -79,7 +79,7 @@ const createMockConnectedTransport = (): Effect.Effect<
 
     const mockStateRef = yield* Ref.make(mockState);
 
-    const transport: ConnectedTransport<TransportMessage> = {
+    const transport: Client.Transport<TransportMessage> = {
       send: (message: TransportMessage) =>
         Effect.gen(function* () {
           yield* Ref.update(sentMessages, (messages) => [...messages, message]);
@@ -112,7 +112,7 @@ const createMockConnectedTransport = (): Effect.Effect<
             receivedMessages: [...state.receivedMessages, message],
           }));
         }),
-    } as ConnectedTransport<TransportMessage> & {
+    } as Client.Transport<TransportMessage> & {
       injectMessage: (message: TransportMessage) => Effect.Effect<void, never, never>;
     };
 

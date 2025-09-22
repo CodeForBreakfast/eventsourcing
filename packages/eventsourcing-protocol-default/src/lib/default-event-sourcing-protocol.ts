@@ -24,10 +24,7 @@ import {
   StreamError,
   CommandError,
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
-import {
-  type ConnectedTransport,
-  type TransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { Client, type TransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { type EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 import {
   type ProtocolStateManagerInterface,
@@ -40,7 +37,7 @@ import {
 
 export class DefaultEventSourcingProtocol<TEvent> implements EventSourcingProtocol<TEvent> {
   constructor(
-    private readonly transport: ConnectedTransport<TransportMessage>,
+    private readonly transport: Client.Transport<TransportMessage>,
     private readonly serializer: ProtocolSerializer<TEvent>,
     private readonly stateManager: ProtocolStateManagerInterface<TEvent>,
     public readonly context: ProtocolContext
@@ -292,7 +289,7 @@ export class DefaultEventSourcingProtocol<TEvent> implements EventSourcingProtoc
  * Create a new default event sourcing protocol instance.
  */
 export const createDefaultEventSourcingProtocol = <TEvent>(
-  transport: ConnectedTransport<TransportMessage>,
+  transport: Client.Transport<TransportMessage>,
   serializer: ProtocolSerializer<TEvent>,
   stateManager: ProtocolStateManagerInterface<TEvent>,
   context: ProtocolContext

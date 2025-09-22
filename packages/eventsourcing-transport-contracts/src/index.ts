@@ -8,29 +8,28 @@
  * For testing utilities, use @codeforbreakfast/eventsourcing-testing-contracts.
  */
 
-// Branded types and constructors
-export type { TransportId, MessageId } from './lib/transport-abstractions.js';
+// ============================================================================
+// Shared Types and Utilities
+// ============================================================================
+
+export type { TransportId, MessageId, TransportMessage, ConnectionState } from './lib/shared';
 
 export {
   TransportId as makeTransportId,
   MessageId as makeMessageId,
-} from './lib/transport-abstractions.js';
+  makeTransportMessage,
+} from './lib/shared';
 
-// Core transport abstractions
-export type {
-  TransportMessage,
-  ConnectionState,
-  ConnectedTransport,
-  TransportConnectorInterface,
-  ConnectedTransportInterface,
-} from './lib/transport-abstractions.js';
+export { TransportError, ConnectionError, MessageParseError } from './lib/shared';
 
-// Service tags (Effect.Tag for proper type inference)
-export { TransportConnector, ConnectedTransportService } from './lib/transport-abstractions.js';
+// ============================================================================
+// Client Namespace
+// ============================================================================
 
-// Transport error types
-export {
-  TransportError,
-  ConnectionError,
-  MessageParseError,
-} from './lib/transport-abstractions.js';
+export * as Client from './lib/client';
+
+// ============================================================================
+// Server Namespace
+// ============================================================================
+
+export * as Server from './lib/server';

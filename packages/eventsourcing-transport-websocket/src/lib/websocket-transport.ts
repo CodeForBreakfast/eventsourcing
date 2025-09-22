@@ -11,9 +11,7 @@ import {
   ConnectionError,
   type TransportMessage,
   type ConnectionState,
-  type ConnectedTransport,
-  type TransportConnectorInterface,
-  TransportConnector,
+  Client,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
@@ -52,7 +50,7 @@ const createConnectionStateStream = (
         )
       ),
       Effect.orDie
-    ) as Effect.Effect<Stream.Stream<ConnectionState, never, never>, never, never>
+    )
   );
 
 const publishMessage =
@@ -115,7 +113,7 @@ const subscribeToMessages =
 
 const createConnectedTransport = (
   stateRef: Ref.Ref<WebSocketInternalState>
-): ConnectedTransport<TransportMessage> & { __stateRef: Ref.Ref<WebSocketInternalState> } => ({
+): Client.Transport<TransportMessage> & { __stateRef: Ref.Ref<WebSocketInternalState> } => ({
   connectionState: createConnectionStateStream(stateRef),
   publish: publishMessage(stateRef),
   subscribe: subscribeToMessages(stateRef),
@@ -264,7 +262,7 @@ const cleanupConnection = (
 
 const connectWebSocket = (
   url: string
-): Effect.Effect<ConnectedTransport<TransportMessage>, ConnectionError, Scope.Scope> =>
+): Effect.Effect<Client.Transport<TransportMessage>, ConnectionError, Scope.Scope> =>
   Effect.acquireRelease(
     pipe(
       createInitialState(),
@@ -277,11 +275,8 @@ const connectWebSocket = (
       )
     ),
     (transport) => {
-      const transportWithState = transport as ConnectedTransport<TransportMessage> & {
-        __stateRef: Ref.Ref<WebSocketInternalState>;
-      };
-
-      return cleanupConnection(transportWithState.__stateRef);
+      // Access __stateRef directly from the transport with internal state
+      return cleanupConnection((transport as any).__stateRef);
     }
   );
 
@@ -289,7 +284,7 @@ const connectWebSocket = (
 // WebSocket Connector Implementation
 // =============================================================================
 
-const webSocketConnectorImpl: TransportConnectorInterface<TransportMessage> = {
+const webSocketConnectorImpl: Client.ConnectorInterface<TransportMessage> = {
   connect: connectWebSocket,
 };
 
@@ -305,4 +300,4 @@ export const WebSocketConnector = webSocketConnectorImpl;
 /**
  * Layer providing WebSocket transport connector service
  */
-export const WebSocketTransportLive = Layer.succeed(TransportConnector, WebSocketConnector);
+export const WebSocketTransportLive = Layer.succeed(Client.Connector, WebSocketConnector);

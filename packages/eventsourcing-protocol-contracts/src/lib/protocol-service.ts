@@ -8,7 +8,7 @@
 
 import { Effect, Stream, Scope, Context } from 'effect';
 import {
-  type ConnectedTransport,
+  Client,
   type TransportMessage,
   type ConnectionError,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
@@ -112,7 +112,7 @@ export interface EventSourcingProtocol<TEvent>
  */
 export interface EventSourcingTransportAdapter<TEvent> {
   readonly adapt: (
-    transport: ConnectedTransport<TransportMessage>,
+    transport: Client.Transport<TransportMessage>,
     serializer: ProtocolSerializer<TEvent>,
     context: ProtocolContext
   ) => Effect.Effect<EventSourcingProtocol<TEvent>, never, never>;
