@@ -6,9 +6,8 @@
  * regardless of the underlying transport implementation.
  */
 
-import { Effect, Stream, Scope } from 'effect';
+import { Effect, Stream, Scope, Context } from 'effect';
 import {
-  type TransportConnector,
   type ConnectedTransport,
   type TransportMessage,
   type ConnectionError,
@@ -17,7 +16,6 @@ import { type EventStreamPosition } from '@codeforbreakfast/eventsourcing-store'
 
 import {
   type StreamEvent,
-  type Aggregate,
   type AggregateCommand,
   type CommandResult,
   type AsyncCommandResult,
@@ -30,11 +28,7 @@ import {
   ProtocolSerializationError,
 } from './protocol-types.js';
 
-import {
-  type ProtocolMessage,
-  type ClientMessage,
-  type ServerMessage,
-} from './protocol-messages.js';
+import { type ClientMessage, type ServerMessage } from './protocol-messages.js';
 
 // ============================================================================
 // Event Sourcing Protocol Operations
@@ -155,10 +149,12 @@ export interface EventSourcingProtocolConnectorInterface<TEvent = unknown> {
 /**
  * Service tag for EventSourcingProtocolConnector.
  * Use this to inject protocol connection capabilities.
+ * Note: Using Context.GenericTag for generic type support.
  */
-export class EventSourcingProtocolConnector<TEvent = unknown> extends Effect.Tag(
-  '@eventsourcing/EventSourcingProtocolConnector'
-)<EventSourcingProtocolConnector<TEvent>, EventSourcingProtocolConnectorInterface<TEvent>>() {}
+export const EventSourcingProtocolConnector =
+  Context.GenericTag<EventSourcingProtocolConnectorInterface>(
+    '@eventsourcing/EventSourcingProtocolConnector'
+  );
 
 /**
  * Service interface for a connected event sourcing protocol.
@@ -170,10 +166,11 @@ export interface EventSourcingProtocolInterface<TEvent = unknown>
 /**
  * Service tag for connected EventSourcingProtocol.
  * Use this for pre-connected protocol instances.
+ * Note: Using Context.GenericTag for generic type support.
  */
-export class EventSourcingProtocolService<TEvent = unknown> extends Effect.Tag(
+export const EventSourcingProtocolService = Context.GenericTag<EventSourcingProtocolInterface>(
   '@eventsourcing/EventSourcingProtocol'
-)<EventSourcingProtocolService<TEvent>, EventSourcingProtocolInterface<TEvent>>() {}
+);
 
 // ============================================================================
 // Protocol Implementation Helpers
@@ -256,17 +253,22 @@ export const createRequestContext = (
 /**
  * Utility to wrap transport operations with protocol error handling.
  */
-export const withProtocolErrorHandling = <A, E>(operation: Effect.Effect<A, E, never>) =>
-  Effect.catchAll(operation, (error) => {
-    if (error instanceof CommandError || error instanceof StreamError) {
-      return Effect.fail(error);
-    }
+export const withProtocolErrorHandling = <A, E>(
+  operation: Effect.Effect<A, E, never>
+): Effect.Effect<A, E | CommandError | StreamError, never> =>
+  Effect.catchAll(
+    operation,
+    (error: E): Effect.Effect<never, E | CommandError | StreamError, never> => {
+      if (error instanceof CommandError || error instanceof StreamError) {
+        return Effect.fail(error as E & (CommandError | StreamError));
+      }
 
-    // Convert other errors to appropriate protocol errors
-    return Effect.fail(
-      new StreamError({
-        message: `Protocol operation failed: ${String(error)}`,
-        cause: error,
-      })
-    );
-  });
+      // Convert other errors to appropriate protocol errors
+      return Effect.fail(
+        new StreamError({
+          message: `Protocol operation failed: ${String(error)}`,
+          cause: error,
+        })
+      );
+    }
+  );

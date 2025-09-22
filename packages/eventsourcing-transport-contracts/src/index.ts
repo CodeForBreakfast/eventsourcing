@@ -8,6 +8,14 @@
  * For testing utilities, use @codeforbreakfast/eventsourcing-testing-contracts.
  */
 
+// Branded types and constructors
+export type { TransportId, MessageId } from './lib/transport-abstractions.js';
+
+export {
+  TransportId as makeTransportId,
+  MessageId as makeMessageId,
+} from './lib/transport-abstractions.js';
+
 // Core transport abstractions
 export type {
   TransportMessage,
@@ -17,12 +25,11 @@ export type {
   MessageSubscriber,
   RequestResponse,
   ConnectedTransport,
-  TransportConnector,
   TransportConnectorService,
-  ConnectedTransportService,
-  TransportFeatures,
-  AdvancedTransport,
 } from './lib/transport-abstractions.js';
+
+// Service tags (Context.GenericTag for generic support)
+export { TransportConnector, ConnectedTransportService } from './lib/transport-abstractions.js';
 
 // Transport error types
 export {

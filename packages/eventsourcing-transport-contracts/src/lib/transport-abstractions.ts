@@ -6,10 +6,20 @@
  * message transport, connection management, and stream operations.
  */
 
-import { Effect, Stream, Scope, Data } from 'effect';
+import { Effect, Stream, Scope, Data, Brand, Context } from 'effect';
 
 // ============================================================================
-// Generic Transport Error Types
+// Branded Types
+// ============================================================================
+
+export type TransportId = string & Brand.Brand<'TransportId'>;
+export const TransportId = Brand.nominal<TransportId>();
+
+export type MessageId = string & Brand.Brand<'MessageId'>;
+export const MessageId = Brand.nominal<MessageId>();
+
+// ============================================================================
+// Transport Error Types
 // ============================================================================
 
 export class TransportError extends Data.TaggedError('TransportError')<{
@@ -29,14 +39,14 @@ export class MessageParseError extends Data.TaggedError('MessageParseError')<{
 }> {}
 
 // ============================================================================
-// Core Transport Interfaces
+// Core Transport Types
 // ============================================================================
 
 /**
  * Generic message type for transport layer
  */
 export interface TransportMessage<TPayload = unknown> {
-  readonly id: string;
+  readonly id: MessageId;
   readonly type: string;
   readonly payload: TPayload;
   readonly metadata?: Record<string, unknown>;
@@ -44,7 +54,7 @@ export interface TransportMessage<TPayload = unknown> {
 }
 
 /**
- * Connection state management
+ * Connection state using Effect's built-in state management concepts
  */
 export type ConnectionState =
   | 'disconnected'
@@ -71,7 +81,7 @@ export interface MessagePublisher<TMessage extends TransportMessage = TransportM
 }
 
 /**
- * Message subscription operations
+ * Message subscription operations using Effect's Stream
  */
 export interface MessageSubscriber<TMessage extends TransportMessage = TransportMessage> {
   readonly subscribe: (
@@ -99,23 +109,13 @@ export interface ConnectedTransport<TMessage extends TransportMessage = Transpor
     MessageSubscriber<TMessage>,
     RequestResponse {}
 
-/**
- * Transport connector - the only way to get a ConnectedTransport.
- * This design makes it impossible to call transport methods before connecting.
- */
-export interface TransportConnector<TMessage extends TransportMessage = TransportMessage> {
-  readonly connect: (
-    url: string
-  ) => Effect.Effect<ConnectedTransport<TMessage>, ConnectionError, Scope.Scope>;
-}
-
 // ============================================================================
-// Service Interface Definitions
+// Service Definitions
 // ============================================================================
 
 /**
- * Service interface for transport connector.
- * Provides a connect function instead of a pre-built transport.
+ * Service interface for creating transport connections.
+ * Implementations handle protocol negotiation and connection setup.
  */
 export interface TransportConnectorService<TMessage extends TransportMessage = TransportMessage> {
   readonly connect: (
@@ -124,47 +124,16 @@ export interface TransportConnectorService<TMessage extends TransportMessage = T
 }
 
 /**
- * Legacy service interface that provides pre-connected transport.
- * This is primarily for testing and simple use cases.
- * For production code, prefer using TransportConnectorService.
+ * Service tag for TransportConnector.
+ * Use Context.GenericTag to support generic types.
  */
-export interface ConnectedTransportService<TMessage extends TransportMessage = TransportMessage>
-  extends ConnectedTransport<TMessage> {}
-
-// ============================================================================
-// Optional Transport Features
-// ============================================================================
+export const TransportConnector = Context.GenericTag<TransportConnectorService>(
+  '@transport/TransportConnector'
+);
 
 /**
- * Advanced features that a transport may optionally support
+ * Connected transport service for testing and dependency injection
  */
-export interface TransportFeatures {
-  readonly supportsReconnection?: boolean;
-  readonly supportsOfflineBuffering?: boolean;
-  readonly supportsBackpressure?: boolean;
-  readonly guaranteesOrdering?: boolean;
-  readonly supportsMultiplexing?: boolean;
-  readonly supportsBatching?: boolean;
-  readonly supportsCompression?: boolean;
-}
-
-/**
- * Extended transport interface with optional advanced features
- */
-export interface AdvancedTransport<TMessage extends TransportMessage = TransportMessage>
-  extends ConnectedTransport<TMessage> {
-  readonly features: TransportFeatures;
-
-  // Reconnection support
-  readonly simulateDisconnect?: () => Effect.Effect<void, never, never>;
-  readonly simulateReconnect?: () => Effect.Effect<void, never, never>;
-
-  // Buffering support
-  readonly getBufferedMessageCount?: () => Effect.Effect<number, never, never>;
-  readonly flushBuffer?: () => Effect.Effect<void, TransportError, never>;
-
-  // Batching support
-  readonly publishBatch?: (
-    messages: readonly TMessage[]
-  ) => Effect.Effect<void, TransportError, never>;
-}
+export const ConnectedTransportService = Context.GenericTag<ConnectedTransport>(
+  '@transport/ConnectedTransport'
+);
