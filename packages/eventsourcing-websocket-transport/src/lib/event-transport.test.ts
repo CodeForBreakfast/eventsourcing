@@ -14,7 +14,7 @@ import {
 } from 'effect';
 import { runEventTransportTestSuite } from './testing/transport-test-suite';
 import { EventTransportLive, EventTransportService, CommandError } from './event-transport';
-import type { AggregateCommand, CommandResult, CommandSuccess } from './event-transport';
+import type { AggregateCommand, CommandResult } from './event-transport';
 
 // Mock WebSocket for testing with proper connection timing
 class MockWebSocket {
@@ -102,7 +102,7 @@ const setupMockServer = () =>
     let websocket: MockWebSocket | null = null;
 
     // Track pending command responses
-    const commandResponses = yield* Ref.make(HashMap.empty<string, CommandResult<unknown>>());
+    const commandResponses = yield* Ref.make(HashMap.empty<string, CommandResult>());
 
     mockServer = {
       handleMessage: (msg: any) => {
@@ -132,9 +132,8 @@ const setupMockServer = () =>
                             type: 'command_result',
                             id: msg.id,
                             success: Either.isRight(result),
-                            result: Either.isRight(result) ? result.right.result : undefined,
+                            position: Either.isRight(result) ? result.right : undefined,
                             error: Either.isLeft(result) ? result.left.message : undefined,
-                            position: Either.isRight(result) ? result.right.position : undefined,
                           }),
                         })
                       );
@@ -188,7 +187,7 @@ const setupMockServer = () =>
       expectCommand: <T>(command: AggregateCommand<T>) =>
         // Just check that a command was received - the actual command is stored
         Effect.void,
-      respondToCommand: <T>(result: Either.Either<CommandSuccess<T>, CommandError>) =>
+      respondToCommand: (result: CommandResult) =>
         Effect.gen(function* () {
           // Get the latest command ID
           const commands = yield* Ref.get(pendingCommands);
@@ -196,10 +195,7 @@ const setupMockServer = () =>
           if (commandIds.length > 0) {
             const commandId = commandIds[commandIds.length - 1];
             // Store the response for when the command arrives
-            yield* Ref.update(
-              commandResponses,
-              HashMap.set(commandId, result as CommandResult<unknown>)
-            );
+            yield* Ref.update(commandResponses, HashMap.set(commandId, result));
             // If command already arrived, send response now
             if (HashMap.has(commands, commandId)) {
               setTimeout(() => {
@@ -210,9 +206,8 @@ const setupMockServer = () =>
                         type: 'command_result',
                         id: commandId,
                         success: Either.isRight(result),
-                        result: Either.isRight(result) ? result.right.result : undefined,
+                        position: Either.isRight(result) ? result.right : undefined,
                         error: Either.isLeft(result) ? result.left.message : undefined,
-                        position: Either.isRight(result) ? result.right.position : undefined,
                       }),
                     })
                   );
@@ -293,7 +288,9 @@ describe('WebSocket Transport specific tests', () => {
             EventTransportLive('ws://localhost:8080/fail', TestEventSchema),
             Effect.provide,
             Effect.flatMap(() => EventTransportService),
-            Effect.flatMap((transport) => transport.subscribe('test-stream' as any))
+            Effect.flatMap((transport) =>
+              transport.subscribe({ streamId: 'test-stream' as any, eventNumber: 0 } as any)
+            )
           )
         ),
         Effect.timeout(Duration.millis(1000)),
@@ -316,7 +313,10 @@ describe('WebSocket Transport specific tests', () => {
           EventTransportService,
           Effect.flatMap((t) =>
             Effect.gen(function* () {
-              const stream = yield* t.subscribe('test-stream' as any);
+              const stream = yield* t.subscribe({
+                streamId: 'test-stream' as any,
+                eventNumber: 0,
+              } as any);
               // Send malformed JSON to the WebSocket
               if (currentWebSocket?.onmessage) {
                 currentWebSocket.onmessage(

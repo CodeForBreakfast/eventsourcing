@@ -1,8 +1,12 @@
-import { Effect, Stream, Layer, Schema, pipe, Chunk, Fiber, Duration } from 'effect';
+import { Effect, Stream, Layer, Schema, pipe, Chunk, Fiber, Duration, Either } from 'effect';
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import type { AggregateCommand, CommandResult } from '../event-transport';
-import { EventTransportService } from '../event-transport';
-import type { EventStreamId, EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
+import { EventTransportService, CommandError } from '../event-transport';
+import type {
+  EventStreamId,
+  EventStreamPosition,
+  EventNumber,
+} from '@codeforbreakfast/eventsourcing-store';
 
 // Test event schema
 const TestEvent = Schema.Struct({
@@ -39,7 +43,7 @@ export function runEventTransportTestSuite<E>(
       sendEvent: (streamId: string, event: TestEvent) => Effect.Effect<void, never, never>;
       expectSubscription: (streamId: string) => Effect.Effect<void, never, never>;
       expectCommand: <T>(command: AggregateCommand<T>) => Effect.Effect<void, never, never>;
-      respondToCommand: <T>(result: CommandResult<T>) => Effect.Effect<void, never, never>;
+      respondToCommand: (result: CommandResult) => Effect.Effect<void, never, never>;
       cleanup: () => Effect.Effect<void, never, never>;
       waitForConnection: () => Effect.Effect<void, never, never>;
       simulateDisconnect: () => Effect.Effect<void, never, never>;
@@ -55,7 +59,7 @@ export function runEventTransportTestSuite<E>(
       sendEvent: (streamId: string, event: TestEvent) => Effect.Effect<void, never, never>;
       expectSubscription: (streamId: string) => Effect.Effect<void, never, never>;
       expectCommand: <T>(command: AggregateCommand<T>) => Effect.Effect<void, never, never>;
-      respondToCommand: <T>(result: CommandResult<T>) => Effect.Effect<void, never, never>;
+      respondToCommand: (result: CommandResult) => Effect.Effect<void, never, never>;
       cleanup: () => Effect.Effect<void, never, never>;
       waitForConnection: () => Effect.Effect<void, never, never>;
       simulateDisconnect?: () => Effect.Effect<void, never, never>;
@@ -91,7 +95,7 @@ export function runEventTransportTestSuite<E>(
             EventTransportService,
             Effect.flatMap((transport) =>
               pipe(
-                transport.subscribe(streamId),
+                transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition),
                 Effect.flatMap((stream) =>
                   pipe(stream, Stream.take(1), Stream.runCollect, Effect.map(Chunk.toReadonlyArray))
                 ),
@@ -128,7 +132,7 @@ export function runEventTransportTestSuite<E>(
         await runWithTransport(
           pipe(
             EventTransportService,
-            Effect.flatMap((transport) => transport.subscribe(streamId, position)),
+            Effect.flatMap((transport) => transport.subscribe(position)),
             Effect.tap(() => (mockServer ? mockServer.expectSubscription(streamId) : Effect.void)),
             Effect.scoped
           )
@@ -147,14 +151,14 @@ export function runEventTransportTestSuite<E>(
             Effect.bind('transport', () => EventTransportService),
             Effect.bind('fiber1', ({ transport }) =>
               pipe(
-                transport.subscribe(streamId1),
+                transport.subscribe({ streamId: streamId1, eventNumber: 0 } as EventStreamPosition),
                 Effect.flatMap((stream) => pipe(stream, Stream.take(1), Stream.runCollect)),
                 Effect.fork
               )
             ),
             Effect.bind('fiber2', ({ transport }) =>
               pipe(
-                transport.subscribe(streamId2),
+                transport.subscribe({ streamId: streamId2, eventNumber: 0 } as EventStreamPosition),
                 Effect.flatMap((stream) => pipe(stream, Stream.take(1), Stream.runCollect)),
                 Effect.fork
               )
@@ -206,7 +210,10 @@ export function runEventTransportTestSuite<E>(
             Effect.bind('transport', () => EventTransportService),
             Effect.bind('fiber', ({ transport }) =>
               pipe(
-                transport.subscribe(subscribedStream),
+                transport.subscribe({
+                  streamId: subscribedStream,
+                  eventNumber: 0,
+                } as EventStreamPosition),
                 Effect.flatMap((stream) =>
                   pipe(stream, Stream.take(1), Stream.runCollect, Effect.map(Chunk.toReadonlyArray))
                 ),
@@ -251,7 +258,7 @@ export function runEventTransportTestSuite<E>(
             Effect.bind('transport', () => EventTransportService),
             Effect.bind('fiber', ({ transport }) =>
               pipe(
-                transport.subscribe(streamId),
+                transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition),
                 Effect.flatMap((stream) =>
                   pipe(stream, Stream.take(3), Stream.runCollect, Effect.map(Chunk.toReadonlyArray))
                 ),
@@ -292,23 +299,23 @@ export function runEventTransportTestSuite<E>(
     describe('command behavior', () => {
       it('should send a command and receive a result', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'test-aggregate-123',
-          aggregateName: 'TestAggregate',
-          commandName: 'ProcessTest',
+          aggregateId: 'user-123',
+          aggregateName: 'User',
+          commandName: 'UpdateEmail',
           payload: { action: 'test', value: 42 },
         };
 
-        const expectedResult: CommandResult<{ processed: boolean }> = {
-          success: true,
-          result: { processed: true },
-        };
+        const expectedResult: CommandResult = Either.right({
+          streamId: 'user-123' as EventStreamId,
+          eventNumber: 1 as EventNumber,
+        } as EventStreamPosition);
 
         const result = await runWithTransport(
           pipe(
             Effect.Do,
             Effect.bind('transport', () => EventTransportService),
             Effect.bind('commandFiber', ({ transport }) =>
-              pipe(transport.sendCommand<TestCommand, { processed: boolean }>(command), Effect.fork)
+              pipe(transport.sendCommand<TestCommand>(command), Effect.fork)
             ),
             Effect.tap(() =>
               mockServer
@@ -324,23 +331,26 @@ export function runEventTransportTestSuite<E>(
         );
 
         if (mockServer) {
-          expect(result.success).toBe(true);
-          expect(result.result).toEqual({ processed: true });
+          expect(Either.isRight(result)).toBe(true);
+          if (Either.isRight(result)) {
+            expect(result.right.streamId).toBe('user-123' as EventStreamId);
+            expect(result.right.eventNumber).toBe(1);
+          }
         }
       });
 
       it('should handle command errors', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'test-aggregate-456',
-          aggregateName: 'TestAggregate',
-          commandName: 'FailingCommand',
+          aggregateId: 'order-456',
+          aggregateName: 'Order',
+          commandName: 'CancelOrder',
           payload: { action: 'fail', value: -1 },
+          expectedPosition: 5 as EventNumber, // Demonstrate optimistic concurrency
         };
 
-        const errorResult: CommandResult = {
-          success: false,
-          error: 'Command validation failed',
-        };
+        const errorResult: CommandResult = Either.left(
+          new CommandError({ message: 'Command validation failed' })
+        );
 
         const result = await runWithTransport(
           pipe(
@@ -363,35 +373,38 @@ export function runEventTransportTestSuite<E>(
         );
 
         if (mockServer) {
-          expect(result.success).toBe(false);
-          expect(result.error).toBe('Command validation failed');
+          expect(Either.isLeft(result)).toBe(true);
+          if (Either.isLeft(result)) {
+            expect(result.left.message).toBe('Command validation failed');
+          }
         }
       });
 
       it('should handle concurrent commands', async () => {
         const command1: AggregateCommand<TestCommand> = {
-          aggregateId: 'aggregate-1',
-          aggregateName: 'TestAggregate',
-          commandName: 'Command1',
+          aggregateId: 'product-100',
+          aggregateName: 'Product',
+          commandName: 'UpdateStock',
           payload: { action: 'first', value: 1 },
+          expectedPosition: 0 as EventNumber, // Starting from beginning
         };
 
         const command2: AggregateCommand<TestCommand> = {
-          aggregateId: 'aggregate-2',
-          aggregateName: 'TestAggregate',
-          commandName: 'Command2',
+          aggregateId: 'product-200',
+          aggregateName: 'Product',
+          commandName: 'UpdatePrice',
           payload: { action: 'second', value: 2 },
         };
 
-        const result1: CommandResult<{ id: number }> = {
-          success: true,
-          result: { id: 1 },
-        };
+        const result1: CommandResult = Either.right({
+          streamId: 'product-100' as EventStreamId,
+          eventNumber: 1 as EventNumber,
+        } as EventStreamPosition);
 
-        const result2: CommandResult<{ id: number }> = {
-          success: true,
-          result: { id: 2 },
-        };
+        const result2: CommandResult = Either.right({
+          streamId: 'product-200' as EventStreamId,
+          eventNumber: 1 as EventNumber,
+        } as EventStreamPosition);
 
         const results = await runWithTransport(
           pipe(
@@ -424,17 +437,21 @@ export function runEventTransportTestSuite<E>(
         );
 
         if (mockServer) {
-          expect(results.result1.success).toBe(true);
-          expect(results.result2.success).toBe(true);
-          expect((results.result1 as any).result?.id).toBe(1);
-          expect((results.result2 as any).result?.id).toBe(2);
+          expect(Either.isRight(results.result1)).toBe(true);
+          expect(Either.isRight(results.result2)).toBe(true);
+          if (Either.isRight(results.result1)) {
+            expect(results.result1.right.streamId).toBe('product-100' as EventStreamId);
+          }
+          if (Either.isRight(results.result2)) {
+            expect(results.result2.right.streamId).toBe('product-200' as EventStreamId);
+          }
         }
       });
 
       it('should handle command timeout', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'timeout-aggregate',
-          aggregateName: 'TestAggregate',
+          aggregateId: 'session-789',
+          aggregateName: 'Session',
           commandName: 'TimeoutCommand',
           payload: { action: 'timeout', value: 999 },
         };
@@ -448,7 +465,7 @@ export function runEventTransportTestSuite<E>(
                 Effect.timeoutTo({
                   duration: Duration.millis(100),
                   onTimeout: () =>
-                    Effect.succeed({ success: false as const, error: 'Timeout' } as CommandResult),
+                    Effect.succeed(Either.left(new CommandError({ message: 'Timeout' }))),
                   onSuccess: (value) => Effect.succeed(value),
                 }),
                 Effect.flatten
@@ -459,9 +476,9 @@ export function runEventTransportTestSuite<E>(
         );
 
         // Command should timeout
-        expect(result.success).toBe(false);
-        if ('error' in result) {
-          expect(result.error).toBe('Timeout');
+        expect(Either.isLeft(result)).toBe(true);
+        if (Either.isLeft(result)) {
+          expect(result.left.message).toBe('Timeout');
         }
       });
     });
@@ -473,7 +490,10 @@ export function runEventTransportTestSuite<E>(
             EventTransportService,
             Effect.tap((transport) =>
               pipe(
-                transport.subscribe(createStreamId()),
+                transport.subscribe({
+                  streamId: createStreamId(),
+                  eventNumber: 0,
+                } as EventStreamPosition),
                 Effect.zipRight(Effect.sleep(Duration.millis(50))),
                 Effect.zipRight(transport.disconnect())
               )
@@ -492,7 +512,9 @@ export function runEventTransportTestSuite<E>(
             Effect.scoped(
               pipe(
                 EventTransportService,
-                Effect.flatMap((transport) => transport.subscribe(streamId)),
+                Effect.flatMap((transport) =>
+                  transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition)
+                ),
                 Effect.map(() => void 0)
               )
             ),
@@ -515,7 +537,9 @@ export function runEventTransportTestSuite<E>(
           pipe(
             Effect.Do,
             Effect.bind('transport', () => EventTransportService),
-            Effect.bind('stream', ({ transport }) => transport.subscribe(streamId)),
+            Effect.bind('stream', ({ transport }) =>
+              transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition)
+            ),
             Effect.bind('collector', ({ stream }) =>
               pipe(stream, Stream.runCollect, Effect.map(Chunk.toReadonlyArray), Effect.fork)
             ),
@@ -561,7 +585,7 @@ export function runEventTransportTestSuite<E>(
             EventTransportService,
             Effect.flatMap((transport) =>
               pipe(
-                transport.subscribe(streamId),
+                transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition),
                 Effect.flatMap((stream) =>
                   pipe(
                     Effect.fork(pipe(stream, Stream.take(1), Stream.runDrain)),
@@ -585,10 +609,11 @@ export function runEventTransportTestSuite<E>(
 
       it('should retry on transient errors', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'retry-aggregate',
-          aggregateName: 'TestAggregate',
-          commandName: 'RetryCommand',
+          aggregateId: 'payment-567',
+          aggregateName: 'Payment',
+          commandName: 'ProcessPayment',
           payload: { action: 'retry', value: 3 },
+          expectedPosition: 10 as EventNumber,
         };
 
         // This test is implementation-specific
@@ -617,7 +642,9 @@ export function runEventTransportTestSuite<E>(
           pipe(
             Effect.Do,
             Effect.bind('transport', () => EventTransportService),
-            Effect.bind('stream', ({ transport }) => transport.subscribe(streamId)),
+            Effect.bind('stream', ({ transport }) =>
+              transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition)
+            ),
             Effect.tap(() => {
               const server = mockServer;
               return server
@@ -647,9 +674,9 @@ export function runEventTransportTestSuite<E>(
     describe('edge cases', () => {
       it('should handle empty payloads', async () => {
         const command: AggregateCommand<{}> = {
-          aggregateId: 'empty-aggregate',
-          aggregateName: 'TestAggregate',
-          commandName: 'EmptyCommand',
+          aggregateId: 'cart-empty-001',
+          aggregateName: 'Cart',
+          commandName: 'ClearCart',
           payload: {},
         };
 
@@ -669,10 +696,11 @@ export function runEventTransportTestSuite<E>(
       it('should handle very large payloads', async () => {
         const largeData = 'x'.repeat(10000);
         const command: AggregateCommand<{ data: string }> = {
-          aggregateId: 'large-aggregate',
-          aggregateName: 'TestAggregate',
-          commandName: 'LargeCommand',
+          aggregateId: 'document-large-999',
+          aggregateName: 'Document',
+          commandName: 'UploadContent',
           payload: { data: largeData },
+          expectedPosition: 0 as EventNumber, // New document
         };
 
         const result = await runWithTransport(
@@ -694,7 +722,12 @@ export function runEventTransportTestSuite<E>(
         await runWithTransport(
           pipe(
             EventTransportService,
-            Effect.flatMap((transport) => transport.subscribe(specialStreamId)),
+            Effect.flatMap((transport) =>
+              transport.subscribe({
+                streamId: specialStreamId,
+                eventNumber: 0,
+              } as EventStreamPosition)
+            ),
             Effect.scoped
           )
         );
@@ -710,7 +743,11 @@ export function runEventTransportTestSuite<E>(
             Effect.flatMap((transport) =>
               Effect.forEach(
                 Array.from({ length: 10 }),
-                () => pipe(transport.subscribe(streamId), Effect.scoped),
+                () =>
+                  pipe(
+                    transport.subscribe({ streamId, eventNumber: 0 } as EventStreamPosition),
+                    Effect.scoped
+                  ),
                 { concurrency: 1 }
               )
             ),

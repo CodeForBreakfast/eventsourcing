@@ -65,17 +65,12 @@ export interface AggregateCommand<T = unknown> {
   readonly aggregateName: string;
   readonly commandName: string;
   readonly payload: T;
+  readonly expectedPosition?: EventNumber;
   readonly metadata?: Record<string, unknown>;
 }
 
-// Command results now include position in success case
-export interface CommandSuccess<T = unknown> {
-  readonly result: T;
-  readonly position?: EventStreamPosition | undefined;
-}
-
-// Use Either for command results instead of the shitty CommandResult interface
-export type CommandResult<T = unknown> = Either.Either<CommandSuccess<T>, CommandError>;
+// Use Either for command results - success returns position, failure returns error
+export type CommandResult = Either.Either<EventStreamPosition, CommandError>;
 
 // ============================================================================
 // Protocol Messages - Event sourcing protocol over WebSocket
@@ -110,9 +105,8 @@ export const ProtocolMessage = Schema.Union(
     type: Schema.Literal('command_result'),
     id: Schema.String,
     success: Schema.Boolean,
-    result: Schema.optional(Schema.Unknown),
-    error: Schema.optional(Schema.String),
     position: Schema.optional(Schema.Unknown),
+    error: Schema.optional(Schema.String),
   })
 );
 
@@ -124,12 +118,11 @@ type ProtocolMessage = Schema.Schema.Type<typeof ProtocolMessage>;
 
 export interface EventTransport<TEvent> {
   readonly subscribe: (
-    streamId: EventStreamId,
-    position?: EventStreamPosition
+    position: EventStreamPosition
   ) => Effect.Effect<Stream.Stream<StreamEvent<TEvent>, never, never>, never, never>;
-  readonly sendCommand: <TPayload, TResult>(
+  readonly sendCommand: <TPayload>(
     command: AggregateCommand<TPayload>
-  ) => Effect.Effect<CommandResult<TResult>, never, never>;
+  ) => Effect.Effect<CommandResult, never, never>;
   readonly disconnect: () => Effect.Effect<void, never, never>;
 }
 
@@ -214,7 +207,7 @@ const processEventMessage =
     );
 
 const processCommandResult =
-  (pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>) =>
+  (pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>) =>
   (msg: Extract<ProtocolMessage, { type: 'command_result' }>) =>
     pipe(
       Ref.get(pendingCommands),
@@ -224,11 +217,8 @@ const processCommandResult =
           onNone: () => Effect.void,
           onSome: (queue) => {
             // Convert protocol message to Either
-            const result: CommandResult<unknown> = msg.success
-              ? Either.right({
-                  result: msg.result,
-                  position: msg.position as EventStreamPosition | undefined,
-                } as CommandSuccess<unknown>)
+            const result: CommandResult = msg.success
+              ? Either.right(msg.position as EventStreamPosition)
               : Either.left(
                   new CommandError({
                     message: msg.error || 'Command failed',
@@ -244,7 +234,7 @@ const processMessage =
   <TEvent>(
     eventSchema: Schema.Schema<TEvent>,
     eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>,
-    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
+    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>
   ) =>
   (msg: ProtocolMessage) => {
     switch (msg.type) {
@@ -261,7 +251,7 @@ const startMessageProcessor = <TEvent>(
   ws: WebSocket,
   eventSchema: Schema.Schema<TEvent>,
   eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>,
-  pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
+  pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>
 ) =>
   Effect.async<Fiber.RuntimeFiber<never, never>>((resume) => {
     const fiber = Effect.runFork(
@@ -289,45 +279,39 @@ const subscribe =
     subscriptions: Ref.Ref<HashMap.HashMap<EventStreamId, boolean>>,
     eventPubSub: PubSub.PubSub<StreamEvent<any>>
   ) =>
-  (streamId: EventStreamId, position?: EventStreamPosition) =>
+  (position: EventStreamPosition) =>
     pipe(
       Ref.get(subscriptions),
       Effect.flatMap((subs) =>
-        HashMap.has(subs, streamId)
+        HashMap.has(subs, position.streamId)
           ? Effect.void
           : pipe(
               sendMessage(ws)({
                 type: 'subscribe',
-                streamId,
-                position,
+                streamId: position.streamId,
+                position: position.eventNumber,
               }),
-              Effect.zipRight(Ref.update(subscriptions, HashMap.set(streamId, true)))
+              Effect.zipRight(Ref.update(subscriptions, HashMap.set(position.streamId, true)))
             )
       ),
       Effect.map(() =>
         pipe(
           Stream.fromPubSub(eventPubSub),
-          Stream.filter((event) => event.streamId === streamId)
+          Stream.filter((event) => event.streamId === position.streamId)
         )
       )
     );
 
 const sendCommand =
-  (
-    ws: WebSocket,
-    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
-  ) =>
-  <TPayload, TResult>(command: AggregateCommand<TPayload>) =>
+  (ws: WebSocket, pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>) =>
+  <TPayload>(command: AggregateCommand<TPayload>) =>
     pipe(
       Effect.all({
         id: Effect.sync(() => crypto.randomUUID() as string),
-        resultQueue: Queue.unbounded<CommandResult<TResult>>(),
+        resultQueue: Queue.unbounded<CommandResult>(),
       }),
       Effect.tap(({ id, resultQueue }) =>
-        Ref.update(
-          pendingCommands,
-          HashMap.set(id, resultQueue as Queue.Queue<CommandResult<unknown>>)
-        )
+        Ref.update(pendingCommands, HashMap.set(id, resultQueue))
       ),
       Effect.tap(({ id }) =>
         sendMessage(ws)({
@@ -339,8 +323,7 @@ const sendCommand =
       Effect.flatMap(({ id, resultQueue }) =>
         pipe(
           Queue.take(resultQueue),
-          Effect.tap(() => Ref.update(pendingCommands, HashMap.remove(id as string))),
-          Effect.map((result) => result as CommandResult<TResult>)
+          Effect.tap(() => Ref.update(pendingCommands, HashMap.remove(id as string)))
         )
       )
     );
@@ -384,20 +367,16 @@ export const makeEventTransport = <TEvent>(
         Effect.all({
           eventPubSub: PubSub.unbounded<StreamEvent<TEvent>>(),
           subscriptions: Ref.make(HashMap.empty<EventStreamId, boolean>()),
-          pendingCommands: Ref.make(HashMap.empty<string, Queue.Queue<CommandResult<unknown>>>()),
+          pendingCommands: Ref.make(HashMap.empty<string, Queue.Queue<CommandResult>>()),
         }),
         Effect.tap(({ eventPubSub, pendingCommands }) =>
           startMessageProcessor(ws, eventSchema, eventPubSub, pendingCommands)
         ),
         Effect.map(({ eventPubSub, subscriptions, pendingCommands }) => ({
-          subscribe: (streamId: EventStreamId, position?: EventStreamPosition) =>
-            pipe(subscribe(ws, subscriptions, eventPubSub)(streamId, position), Effect.orDie),
-          sendCommand: <TPayload, TResult>(command: AggregateCommand<TPayload>) =>
-            pipe(sendCommand(ws, pendingCommands)(command), Effect.orDie) as Effect.Effect<
-              CommandResult<TResult>,
-              never,
-              never
-            >,
+          subscribe: (position: EventStreamPosition) =>
+            pipe(subscribe(ws, subscriptions, eventPubSub)(position), Effect.orDie),
+          sendCommand: <TPayload>(command: AggregateCommand<TPayload>) =>
+            pipe(sendCommand(ws, pendingCommands)(command), Effect.orDie),
           disconnect: () => pipe(disconnect(ws, subscriptions)(), Effect.orDie),
         }))
       )
