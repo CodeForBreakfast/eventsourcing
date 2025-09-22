@@ -121,20 +121,14 @@ export {
 // ============================================================================
 
 // Transport implementation
-export {
-  WebSocketTransport,
-  WebSocketConnector,
-  WEBSOCKET_FEATURES,
-} from '@codeforbreakfast/eventsourcing-transport-websocket';
+export { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
 
 // Transport types
 export type {
   TransportMessage,
   ConnectionState,
   ConnectedTransport,
-  TransportConnector,
-  TransportFeatures,
-  AdvancedTransport,
+  TransportConnectorService,
   TransportError,
   ConnectionError,
   MessageParseError,
