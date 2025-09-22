@@ -1,0 +1,80 @@
+{
+  "name": "@codeforbreakfast/eventsourcing-transport-websocket",
+  "version": "0.1.0",
+  "description": "WebSocket transport implementation for event sourcing - Protocol-agnostic message transport over WebSocket connections",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "publish:package": "bun publish --access public",
+    "prepublishOnly": "bun run clean && bun run build"
+  },
+  "keywords": [
+    "websocket",
+    "transport",
+    "message-transport",
+    "connection",
+    "streaming",
+    "event-sourcing",
+    "protocol-agnostic",
+    "real-time",
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "fp",
+    "typescript",
+    "type-safe"
+  ],
+  "author": "Code for Breakfast",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "directory": "packages/eventsourcing-transport-websocket"
+  },
+  "bugs": {
+    "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
+  },
+  "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
+  "peerDependencies": {
+    "effect": "^3.17.0"
+  },
+  "dependencies": {
+    "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+    "@effect/platform": "^0.90.10"
+  },
+  "devDependencies": {
+    "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
+    "@types/node": "24.5.2",
+    "effect": "3.17.14",
+    "typescript": "5.9.2",
+    "vitest": "3.2.4",
+    "eslint": "9.36.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
