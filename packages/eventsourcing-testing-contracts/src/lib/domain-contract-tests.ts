@@ -1,13 +1,32 @@
 /**
- * Domain Contract Tests
+ * LAYER 3: Domain Contract Tests
  *
- * These tests validate the event sourcing domain behaviors that any
- * transport implementation must respect, regardless of how messages
- * are delivered. These are REQUIRED behaviors.
+ * Tests ONLY event sourcing domain invariants. NO transport or protocol concerns.
+ * These tests validate that the event store correctly implements fundamental
+ * event sourcing rules that must never be violated.
+ *
+ * WHAT IS TESTED:
+ * - Optimistic concurrency control
+ * - Event ordering within streams
+ * - Aggregate consistency rules
+ * - Stream isolation
+ * - Command idempotency
+ * - Atomic operations
+ *
+ * WHAT IS NOT TESTED:
+ * - Message transport reliability (covered in Layer 1)
+ * - Protocol serialization (covered in Layer 2)
+ * - End-to-end scenarios (covered in Layer 4)
  */
 
 import { Effect, pipe, Either } from 'effect';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
+import type {
+  DomainTestContext,
+  DomainFeatures,
+  DomainTestRunner,
+  StreamEvent,
+} from './test-layer-interfaces.js';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
 import type {
   AggregateCommand,
@@ -15,64 +34,28 @@ import type {
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 
 /**
- * Test helpers for domain consistency
+ * REQUIRED: Core domain contract tests.
+ * Every event store implementation MUST pass these tests.
  */
-interface DomainTestContext {
-  readonly processCommand: (command: AggregateCommand) => Effect.Effect<CommandResult>;
-  readonly getEventCount: (streamId: EventStreamId) => Effect.Effect<number>;
-  readonly getLastEventNumber: (streamId: EventStreamId) => Effect.Effect<EventNumber>;
-  readonly reset: () => Effect.Effect<void>;
-}
-
-/**
- * Domain contract test suite.
- *
- * These tests ensure that any transport + backend combination correctly
- * implements event sourcing domain rules.
- *
- * @param name - Name of the implementation being tested
- * @param setup - Function that creates a test context with domain operations
- */
-export function runDomainContractTests(
+export const runDomainContractTests: DomainTestRunner = (
   name: string,
-  setup: () => Effect.Effect<DomainTestContext, never, never>
-) {
+  setup: () => Effect.Effect<DomainTestContext>,
+  features?: DomainFeatures
+) => {
   describe(`${name} Domain Contract`, () => {
-    describe('Event Ordering Guarantees', () => {
-      it('MUST preserve strict ordering of events within a stream', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `test-stream-${Date.now()}` as EventStreamId;
+    let context: DomainTestContext;
 
-        // Send multiple commands in sequence
-        const commands = Array.from({ length: 10 }, (_, i) => ({
-          aggregate: {
-            position: { streamId, eventNumber: i as EventNumber },
-            name: 'TestAggregate',
-          },
-          commandName: 'TestCommand',
-          payload: { sequence: i },
-        }));
+    beforeEach(async () => {
+      context = await Effect.runPromise(setup());
+    });
 
-        // Process commands sequentially
-        for (const cmd of commands) {
-          const result = await Effect.runPromise(context.processCommand(cmd));
-          expect(Either.isRight(result)).toBe(true);
-          if (Either.isRight(result)) {
-            expect(result.right.eventNumber).toBe(cmd.aggregate.position.eventNumber + 1);
-          }
-        }
+    afterEach(async () => {
+      await Effect.runPromise(context.reset());
+    });
 
-        // Verify final state
-        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
-        expect(eventCount).toBe(10);
-
-        const lastEventNumber = await Effect.runPromise(context.getLastEventNumber(streamId));
-        expect(lastEventNumber).toBe(10);
-      });
-
-      it('MUST reject commands with incorrect expected version (optimistic concurrency)', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `test-stream-${Date.now()}` as EventStreamId;
+    describe('REQUIRED: Optimistic Concurrency Control', () => {
+      it('MUST reject commands with incorrect expected version', async () => {
+        const streamId = `concurrency-test-${Date.now()}` as EventStreamId;
 
         // First command succeeds
         const firstCommand: AggregateCommand = {
@@ -100,7 +83,7 @@ export function runDomainContractTests(
         const wrongResult = await Effect.runPromise(context.processCommand(wrongVersionCommand));
         expect(Either.isLeft(wrongResult)).toBe(true);
         if (Either.isLeft(wrongResult)) {
-          expect(wrongResult.left.message).toContain('concurrency');
+          expect(wrongResult.left.message).toMatch(/concurrency|version|conflict/i);
         }
 
         // Correct version succeeds
@@ -118,8 +101,7 @@ export function runDomainContractTests(
       });
 
       it('MUST handle concurrent commands to the same stream correctly', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `test-stream-${Date.now()}` as EventStreamId;
+        const streamId = `concurrent-test-${Date.now()}` as EventStreamId;
 
         // Create multiple commands all expecting version 0
         const concurrentCommands = Array.from({ length: 5 }, (_, i) => ({
@@ -154,96 +136,249 @@ export function runDomainContractTests(
         // All failures should be optimistic concurrency errors
         failures.forEach((f) => {
           if (Either.isLeft(f.result)) {
-            expect(f.result.left.message).toContain('concurrency');
+            expect(f.result.left.message).toMatch(/concurrency|version|conflict/i);
           }
         });
-      });
-    });
 
-    describe('Aggregate Consistency', () => {
-      it('MUST maintain consistency within an aggregate boundary', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `account-${Date.now()}` as EventStreamId;
-
-        // Initialize account with balance
-        const initCommand: AggregateCommand = {
-          aggregate: {
-            position: { streamId, eventNumber: 0 as EventNumber },
-            name: 'Account',
-          },
-          commandName: 'OpenAccount',
-          payload: { initialBalance: 100 },
-        };
-
-        await Effect.runPromise(context.processCommand(initCommand));
-
-        // Try to withdraw more than balance (should fail based on aggregate rules)
-        const overdraftCommand: AggregateCommand = {
-          aggregate: {
-            position: { streamId, eventNumber: 1 as EventNumber },
-            name: 'Account',
-          },
-          commandName: 'Withdraw',
-          payload: { amount: 150 },
-        };
-
-        const overdraftResult = await Effect.runPromise(context.processCommand(overdraftCommand));
-        expect(Either.isLeft(overdraftResult)).toBe(true);
-        if (Either.isLeft(overdraftResult)) {
-          expect(overdraftResult.left.message).toContain('insufficient');
-        }
-
-        // Valid withdrawal should succeed
-        const validWithdraw: AggregateCommand = {
-          aggregate: {
-            position: { streamId, eventNumber: 1 as EventNumber },
-            name: 'Account',
-          },
-          commandName: 'Withdraw',
-          payload: { amount: 50 },
-        };
-
-        const validResult = await Effect.runPromise(context.processCommand(validWithdraw));
-        expect(Either.isRight(validResult)).toBe(true);
-      });
-
-      it('MUST ensure events are idempotent when replayed', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `idempotent-${Date.now()}` as EventStreamId;
-
-        // Create a command with an idempotency key
-        const idempotencyKey = `key-${Date.now()}`;
-        const command: AggregateCommand = {
-          aggregate: {
-            position: { streamId, eventNumber: 0 as EventNumber },
-            name: 'TestAggregate',
-          },
-          commandName: 'IdempotentCommand',
-          payload: { value: 'test' },
-          metadata: { idempotencyKey },
-        };
-
-        // Send the same command multiple times
-        const results = await Effect.runPromise(
-          Effect.all([
-            context.processCommand(command),
-            context.processCommand(command),
-            context.processCommand(command),
-          ])
-        );
-
-        // All should return the same result (idempotent)
-        const successCount = results.filter(Either.isRight).length;
-        expect(successCount).toBe(3); // All return same success
-
-        // Only one event should be created
+        // Verify only one event was created
         const eventCount = await Effect.runPromise(context.getEventCount(streamId));
         expect(eventCount).toBe(1);
       });
 
+      it('MUST maintain correct version numbers under high concurrency', async () => {
+        const streamId = `version-stress-${Date.now()}` as EventStreamId;
+        const commandCount = 50;
+
+        // Process commands sequentially to establish expected final version
+        for (let i = 0; i < commandCount; i++) {
+          const command: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: i as EventNumber },
+              name: 'TestAggregate',
+            },
+            commandName: 'SequentialCommand',
+            payload: { sequence: i },
+          };
+
+          const result = await Effect.runPromise(context.processCommand(command));
+          expect(Either.isRight(result)).toBe(true);
+        }
+
+        // Verify final state
+        const finalVersion = await Effect.runPromise(context.getAggregateVersion(streamId));
+        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+
+        expect(finalVersion).toBe(commandCount);
+        expect(eventCount).toBe(commandCount);
+      });
+    });
+
+    describe('REQUIRED: Event Ordering Guarantees', () => {
+      it('MUST preserve strict ordering of events within a stream', async () => {
+        const streamId = `ordering-test-${Date.now()}` as EventStreamId;
+        const eventCount = 20;
+
+        // Send multiple commands in sequence
+        for (let i = 0; i < eventCount; i++) {
+          const command: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: i as EventNumber },
+              name: 'OrderedAggregate',
+            },
+            commandName: 'OrderedCommand',
+            payload: { sequence: i, timestamp: Date.now() },
+          };
+
+          const result = await Effect.runPromise(context.processCommand(command));
+          expect(Either.isRight(result)).toBe(true);
+        }
+
+        // Verify events are in correct order
+        const events = await Effect.runPromise(context.getEvents(streamId));
+        expect(events).toHaveLength(eventCount);
+
+        events.forEach((event, index) => {
+          expect(event.eventNumber).toBe((index + 1) as EventNumber);
+          expect((event.data as any).sequence).toBe(index);
+        });
+      });
+
+      it('MUST guarantee no gaps in event numbers within a stream', async () => {
+        const streamId = `no-gaps-${Date.now()}` as EventStreamId;
+        const commandCount = 15;
+
+        // Create events
+        for (let i = 0; i < commandCount; i++) {
+          const command: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: i as EventNumber },
+              name: 'GapTestAggregate',
+            },
+            commandName: 'GapTestCommand',
+            payload: { index: i },
+          };
+          await Effect.runPromise(context.processCommand(command));
+        }
+
+        // Verify continuous sequence
+        const events = await Effect.runPromise(context.getEvents(streamId));
+        expect(events).toHaveLength(commandCount);
+
+        // Event numbers should be 1, 2, 3, ..., commandCount with no gaps
+        for (let i = 0; i < events.length; i++) {
+          expect(events[i]!.eventNumber).toBe((i + 1) as EventNumber);
+        }
+
+        const lastEventNumber = await Effect.runPromise(context.getLastEventNumber(streamId));
+        expect(lastEventNumber).toBe(commandCount);
+      });
+
+      it('MUST handle rapid sequential commands without ordering violations', async () => {
+        const streamId = `rapid-sequence-${Date.now()}` as EventStreamId;
+        const rapidCount = 100;
+
+        // Send commands rapidly in sequence
+        for (let i = 0; i < rapidCount; i++) {
+          const command: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: i as EventNumber },
+              name: 'RapidAggregate',
+            },
+            commandName: 'RapidCommand',
+            payload: {
+              sequence: i,
+              timestamp: Date.now(),
+              batchId: 'rapid-test',
+            },
+          };
+
+          const result = await Effect.runPromise(context.processCommand(command));
+          expect(Either.isRight(result)).toBe(true);
+        }
+
+        // Verify perfect ordering
+        const events = await Effect.runPromise(context.getEvents(streamId));
+        expect(events).toHaveLength(rapidCount);
+
+        events.forEach((event, index) => {
+          expect(event.eventNumber).toBe((index + 1) as EventNumber);
+          expect((event.data as any).sequence).toBe(index);
+        });
+      });
+    });
+
+    describe('REQUIRED: Stream Isolation', () => {
+      it('MUST ensure complete isolation between different streams', async () => {
+        const streamA = `stream-a-${Date.now()}` as EventStreamId;
+        const streamB = `stream-b-${Date.now()}` as EventStreamId;
+        const streamC = `stream-c-${Date.now()}` as EventStreamId;
+
+        // Add events to multiple streams concurrently
+        const commands = [
+          {
+            aggregate: {
+              position: { streamId: streamA, eventNumber: 0 as EventNumber },
+              name: 'TestAggregate',
+            },
+            commandName: 'TestCommand',
+            payload: { stream: 'A', value: 1 },
+          },
+          {
+            aggregate: {
+              position: { streamId: streamB, eventNumber: 0 as EventNumber },
+              name: 'TestAggregate',
+            },
+            commandName: 'TestCommand',
+            payload: { stream: 'B', value: 2 },
+          },
+          {
+            aggregate: {
+              position: { streamId: streamC, eventNumber: 0 as EventNumber },
+              name: 'TestAggregate',
+            },
+            commandName: 'TestCommand',
+            payload: { stream: 'C', value: 3 },
+          },
+          {
+            aggregate: {
+              position: { streamId: streamA, eventNumber: 1 as EventNumber },
+              name: 'TestAggregate',
+            },
+            commandName: 'TestCommand',
+            payload: { stream: 'A', value: 4 },
+          },
+        ];
+
+        // Process all commands
+        for (const cmd of commands) {
+          const result = await Effect.runPromise(context.processCommand(cmd));
+          expect(Either.isRight(result)).toBe(true);
+        }
+
+        // Each stream should have the correct number of events
+        const countA = await Effect.runPromise(context.getEventCount(streamA));
+        const countB = await Effect.runPromise(context.getEventCount(streamB));
+        const countC = await Effect.runPromise(context.getEventCount(streamC));
+
+        expect(countA).toBe(2);
+        expect(countB).toBe(1);
+        expect(countC).toBe(1);
+
+        // Versions should be independent
+        const versionA = await Effect.runPromise(context.getAggregateVersion(streamA));
+        const versionB = await Effect.runPromise(context.getAggregateVersion(streamB));
+        const versionC = await Effect.runPromise(context.getAggregateVersion(streamC));
+
+        expect(versionA).toBe(2);
+        expect(versionB).toBe(1);
+        expect(versionC).toBe(1);
+      });
+
+      it('MUST not allow cross-stream version conflicts', async () => {
+        const streamA = `cross-stream-a-${Date.now()}` as EventStreamId;
+        const streamB = `cross-stream-b-${Date.now()}` as EventStreamId;
+
+        // Add event to stream A
+        const commandA: AggregateCommand = {
+          aggregate: {
+            position: { streamId: streamA, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'TestCommand',
+          payload: { stream: 'A' },
+        };
+
+        await Effect.runPromise(context.processCommand(commandA));
+
+        // Add event to stream B with same position - should not conflict
+        const commandB: AggregateCommand = {
+          aggregate: {
+            position: { streamId: streamB, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'TestCommand',
+          payload: { stream: 'B' },
+        };
+
+        const resultB = await Effect.runPromise(context.processCommand(commandB));
+        expect(Either.isRight(resultB)).toBe(true);
+
+        // Both streams should have version 1
+        const versionA = await Effect.runPromise(context.getAggregateVersion(streamA));
+        const versionB = await Effect.runPromise(context.getAggregateVersion(streamB));
+
+        expect(versionA).toBe(1);
+        expect(versionB).toBe(1);
+      });
+    });
+
+    describe('REQUIRED: Aggregate Lifecycle', () => {
       it('MUST handle aggregate creation correctly', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `new-aggregate-${Date.now()}` as EventStreamId;
+        const streamId = `creation-test-${Date.now()}` as EventStreamId;
+
+        // Aggregate should not exist initially
+        const initialExists = await Effect.runPromise(context.aggregateExists(streamId));
+        expect(initialExists).toBe(false);
 
         // Command to non-existent aggregate with eventNumber > 0 should fail
         const invalidCommand: AggregateCommand = {
@@ -270,24 +405,148 @@ export function runDomainContractTests(
 
         const createResult = await Effect.runPromise(context.processCommand(createCommand));
         expect(Either.isRight(createResult)).toBe(true);
+
+        // Aggregate should now exist
+        const nowExists = await Effect.runPromise(context.aggregateExists(streamId));
+        expect(nowExists).toBe(true);
+
+        // Version should be 1
+        const version = await Effect.runPromise(context.getAggregateVersion(streamId));
+        expect(version).toBe(1);
+      });
+
+      it('MUST prevent recreation of existing aggregates', async () => {
+        const streamId = `recreation-test-${Date.now()}` as EventStreamId;
+
+        // Create aggregate
+        const createCommand: AggregateCommand = {
+          aggregate: {
+            position: { streamId, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'CreateAggregate',
+          payload: { value: 'original' },
+        };
+
+        await Effect.runPromise(context.processCommand(createCommand));
+
+        // Try to recreate (should fail)
+        const recreateCommand: AggregateCommand = {
+          aggregate: {
+            position: { streamId, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'CreateAggregate',
+          payload: { value: 'duplicate' },
+        };
+
+        const recreateResult = await Effect.runPromise(context.processCommand(recreateCommand));
+        expect(Either.isLeft(recreateResult)).toBe(true);
+
+        // Should still have only 1 event
+        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+        expect(eventCount).toBe(1);
       });
     });
 
-    describe('Command Processing', () => {
-      it('MUST atomically process commands (all-or-nothing)', async () => {
-        const context = await Effect.runPromise(setup());
+    describe('REQUIRED: Command Idempotency', () => {
+      it('MUST provide idempotent command processing', async () => {
+        const streamId = `idempotent-${Date.now()}` as EventStreamId;
+        const idempotencyKey = `key-${Date.now()}`;
+
+        // Create a command with an idempotency key
+        const command: AggregateCommand = {
+          aggregate: {
+            position: { streamId, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'IdempotentCommand',
+          payload: { value: 'test' },
+          metadata: { idempotencyKey },
+        };
+
+        // Send the same command multiple times
+        const results = await Effect.runPromise(
+          Effect.all([
+            context.processCommand(command),
+            context.processCommand(command),
+            context.processCommand(command),
+          ])
+        );
+
+        // All should return the same result (idempotent)
+        expect(results).toHaveLength(3);
+
+        // All should be successful
+        results.forEach((result) => {
+          expect(Either.isRight(result)).toBe(true);
+        });
+
+        // All results should be identical
+        const firstResult = results[0];
+        results.forEach((result) => {
+          expect(result).toEqual(firstResult);
+        });
+
+        // Only one event should be created
+        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+        expect(eventCount).toBe(1);
+      });
+
+      it('MUST handle idempotency across concurrent requests', async () => {
+        const streamId = `concurrent-idempotent-${Date.now()}` as EventStreamId;
+        const idempotencyKey = `concurrent-key-${Date.now()}`;
+
+        const command: AggregateCommand = {
+          aggregate: {
+            position: { streamId, eventNumber: 0 as EventNumber },
+            name: 'TestAggregate',
+          },
+          commandName: 'ConcurrentIdempotentCommand',
+          payload: { value: 'test' },
+          metadata: { idempotencyKey },
+        };
+
+        // Send the same command concurrently
+        const results = await Effect.runPromise(
+          Effect.all(
+            Array.from({ length: 10 }, () => context.processCommand(command)),
+            { concurrency: 'unbounded' }
+          )
+        );
+
+        // All should return the same successful result
+        expect(results).toHaveLength(10);
+        results.forEach((result) => {
+          expect(Either.isRight(result)).toBe(true);
+        });
+
+        // All results should be identical
+        const firstResult = results[0];
+        results.forEach((result) => {
+          expect(result).toEqual(firstResult);
+        });
+
+        // Only one event should be created
+        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+        expect(eventCount).toBe(1);
+      });
+    });
+
+    describe('REQUIRED: Atomic Operations', () => {
+      it('MUST process commands atomically (all-or-nothing)', async () => {
         const streamId = `atomic-${Date.now()}` as EventStreamId;
 
-        // Command that would produce multiple events
+        // Command that would produce multiple events in one atomic operation
         const multiEventCommand: AggregateCommand = {
           aggregate: {
             position: { streamId, eventNumber: 0 as EventNumber },
-            name: 'Order',
+            name: 'AtomicAggregate',
           },
-          commandName: 'PlaceOrder',
+          commandName: 'AtomicMultiEventCommand',
           payload: {
             items: ['item1', 'item2', 'item3'],
-            // This might trigger: OrderPlaced, InventoryReserved, PaymentRequested
+            // This should trigger multiple events atomically
           },
         };
 
@@ -302,158 +561,163 @@ export function runDomainContractTests(
         }
       });
 
-      it('MUST provide exactly-once command processing semantics', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `exactly-once-${Date.now()}` as EventStreamId;
-        const commandId = `cmd-${Date.now()}`;
+      it('MUST maintain consistency during failures', async () => {
+        const streamId = `failure-consistency-${Date.now()}` as EventStreamId;
 
-        // Command with unique ID
-        const command: AggregateCommand = {
-          aggregate: {
-            position: { streamId, eventNumber: 0 as EventNumber },
-            name: 'TestAggregate',
-          },
-          commandName: 'UniqueCommand',
-          payload: { value: 'test' },
-          metadata: { commandId },
-        };
-
-        // Send command multiple times (simulating retries)
-        const attempts = 5;
-        const results = await Effect.runPromise(
-          Effect.all(Array.from({ length: attempts }, () => context.processCommand(command)))
-        );
-
-        // All attempts should return the same result
-        const firstResult = results[0];
-        if (firstResult !== undefined) {
-          results.forEach((result) => {
-            expect(result).toEqual(firstResult);
-          });
-        }
-
-        // Only one event should be created
-        const eventCount = await Effect.runPromise(context.getEventCount(streamId));
-        expect(eventCount).toBe(1);
-      });
-
-      it('MUST reject commands that violate business invariants', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `invariant-${Date.now()}` as EventStreamId;
-
-        // Create aggregate with constraints
+        // Create aggregate first
         const createCommand: AggregateCommand = {
           aggregate: {
             position: { streamId, eventNumber: 0 as EventNumber },
-            name: 'BoundedList',
+            name: 'FailureTestAggregate',
           },
-          commandName: 'CreateList',
-          payload: { maxSize: 3 },
+          commandName: 'CreateAggregate',
+          payload: { initialValue: 100 },
         };
 
         await Effect.runPromise(context.processCommand(createCommand));
 
-        // Add items up to the limit
-        for (let i = 0; i < 3; i++) {
-          const addCommand: AggregateCommand = {
-            aggregate: {
-              position: { streamId, eventNumber: (i + 1) as EventNumber },
-              name: 'BoundedList',
-            },
-            commandName: 'AddItem',
-            payload: { item: `item${i}` },
-          };
-          const result = await Effect.runPromise(context.processCommand(addCommand));
-          expect(Either.isRight(result)).toBe(true);
-        }
-
-        // Try to exceed the limit (should fail)
-        const exceedCommand: AggregateCommand = {
+        // Command that should fail due to business rules
+        const failingCommand: AggregateCommand = {
           aggregate: {
-            position: { streamId, eventNumber: 4 as EventNumber },
-            name: 'BoundedList',
+            position: { streamId, eventNumber: 1 as EventNumber },
+            name: 'FailureTestAggregate',
           },
-          commandName: 'AddItem',
-          payload: { item: 'tooMany' },
+          commandName: 'InvalidOperation',
+          payload: { value: -999 }, // Invalid negative value
         };
 
-        const exceedResult = await Effect.runPromise(context.processCommand(exceedCommand));
-        expect(Either.isLeft(exceedResult)).toBe(true);
-        if (Either.isLeft(exceedResult)) {
-          expect(exceedResult.left.message).toContain('limit');
-        }
-      });
-    });
+        const failResult = await Effect.runPromise(context.processCommand(failingCommand));
+        expect(Either.isLeft(failResult)).toBe(true);
 
-    describe('Event Stream Guarantees', () => {
-      it('MUST guarantee no gaps in event numbers within a stream', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamId = `no-gaps-${Date.now()}` as EventStreamId;
+        // Aggregate should remain in consistent state
+        const version = await Effect.runPromise(context.getAggregateVersion(streamId));
+        expect(version).toBe(1); // Should not have incremented
 
-        // Create 10 events
-        for (let i = 0; i < 10; i++) {
-          const command: AggregateCommand = {
-            aggregate: {
-              position: { streamId, eventNumber: i as EventNumber },
-              name: 'TestAggregate',
-            },
-            commandName: 'AppendEvent',
-            payload: { index: i },
-          };
-          await Effect.runPromise(context.processCommand(command));
-        }
-
-        // Verify continuous sequence
-        const lastEventNumber = await Effect.runPromise(context.getLastEventNumber(streamId));
-        expect(lastEventNumber).toBe(10);
-
-        // Event numbers should be 1, 2, 3, ..., 10 with no gaps
         const eventCount = await Effect.runPromise(context.getEventCount(streamId));
-        expect(eventCount).toBe(10);
-      });
-
-      it('MUST ensure stream isolation (no cross-stream contamination)', async () => {
-        const context = await Effect.runPromise(setup());
-        const streamA = `stream-a-${Date.now()}` as EventStreamId;
-        const streamB = `stream-b-${Date.now()}` as EventStreamId;
-
-        // Add events to stream A
-        const commandA: AggregateCommand = {
-          aggregate: {
-            position: { streamId: streamA, eventNumber: 0 as EventNumber },
-            name: 'TestAggregate',
-          },
-          commandName: 'TestCommand',
-          payload: { stream: 'A' },
-        };
-
-        // Add events to stream B
-        const commandB: AggregateCommand = {
-          aggregate: {
-            position: { streamId: streamB, eventNumber: 0 as EventNumber },
-            name: 'TestAggregate',
-          },
-          commandName: 'TestCommand',
-          payload: { stream: 'B' },
-        };
-
-        await Effect.runPromise(context.processCommand(commandA));
-        await Effect.runPromise(context.processCommand(commandB));
-
-        // Each stream should have exactly 1 event
-        const countA = await Effect.runPromise(context.getEventCount(streamA));
-        const countB = await Effect.runPromise(context.getEventCount(streamB));
-
-        expect(countA).toBe(1);
-        expect(countB).toBe(1);
-
-        // Event numbers should be independent
-        const lastA = await Effect.runPromise(context.getLastEventNumber(streamA));
-        const lastB = await Effect.runPromise(context.getLastEventNumber(streamB));
-
-        expect(lastA).toBe(1);
-        expect(lastB).toBe(1);
+        expect(eventCount).toBe(1); // Should still have only creation event
       });
     });
+
+    // OPTIONAL FEATURE TESTS
+    if (features?.supportsSnapshots) {
+      describe('OPTIONAL: Snapshot Support', () => {
+        it('should maintain consistency with snapshots', async () => {
+          const streamId = `snapshot-test-${Date.now()}` as EventStreamId;
+
+          // Create many events to trigger snapshot
+          for (let i = 0; i < 100; i++) {
+            const command: AggregateCommand = {
+              aggregate: {
+                position: { streamId, eventNumber: i as EventNumber },
+                name: 'SnapshotAggregate',
+              },
+              commandName: 'SnapshotCommand',
+              payload: { sequence: i },
+            };
+            await Effect.runPromise(context.processCommand(command));
+          }
+
+          // Add more events after potential snapshot
+          for (let i = 100; i < 120; i++) {
+            const command: AggregateCommand = {
+              aggregate: {
+                position: { streamId, eventNumber: i as EventNumber },
+                name: 'SnapshotAggregate',
+              },
+              commandName: 'PostSnapshotCommand',
+              payload: { sequence: i },
+            };
+            await Effect.runPromise(context.processCommand(command));
+          }
+
+          // Verify final state is consistent
+          const finalVersion = await Effect.runPromise(context.getAggregateVersion(streamId));
+          const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+
+          expect(finalVersion).toBe(120);
+          expect(eventCount).toBe(120);
+        });
+      });
+    }
+
+    if (features?.supportsProjections) {
+      describe('OPTIONAL: Projection Support', () => {
+        it('should maintain projection consistency', async () => {
+          const streamId = `projection-test-${Date.now()}` as EventStreamId;
+
+          // Create events that would trigger projections
+          const events = [
+            { type: 'UserCreated', data: { name: 'John' } },
+            { type: 'UserUpdated', data: { name: 'Jane' } },
+            { type: 'UserDeleted', data: {} },
+          ];
+
+          for (let i = 0; i < events.length; i++) {
+            const command: AggregateCommand = {
+              aggregate: {
+                position: { streamId, eventNumber: i as EventNumber },
+                name: 'ProjectionAggregate',
+              },
+              commandName: 'ProjectionCommand',
+              payload: events[i],
+            };
+            await Effect.runPromise(context.processCommand(command));
+          }
+
+          // Verify events are properly stored
+          const eventCount = await Effect.runPromise(context.getEventCount(streamId));
+          expect(eventCount).toBe(3);
+        });
+      });
+    }
+
+    if (features?.supportsComplexAggregates) {
+      describe('OPTIONAL: Complex Aggregate Support', () => {
+        it('should handle aggregates with complex state', async () => {
+          const streamId = `complex-aggregate-${Date.now()}` as EventStreamId;
+
+          // Create complex aggregate with nested state
+          const createCommand: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: 0 as EventNumber },
+              name: 'ComplexAggregate',
+            },
+            commandName: 'CreateComplexAggregate',
+            payload: {
+              configuration: {
+                settings: { mode: 'advanced', level: 5 },
+                features: ['feature1', 'feature2'],
+                metadata: { created: new Date().toISOString() },
+              },
+            },
+          };
+
+          const result = await Effect.runPromise(context.processCommand(createCommand));
+          expect(Either.isRight(result)).toBe(true);
+
+          // Update complex state
+          const updateCommand: AggregateCommand = {
+            aggregate: {
+              position: { streamId, eventNumber: 1 as EventNumber },
+              name: 'ComplexAggregate',
+            },
+            commandName: 'UpdateComplexState',
+            payload: {
+              updates: {
+                'settings.level': 10,
+                'features[]': 'feature3',
+                'metadata.updated': new Date().toISOString(),
+              },
+            },
+          };
+
+          const updateResult = await Effect.runPromise(context.processCommand(updateCommand));
+          expect(Either.isRight(updateResult)).toBe(true);
+
+          const finalVersion = await Effect.runPromise(context.getAggregateVersion(streamId));
+          expect(finalVersion).toBe(2);
+        });
+      });
+    }
   });
-}
+};

@@ -1,6 +1,22 @@
-# Event Transport Test Architecture
+# DEPRECATED - Use @codeforbreakfast/eventsourcing-testing-contracts
 
-This directory contains three separate test suites for validating event transport implementations:
+This directory has been deprecated. All testing utilities have been consolidated into the `@codeforbreakfast/eventsourcing-testing-contracts` package.
+
+Please use the centralized testing package instead:
+
+```typescript
+import {
+  runDomainContractTests,
+  runTransportContractTests,
+  runIntegrationTestSuite,
+} from '@codeforbreakfast/eventsourcing-testing-contracts';
+```
+
+The rest of this file is kept for historical reference only.
+
+---
+
+# Historical Documentation
 
 ## Test Suite Overview
 

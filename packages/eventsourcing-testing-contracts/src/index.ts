@@ -1,40 +1,83 @@
 /**
  * @codeforbreakfast/eventsourcing-testing-contracts
  *
- * Comprehensive testing utilities for event sourcing implementations.
- * Test contracts for transport and protocol implementations with mock utilities
- * and test data generators.
+ * Layered testing framework for event sourcing implementations.
+ * Provides clear separation of concerns across 4 distinct test layers,
+ * each focusing on specific responsibilities.
  *
- * This package provides:
- * - Complete test coverage for any transport implementation
- * - Complete test coverage for any protocol implementation
- * - Integration tests that combine transport + protocol
- * - Testing documentation and best practices
- * - Mock implementations for testing
- * - Test data generators and utilities
+ * LAYER 1: Transport Tests - Pure message delivery mechanics
+ * LAYER 2: Protocol Tests - Event sourcing message mapping
+ * LAYER 3: Domain Tests - Event sourcing domain invariants
+ * LAYER 4: Integration Tests - End-to-end scenarios
+ *
+ * Each layer has clear interfaces, required behaviors, and optional features.
+ * Implementers only need to test the layers they implement.
  */
 
-// Domain contract tests - validate event sourcing domain behaviors
+// ============================================================================
+// LAYER INTERFACES AND TYPES
+// ============================================================================
+
+export type {
+  // Layer 1: Transport
+  TransportMessage,
+  TransportTestContext,
+  TransportFeatures,
+  TransportTestRunner,
+
+  // Layer 2: Protocol
+  ProtocolTestContext,
+  ProtocolFeatures,
+  ProtocolTestRunner,
+  StreamEvent,
+  GlobalPosition,
+
+  // Layer 3: Domain
+  DomainTestContext,
+  DomainFeatures,
+  DomainTestRunner,
+
+  // Layer 4: Integration
+  IntegrationTestContext,
+  IntegrationFeatures,
+  IntegrationTestRunner,
+  TestScenario,
+  ScenarioResult,
+  ScenarioStep,
+  ScenarioOutcome,
+  ThroughputMetrics,
+} from './lib/test-layer-interfaces.js';
+
+// ============================================================================
+// TEST RUNNERS
+// ============================================================================
+
+// Layer 1: Transport Contract Tests
+export { runTransportContractTests } from './lib/transport-contract-tests.js';
+
+// Layer 2: Protocol Contract Tests
+export { runProtocolContractTests } from './lib/protocol-contract-tests.js';
+
+// Layer 3: Domain Contract Tests
 export { runDomainContractTests } from './lib/domain-contract-tests.js';
 
-// Transport contract tests - validate low-level transport behaviors
-export {
-  runTransportContractTests,
-  runEventSourcingTransportTests,
-  type TransportTestContext,
-  type EventSourcingTransportTestContext,
-  type EventSourcingTransportFeatures,
-} from './lib/transport-contract-tests.js';
+// Layer 4: Integration Test Suite
+export { runIntegrationTestSuite } from './lib/integration-test-suite.js';
 
-// Integration test suite - validate transport + protocol integration
-export {
-  runIntegrationTestSuite,
-  type EventTransportService,
-  type MockEventServer,
-  type IntegrationFeatures,
-} from './lib/integration-test-suite.js';
+// ============================================================================
+// DOCUMENTATION AND GUIDANCE
+// ============================================================================
 
-// Test utilities, mocks, and helpers
+export {
+  ExampleImplementations,
+  BestPractices,
+  TroubleshootingGuide,
+} from './lib/testing-strategy-guide.js';
+
+// ============================================================================
+// TEST UTILITIES AND HELPERS
+// ============================================================================
+
 export {
   // Test data generators
   generateStreamId,

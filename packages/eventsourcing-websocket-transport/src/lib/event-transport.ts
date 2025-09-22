@@ -25,28 +25,11 @@ import {
   WebSocketError,
   webSocketError,
 } from '@codeforbreakfast/eventsourcing-store';
-
-// ============================================================================
-// Event Sourcing Specific Types - The only custom logic we need
-// ============================================================================
-
-export interface StreamEvent<T> {
-  readonly position: EventStreamPosition; // Contains streamId and eventNumber
-  readonly event: T;
-  readonly timestamp: Date;
-}
-
-export interface Aggregate {
-  readonly position: EventStreamPosition; // streamId + eventNumber
-  readonly name: string; // aggregate type (e.g., "User", "Order")
-}
-
-export interface AggregateCommand<T = unknown> {
-  readonly aggregate: Aggregate;
-  readonly commandName: string;
-  readonly payload: T;
-  readonly metadata?: Record<string, unknown>;
-}
+import {
+  type StreamEvent,
+  type Aggregate,
+  type AggregateCommand,
+} from '@codeforbreakfast/eventsourcing-protocol-contracts';
 
 // ============================================================================
 // Error Types - Using Data.TaggedError for proper Effect error handling
