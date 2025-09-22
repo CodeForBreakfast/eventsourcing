@@ -9,21 +9,17 @@
  */
 
 // Main transport implementation
-export {
-  WebSocketTransport,
-  WebSocketConnector,
-  WEBSOCKET_FEATURES,
-} from './lib/websocket-transport.js';
+export { WebSocketConnector } from './lib/websocket-transport.js';
 
 // Re-export transport contracts for convenience
 export type {
   TransportMessage,
   ConnectionState,
   ConnectedTransport,
-  TransportConnector,
-  TransportFeatures,
-  AdvancedTransport,
+  TransportConnectorService,
   TransportError,
   ConnectionError,
   MessageParseError,
+  MessageId,
+  TransportId,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';

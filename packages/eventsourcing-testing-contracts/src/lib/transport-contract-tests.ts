@@ -448,7 +448,11 @@ export const runTransportContractTests: TransportTestRunner = (
               const stateMonitoring = yield* pipe(
                 transport.connectionState,
                 Stream.take(2),
-                Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state))),
+                Stream.runForEach((state) =>
+                  Effect.sync(() => {
+                    stateHistory.push(state);
+                  })
+                ),
                 Effect.fork
               );
 

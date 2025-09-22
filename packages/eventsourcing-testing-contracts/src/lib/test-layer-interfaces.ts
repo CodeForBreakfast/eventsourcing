@@ -5,7 +5,7 @@
  * Each layer tests ONLY its own responsibilities and provides clear contracts for implementers.
  */
 
-import { Effect, Stream, Scope, Schema, Data } from 'effect';
+import { Effect, Stream, Scope, Schema } from 'effect';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
 import type {
   AggregateCommand,
@@ -14,7 +14,6 @@ import type {
 import type {
   ConnectionState as CoreConnectionState,
   TransportError,
-  MessageId,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
@@ -50,6 +49,10 @@ export interface TransportTestContext {
   readonly createConnectedTransport: (
     url: string
   ) => Effect.Effect<ConnectedTransportTestInterface, TransportError, Scope.Scope>;
+
+  // Optional test utilities for advanced testing scenarios
+  readonly simulateDisconnect?: () => Effect.Effect<void, never, never>;
+  readonly simulateReconnect?: () => Effect.Effect<void, never, never>;
 }
 
 /**

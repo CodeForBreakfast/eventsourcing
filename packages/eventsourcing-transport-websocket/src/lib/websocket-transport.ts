@@ -1,388 +1,297 @@
 /**
  * WebSocket Transport Implementation
  *
- * A minimal, protocol-agnostic WebSocket transport that implements the
- * transport contracts. This focuses purely on message transport without
- * any event sourcing domain concepts.
+ * A minimal WebSocket transport that implements the simplified transport contracts.
+ * Uses Effect.acquireRelease for Scope-based lifecycle management.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, Duration, Deferred } from 'effect';
-import type {
-  TransportMessage,
-  ConnectionState,
-  ConnectedTransport,
-  TransportConnector,
+import { Effect, Stream, Scope, Ref, Queue, pipe } from 'effect';
+import {
   TransportError,
   ConnectionError,
-  MessageParseError,
-  TransportFeatures,
-  AdvancedTransport,
+  type TransportMessage,
+  type ConnectionState,
+  type ConnectedTransport,
+  type TransportConnectorService,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
-/**
- * WebSocket-specific transport features
- */
-export const WEBSOCKET_FEATURES: TransportFeatures = {
-  supportsReconnection: true,
-  supportsOfflineBuffering: true,
-  supportsBackpressure: false,
-  guaranteesOrdering: true,
-  supportsMultiplexing: true,
-  supportsBatching: false,
-  supportsCompression: false,
-} as const;
+// =============================================================================
+// Internal State Types
+// =============================================================================
 
-/**
- * Internal WebSocket connection state
- */
-interface WebSocketState {
+interface WebSocketInternalState {
   readonly socket: WebSocket | null;
   readonly connectionState: ConnectionState;
-  readonly subscribers: Map<string, Queue.Queue<TransportMessage>>;
-  readonly messageBuffer: Queue.Queue<TransportMessage>;
-  readonly pendingRequests: Map<string, Deferred.Deferred<unknown, TransportError>>;
+  readonly connectionStateQueue: Queue.Queue<ConnectionState>;
+  readonly subscribers: Set<Queue.Queue<TransportMessage>>;
 }
 
+// =============================================================================
+// Connected WebSocket Transport
+// =============================================================================
+
 /**
- * WebSocket Transport implementation that focuses purely on message transport
+ * A connected WebSocket transport instance.
+ * This can only exist after a successful connection and lives within a Scope.
  */
-export class WebSocketTransport implements AdvancedTransport {
-  public readonly features = WEBSOCKET_FEATURES;
+class ConnectedWebSocketTransport implements ConnectedTransport<TransportMessage> {
+  constructor(private readonly stateRef: Ref.Ref<WebSocketInternalState>) {}
 
-  constructor(
-    private readonly url: string,
-    private readonly stateRef: Ref.Ref<WebSocketState>
-  ) {}
-
-  // ============================================================================
-  // Connection Management
-  // ============================================================================
-
-  connect(): Effect.Effect<void, ConnectionError, never> {
-    return Effect.gen(this, function* () {
-      const currentState = yield* Ref.get(this.stateRef);
-
-      if (currentState.connectionState === 'connected') {
-        return; // Already connected
-      }
-
-      if (currentState.connectionState === 'connecting') {
-        return; // Connection in progress
-      }
-
-      yield* Ref.update(this.stateRef, (state) => ({
-        ...state,
-        connectionState: 'connecting',
-      }));
-
-      try {
-        const socket = new WebSocket(this.url);
-
-        yield* Effect.async<void, ConnectionError>((resume) => {
-          socket.onopen = () => {
-            Effect.runSync(
-              Ref.update(this.stateRef, (state) => ({
-                ...state,
-                socket,
-                connectionState: 'connected',
-              }))
-            );
-            resume(Effect.void);
-          };
-
-          socket.onerror = (error) => {
-            Effect.runSync(
-              Ref.update(this.stateRef, (state) => ({
-                ...state,
-                connectionState: 'error',
-              }))
-            );
-            resume(
-              Effect.fail(
-                new ConnectionError({
-                  message: 'WebSocket connection failed',
-                  url: this.url,
-                  cause: error,
-                })
+  /**
+   * Stream of connection state changes
+   */
+  get connectionState(): Stream.Stream<ConnectionState, never, never> {
+    return Stream.unwrapScoped(
+      pipe(
+        Ref.get(this.stateRef),
+        Effect.flatMap((state) =>
+          pipe(
+            Queue.unbounded<ConnectionState>(),
+            Effect.tap((stateQueue) => Queue.offer(stateQueue, state.connectionState)),
+            Effect.flatMap((stateQueue) =>
+              pipe(
+                Stream.fromQueue(state.connectionStateQueue),
+                Stream.runForEach((newState) => Queue.offer(stateQueue, newState)),
+                Effect.fork,
+                Effect.as(Stream.fromQueue(stateQueue))
               )
-            );
-          };
-
-          socket.onmessage = (event) => {
-            Effect.runSync(this.handleIncomingMessage(event.data));
-          };
-
-          socket.onclose = () => {
-            Effect.runSync(
-              Ref.update(this.stateRef, (state) => ({
-                ...state,
-                socket: null,
-                connectionState: 'disconnected',
-              }))
-            );
-          };
-        });
-      } catch (error) {
-        yield* Ref.update(this.stateRef, (state) => ({
-          ...state,
-          connectionState: 'error',
-        }));
-
-        return yield* Effect.fail(
-          new ConnectionError({
-            message: 'Failed to create WebSocket connection',
-            url: this.url,
-            cause: error,
-          })
-        );
-      }
-    });
+            )
+          )
+        ),
+        Effect.orDie // Convert any error to defect to satisfy the never error type
+      ) as Effect.Effect<Stream.Stream<ConnectionState, never, never>, never, never>
+    );
   }
 
-  disconnect(): Effect.Effect<void, never, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-
-      if (state.socket) {
-        state.socket.close();
-      }
-
-      yield* Ref.update(this.stateRef, (currentState) => ({
-        ...currentState,
-        socket: null,
-        connectionState: 'disconnected',
-      }));
-    });
-  }
-
-  isConnected(): Effect.Effect<boolean, never, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-      return state.connectionState === 'connected';
-    });
-  }
-
-  getState(): Effect.Effect<ConnectionState, never, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-      return state.connectionState;
-    });
-  }
-
-  // ============================================================================
-  // Message Publishing
-  // ============================================================================
-
+  /**
+   * Publish a message through the WebSocket
+   */
   publish(message: TransportMessage): Effect.Effect<void, TransportError, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-
-      if (!state.socket || state.connectionState !== 'connected') {
-        // Buffer message if offline buffering is enabled
-        if (this.features.supportsOfflineBuffering) {
-          yield* Queue.offer(state.messageBuffer, message);
-          return;
+    return pipe(
+      Ref.get(this.stateRef),
+      Effect.flatMap((state) => {
+        if (!state.socket || state.connectionState !== 'connected') {
+          return Effect.fail(
+            new TransportError({
+              message: 'Cannot publish message: WebSocket is not connected',
+            })
+          );
         }
 
-        return yield* Effect.fail(
-          new TransportError({
-            message: 'Cannot publish message: not connected',
-          })
-        );
-      }
-
-      try {
-        const serialized = JSON.stringify(message);
-        state.socket.send(serialized);
-      } catch (error) {
-        return yield* Effect.fail(
-          new TransportError({
-            message: 'Failed to serialize or send message',
-            cause: error,
-          })
-        );
-      }
-    });
+        return Effect.try({
+          try: () => {
+            const serialized = JSON.stringify(message);
+            state.socket!.send(serialized);
+          },
+          catch: (error) =>
+            new TransportError({
+              message: 'Failed to send message through WebSocket',
+              cause: error,
+            }),
+        });
+      })
+    );
   }
 
-  // ============================================================================
-  // Message Subscription
-  // ============================================================================
-
+  /**
+   * Subscribe to messages with optional filtering
+   */
   subscribe(
     filter?: (message: TransportMessage) => boolean
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> {
-    return Effect.gen(this, function* () {
-      const queue = yield* Queue.unbounded<TransportMessage>();
-      const subscriptionId = Math.random().toString(36);
+    return pipe(
+      Queue.unbounded<TransportMessage>(),
+      Effect.tap((queue) =>
+        Ref.update(this.stateRef, (state) => ({
+          ...state,
+          subscribers: new Set([...state.subscribers, queue]),
+        }))
+      ),
+      Effect.map((queue) => {
+        let stream = Stream.fromQueue(queue);
 
-      yield* Ref.update(this.stateRef, (state) => ({
-        ...state,
-        subscribers: new Map(state.subscribers).set(subscriptionId, queue),
-      }));
-
-      const stream = Stream.fromQueue(queue);
-
-      if (filter) {
-        return Stream.filter(stream, filter);
-      }
-
-      return stream;
-    });
-  }
-
-  // ============================================================================
-  // Request/Response
-  // ============================================================================
-
-  request<TRequest = unknown, TResponse = unknown>(
-    request: TRequest,
-    timeoutMs = 30000
-  ): Effect.Effect<TResponse, TransportError, never> {
-    return Effect.gen(this, function* () {
-      const requestId = Math.random().toString(36);
-      const deferred = yield* Deferred.make<TResponse, TransportError>();
-
-      yield* Ref.update(this.stateRef, (state) => ({
-        ...state,
-        pendingRequests: new Map(state.pendingRequests).set(requestId, deferred),
-      }));
-
-      const requestMessage: TransportMessage = {
-        id: requestId,
-        type: 'request',
-        payload: request,
-        metadata: { isRequest: true },
-        timestamp: new Date(),
-      };
-
-      yield* this.publish(requestMessage);
-
-      const timeoutEffect = Effect.gen(function* () {
-        yield* Effect.sleep(Duration.millis(timeoutMs));
-        yield* Deferred.fail(
-          deferred,
-          new TransportError({
-            message: `Request timeout after ${timeoutMs}ms`,
-          })
-        );
-      });
-
-      const responseEffect = Deferred.await(deferred);
-
-      return yield* Effect.race(responseEffect, timeoutEffect);
-    });
-  }
-
-  // ============================================================================
-  // Advanced Features
-  // ============================================================================
-
-  simulateDisconnect(): Effect.Effect<void, never, never> {
-    return Effect.gen(this, function* () {
-      yield* Ref.update(this.stateRef, (state) => ({
-        ...state,
-        connectionState: 'reconnecting',
-      }));
-    });
-  }
-
-  simulateReconnect(): Effect.Effect<void, never, never> {
-    return Effect.gen(this, function* () {
-      yield* Ref.update(this.stateRef, (state) => ({
-        ...state,
-        connectionState: 'connected',
-      }));
-
-      // Flush buffered messages
-      yield* this.flushBuffer();
-    });
-  }
-
-  getBufferedMessageCount(): Effect.Effect<number, never, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-      return yield* Queue.size(state.messageBuffer);
-    });
-  }
-
-  flushBuffer(): Effect.Effect<void, TransportError, never> {
-    return Effect.gen(this, function* () {
-      const state = yield* Ref.get(this.stateRef);
-
-      while (true) {
-        const takeResult = yield* Queue.poll(state.messageBuffer);
-        if (takeResult._tag === 'None') break;
-
-        yield* this.publish(takeResult.value);
-      }
-    });
-  }
-
-  // ============================================================================
-  // Private Methods
-  // ============================================================================
-
-  private handleIncomingMessage(data: string): Effect.Effect<void, never, never> {
-    return Effect.gen(this, function* () {
-      try {
-        const message: TransportMessage = JSON.parse(data);
-        const state = yield* Ref.get(this.stateRef);
-
-        // Handle response to pending request
-        if (message.metadata?.isResponse && message.metadata?.requestId) {
-          const requestId = message.metadata.requestId as string;
-          const pendingRequest = state.pendingRequests.get(requestId);
-
-          if (pendingRequest) {
-            yield* Deferred.succeed(pendingRequest, message.payload);
-            yield* Ref.update(this.stateRef, (currentState) => {
-              const newRequests = new Map(currentState.pendingRequests);
-              newRequests.delete(requestId);
-              return {
-                ...currentState,
-                pendingRequests: newRequests,
-              };
-            });
-            return;
-          }
+        if (filter) {
+          stream = Stream.filter(stream, (msg) => {
+            try {
+              return filter(msg);
+            } catch {
+              // If filter throws, skip the message
+              return false;
+            }
+          });
         }
 
-        // Distribute to all subscribers
-        for (const queue of state.subscribers.values()) {
-          yield* Queue.offer(queue, message);
-        }
-      } catch (error) {
-        // Log parse error but don't crash the transport
-        console.error('Failed to parse incoming message:', error);
-      }
-    });
+        return stream;
+      })
+    );
   }
 }
 
+// =============================================================================
+// WebSocket Connector Service
+// =============================================================================
+
 /**
- * WebSocket Transport Connector - the main entry point for creating connections
+ * WebSocket connector that creates connected transports using Effect.acquireRelease
  */
-export class WebSocketConnector implements TransportConnector {
-  connect(url: string): Effect.Effect<ConnectedTransport, ConnectionError, Scope.Scope> {
-    return Effect.gen(function* () {
-      const initialState: WebSocketState = {
-        socket: null,
-        connectionState: 'disconnected',
-        subscribers: new Map(),
-        messageBuffer: yield* Queue.unbounded<TransportMessage>(),
-        pendingRequests: new Map(),
-      };
+export class WebSocketConnector implements TransportConnectorService<TransportMessage> {
+  /**
+   * Connect to a WebSocket URL and return a ConnectedTransport.
+   * Uses Effect.acquireRelease for proper resource management.
+   */
+  connect(
+    url: string
+  ): Effect.Effect<ConnectedTransport<TransportMessage>, ConnectionError, Scope.Scope> {
+    return Effect.acquireRelease(
+      // Acquire: establish connection
+      pipe(
+        Queue.unbounded<ConnectionState>(),
+        Effect.flatMap((connectionStateQueue) => {
+          const initialState: WebSocketInternalState = {
+            socket: null,
+            connectionState: 'connecting',
+            connectionStateQueue,
+            subscribers: new Set(),
+          };
 
-      const stateRef = yield* Ref.make(initialState);
-      const transport = new WebSocketTransport(url, stateRef);
+          return pipe(
+            Ref.make(initialState),
+            Effect.tap((stateRef) => this.updateConnectionState(stateRef, 'connecting')),
+            Effect.flatMap((stateRef) =>
+              pipe(
+                Effect.async<void, ConnectionError>((resume) => {
+                  try {
+                    const socket = new WebSocket(url);
 
-      yield* transport.connect();
+                    socket.onopen = () => {
+                      Effect.runSync(
+                        pipe(
+                          Ref.update(stateRef, (state) => ({
+                            ...state,
+                            socket,
+                            connectionState: 'connected' as ConnectionState,
+                          })),
+                          Effect.flatMap(() => this.updateConnectionState(stateRef, 'connected'))
+                        )
+                      );
+                      resume(Effect.void);
+                    };
 
-      // Clean up on scope exit
-      yield* Effect.addFinalizer(() => transport.disconnect());
+                    socket.onerror = (event) => {
+                      Effect.runSync(this.updateConnectionState(stateRef, 'error'));
+                      resume(
+                        Effect.fail(
+                          new ConnectionError({
+                            message: 'Failed to connect to WebSocket',
+                            url,
+                            cause: event,
+                          })
+                        )
+                      );
+                    };
 
-      return transport;
-    });
+                    socket.onmessage = (event) => {
+                      Effect.runSync(this.handleMessage(stateRef, event.data));
+                    };
+
+                    socket.onclose = () => {
+                      Effect.runSync(this.updateConnectionState(stateRef, 'disconnected'));
+                    };
+                  } catch (error) {
+                    resume(
+                      Effect.fail(
+                        new ConnectionError({
+                          message: 'Failed to create WebSocket connection',
+                          url,
+                          cause: error,
+                        })
+                      )
+                    );
+                  }
+                }),
+                Effect.as(new ConnectedWebSocketTransport(stateRef))
+              )
+            )
+          );
+        })
+      ),
+
+      // Release: disconnect and cleanup
+      (transport) => {
+        const connectedTransport = transport as ConnectedWebSocketTransport;
+        const stateRef = (connectedTransport as any).stateRef;
+
+        return pipe(
+          Ref.get(stateRef) as Effect.Effect<WebSocketInternalState, never, never>,
+          Effect.flatMap((state) => {
+            if (state.socket && state.socket.readyState !== WebSocket.CLOSED) {
+              state.socket.close();
+            }
+
+            return Ref.update(stateRef, (s: WebSocketInternalState) => {
+              const newState: WebSocketInternalState = {
+                socket: null,
+                connectionState: 'disconnected' as ConnectionState,
+                connectionStateQueue: s.connectionStateQueue,
+                subscribers: new Set<Queue.Queue<TransportMessage>>(),
+              };
+              return newState;
+            });
+          }),
+          Effect.asVoid
+        );
+      }
+    );
+  }
+
+  /**
+   * Update connection state and notify all listeners
+   */
+  private updateConnectionState(
+    stateRef: Ref.Ref<WebSocketInternalState>,
+    newState: ConnectionState
+  ): Effect.Effect<void, never, never> {
+    return pipe(
+      Ref.update(stateRef, (state) => ({
+        ...state,
+        connectionState: newState,
+      })),
+      Effect.flatMap(() => Ref.get(stateRef)),
+      Effect.flatMap((state) => Queue.offer(state.connectionStateQueue, newState))
+    );
+  }
+
+  /**
+   * Handle incoming WebSocket messages
+   */
+  private handleMessage(
+    stateRef: Ref.Ref<WebSocketInternalState>,
+    data: string
+  ): Effect.Effect<void, never, never> {
+    return pipe(
+      Effect.sync(() => {
+        try {
+          return JSON.parse(data) as TransportMessage;
+        } catch {
+          return null; // Return null for parse errors
+        }
+      }),
+      Effect.flatMap((message) => {
+        if (message === null) {
+          // Silently ignore parse errors
+          return Effect.void;
+        }
+
+        return pipe(
+          Ref.get(stateRef),
+          Effect.flatMap((state) =>
+            Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, message), {
+              discard: true,
+            })
+          ),
+          Effect.asVoid
+        );
+      })
+    );
   }
 }
