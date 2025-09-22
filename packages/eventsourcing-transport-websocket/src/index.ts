@@ -11,6 +11,9 @@
 // Main transport implementation and layer
 export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-transport';
 
+// Server transport implementation (TDD placeholder)
+export { WebSocketAcceptor } from './lib/websocket-server';
+
 // Re-export transport contracts for convenience
 export type {
   TransportMessage,
@@ -22,5 +25,5 @@ export type {
   TransportId,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
-// Re-export client namespace
-export { Client } from '@codeforbreakfast/eventsourcing-transport-contracts';
+// Re-export client and server namespaces
+export { Client, Server } from '@codeforbreakfast/eventsourcing-transport-contracts';
