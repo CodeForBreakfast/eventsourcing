@@ -25,6 +25,30 @@ import type {
 } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
+// Event Sourcing Specific Types - The only custom logic we need
+// ============================================================================
+
+export interface StreamEvent<T> {
+  readonly streamId: EventStreamId;
+  readonly eventNumber: EventNumber;
+  readonly position: EventStreamPosition;
+  readonly event: T;
+  readonly timestamp: Date;
+}
+
+export interface Aggregate {
+  readonly position: EventStreamPosition; // streamId + eventNumber
+  readonly name: string; // aggregate type (e.g., "User", "Order")
+}
+
+export interface AggregateCommand<T = unknown> {
+  readonly aggregate: Aggregate;
+  readonly commandName: string;
+  readonly payload: T;
+  readonly metadata?: Record<string, unknown>;
+}
+
+// ============================================================================
 // Error Types - Proper tagged errors for the transport
 // ============================================================================
 
@@ -34,7 +58,7 @@ export class TransportError extends Data.TaggedError('TransportError')<{
 
 export class CommandError extends Data.TaggedError('CommandError')<{
   readonly message: string;
-  readonly aggregateId?: string;
+  readonly aggregate?: Aggregate;
   readonly commandName?: string;
 }> {}
 
@@ -47,27 +71,6 @@ export class MessageParseError extends Data.TaggedError('MessageParseError')<{
   readonly message: string;
   readonly rawData?: unknown;
 }> {}
-
-// ============================================================================
-// Event Sourcing Specific Types - The only custom logic we need
-// ============================================================================
-
-export interface StreamEvent<T> {
-  readonly streamId: EventStreamId;
-  readonly eventNumber: EventNumber;
-  readonly position: EventStreamPosition;
-  readonly event: T;
-  readonly timestamp: Date;
-}
-
-export interface AggregateCommand<T = unknown> {
-  readonly aggregateId: string;
-  readonly aggregateName: string;
-  readonly commandName: string;
-  readonly payload: T;
-  readonly expectedPosition?: EventNumber;
-  readonly metadata?: Record<string, unknown>;
-}
 
 // Use Either for command results - success returns position, failure returns error
 export type CommandResult = Either.Either<EventStreamPosition, CommandError>;

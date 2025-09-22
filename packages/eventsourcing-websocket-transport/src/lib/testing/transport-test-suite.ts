@@ -299,8 +299,13 @@ export function runEventTransportTestSuite<E>(
     describe('command behavior', () => {
       it('should send a command and receive a result', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'user-123',
-          aggregateName: 'User',
+          aggregate: {
+            position: {
+              streamId: 'user-123' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'User',
+          },
           commandName: 'UpdateEmail',
           payload: { action: 'test', value: 42 },
         };
@@ -341,11 +346,15 @@ export function runEventTransportTestSuite<E>(
 
       it('should handle command errors', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'order-456',
-          aggregateName: 'Order',
+          aggregate: {
+            position: {
+              streamId: 'order-456' as EventStreamId,
+              eventNumber: 5 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Order',
+          },
           commandName: 'CancelOrder',
           payload: { action: 'fail', value: -1 },
-          expectedPosition: 5 as EventNumber, // Demonstrate optimistic concurrency
         };
 
         const errorResult: CommandResult = Either.left(
@@ -382,16 +391,25 @@ export function runEventTransportTestSuite<E>(
 
       it('should handle concurrent commands', async () => {
         const command1: AggregateCommand<TestCommand> = {
-          aggregateId: 'product-100',
-          aggregateName: 'Product',
+          aggregate: {
+            position: {
+              streamId: 'product-100' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Product',
+          },
           commandName: 'UpdateStock',
           payload: { action: 'first', value: 1 },
-          expectedPosition: 0 as EventNumber, // Starting from beginning
         };
 
         const command2: AggregateCommand<TestCommand> = {
-          aggregateId: 'product-200',
-          aggregateName: 'Product',
+          aggregate: {
+            position: {
+              streamId: 'product-200' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Product',
+          },
           commandName: 'UpdatePrice',
           payload: { action: 'second', value: 2 },
         };
@@ -450,8 +468,13 @@ export function runEventTransportTestSuite<E>(
 
       it('should handle command timeout', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'session-789',
-          aggregateName: 'Session',
+          aggregate: {
+            position: {
+              streamId: 'session-789' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Session',
+          },
           commandName: 'TimeoutCommand',
           payload: { action: 'timeout', value: 999 },
         };
@@ -609,11 +632,15 @@ export function runEventTransportTestSuite<E>(
 
       it('should retry on transient errors', async () => {
         const command: AggregateCommand<TestCommand> = {
-          aggregateId: 'payment-567',
-          aggregateName: 'Payment',
+          aggregate: {
+            position: {
+              streamId: 'payment-567' as EventStreamId,
+              eventNumber: 10 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Payment',
+          },
           commandName: 'ProcessPayment',
           payload: { action: 'retry', value: 3 },
-          expectedPosition: 10 as EventNumber,
         };
 
         // This test is implementation-specific
@@ -674,8 +701,13 @@ export function runEventTransportTestSuite<E>(
     describe('edge cases', () => {
       it('should handle empty payloads', async () => {
         const command: AggregateCommand<{}> = {
-          aggregateId: 'cart-empty-001',
-          aggregateName: 'Cart',
+          aggregate: {
+            position: {
+              streamId: 'cart-empty-001' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Cart',
+          },
           commandName: 'ClearCart',
           payload: {},
         };
@@ -696,11 +728,15 @@ export function runEventTransportTestSuite<E>(
       it('should handle very large payloads', async () => {
         const largeData = 'x'.repeat(10000);
         const command: AggregateCommand<{ data: string }> = {
-          aggregateId: 'document-large-999',
-          aggregateName: 'Document',
+          aggregate: {
+            position: {
+              streamId: 'document-large-999' as EventStreamId,
+              eventNumber: 0 as EventNumber,
+            } as EventStreamPosition,
+            name: 'Document',
+          },
           commandName: 'UploadContent',
           payload: { data: largeData },
-          expectedPosition: 0 as EventNumber, // New document
         };
 
         const result = await runWithTransport(
