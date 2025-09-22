@@ -169,7 +169,7 @@ const setupMockServer = () =>
             type: 'event',
             streamId,
             eventNumber: 1,
-            position: 1,
+            position: 1, // This is still the global position for the protocol
             event,
             timestamp: new Date().toISOString(),
           });

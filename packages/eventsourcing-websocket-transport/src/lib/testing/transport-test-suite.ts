@@ -117,7 +117,7 @@ export function runEventTransportTestSuite<E>(
 
         if (mockServer) {
           expect(result).toHaveLength(1);
-          expect(result[0]?.streamId).toBe(streamId);
+          expect(result[0]?.position.streamId).toBe(streamId);
           expect(result[0]?.event).toEqual(testEvent);
         }
       });

@@ -29,9 +29,7 @@ import type {
 // ============================================================================
 
 export interface StreamEvent<T> {
-  readonly streamId: EventStreamId;
-  readonly eventNumber: EventNumber;
-  readonly position: EventStreamPosition;
+  readonly position: EventStreamPosition; // Contains streamId and eventNumber
   readonly event: T;
   readonly timestamp: Date;
 }
@@ -200,9 +198,10 @@ const processEventMessage =
     pipe(
       Schema.decode(eventSchema)(msg.event as TEvent),
       Effect.map((event) => ({
-        streamId: msg.streamId as EventStreamId,
-        eventNumber: msg.eventNumber as unknown as EventNumber,
-        position: msg.position as unknown as EventStreamPosition,
+        position: {
+          streamId: msg.streamId as EventStreamId,
+          eventNumber: msg.eventNumber as EventNumber,
+        } as EventStreamPosition,
         event,
         timestamp: new Date(msg.timestamp),
       })),
@@ -300,7 +299,7 @@ const subscribe =
       Effect.map(() =>
         pipe(
           Stream.fromPubSub(eventPubSub),
-          Stream.filter((event) => event.streamId === position.streamId)
+          Stream.filter((event) => event.position.streamId === position.streamId)
         )
       )
     );
