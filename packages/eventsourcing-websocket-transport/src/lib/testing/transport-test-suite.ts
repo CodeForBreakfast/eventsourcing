@@ -1,3 +1,18 @@
+/**
+ * Integration Test Suite for Event Transport Implementations
+ *
+ * This suite tests the INTEGRATION of transport layer with event sourcing concepts.
+ * It combines both domain and transport behaviors to ensure they work correctly together.
+ *
+ * Test Categories:
+ * - REQUIRED: Behaviors that MUST be implemented correctly
+ * - OPTIONAL: Behaviors that MAY be implemented based on transport capabilities
+ * - IMPLEMENTATION-SPECIFIC: Behaviors that vary by transport type
+ *
+ * For pure domain tests, see: domain-contract.test.ts
+ * For pure transport tests, see: message-transport-contract.ts
+ */
+
 import { Effect, Stream, Layer, Schema, pipe, Chunk, Fiber, Duration, Either } from 'effect';
 import { describe, expect, it, beforeAll, afterAll } from 'bun:test';
 import type { AggregateCommand, CommandResult } from '../event-transport';
@@ -28,12 +43,16 @@ const createStreamId = (prefix = 'test-stream'): EventStreamId =>
   `${prefix}-${Math.random().toString(36).substring(7)}` as EventStreamId;
 
 /**
- * Reusable test suite for EventTransport implementations.
- * This ensures all transports implement the required behavior correctly.
+ * Integration test suite for EventTransport implementations.
+ *
+ * This suite validates the INTEGRATION between transport and event sourcing layers.
+ * It ensures that transport implementations correctly bridge network protocols
+ * with event sourcing semantics.
  *
  * @param name - Display name for the implementation (e.g., "WebSocket", "HTTP", "SSE")
  * @param makeTransport - Function that returns a Layer providing the EventTransport implementation
  * @param setupMockServer - Optional function to set up a mock server for testing
+ * @param features - Optional features this transport implementation supports
  */
 export function runEventTransportTestSuite<E>(
   name: string,
@@ -51,9 +70,15 @@ export function runEventTransportTestSuite<E>(
     },
     never,
     never
-  >
+  >,
+  features?: {
+    supportsReconnection?: boolean;
+    supportsOfflineBuffering?: boolean;
+    supportsBackpressure?: boolean;
+    maintainsOrderingDuringReconnect?: boolean;
+  }
 ) {
-  describe(`${name} EventTransport`, () => {
+  describe(`${name} EventTransport Integration`, () => {
     let transport: Layer.Layer<EventTransportService, E, never>;
     let mockServer: {
       sendEvent: (streamId: string, event: TestEvent) => Effect.Effect<void, never, never>;
@@ -85,8 +110,8 @@ export function runEventTransportTestSuite<E>(
       }
     });
 
-    describe('subscription behavior', () => {
-      it('should subscribe to a single stream', async () => {
+    describe('REQUIRED: Event Subscription Behavior', () => {
+      it('REQUIRED: must subscribe to a single stream and receive events', async () => {
         const streamId = createStreamId();
         const testEvent: TestEvent = { type: 'test', data: 'hello', version: 1 };
 
@@ -122,7 +147,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should subscribe to a stream from a specific position', async () => {
+      it('REQUIRED: must support subscribing from a specific position', async () => {
         const streamId = createStreamId();
         const position = {
           streamId,
@@ -139,7 +164,7 @@ export function runEventTransportTestSuite<E>(
         );
       });
 
-      it('should handle multiple concurrent subscriptions', async () => {
+      it('REQUIRED: must handle multiple concurrent subscriptions', async () => {
         const streamId1 = createStreamId('stream1');
         const streamId2 = createStreamId('stream2');
         const event1: TestEvent = { type: 'test', data: 'stream1', version: 1 };
@@ -198,7 +223,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should filter events to only subscribed streams', async () => {
+      it('REQUIRED: must filter events to only subscribed streams', async () => {
         const subscribedStream = createStreamId('subscribed');
         const unsubscribedStream = createStreamId('unsubscribed');
         const correctEvent: TestEvent = { type: 'test', data: 'correct', version: 1 };
@@ -244,7 +269,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should handle stream completion', async () => {
+      it('REQUIRED: must handle stream completion gracefully', async () => {
         const streamId = createStreamId();
         const events = [
           { type: 'test' as const, data: 'event1', version: 1 },
@@ -296,8 +321,8 @@ export function runEventTransportTestSuite<E>(
       });
     });
 
-    describe('command behavior', () => {
-      it('should send a command and receive a result', async () => {
+    describe('REQUIRED: Command Processing Behavior', () => {
+      it('REQUIRED: must send a command and receive a result', async () => {
         const command: AggregateCommand<TestCommand> = {
           aggregate: {
             position: {
@@ -344,7 +369,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should handle command errors', async () => {
+      it('REQUIRED: must handle command errors properly', async () => {
         const command: AggregateCommand<TestCommand> = {
           aggregate: {
             position: {
@@ -389,7 +414,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should handle concurrent commands', async () => {
+      it('REQUIRED: must handle concurrent commands', async () => {
         const command1: AggregateCommand<TestCommand> = {
           aggregate: {
             position: {
@@ -466,7 +491,7 @@ export function runEventTransportTestSuite<E>(
         }
       });
 
-      it('should handle command timeout', async () => {
+      it('OPTIONAL: should handle command timeout gracefully', async () => {
         const command: AggregateCommand<TestCommand> = {
           aggregate: {
             position: {
@@ -506,8 +531,8 @@ export function runEventTransportTestSuite<E>(
       });
     });
 
-    describe('lifecycle behavior', () => {
-      it('should disconnect gracefully', async () => {
+    describe('REQUIRED: Lifecycle Management', () => {
+      it('REQUIRED: must disconnect gracefully', async () => {
         await runWithTransport(
           pipe(
             EventTransportService,
@@ -527,7 +552,7 @@ export function runEventTransportTestSuite<E>(
         // Should complete without errors
       });
 
-      it('should clean up resources on scope exit', async () => {
+      it('REQUIRED: must clean up resources on scope exit', async () => {
         const streamId = createStreamId();
 
         await runWithTransport(
@@ -547,9 +572,9 @@ export function runEventTransportTestSuite<E>(
         // Resources should be cleaned up automatically
       });
 
-      it('should handle reconnection after disconnect', async () => {
-        if (!mockServer?.simulateDisconnect) {
-          return; // Skip if mock doesn't support disconnect simulation
+      it('OPTIONAL: should handle reconnection after disconnect', async () => {
+        if (!features?.supportsReconnection || !mockServer?.simulateDisconnect) {
+          return; // Skip if not supported
         }
 
         const streamId = createStreamId();
@@ -597,8 +622,8 @@ export function runEventTransportTestSuite<E>(
       });
     });
 
-    describe('error handling', () => {
-      it('should handle malformed messages gracefully', async () => {
+    describe('OPTIONAL: Error Recovery', () => {
+      it('IMPLEMENTATION-SPECIFIC: should handle malformed messages gracefully', async () => {
         if (!mockServer) return;
 
         const streamId = createStreamId();
@@ -630,7 +655,7 @@ export function runEventTransportTestSuite<E>(
         // Should handle gracefully without crashing
       });
 
-      it('should retry on transient errors', async () => {
+      it('IMPLEMENTATION-SPECIFIC: may retry on transient errors', async () => {
         const command: AggregateCommand<TestCommand> = {
           aggregate: {
             position: {
@@ -657,7 +682,10 @@ export function runEventTransportTestSuite<E>(
         );
       });
 
-      it('should handle backpressure on streams', async () => {
+      it('OPTIONAL: should handle backpressure on streams', async () => {
+        if (!features?.supportsBackpressure) {
+          return; // Skip if not supported
+        }
         const streamId = createStreamId();
         const manyEvents = Array.from({ length: 100 }, (_, i) => ({
           type: 'test' as const,
@@ -698,8 +726,8 @@ export function runEventTransportTestSuite<E>(
       });
     });
 
-    describe('edge cases', () => {
-      it('should handle empty payloads', async () => {
+    describe('REQUIRED: Edge Cases', () => {
+      it('REQUIRED: must handle empty payloads', async () => {
         const command: AggregateCommand<{}> = {
           aggregate: {
             position: {
@@ -725,7 +753,7 @@ export function runEventTransportTestSuite<E>(
         expect(result.success).toBeDefined();
       });
 
-      it('should handle very large payloads', async () => {
+      it('OPTIONAL: should handle very large payloads', async () => {
         const largeData = 'x'.repeat(10000);
         const command: AggregateCommand<{ data: string }> = {
           aggregate: {
@@ -752,7 +780,7 @@ export function runEventTransportTestSuite<E>(
         expect(result.success).toBeDefined();
       });
 
-      it('should handle special characters in stream IDs', async () => {
+      it('REQUIRED: must handle special characters in stream IDs', async () => {
         const specialStreamId = 'test/stream:with-special.chars_123' as EventStreamId;
 
         await runWithTransport(
@@ -770,7 +798,7 @@ export function runEventTransportTestSuite<E>(
         // Should handle without errors
       });
 
-      it('should handle rapid subscription/unsubscription', async () => {
+      it('REQUIRED: must handle rapid subscription/unsubscription', async () => {
         const streamId = createStreamId();
 
         await runWithTransport(

@@ -18,10 +18,12 @@ import {
   Either,
   Data,
 } from 'effect';
-import type {
-  EventStreamId,
-  EventStreamPosition,
-  EventNumber,
+import {
+  type EventStreamId,
+  type EventStreamPosition,
+  EventStreamPosition as EventStreamPositionSchema,
+  WebSocketError,
+  webSocketError,
 } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
@@ -47,7 +49,7 @@ export interface AggregateCommand<T = unknown> {
 }
 
 // ============================================================================
-// Error Types - Proper tagged errors for the transport
+// Error Types - Using Data.TaggedError for proper Effect error handling
 // ============================================================================
 
 export class TransportError extends Data.TaggedError('TransportError')<{
@@ -58,11 +60,6 @@ export class CommandError extends Data.TaggedError('CommandError')<{
   readonly message: string;
   readonly aggregate?: Aggregate;
   readonly commandName?: string;
-}> {}
-
-export class ConnectionError extends Data.TaggedError('ConnectionError')<{
-  readonly message: string;
-  readonly url?: string;
 }> {}
 
 export class MessageParseError extends Data.TaggedError('MessageParseError')<{
@@ -114,10 +111,14 @@ export const ProtocolMessage = Schema.Union(
 type ProtocolMessage = Schema.Schema.Type<typeof ProtocolMessage>;
 
 // ============================================================================
-// Event Transport Interface
+// Event Transport Interface - Functional Design with Type Safety
 // ============================================================================
 
-export interface EventTransport<TEvent> {
+/**
+ * A connected transport that can perform operations.
+ * This type can ONLY exist after a successful connection.
+ */
+export interface ConnectedTransport<TEvent> {
   readonly subscribe: (
     position: EventStreamPosition
   ) => Effect.Effect<Stream.Stream<StreamEvent<TEvent>, never, never>, never, never>;
@@ -128,13 +129,42 @@ export interface EventTransport<TEvent> {
 }
 
 /**
- * Service tag for EventTransport.
- * Allows clients to depend on the transport abstraction without knowing
- * whether it's WebSocket, HTTP, or any other implementation.
+ * Transport connector function - the only way to get a ConnectedTransport.
+ * This design makes it impossible to call transport methods before connecting.
+ */
+export interface TransportConnector<TEvent> {
+  readonly connect: (
+    url: string
+  ) => Effect.Effect<ConnectedTransport<TEvent>, WebSocketError, Scope.Scope>;
+}
+
+/**
+ * Service interface for EventTransportService.
+ * Provides a connect function instead of a pre-built transport.
+ */
+export interface EventTransportConnectorInterface {
+  readonly connect: (
+    url: string
+  ) => Effect.Effect<ConnectedTransport<unknown>, WebSocketError, Scope.Scope>;
+}
+
+/**
+ * Service tag for EventTransportConnector.
+ * Clients must explicitly connect before they can use the transport.
+ */
+export class EventTransportConnector extends Effect.Tag('@eventsourcing/EventTransportConnector')<
+  EventTransportConnector,
+  EventTransportConnectorInterface
+>() {}
+
+/**
+ * Legacy service interface that provides pre-connected transport for backward compatibility.
+ * This is primarily for testing and simple use cases.
+ * For production code, prefer using EventTransportConnector.
  */
 export class EventTransportService extends Effect.Tag('@eventsourcing/EventTransport')<
   EventTransportService,
-  EventTransport<unknown>
+  ConnectedTransport<unknown>
 >() {}
 
 // ============================================================================
@@ -152,8 +182,8 @@ const createWebSocket = (url: string) =>
       })
   );
 
-const waitForConnection = (ws: WebSocket, url: string): Effect.Effect<void, ConnectionError> =>
-  Effect.async<void, ConnectionError>((resume) => {
+const waitForConnection = (ws: WebSocket, url: string): Effect.Effect<void, WebSocketError> =>
+  Effect.async<void, WebSocketError>((resume) => {
     if (ws.readyState === WebSocket.OPEN) {
       resume(Effect.succeed(void 0));
     } else {
@@ -161,10 +191,7 @@ const waitForConnection = (ws: WebSocket, url: string): Effect.Effect<void, Conn
       ws.onerror = (error) =>
         resume(
           Effect.fail(
-            new ConnectionError({
-              message: `WebSocket connection failed: ${error}`,
-              url,
-            })
+            webSocketError.connect(url, `WebSocket connection failed: ${error}`, undefined, error)
           )
         );
     }
@@ -173,35 +200,37 @@ const waitForConnection = (ws: WebSocket, url: string): Effect.Effect<void, Conn
 const sendMessage =
   (ws: WebSocket) =>
   (message: unknown): Effect.Effect<void, TransportError> =>
-    Effect.sync(() => {
-      if (ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(message));
-      } else {
-        throw new TransportError({ message: 'WebSocket is not connected' });
-      }
-    }).pipe(
-      Effect.catchAll((error: unknown) =>
-        Effect.fail(
-          error &&
-            typeof error === 'object' &&
-            '_tag' in error &&
-            (error as any)._tag === 'TransportError'
-            ? (error as TransportError)
-            : new TransportError({ message: String(error) })
-        )
-      )
+    pipe(
+      Effect.try({
+        try: () => {
+          if (ws.readyState === WebSocket.OPEN) {
+            ws.send(JSON.stringify(message));
+          } else {
+            throw new TransportError({ message: 'WebSocket is not connected' });
+          }
+        },
+        catch: (error: unknown) => {
+          if (error instanceof TransportError) {
+            return error;
+          }
+          return new TransportError({ message: String(error) });
+        },
+      })
     );
 
 const processEventMessage =
   <TEvent>(eventSchema: Schema.Schema<TEvent>, eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>) =>
   (msg: Extract<ProtocolMessage, { type: 'event' }>) =>
     pipe(
-      Schema.decode(eventSchema)(msg.event as TEvent),
-      Effect.map((event) => ({
-        position: {
-          streamId: msg.streamId as EventStreamId,
-          eventNumber: msg.eventNumber as EventNumber,
-        } as EventStreamPosition,
+      Effect.all({
+        event: Schema.decodeUnknown(eventSchema)(msg.event),
+        position: Schema.decodeUnknown(EventStreamPositionSchema)({
+          streamId: msg.streamId,
+          eventNumber: msg.eventNumber,
+        }),
+      }),
+      Effect.map(({ event, position }) => ({
+        position,
         event,
         timestamp: new Date(msg.timestamp),
       })),
@@ -216,17 +245,28 @@ const processCommandResult =
       Effect.map((commands) => HashMap.get(commands, msg.id)),
       Effect.flatMap((queueOption) =>
         Option.match(queueOption, {
-          onNone: () => Effect.void,
+          onNone: () => Effect.void as Effect.Effect<void, never, never>,
           onSome: (queue) => {
-            // Convert protocol message to Either
-            const result: CommandResult = msg.success
-              ? Either.right(msg.position as EventStreamPosition)
-              : Either.left(
-                  new CommandError({
-                    message: msg.error || 'Command failed',
-                  })
-                );
-            return Queue.offer(queue, result);
+            if (msg.success && msg.position) {
+              return pipe(
+                Schema.decodeUnknown(EventStreamPositionSchema)(msg.position),
+                Effect.map((position) => Either.right(position) as CommandResult),
+                Effect.flatMap((result) => Queue.offer(queue, result)),
+                Effect.catchAll(() =>
+                  // If position decode fails, treat as command error
+                  Queue.offer(
+                    queue,
+                    Either.left(new CommandError({ message: 'Invalid command result position' }))
+                  )
+                )
+              );
+            } else {
+              // Command failed
+              return Queue.offer(
+                queue,
+                Either.left(new CommandError({ message: msg.error || 'Command failed' }))
+              );
+            }
           },
         })
       )
@@ -265,7 +305,8 @@ const startMessageProcessor = <TEvent>(
                 Effect.try(() => JSON.parse(event.data as string)),
                 Effect.flatMap(Schema.decode(ProtocolMessage)),
                 Effect.flatMap(processMessage(eventSchema, eventPubSub, pendingCommands)),
-                Effect.catchAll((error) => Effect.logError(`Failed to process message: ${error}`))
+                Effect.catchAll((error) => Effect.logError(`Failed to process message: ${error}`)),
+                Effect.asVoid
               )
             ).then(() => messageResume(Effect.succeed(void 0)));
           };
@@ -353,14 +394,13 @@ const disconnect =
     );
 
 /**
- * Creates a WebSocket event transport for event sourcing.
- * Returns an EventTransport implementation that clients can use without
- * knowing about the underlying WebSocket details.
+ * Creates a connected WebSocket transport for event sourcing.
+ * This is a private function - clients should use `connect` to get a ConnectedTransport.
  */
-export const makeEventTransport = <TEvent>(
+const createConnectedTransport = <TEvent>(
   url: string,
   eventSchema: Schema.Schema<TEvent>
-): Effect.Effect<EventTransport<TEvent>, ConnectionError, Scope.Scope> =>
+): Effect.Effect<ConnectedTransport<TEvent>, WebSocketError, Scope.Scope> =>
   pipe(
     createWebSocket(url),
     Effect.tap((ws) => waitForConnection(ws, url)),
@@ -387,9 +427,40 @@ export const makeEventTransport = <TEvent>(
   );
 
 /**
- * Creates a Layer that provides EventTransportService with WebSocket implementation.
- * This allows clients to use the transport via dependency injection without
- * knowing about the WebSocket implementation details.
+ * Creates a transport connector that provides a connect function.
+ * The connect function is the ONLY way to get a ConnectedTransport,
+ * ensuring that transport methods can't be called before connection.
+ */
+export const makeTransportConnector = <TEvent>(
+  eventSchema: Schema.Schema<TEvent>
+): TransportConnector<TEvent> => ({
+  connect: (url: string) => createConnectedTransport(url, eventSchema),
+});
+
+/**
+ * Direct connect function - the functional way to create a connected transport.
+ * This is the primary API for the new functional design.
+ */
+export const connect = <TEvent>(
+  url: string,
+  eventSchema: Schema.Schema<TEvent>
+): Effect.Effect<ConnectedTransport<TEvent>, WebSocketError, Scope.Scope> =>
+  createConnectedTransport(url, eventSchema);
+
+/**
+ * Creates a Layer that provides EventTransportConnector with WebSocket implementation.
+ * Clients must call connect() to get a ConnectedTransport.
+ * This is the recommended approach for production code.
+ */
+export const EventTransportConnectorLive = (eventSchema: Schema.Schema<unknown>) =>
+  Layer.succeed(EventTransportConnector, {
+    connect: (url: string) => createConnectedTransport(url, eventSchema),
+  } as EventTransportConnectorInterface);
+
+/**
+ * Creates a Layer that provides EventTransportService with a pre-connected WebSocket transport.
+ * This is for backward compatibility and testing.
+ * For production code, prefer EventTransportConnectorLive.
  */
 export const EventTransportLive = (url: string, eventSchema: Schema.Schema<unknown>) =>
-  Layer.scoped(EventTransportService, makeEventTransport(url, eventSchema));
+  Layer.scoped(EventTransportService, createConnectedTransport(url, eventSchema));
