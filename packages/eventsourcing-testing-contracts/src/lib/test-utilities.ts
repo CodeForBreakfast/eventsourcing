@@ -424,13 +424,17 @@ export const createMockDomainContext = (): Effect.Effect<
         }
 
         // Simulate business rule validation
-        if (command.payload && typeof command.payload === 'object' && 'amount' in command.payload) {
-          const amount = (command.payload as any).amount;
-          if (amount < 0) {
-            return {
-              _tag: 'Left',
-              left: createMockCommandError('Negative amounts not allowed'),
-            } as any;
+        if (command.payload && typeof command.payload === 'object' && command.payload !== null) {
+          const payloadObj = command.payload as Record<string, unknown>;
+          const hasAmount = 'amount' in payloadObj;
+          if (hasAmount) {
+            const amount = payloadObj.amount;
+            if (typeof amount === 'number' && amount < 0) {
+              return {
+                _tag: 'Left',
+                left: createMockCommandError('Negative amounts not allowed'),
+              } as any;
+            }
           }
         }
 
