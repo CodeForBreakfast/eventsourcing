@@ -10,10 +10,11 @@ import {
   Fiber,
   Duration,
   Stream,
+  Either,
 } from 'effect';
 import { runEventTransportTestSuite } from './testing/transport-test-suite';
-import { EventTransportLive, EventTransportService } from './event-transport';
-import type { AggregateCommand, CommandResult } from './event-transport';
+import { EventTransportLive, EventTransportService, CommandError } from './event-transport';
+import type { AggregateCommand, CommandResult, CommandSuccess } from './event-transport';
 
 // Mock WebSocket for testing with proper connection timing
 class MockWebSocket {
@@ -35,7 +36,7 @@ class MockWebSocket {
       if (this.onopen) {
         this.onopen(new Event('open'));
       }
-    }, 50);
+    }, 10);
   }
 
   waitForConnection(): Effect.Effect<void, never, never> {
@@ -101,7 +102,7 @@ const setupMockServer = () =>
     let websocket: MockWebSocket | null = null;
 
     // Track pending command responses
-    const commandResponses = yield* Ref.make(HashMap.empty<string, CommandResult>());
+    const commandResponses = yield* Ref.make(HashMap.empty<string, CommandResult<unknown>>());
 
     mockServer = {
       handleMessage: (msg: any) => {
@@ -122,6 +123,7 @@ const setupMockServer = () =>
                 const response = HashMap.get(responses, msg.id);
                 if (response._tag === 'Some') {
                   // Send the response immediately
+                  const result = response.value;
                   setTimeout(() => {
                     if (websocket?.onmessage) {
                       websocket.onmessage(
@@ -129,7 +131,10 @@ const setupMockServer = () =>
                           data: JSON.stringify({
                             type: 'command_result',
                             id: msg.id,
-                            result: response.value,
+                            success: Either.isRight(result),
+                            result: Either.isRight(result) ? result.right.result : undefined,
+                            error: Either.isLeft(result) ? result.left.message : undefined,
+                            position: Either.isRight(result) ? result.right.position : undefined,
                           }),
                         })
                       );
@@ -183,7 +188,7 @@ const setupMockServer = () =>
       expectCommand: <T>(command: AggregateCommand<T>) =>
         // Just check that a command was received - the actual command is stored
         Effect.void,
-      respondToCommand: <T>(result: CommandResult<T>) =>
+      respondToCommand: <T>(result: Either.Either<CommandSuccess<T>, CommandError>) =>
         Effect.gen(function* () {
           // Get the latest command ID
           const commands = yield* Ref.get(pendingCommands);
@@ -191,7 +196,10 @@ const setupMockServer = () =>
           if (commandIds.length > 0) {
             const commandId = commandIds[commandIds.length - 1];
             // Store the response for when the command arrives
-            yield* Ref.update(commandResponses, HashMap.set(commandId, result as CommandResult));
+            yield* Ref.update(
+              commandResponses,
+              HashMap.set(commandId, result as CommandResult<unknown>)
+            );
             // If command already arrived, send response now
             if (HashMap.has(commands, commandId)) {
               setTimeout(() => {
@@ -201,7 +209,10 @@ const setupMockServer = () =>
                       data: JSON.stringify({
                         type: 'command_result',
                         id: commandId,
-                        result,
+                        success: Either.isRight(result),
+                        result: Either.isRight(result) ? result.right.result : undefined,
+                        error: Either.isLeft(result) ? result.left.message : undefined,
+                        position: Either.isRight(result) ? result.right.position : undefined,
                       }),
                     })
                   );
@@ -302,10 +313,8 @@ describe('WebSocket Transport specific tests', () => {
     await pipe(
       Effect.scoped(
         pipe(
-          transport,
-          Effect.provide,
-          Effect.flatMap(() => EventTransportService),
-          Effect.tap((t) =>
+          EventTransportService,
+          Effect.flatMap((t) =>
             Effect.gen(function* () {
               const stream = yield* t.subscribe('test-stream' as any);
               // Send malformed JSON to the WebSocket
@@ -323,7 +332,8 @@ describe('WebSocket Transport specific tests', () => {
                 Effect.catchAll(() => Effect.void)
               );
             })
-          )
+          ),
+          Effect.provide(transport)
         )
       ),
       Effect.runPromise

@@ -15,12 +15,38 @@ import {
   Fiber,
   Scope,
   Layer,
+  Either,
+  Data,
 } from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
   EventNumber,
 } from '@codeforbreakfast/eventsourcing-store';
+
+// ============================================================================
+// Error Types - Proper tagged errors for the transport
+// ============================================================================
+
+export class TransportError extends Data.TaggedError('TransportError')<{
+  readonly message: string;
+}> {}
+
+export class CommandError extends Data.TaggedError('CommandError')<{
+  readonly message: string;
+  readonly aggregateId?: string;
+  readonly commandName?: string;
+}> {}
+
+export class ConnectionError extends Data.TaggedError('ConnectionError')<{
+  readonly message: string;
+  readonly url?: string;
+}> {}
+
+export class MessageParseError extends Data.TaggedError('MessageParseError')<{
+  readonly message: string;
+  readonly rawData?: unknown;
+}> {}
 
 // ============================================================================
 // Event Sourcing Specific Types - The only custom logic we need
@@ -42,12 +68,14 @@ export interface AggregateCommand<T = unknown> {
   readonly metadata?: Record<string, unknown>;
 }
 
-export interface CommandResult<T = unknown> {
-  readonly success: boolean;
-  readonly result?: T;
-  readonly error?: string;
-  readonly position?: EventStreamPosition;
+// Command results now include position in success case
+export interface CommandSuccess<T = unknown> {
+  readonly result: T;
+  readonly position?: EventStreamPosition | undefined;
 }
+
+// Use Either for command results instead of the shitty CommandResult interface
+export type CommandResult<T = unknown> = Either.Either<CommandSuccess<T>, CommandError>;
 
 // ============================================================================
 // Protocol Messages - Event sourcing protocol over WebSocket
@@ -81,7 +109,10 @@ export const ProtocolMessage = Schema.Union(
   Schema.Struct({
     type: Schema.Literal('command_result'),
     id: Schema.String,
-    result: Schema.Unknown,
+    success: Schema.Boolean,
+    result: Schema.optional(Schema.Unknown),
+    error: Schema.optional(Schema.String),
+    position: Schema.optional(Schema.Unknown),
   })
 );
 
@@ -127,25 +158,45 @@ const createWebSocket = (url: string) =>
       })
   );
 
-const waitForConnection = (ws: WebSocket): Effect.Effect<void, Error> =>
-  Effect.async<void, Error>((resume) => {
+const waitForConnection = (ws: WebSocket, url: string): Effect.Effect<void, ConnectionError> =>
+  Effect.async<void, ConnectionError>((resume) => {
     if (ws.readyState === WebSocket.OPEN) {
       resume(Effect.succeed(void 0));
     } else {
       ws.onopen = () => resume(Effect.succeed(void 0));
       ws.onerror = (error) =>
-        resume(Effect.fail(new Error(`WebSocket connection failed: ${error}`)));
+        resume(
+          Effect.fail(
+            new ConnectionError({
+              message: `WebSocket connection failed: ${error}`,
+              url,
+            })
+          )
+        );
     }
   });
 
-const sendMessage = (ws: WebSocket) => (message: unknown) =>
-  Effect.sync(() => {
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify(message));
-    } else {
-      throw new Error('WebSocket is not connected');
-    }
-  });
+const sendMessage =
+  (ws: WebSocket) =>
+  (message: unknown): Effect.Effect<void, TransportError> =>
+    Effect.sync(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify(message));
+      } else {
+        throw new TransportError({ message: 'WebSocket is not connected' });
+      }
+    }).pipe(
+      Effect.catchAll((error: unknown) =>
+        Effect.fail(
+          error &&
+            typeof error === 'object' &&
+            '_tag' in error &&
+            (error as any)._tag === 'TransportError'
+            ? (error as TransportError)
+            : new TransportError({ message: String(error) })
+        )
+      )
+    );
 
 const processEventMessage =
   <TEvent>(eventSchema: Schema.Schema<TEvent>, eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>) =>
@@ -163,7 +214,7 @@ const processEventMessage =
     );
 
 const processCommandResult =
-  (pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>) =>
+  (pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>) =>
   (msg: Extract<ProtocolMessage, { type: 'command_result' }>) =>
     pipe(
       Ref.get(pendingCommands),
@@ -171,7 +222,20 @@ const processCommandResult =
       Effect.flatMap((queueOption) =>
         Option.match(queueOption, {
           onNone: () => Effect.void,
-          onSome: (queue) => Queue.offer(queue, msg.result as CommandResult),
+          onSome: (queue) => {
+            // Convert protocol message to Either
+            const result: CommandResult<unknown> = msg.success
+              ? Either.right({
+                  result: msg.result,
+                  position: msg.position as EventStreamPosition | undefined,
+                } as CommandSuccess<unknown>)
+              : Either.left(
+                  new CommandError({
+                    message: msg.error || 'Command failed',
+                  })
+                );
+            return Queue.offer(queue, result);
+          },
         })
       )
     );
@@ -180,7 +244,7 @@ const processMessage =
   <TEvent>(
     eventSchema: Schema.Schema<TEvent>,
     eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>,
-    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>
+    pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
   ) =>
   (msg: ProtocolMessage) => {
     switch (msg.type) {
@@ -197,7 +261,7 @@ const startMessageProcessor = <TEvent>(
   ws: WebSocket,
   eventSchema: Schema.Schema<TEvent>,
   eventPubSub: PubSub.PubSub<StreamEvent<TEvent>>,
-  pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult>>>
+  pendingCommands: Ref.Ref<HashMap.HashMap<string, Queue.Queue<CommandResult<unknown>>>>
 ) =>
   Effect.async<Fiber.RuntimeFiber<never, never>>((resume) => {
     const fiber = Effect.runFork(
@@ -311,24 +375,30 @@ const disconnect =
 export const makeEventTransport = <TEvent>(
   url: string,
   eventSchema: Schema.Schema<TEvent>
-): Effect.Effect<EventTransport<TEvent>, never, Scope.Scope> =>
+): Effect.Effect<EventTransport<TEvent>, ConnectionError, Scope.Scope> =>
   pipe(
     createWebSocket(url),
-    Effect.tap((ws) => waitForConnection(ws).pipe(Effect.orDie)),
+    Effect.tap((ws) => waitForConnection(ws, url)),
     Effect.flatMap((ws) =>
       pipe(
         Effect.all({
           eventPubSub: PubSub.unbounded<StreamEvent<TEvent>>(),
           subscriptions: Ref.make(HashMap.empty<EventStreamId, boolean>()),
-          pendingCommands: Ref.make(HashMap.empty<string, Queue.Queue<CommandResult>>()),
+          pendingCommands: Ref.make(HashMap.empty<string, Queue.Queue<CommandResult<unknown>>>()),
         }),
         Effect.tap(({ eventPubSub, pendingCommands }) =>
           startMessageProcessor(ws, eventSchema, eventPubSub, pendingCommands)
         ),
         Effect.map(({ eventPubSub, subscriptions, pendingCommands }) => ({
-          subscribe: subscribe(ws, subscriptions, eventPubSub),
-          sendCommand: sendCommand(ws, pendingCommands),
-          disconnect: disconnect(ws, subscriptions),
+          subscribe: (streamId: EventStreamId, position?: EventStreamPosition) =>
+            pipe(subscribe(ws, subscriptions, eventPubSub)(streamId, position), Effect.orDie),
+          sendCommand: <TPayload, TResult>(command: AggregateCommand<TPayload>) =>
+            pipe(sendCommand(ws, pendingCommands)(command), Effect.orDie) as Effect.Effect<
+              CommandResult<TResult>,
+              never,
+              never
+            >,
+          disconnect: () => pipe(disconnect(ws, subscriptions)(), Effect.orDie),
         }))
       )
     ),
