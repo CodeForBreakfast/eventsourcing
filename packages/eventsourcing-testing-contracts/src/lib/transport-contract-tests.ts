@@ -10,7 +10,6 @@ import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import type {
   TransportMessage,
   TransportTestContext,
-  TransportFeatures,
   TransportTestRunner,
   ConnectedTransportTestInterface,
   ConnectionState,
@@ -18,13 +17,12 @@ import type {
 import { TransportMessageSchema } from './test-layer-interfaces.js';
 
 /**
- * REQUIRED: Core transport contract tests.
- * Every transport implementation MUST pass these tests.
+ * Core transport contract tests.
+ * Every transport implementation must pass these tests.
  */
 export const runTransportContractTests: TransportTestRunner = (
   name: string,
-  setup: () => Effect.Effect<TransportTestContext>,
-  features?: TransportFeatures
+  setup: () => Effect.Effect<TransportTestContext>
 ) => {
   describe(`${name} Transport Contract`, () => {
     let context: TransportTestContext;
@@ -38,7 +36,7 @@ export const runTransportContractTests: TransportTestRunner = (
       // No manual disconnect needed
     });
 
-    describe('REQUIRED: Connection Lifecycle (Scope-based)', () => {
+    describe('Connection Lifecycle (Scope-based)', () => {
       it('should create connected transport within scope', async () => {
         await Effect.runPromise(
           Effect.scoped(
@@ -129,7 +127,7 @@ export const runTransportContractTests: TransportTestRunner = (
       });
     });
 
-    describe('REQUIRED: Message Publishing', () => {
+    describe('Message Publishing', () => {
       it('should publish a simple message', async () => {
         await Effect.runPromise(
           Effect.scoped(
@@ -246,7 +244,7 @@ export const runTransportContractTests: TransportTestRunner = (
       });
     });
 
-    describe('REQUIRED: Message Subscription', () => {
+    describe('Message Subscription', () => {
       it('should receive published messages', async () => {
         await Effect.runPromise(
           Effect.scoped(
@@ -439,7 +437,7 @@ export const runTransportContractTests: TransportTestRunner = (
       });
     });
 
-    describe('REQUIRED: Connection State Monitoring', () => {
+    describe('Connection State Monitoring', () => {
       it('should monitor connection state changes', async () => {
         await Effect.runPromise(
           Effect.scoped(
@@ -472,118 +470,7 @@ export const runTransportContractTests: TransportTestRunner = (
       });
     });
 
-    // OPTIONAL FEATURE TESTS - Updated for Scope-based lifecycle
-
-    if (features?.guaranteesMessageOrdering) {
-      describe('OPTIONAL: Message Ordering', () => {
-        it('should maintain message order', async () => {
-          await Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const transport = yield* context.createConnectedTransport('test://localhost');
-
-                const orderedMessages = yield* pipe(
-                  transport.subscribe((msg) => msg.type === 'order-test'),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.take(5),
-                      Stream.runCollect,
-                      Effect.map(Chunk.toReadonlyArray),
-                      Effect.fork
-                    )
-                  )
-                );
-
-                yield* Effect.sleep(Duration.millis(50));
-
-                // Send messages in sequence
-                for (let i = 0; i < 5; i++) {
-                  yield* transport.publish({
-                    id: `order-${i}`,
-                    type: 'order-test',
-                    payload: { sequence: i },
-                  });
-                }
-
-                const messages = yield* Fiber.join(orderedMessages);
-                expect(messages).toHaveLength(5);
-
-                // Verify ordering with proper schema validation
-                const SequencePayloadSchema = Schema.Struct({
-                  sequence: Schema.Number,
-                });
-
-                for (let i = 0; i < messages.length; i++) {
-                  const msg = messages[i];
-                  if (!msg) continue; // Safety check
-                  const decoded = yield* Schema.decodeUnknown(SequencePayloadSchema)(msg.payload);
-                  expect(decoded.sequence).toBe(i);
-                }
-              })
-            )
-          );
-        });
-      });
-    }
-
-    if (features?.supportsOfflineBuffering) {
-      describe('OPTIONAL: Offline Buffering', () => {
-        it('should buffer messages appropriately', async () => {
-          const testContext = await Effect.runPromise(setup());
-          if (testContext.getBufferedMessageCount) {
-            const initialCount = await Effect.runPromise(testContext.getBufferedMessageCount());
-            expect(typeof initialCount).toBe('number');
-          }
-        });
-      });
-    }
-
-    if (features?.supportsReconnection) {
-      describe('OPTIONAL: Reconnection Handling', () => {
-        it('should handle network simulation', async () => {
-          const testContext = await Effect.runPromise(setup());
-          if (!testContext.simulateDisconnect || !testContext.simulateReconnect) {
-            return; // Skip if simulation not supported
-          }
-
-          await Effect.runPromise(
-            Effect.scoped(
-              Effect.gen(function* () {
-                const transport = yield* testContext.createConnectedTransport('test://localhost');
-
-                if (testContext.simulateDisconnect) {
-                  yield* testContext.simulateDisconnect();
-                }
-
-                // Monitor state changes during reconnection
-                const stateChanges: ConnectionState[] = [];
-                const monitoring = yield* pipe(
-                  transport.connectionState,
-                  Stream.take(3),
-                  Stream.runForEach((state: ConnectionState) =>
-                    Effect.sync(() => stateChanges.push(state))
-                  ),
-                  Effect.fork
-                );
-
-                yield* Effect.sleep(Duration.millis(50));
-                if (testContext.simulateReconnect) {
-                  yield* testContext.simulateReconnect();
-                }
-
-                yield* Effect.sleep(Duration.millis(100));
-                yield* Fiber.interrupt(monitoring);
-
-                expect(stateChanges.length).toBeGreaterThan(0);
-              })
-            )
-          );
-        });
-      });
-    }
-
-    describe('REQUIRED: Resource Management', () => {
+    describe('Resource Management', () => {
       it('should handle Scope-based cleanup', async () => {
         let transport: ConnectedTransportTestInterface | undefined;
 

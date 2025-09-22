@@ -50,12 +50,6 @@ export interface TransportTestContext {
   readonly createConnectedTransport: (
     url: string
   ) => Effect.Effect<ConnectedTransportTestInterface, TransportError, Scope.Scope>;
-
-  // Test utilities for simulating network conditions
-  readonly simulateDisconnect?: () => Effect.Effect<void, never, never>;
-  readonly simulateReconnect?: () => Effect.Effect<void, never, never>;
-  readonly simulateNetworkDelay?: (delayMs: number) => Effect.Effect<void, never, never>;
-  readonly getBufferedMessageCount?: () => Effect.Effect<number, never, never>;
 }
 
 /**
@@ -70,17 +64,6 @@ export interface ConnectedTransportTestInterface {
   readonly subscribe: (
     filter?: (msg: TransportMessage) => boolean
   ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never>;
-}
-
-/**
- * Transport capabilities - declare which optional features your transport supports.
- */
-export interface TransportFeatures {
-  readonly supportsReconnection?: boolean;
-  readonly supportsOfflineBuffering?: boolean;
-  readonly supportsBackpressure?: boolean;
-  readonly guaranteesMessageOrdering?: boolean;
-  readonly supportsMultiplexing?: boolean;
 }
 
 // =============================================================================
@@ -272,8 +255,7 @@ export interface IntegrationFeatures {
  */
 export type TransportTestRunner = (
   name: string,
-  setup: () => Effect.Effect<TransportTestContext>,
-  features?: TransportFeatures
+  setup: () => Effect.Effect<TransportTestContext>
 ) => void;
 
 export type ProtocolTestRunner = (

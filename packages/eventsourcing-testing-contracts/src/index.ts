@@ -22,7 +22,6 @@ export type {
   // Layer 1: Transport
   TransportMessage,
   TransportTestContext,
-  TransportFeatures,
   TransportTestRunner,
 
   // Layer 2: Protocol
