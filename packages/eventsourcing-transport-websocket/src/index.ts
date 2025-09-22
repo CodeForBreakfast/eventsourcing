@@ -9,7 +9,7 @@
  */
 
 // Main transport implementation and layer
-export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-transport.js';
+export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-transport';
 
 // Re-export transport contracts for convenience
 export type {

@@ -23,6 +23,8 @@ export type {
   TransportMessage,
   TransportTestContext,
   TransportTestRunner,
+  ConnectedTransportTestInterface,
+  ConnectionState,
 
   // Layer 2: Protocol
   ProtocolTestContext,

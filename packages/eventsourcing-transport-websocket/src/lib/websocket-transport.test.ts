@@ -5,20 +5,20 @@
  * Uses mock WebSocket for Node.js testing environment.
  */
 
-import { Effect, Scope, Stream, Ref, Queue, pipe } from 'effect';
+import { Effect, Stream, Ref, Queue, pipe } from 'effect';
 import type {
   TransportTestContext,
   ConnectedTransportTestInterface,
   TransportMessage,
-  ConnectionState,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
   Client,
   makeMessageId,
   TransportError,
+  type TransportMessage as ContractTransportMessage,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import { WebSocketConnector } from './websocket-transport.js';
+import { WebSocketConnector } from './websocket-transport';
 
 // =============================================================================
 // Mock WebSocket Implementation
@@ -170,7 +170,7 @@ function MockWebSocket(url: string): MockWebSocketInstance {
   };
 
   // Track this instance globally for test utilities
-  (global as any).lastCreatedWebSocket = instance;
+  globalThis.lastCreatedWebSocket = instance;
 
   // Simulate async connection
   setTimeout(() => {
@@ -185,13 +185,15 @@ function MockWebSocket(url: string): MockWebSocketInstance {
 }
 
 // Add static constants to the function
-(MockWebSocket as any).CONNECTING = MockWebSocketConstants.CONNECTING;
-(MockWebSocket as any).OPEN = MockWebSocketConstants.OPEN;
-(MockWebSocket as any).CLOSING = MockWebSocketConstants.CLOSING;
-(MockWebSocket as any).CLOSED = MockWebSocketConstants.CLOSED;
+Object.assign(MockWebSocket, MockWebSocketConstants);
+
+// Global type declarations for test environment
+declare global {
+  var lastCreatedWebSocket: MockWebSocketInstance | undefined;
+}
 
 // Install mock globally for tests
-(global as any).WebSocket = MockWebSocket;
+globalThis.WebSocket = MockWebSocket as any;
 
 // =============================================================================
 // Transport Adapter
@@ -201,49 +203,41 @@ function MockWebSocket(url: string): MockWebSocketInstance {
  * Adapter that converts Client.Transport to ConnectedTransportTestInterface.
  * Handles the MessageId branding difference between the interfaces.
  */
-function adaptConnectedTransport(
-  transport: Client.Transport<
-    import('@codeforbreakfast/eventsourcing-transport-contracts').TransportMessage
-  >
-): ConnectedTransportTestInterface {
-  return {
-    connectionState: transport.connectionState,
+const adaptConnectedTransport = (
+  transport: Client.Transport<ContractTransportMessage>
+): ConnectedTransportTestInterface => ({
+  connectionState: transport.connectionState,
 
-    publish: (message: TransportMessage) => {
-      // Convert test message to transport message by branding the id
-      const transportMessage: import('@codeforbreakfast/eventsourcing-transport-contracts').TransportMessage =
-        {
-          ...message,
-          id: makeMessageId(message.id),
-          metadata: message.metadata || {},
-        };
-      return transport.publish(transportMessage);
-    },
+  publish: (message: TransportMessage) => {
+    const transportMessage: ContractTransportMessage = {
+      ...message,
+      id: makeMessageId(message.id),
+      metadata: message.metadata || {},
+    };
+    return transport.publish(transportMessage);
+  },
 
-    subscribe: (filter?: (msg: TransportMessage) => boolean) => {
-      return pipe(
-        transport.subscribe(
-          filter
-            ? (msg) => {
-                // Convert transport message back to test message for filter
-                const testMessage: TransportMessage = {
-                  ...msg,
-                  id: msg.id as string, // Remove branding for test interface
-                };
-                return filter(testMessage);
-              }
-            : undefined
-        ),
-        Effect.map((stream) =>
-          Stream.map(stream, (msg) => ({
-            ...msg,
-            id: msg.id as string, // Remove branding for test interface
-          }))
-        )
-      );
-    },
-  };
-}
+  subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+    pipe(
+      transport.subscribe(
+        filter
+          ? (msg) => {
+              const testMessage: TransportMessage = {
+                ...msg,
+                id: msg.id as string,
+              };
+              return filter(testMessage);
+            }
+          : undefined
+      ),
+      Effect.map((stream) =>
+        Stream.map(stream, (msg) => ({
+          ...msg,
+          id: msg.id as string,
+        }))
+      )
+    ),
+});
 
 // =============================================================================
 // Test Context Setup
@@ -252,10 +246,10 @@ function adaptConnectedTransport(
 /**
  * Creates the test context for WebSocket transport tests
  */
-function createWebSocketTestContext(): Effect.Effect<TransportTestContext> {
-  return Effect.succeed({
-    createConnectedTransport: (url: string) => {
-      return pipe(
+const createWebSocketTestContext = (): Effect.Effect<TransportTestContext> =>
+  Effect.succeed({
+    createConnectedTransport: (url: string) =>
+      pipe(
         WebSocketConnector.connect(url),
         Effect.map(adaptConnectedTransport),
         Effect.mapError(
@@ -265,13 +259,11 @@ function createWebSocketTestContext(): Effect.Effect<TransportTestContext> {
               cause: error.cause,
             })
         )
-      );
-    },
+      ),
 
-    // WebSocket-specific test utilities
     simulateDisconnect: () =>
       Effect.sync(() => {
-        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocketInstance;
+        const mockWs = globalThis.lastCreatedWebSocket;
         if (mockWs) {
           mockWs.simulateDisconnect();
         }
@@ -279,13 +271,12 @@ function createWebSocketTestContext(): Effect.Effect<TransportTestContext> {
 
     simulateReconnect: () =>
       Effect.sync(() => {
-        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocketInstance;
+        const mockWs = globalThis.lastCreatedWebSocket;
         if (mockWs) {
           mockWs.simulateReconnect();
         }
       }),
   });
-}
 
 // =============================================================================
 // Run Contract Tests
@@ -301,7 +292,7 @@ import { describe, it, expect } from 'bun:test';
 
 describe('WebSocket Transport - Implementation Specific', () => {
   it('should use mock WebSocket in tests', () => {
-    const ws = new (global as any).WebSocket('ws://test.com');
+    const ws = new globalThis.WebSocket('ws://test.com');
     expect(typeof ws.send).toBe('function');
     expect(typeof ws.close).toBe('function');
     expect(typeof ws.url).toBe('string');

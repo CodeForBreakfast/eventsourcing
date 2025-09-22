@@ -25,6 +25,10 @@ interface WebSocketInternalState {
   readonly subscribers: Set<Queue.Queue<TransportMessage>>;
 }
 
+interface InternalTransport extends Client.Transport<TransportMessage> {
+  readonly __stateRef: Ref.Ref<WebSocketInternalState>;
+}
+
 // =============================================================================
 // Pure Functions for ConnectedTransport
 // =============================================================================
@@ -113,7 +117,7 @@ const subscribeToMessages =
 
 const createConnectedTransport = (
   stateRef: Ref.Ref<WebSocketInternalState>
-): Client.Transport<TransportMessage> & { __stateRef: Ref.Ref<WebSocketInternalState> } => ({
+): InternalTransport => ({
   connectionState: createConnectionStateStream(stateRef),
   publish: publishMessage(stateRef),
   subscribe: subscribeToMessages(stateRef),
@@ -274,10 +278,7 @@ const connectWebSocket = (
         )
       )
     ),
-    (transport) => {
-      // Access __stateRef directly from the transport with internal state
-      return cleanupConnection((transport as any).__stateRef);
-    }
+    (transport) => cleanupConnection((transport as InternalTransport).__stateRef)
   );
 
 // =============================================================================
