@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { Effect } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import {
   generateStreamId,
   createTestCommand,
@@ -36,16 +36,31 @@ describe('Testing Contracts Package', () => {
 
   describe('Mock Implementations', () => {
     it('should create mock transport', async () => {
-      const transport = await Effect.runPromise(createMockTransport());
+      const transportContext = await Effect.runPromise(createMockTransport());
 
-      expect(typeof transport.connect).toBe('function');
-      expect(typeof transport.disconnect).toBe('function');
-      expect(typeof transport.publish).toBe('function');
+      expect(typeof transportContext.createConnectedTransport).toBe('function');
+      expect(typeof transportContext.simulateDisconnect).toBe('function');
+      expect(typeof transportContext.simulateReconnect).toBe('function');
 
-      // Test basic functionality
-      expect(await Effect.runPromise(transport.isConnected())).toBe(false);
-      await Effect.runPromise(transport.connect());
-      expect(await Effect.runPromise(transport.isConnected())).toBe(true);
+      // Test basic functionality - create a connected transport and test it
+      await Effect.runPromise(
+        Effect.scoped(
+          pipe(
+            transportContext.createConnectedTransport('test://localhost'),
+            Effect.flatMap((connectedTransport) =>
+              pipe(
+                connectedTransport.connectionState,
+                Stream.take(1),
+                Stream.runHead,
+                Effect.tap((state) => {
+                  expect(state._tag).toBe('Some');
+                  return Effect.void;
+                })
+              )
+            )
+          )
+        )
+      );
     });
 
     it('should create mock domain context', async () => {

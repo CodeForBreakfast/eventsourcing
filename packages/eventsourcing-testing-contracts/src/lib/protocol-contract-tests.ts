@@ -28,10 +28,7 @@ import type {
   GlobalPosition,
 } from './test-layer-interfaces.js';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
-import type {
-  AggregateCommand,
-  CommandResult,
-} from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import type { AggregateCommand } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 
 /**
  * REQUIRED: Core protocol contract tests.

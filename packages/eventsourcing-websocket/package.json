@@ -70,7 +70,6 @@
     "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*"
   },
   "devDependencies": {
-    "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@types/node": "24.5.2",
     "effect": "3.17.14",
     "typescript": "5.9.2",

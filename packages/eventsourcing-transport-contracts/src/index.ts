@@ -21,10 +21,11 @@ export type {
   TransportMessage,
   ConnectionState,
   ConnectedTransport,
-  TransportConnectorService,
+  TransportConnectorInterface,
+  ConnectedTransportInterface,
 } from './lib/transport-abstractions.js';
 
-// Service tags (Context.GenericTag for generic support)
+// Service tags (Effect.Tag for proper type inference)
 export { TransportConnector, ConnectedTransportService } from './lib/transport-abstractions.js';
 
 // Transport error types

@@ -19,24 +19,16 @@
  * - Domain invariants (covered in Layer 3)
  */
 
-import { Effect, Stream, pipe, Chunk, Duration, Either, Fiber } from 'effect';
+import { Effect, pipe, Duration, Either, Schedule } from 'effect';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
 import type {
   IntegrationTestContext,
   IntegrationFeatures,
   IntegrationTestRunner,
   TestScenario,
-  ScenarioResult,
-  ThroughputMetrics,
-  StreamEvent,
-  ScenarioStep,
-  ScenarioOutcome,
 } from './test-layer-interfaces.js';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
-import type {
-  AggregateCommand,
-  CommandResult,
-} from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import type { AggregateCommand } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 
 /**
  * OPTIONAL: Integration test suite.
@@ -608,7 +600,7 @@ export const runIntegrationTestSuite: IntegrationTestRunner = (
         const result = await Effect.runPromise(
           pipe(
             context.sendCommandAndWaitForEvents(command, ['RecoveryProcessed'], 10000),
-            Effect.retry({ times: 3, delay: Duration.millis(500) }),
+            Effect.retry(Schedule.recurs(3).pipe(Schedule.addDelay(() => Duration.millis(500)))),
             Effect.either
           )
         );

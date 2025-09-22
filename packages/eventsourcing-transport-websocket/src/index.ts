@@ -8,15 +8,16 @@
  * the transport contracts without any event sourcing domain concepts.
  */
 
-// Main transport implementation
-export { WebSocketConnector } from './lib/websocket-transport.js';
+// Main transport implementation and layer
+export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-transport.js';
 
 // Re-export transport contracts for convenience
 export type {
   TransportMessage,
   ConnectionState,
   ConnectedTransport,
-  TransportConnectorService,
+  TransportConnectorInterface,
+  ConnectedTransportInterface,
   TransportError,
   ConnectionError,
   MessageParseError,

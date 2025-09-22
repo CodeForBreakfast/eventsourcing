@@ -175,12 +175,6 @@ export const createWebSocketConnectorLayer = <TEvent = unknown>() => {
 // ============================================================================
 
 /**
- * Legacy connection method for backward compatibility.
- * @deprecated Use `connect()` instead for new code.
- */
-export const connectWebSocket = connect;
-
-/**
  * Create protocol with explicit configuration for migration scenarios.
  */
 export const createWebSocketProtocol = <TEvent = unknown>(

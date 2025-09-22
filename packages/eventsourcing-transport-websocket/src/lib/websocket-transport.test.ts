@@ -13,13 +13,9 @@ import type {
   ConnectionState,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import type {
-  ConnectedTransport,
-  TransportError,
-  ConnectionError,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import type { ConnectedTransport } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { WebSocketConnector } from './websocket-transport.js';
-import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeMessageId, TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
 // Mock WebSocket Implementation
@@ -36,136 +32,160 @@ type MockWebSocketState = {
   readonly isConnected: boolean;
 };
 
-class MockWebSocket {
-  static CONNECTING = 0;
-  static OPEN = 1;
-  static CLOSING = 2;
-  static CLOSED = 3;
+const MockWebSocketConstants = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3,
+} as const;
 
-  private state: MockWebSocketState;
-  private stateRef: Ref.Ref<MockWebSocketState>;
+const createMockWebSocketState = (url: string): MockWebSocketState => ({
+  readyState: MockWebSocketConstants.CONNECTING,
+  url,
+  onopen: null,
+  onclose: null,
+  onerror: null,
+  onmessage: null,
+  messages: Effect.runSync(Queue.unbounded<string>()),
+  isConnected: false,
+});
 
-  onopen: ((event: Event) => void) | null = null;
-  onclose: ((event: CloseEvent) => void) | null = null;
-  onerror: ((event: Event) => void) | null = null;
-  onmessage: ((event: MessageEvent) => void) | null = null;
+const simulateOpen = (
+  stateRef: Ref.Ref<MockWebSocketState>,
+  instance: MockWebSocketInstance
+): void => {
+  Effect.runSync(
+    Ref.update(stateRef, (s) => ({
+      ...s,
+      readyState: MockWebSocketConstants.OPEN,
+      isConnected: true,
+    }))
+  );
 
-  constructor(url: string) {
-    // Initialize state synchronously for now
-    this.state = {
-      readyState: MockWebSocket.CONNECTING,
-      url,
-      onopen: null,
-      onclose: null,
-      onerror: null,
-      onmessage: null,
-      messages: Effect.runSync(Queue.unbounded<string>()),
+  if (instance.onopen) {
+    instance.onopen(new Event('open'));
+  }
+};
+
+const simulateError = (
+  stateRef: Ref.Ref<MockWebSocketState>,
+  instance: MockWebSocketInstance
+): void => {
+  Effect.runSync(
+    Ref.update(stateRef, (s) => ({
+      ...s,
+      readyState: MockWebSocketConstants.CLOSED,
       isConnected: false,
-    };
+    }))
+  );
 
-    this.stateRef = Effect.runSync(Ref.make(this.state));
+  if (instance.onerror) {
+    instance.onerror(new Event('error'));
+  }
+};
 
-    // Track this instance globally for test utilities
-    (global as any).lastCreatedWebSocket = this;
+type MockWebSocketInstance = {
+  onopen: ((event: Event) => void) | null;
+  onclose: ((event: CloseEvent) => void) | null;
+  onerror: ((event: Event) => void) | null;
+  onmessage: ((event: MessageEvent) => void) | null;
+  readyState: number;
+  url: string;
+  send: (data: string) => void;
+  close: () => void;
+  simulateDisconnect: () => void;
+  simulateReconnect: () => void;
+};
 
-    // Simulate async connection
-    setTimeout(() => {
-      if (url.includes('invalid')) {
-        this.simulateError();
-      } else {
-        this.simulateOpen();
+function MockWebSocket(url: string): MockWebSocketInstance {
+  const initialState = createMockWebSocketState(url);
+  const stateRef = Effect.runSync(Ref.make(initialState));
+
+  const instance: MockWebSocketInstance = {
+    onopen: null,
+    onclose: null,
+    onerror: null,
+    onmessage: null,
+
+    get readyState(): number {
+      return Effect.runSync(
+        pipe(
+          Ref.get(stateRef),
+          Effect.map((s) => s.readyState)
+        )
+      );
+    },
+
+    get url(): string {
+      return initialState.url;
+    },
+
+    send(data: string): void {
+      const currentState = Effect.runSync(Ref.get(stateRef));
+      if (currentState.readyState !== MockWebSocketConstants.OPEN) {
+        throw new Error('WebSocket is not open');
       }
-    }, 10);
-  }
 
-  get readyState(): number {
-    return Effect.runSync(
-      pipe(
-        Ref.get(this.stateRef),
-        Effect.map((s) => s.readyState)
-      )
-    );
-  }
+      setTimeout(() => {
+        if (instance.onmessage) {
+          instance.onmessage(new MessageEvent('message', { data }));
+        }
+      }, 0);
+    },
 
-  get url(): string {
-    return this.state.url;
-  }
+    close(): void {
+      Effect.runSync(
+        Ref.update(stateRef, (s) => ({
+          ...s,
+          readyState: MockWebSocketConstants.CLOSED,
+          isConnected: false,
+        }))
+      );
 
-  send(data: string): void {
-    const currentState = Effect.runSync(Ref.get(this.stateRef));
-    if (currentState.readyState !== MockWebSocket.OPEN) {
-      throw new Error('WebSocket is not open');
-    }
-
-    // Echo the message back for testing
-    setTimeout(() => {
-      if (this.onmessage) {
-        this.onmessage(new MessageEvent('message', { data }));
+      if (instance.onclose) {
+        instance.onclose(new CloseEvent('close'));
       }
-    }, 0);
-  }
+    },
 
-  close(): void {
-    Effect.runSync(
-      Ref.update(this.stateRef, (s) => ({
-        ...s,
-        readyState: MockWebSocket.CLOSED,
-        isConnected: false,
-      }))
-    );
+    simulateDisconnect(): void {
+      Effect.runSync(
+        Ref.update(stateRef, (s) => ({
+          ...s,
+          readyState: MockWebSocketConstants.CLOSED,
+          isConnected: false,
+        }))
+      );
 
-    if (this.onclose) {
-      this.onclose(new CloseEvent('close'));
+      if (instance.onclose) {
+        instance.onclose(new CloseEvent('close', { code: 1006, reason: 'Connection lost' }));
+      }
+    },
+
+    simulateReconnect(): void {
+      simulateOpen(stateRef, instance);
+    },
+  };
+
+  // Track this instance globally for test utilities
+  (global as any).lastCreatedWebSocket = instance;
+
+  // Simulate async connection
+  setTimeout(() => {
+    if (url.includes('invalid')) {
+      simulateError(stateRef, instance);
+    } else {
+      simulateOpen(stateRef, instance);
     }
-  }
+  }, 10);
 
-  private simulateOpen(): void {
-    Effect.runSync(
-      Ref.update(this.stateRef, (s) => ({
-        ...s,
-        readyState: MockWebSocket.OPEN,
-        isConnected: true,
-      }))
-    );
-
-    if (this.onopen) {
-      this.onopen(new Event('open'));
-    }
-  }
-
-  private simulateError(): void {
-    Effect.runSync(
-      Ref.update(this.stateRef, (s) => ({
-        ...s,
-        readyState: MockWebSocket.CLOSED,
-        isConnected: false,
-      }))
-    );
-
-    if (this.onerror) {
-      this.onerror(new Event('error'));
-    }
-  }
-
-  // Test helper methods
-  simulateDisconnect(): void {
-    Effect.runSync(
-      Ref.update(this.stateRef, (s) => ({
-        ...s,
-        readyState: MockWebSocket.CLOSED,
-        isConnected: false,
-      }))
-    );
-
-    if (this.onclose) {
-      this.onclose(new CloseEvent('close', { code: 1006, reason: 'Connection lost' }));
-    }
-  }
-
-  simulateReconnect(): void {
-    this.simulateOpen();
-  }
+  return instance;
 }
+
+// Add static constants to the function
+(MockWebSocket as any).CONNECTING = MockWebSocketConstants.CONNECTING;
+(MockWebSocket as any).OPEN = MockWebSocketConstants.OPEN;
+(MockWebSocket as any).CLOSING = MockWebSocketConstants.CLOSING;
+(MockWebSocket as any).CLOSED = MockWebSocketConstants.CLOSED;
 
 // Install mock globally for tests
 (global as any).WebSocket = MockWebSocket;
@@ -192,6 +212,7 @@ function adaptConnectedTransport(
         {
           ...message,
           id: makeMessageId(message.id),
+          metadata: message.metadata || {},
         };
       return transport.publish(transportMessage);
     },
@@ -231,15 +252,23 @@ function adaptConnectedTransport(
 function createWebSocketTestContext(): Effect.Effect<TransportTestContext> {
   return Effect.succeed({
     createConnectedTransport: (url: string) => {
-      const connector = new WebSocketConnector();
-      return pipe(connector.connect(url), Effect.map(adaptConnectedTransport));
+      return pipe(
+        WebSocketConnector.connect(url),
+        Effect.map(adaptConnectedTransport),
+        Effect.mapError(
+          (error) =>
+            new TransportError({
+              message: error.message,
+              cause: error.cause,
+            })
+        )
+      );
     },
 
     // WebSocket-specific test utilities
     simulateDisconnect: () =>
       Effect.sync(() => {
-        // For the mock WebSocket, we can trigger disconnect through the global mock
-        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocket;
+        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocketInstance;
         if (mockWs) {
           mockWs.simulateDisconnect();
         }
@@ -247,7 +276,7 @@ function createWebSocketTestContext(): Effect.Effect<TransportTestContext> {
 
     simulateReconnect: () =>
       Effect.sync(() => {
-        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocket;
+        const mockWs = (global as any).lastCreatedWebSocket as MockWebSocketInstance;
         if (mockWs) {
           mockWs.simulateReconnect();
         }
@@ -265,30 +294,36 @@ runTransportContractTests('WebSocket', createWebSocketTestContext);
 // WebSocket-Specific Tests
 // =============================================================================
 
-import { describe, it, expect, beforeEach } from 'bun:test';
-import { Duration } from 'effect';
+import { describe, it, expect } from 'bun:test';
 
 describe('WebSocket Transport - Implementation Specific', () => {
   it('should use mock WebSocket in tests', () => {
     const ws = new (global as any).WebSocket('ws://test.com');
-    expect(ws).toBeInstanceOf(MockWebSocket);
+    expect(typeof ws.send).toBe('function');
+    expect(typeof ws.close).toBe('function');
+    expect(typeof ws.url).toBe('string');
   });
 
   it('should handle WebSocket-specific connection URLs', async () => {
-    const result = await Effect.runPromise(
+    await Effect.runPromise(
       Effect.scoped(
-        Effect.gen(function* () {
-          const connector = new WebSocketConnector();
-          const transport = yield* connector.connect('ws://localhost:8080/socket');
-
-          // Should be connected
-          const state = yield* pipe(transport.connectionState, Stream.take(1), Stream.runHead);
-
-          expect(state._tag).toBe('Some');
-          if (state._tag === 'Some') {
-            expect(state.value).toBe('connected');
-          }
-        })
+        pipe(
+          WebSocketConnector.connect('ws://localhost:8080/socket'),
+          Effect.flatMap((transport) =>
+            pipe(
+              transport.connectionState,
+              Stream.take(1),
+              Stream.runHead,
+              Effect.tap((state) => {
+                expect(state._tag).toBe('Some');
+                if (state._tag === 'Some') {
+                  expect(state.value).toBe('connected');
+                }
+                return Effect.void;
+              })
+            )
+          )
+        )
       )
     );
   });
@@ -296,14 +331,20 @@ describe('WebSocket Transport - Implementation Specific', () => {
   it('should handle wss:// URLs', async () => {
     await Effect.runPromise(
       Effect.scoped(
-        Effect.gen(function* () {
-          const connector = new WebSocketConnector();
-          const transport = yield* connector.connect('wss://secure.example.com/socket');
-
-          const state = yield* pipe(transport.connectionState, Stream.take(1), Stream.runHead);
-
-          expect(state._tag).toBe('Some');
-        })
+        pipe(
+          WebSocketConnector.connect('wss://secure.example.com/socket'),
+          Effect.flatMap((transport) =>
+            pipe(
+              transport.connectionState,
+              Stream.take(1),
+              Stream.runHead,
+              Effect.tap((state) => {
+                expect(state._tag).toBe('Some');
+                return Effect.void;
+              })
+            )
+          )
+        )
       )
     );
   });

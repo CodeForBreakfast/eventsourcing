@@ -25,13 +25,9 @@ import type {
   DomainTestContext,
   DomainFeatures,
   DomainTestRunner,
-  StreamEvent,
 } from './test-layer-interfaces.js';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
-import type {
-  AggregateCommand,
-  CommandResult,
-} from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import type { AggregateCommand } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 
 /**
  * REQUIRED: Core domain contract tests.
@@ -483,7 +479,7 @@ export const runDomainContractTests: DomainTestRunner = (
         });
 
         // All results should be identical
-        const firstResult = results[0];
+        const firstResult = results[0]!;
         results.forEach((result) => {
           expect(result).toEqual(firstResult);
         });
@@ -522,7 +518,7 @@ export const runDomainContractTests: DomainTestRunner = (
         });
 
         // All results should be identical
-        const firstResult = results[0];
+        const firstResult = results[0]!;
         results.forEach((result) => {
           expect(result).toEqual(firstResult);
         });

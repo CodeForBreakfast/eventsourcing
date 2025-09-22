@@ -6,7 +6,7 @@
  * message transport, connection management, and stream operations.
  */
 
-import { Effect, Stream, Scope, Data, Context, Brand } from 'effect';
+import { Effect, Stream, Scope, Data, Brand, Context } from 'effect';
 
 // ============================================================================
 // Branded Types
@@ -94,7 +94,7 @@ export interface ConnectedTransport<TMessage extends TransportMessage = Transpor
  * The Scope requirement ensures the transport is automatically
  * disconnected when the scope closes.
  */
-export interface TransportConnectorService<TMessage extends TransportMessage = TransportMessage> {
+export interface TransportConnectorInterface<TMessage extends TransportMessage = TransportMessage> {
   readonly connect: (
     url: string
   ) => Effect.Effect<ConnectedTransport<TMessage>, ConnectionError, Scope.Scope>;
@@ -102,15 +102,18 @@ export interface TransportConnectorService<TMessage extends TransportMessage = T
 
 /**
  * Service tag for TransportConnector.
- * Use Context.GenericTag to support generic types.
+ * Uses Context.GenericTag to support generic types properly.
  */
-export const TransportConnector = Context.GenericTag<TransportConnectorService>(
+export const TransportConnector = Context.GenericTag<TransportConnectorInterface>(
   '@transport/TransportConnector'
 );
 
 /**
  * Connected transport service for testing and dependency injection
  */
-export const ConnectedTransportService = Context.GenericTag<ConnectedTransport>(
+export interface ConnectedTransportInterface<TMessage extends TransportMessage = TransportMessage>
+  extends ConnectedTransport<TMessage> {}
+
+export const ConnectedTransportService = Context.GenericTag<ConnectedTransportInterface>(
   '@transport/ConnectedTransport'
 );
