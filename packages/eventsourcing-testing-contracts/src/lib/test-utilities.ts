@@ -5,7 +5,7 @@
  * and test data generators for event sourcing testing scenarios.
  */
 
-import { Effect, Stream, Layer, Data, pipe, Chunk, Ref, Duration, Fiber } from 'effect';
+import { Effect, Stream, Layer, Data, pipe, Chunk, Ref, Duration, Fiber, Scope } from 'effect';
 import type {
   EventStreamId,
   EventStreamPosition,
@@ -21,7 +21,8 @@ import type {
   TransportMessage,
   ConnectionState,
   TransportTestContext,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+  ConnectedTransportTestInterface,
+} from './test-layer-interfaces.js';
 
 // ============================================================================
 // Test Data Generators
@@ -79,7 +80,7 @@ export const createTestCommand = <TPayload = unknown>(
   aggregate: createTestAggregate(options?.aggregateName || 'TestAggregate', options?.position),
   commandName: options?.commandName || 'TestCommand',
   payload,
-  metadata: options?.metadata,
+  ...(options?.metadata && { metadata: options.metadata }),
 });
 
 /**
@@ -98,20 +99,21 @@ export const createTestStreamEvent = <TEvent>(
 });
 
 /**
- * Creates a test transport message
+ * Creates a test transport message (aligned with simplified interface)
  */
 export const createTestTransportMessage = <TPayload = unknown>(
   payload: TPayload,
   options?: {
     id?: string;
     type?: string;
-    timestamp?: Date;
+    metadata?: Record<string, unknown>;
   }
 ): TransportMessage => ({
   id: options?.id || generateMessageId(),
   type: options?.type || 'test-message',
   payload,
-  timestamp: options?.timestamp || new Date(),
+  ...(options?.metadata && { metadata: options.metadata }),
+  // Note: timestamp removed from simplified interface
 });
 
 /**
@@ -145,8 +147,8 @@ export const generateTestCommands = <TPayload>(
 ): AggregateCommand<TPayload>[] =>
   Array.from({ length: count }, (_, i) =>
     createTestCommand(payloadFactory(i), {
-      aggregateName: options?.aggregateName,
-      commandName: options?.commandName,
+      aggregateName: options?.aggregateName || 'TestAggregate',
+      commandName: options?.commandName || 'TestCommand',
       position: {
         streamId: options?.streamId || generateStreamId(),
         eventNumber: i as EventNumber,
@@ -191,11 +193,11 @@ export interface MockTransportState {
 }
 
 /**
- * Creates a mock transport implementation for testing
+ * Creates a mock transport implementation for testing the simplified interface
  */
 export const createMockTransport = (): Effect.Effect<TransportTestContext, never, never> =>
   Effect.gen(function* () {
-    const state = yield* Ref.make<MockTransportState>({
+    const globalState = yield* Ref.make<MockTransportState>({
       isConnected: false,
       connectionState: 'disconnected',
       messages: [],
@@ -208,69 +210,126 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
       },
     });
 
-    const connect = (): Effect.Effect<void> =>
-      Ref.update(state, (s) => ({
-        ...s,
-        isConnected: true,
-        connectionState: 'connected' as ConnectionState,
-      }));
-
-    const disconnect = (): Effect.Effect<void> =>
-      Ref.update(state, (s) => ({
-        ...s,
-        isConnected: false,
-        connectionState: 'disconnected' as ConnectionState,
-      }));
-
-    const isConnected = (): Effect.Effect<boolean> =>
-      pipe(
-        Ref.get(state),
-        Effect.map((s) => s.isConnected)
-      );
-
-    const subscribe = (
-      filter?: (message: TransportMessage) => boolean
-    ): Effect.Effect<Stream.Stream<TransportMessage, never, never>> =>
+    const createConnectedTransport = (
+      url: string
+    ): Effect.Effect<ConnectedTransportTestInterface, Error, Scope.Scope> =>
       Effect.gen(function* () {
-        const subscriberId = generateMessageId();
+        // Validate URL (basic check)
+        if (url.startsWith('invalid://')) {
+          yield* Effect.fail(new Error(`Invalid URL: ${url}`));
+        }
 
-        yield* Ref.update(state, (s) => ({
+        // Create connection state stream
+        const connectionStateRef = yield* Ref.make<ConnectionState>('connected');
+        const connectionState = Stream.repeatEffect(Ref.get(connectionStateRef));
+
+        // Update global state to connected
+        yield* Ref.update(globalState, (s) => ({
           ...s,
-          subscribers: [...s.subscribers, { id: subscriberId, filter }],
+          isConnected: true,
+          connectionState: 'connected' as ConnectionState,
         }));
 
-        return pipe(
-          Stream.fromEffect(Ref.get(state)),
-          Stream.flatMap((s) => Stream.fromIterable(s.messages)),
-          Stream.filter((msg) => !filter || filter(msg))
+        // Set up cleanup on scope close
+        yield* Effect.addFinalizer(() =>
+          Ref.update(globalState, (s) => ({
+            ...s,
+            isConnected: false,
+            connectionState: 'disconnected' as ConnectionState,
+          }))
         );
+
+        const messageQueue = yield* Ref.make<TransportMessage[]>([]);
+        const subscriptionStreams = yield* Ref.make<
+          Array<{
+            id: string;
+            filter?: (msg: TransportMessage) => boolean;
+            queue: Ref.Ref<TransportMessage[]>;
+          }>
+        >([]);
+
+        const publish = (message: TransportMessage): Effect.Effect<void, Error, never> =>
+          Effect.gen(function* () {
+            const currentState = yield* Ref.get(globalState);
+
+            if (!currentState.isConnected) {
+              yield* Effect.fail(new Error('Transport not connected'));
+            }
+
+            // Add to main message queue
+            yield* Ref.update(messageQueue, (messages) => [...messages, message]);
+
+            // Distribute to all active subscriptions
+            const subs = yield* Ref.get(subscriptionStreams);
+            for (const sub of subs) {
+              if (!sub.filter || sub.filter(message)) {
+                yield* Ref.update(sub.queue, (messages) => [...messages, message]);
+              }
+            }
+
+            // Update metrics
+            yield* Ref.update(globalState, (s) => ({
+              ...s,
+              messages: [...s.messages, message],
+              metrics: {
+                ...s.metrics,
+                messagesSent: s.metrics.messagesSent + 1,
+              },
+            }));
+          });
+
+        const subscribe = (
+          filter?: (msg: TransportMessage) => boolean
+        ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never> =>
+          Effect.gen(function* () {
+            const subscriptionId = generateMessageId();
+            const subscriptionQueue = yield* Ref.make<TransportMessage[]>([]);
+
+            const subscription = {
+              id: subscriptionId,
+              filter,
+              queue: subscriptionQueue,
+            };
+
+            yield* Ref.update(subscriptionStreams, (subs) => [...subs, subscription]);
+
+            // Set up cleanup when subscription ends
+            yield* Effect.addFinalizer(() =>
+              Ref.update(subscriptionStreams, (subs) =>
+                subs.filter((sub) => sub.id !== subscriptionId)
+              )
+            );
+
+            // Create stream from subscription queue
+            const stream = Stream.repeatEffect(
+              pipe(
+                Ref.get(subscriptionQueue),
+                Effect.flatMap((messages) =>
+                  messages.length > 0
+                    ? pipe(Ref.set(subscriptionQueue, []), Effect.as(messages))
+                    : Effect.sleep(Duration.millis(10)).pipe(Effect.as([]))
+                )
+              )
+            ).pipe(
+              Stream.flatMap((messages) => Stream.fromIterable(messages)),
+              Stream.filter((msg) => !filter || filter(msg))
+            );
+
+            return stream;
+          });
+
+        return {
+          connectionState,
+          publish,
+          subscribe,
+        };
       });
 
-    const publish = (message: TransportMessage): Effect.Effect<void> =>
-      pipe(
-        Ref.get(state),
-        Effect.flatMap((s) =>
-          s.isConnected
-            ? Ref.update(state, (current) => ({
-                ...current,
-                messages: [...current.messages, message],
-                metrics: {
-                  ...current.metrics,
-                  messagesSent: current.metrics.messagesSent + 1,
-                },
-              }))
-            : Ref.update(state, (current) => ({
-                ...current,
-                bufferedMessages: [...current.bufferedMessages, message],
-              }))
-        )
-      );
-
     const simulateDisconnect = (): Effect.Effect<void> =>
-      Ref.update(state, (s) => ({
+      Ref.update(globalState, (s) => ({
         ...s,
         isConnected: false,
-        connectionState: 'reconnecting' as ConnectionState,
+        connectionState: 'error' as ConnectionState,
         metrics: {
           ...s.metrics,
           connectionDrops: s.metrics.connectionDrops + 1,
@@ -278,37 +337,24 @@ export const createMockTransport = (): Effect.Effect<TransportTestContext, never
       }));
 
     const simulateReconnect = (): Effect.Effect<void> =>
-      pipe(
-        Ref.update(state, (s) => ({
-          ...s,
-          isConnected: true,
-          connectionState: 'connected' as ConnectionState,
-          messages: [...s.messages, ...s.bufferedMessages],
-          bufferedMessages: [],
-        }))
-      );
-
-    const getConnectionState = (): Effect.Effect<ConnectionState> =>
-      pipe(
-        Ref.get(state),
-        Effect.map((s) => s.connectionState)
-      );
+      Ref.update(globalState, (s) => ({
+        ...s,
+        isConnected: true,
+        connectionState: 'connected' as ConnectionState,
+        messages: [...s.messages, ...s.bufferedMessages],
+        bufferedMessages: [],
+      }));
 
     const getBufferedMessageCount = (): Effect.Effect<number> =>
       pipe(
-        Ref.get(state),
+        Ref.get(globalState),
         Effect.map((s) => s.bufferedMessages.length)
       );
 
     return {
-      connect,
-      disconnect,
-      isConnected,
-      subscribe,
-      publish,
+      createConnectedTransport,
       simulateDisconnect,
       simulateReconnect,
-      getConnectionState,
       getBufferedMessageCount,
     };
   });

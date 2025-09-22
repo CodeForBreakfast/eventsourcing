@@ -5,7 +5,7 @@
  * Each layer tests ONLY its own responsibilities and provides clear contracts for implementers.
  */
 
-import { Effect, Stream } from 'effect';
+import { Effect, Stream, Scope } from 'effect';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
 import type {
   AggregateCommand,
@@ -17,42 +17,59 @@ import type {
 // =============================================================================
 
 /**
- * Pure message transport interface - no event sourcing concepts.
+ * Pure message transport interface - aligned with simplified transport-contracts.
  * Tests raw message delivery mechanics only.
  */
 export interface TransportMessage {
-  readonly id: string; // Using plain string in tests for simplicity
+  readonly id: string; // Using plain string in tests for simplicity (no branded types in tests)
   readonly type: string;
   readonly payload: unknown;
   readonly metadata?: Record<string, unknown>;
+  // Note: timestamp removed from simplified interface
 }
 
 /**
- * Transport test context for testing pure message delivery.
- * Implementers MUST provide this interface to validate transport mechanics.
+ * Connection state matching the simplified transport interface
+ */
+export type ConnectionState =
+  | 'disconnected'
+  | 'connecting'
+  | 'connected'
+  | 'reconnecting'
+  | 'error';
+
+/**
+ * Transport test context for testing the simplified ConnectedTransport interface.
+ *
+ * IMPORTANT: This interface models the Effect.acquireRelease pattern.
+ * The `createConnectedTransport` method should use Scope to manage lifecycle.
+ * When the Scope closes, the transport should automatically disconnect.
  */
 export interface TransportTestContext {
-  // Core transport operations
-  readonly connect: () => Effect.Effect<void>;
-  readonly disconnect: () => Effect.Effect<void>;
-  readonly isConnected: () => Effect.Effect<boolean>;
-
-  // Message operations
-  readonly publish: (message: TransportMessage) => Effect.Effect<void>;
-  readonly subscribe: (
-    filter?: (msg: TransportMessage) => boolean
-  ) => Effect.Effect<Stream.Stream<TransportMessage>>;
-
-  // State inspection
-  readonly getConnectionState: () => Effect.Effect<
-    'connected' | 'disconnected' | 'connecting' | 'error'
-  >;
-  readonly getBufferedMessageCount?: () => Effect.Effect<number>;
+  // Transport factory using Effect's Scope for lifecycle management
+  readonly createConnectedTransport: (
+    url: string
+  ) => Effect.Effect<ConnectedTransportTestInterface, Error, Scope.Scope>;
 
   // Test utilities for simulating network conditions
   readonly simulateDisconnect?: () => Effect.Effect<void>;
   readonly simulateReconnect?: () => Effect.Effect<void>;
   readonly simulateNetworkDelay?: (delayMs: number) => Effect.Effect<void>;
+  readonly getBufferedMessageCount?: () => Effect.Effect<number>;
+}
+
+/**
+ * Test interface that mirrors the simplified ConnectedTransport interface
+ */
+export interface ConnectedTransportTestInterface {
+  // Connection state monitoring (core new feature!)
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+
+  // Message operations
+  readonly publish: (message: TransportMessage) => Effect.Effect<void, Error, never>;
+  readonly subscribe: (
+    filter?: (msg: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never>;
 }
 
 /**
