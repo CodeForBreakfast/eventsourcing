@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect } from 'bun:test';
-import { Effect, Stream, pipe, Option } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -39,46 +39,46 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
       const host = 'localhost';
       const url = `ws://${host}:${port}`;
 
-      // Server reference - created lazily (unused but kept for potential future use)
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars
-      let serverTransport: unknown = null;
+      // Server effect - created once and reused
+      let serverEffect: Effect.Effect<ServerTransport, Error, Scope.Scope> | null = null;
 
       return {
-        getServer: () =>
-          pipe(
-            WebSocketAcceptor.make({ port, host }),
-            Effect.flatMap((acceptor) => acceptor.start()),
-            Effect.tap((transport) =>
-              Effect.sync(() => {
-                serverTransport = transport;
+        getServer: () => {
+          // Only create the server once, reuse for subsequent calls
+          if (!serverEffect) {
+            serverEffect = pipe(
+              WebSocketAcceptor.make({ port, host }),
+              Effect.flatMap((acceptor) => acceptor.start()),
+              Effect.map((transport): ServerTransport => {
+                const server: ServerTransport = {
+                  connections: pipe(
+                    transport.connections,
+                    Stream.map((conn) => ({
+                      id: String(conn.clientId),
+                      transport: {
+                        connectionState: conn.transport.connectionState,
+                        publish: (msg: TransportMessage) =>
+                          conn.transport
+                            .publish(msg)
+                            .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+                        subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+                          conn.transport
+                            .subscribe(filter)
+                            .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+                      } satisfies ClientTransport,
+                    }))
+                  ),
+                  broadcast: (message: TransportMessage) =>
+                    transport
+                      .broadcast(message)
+                      .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
+                };
+                return server;
               })
-            ),
-            Effect.map(
-              (transport): ServerTransport => ({
-                connections: pipe(
-                  transport.connections,
-                  Stream.map((conn) => ({
-                    id: String(conn.clientId),
-                    transport: {
-                      connectionState: conn.transport.connectionState,
-                      publish: (msg: TransportMessage) =>
-                        conn.transport
-                          .publish(msg)
-                          .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                      subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                        conn.transport
-                          .subscribe(filter)
-                          .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-                    } satisfies ClientTransport,
-                  }))
-                ),
-                broadcast: (message: TransportMessage) =>
-                  transport
-                    .broadcast(message)
-                    .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
-              })
-            )
-          ),
+            );
+          }
+          return serverEffect;
+        },
 
         getClient: () =>
           pipe(
