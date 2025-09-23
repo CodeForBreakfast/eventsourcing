@@ -105,7 +105,7 @@ const subscribeToClientMessages =
       })
     );
 
-const createClientTransport = (clientState: ClientState): Client.Transport<TransportMessage> => ({
+const createClientTransport = (clientState: ClientState): Client.Transport => ({
   connectionState: createClientConnectionStateStream(clientState),
   publish: publishMessageToClient(clientState),
   subscribe: subscribeToClientMessages(clientState),
@@ -287,7 +287,7 @@ const createWebSocketServer = (
 const createServerTransport = (
   serverStateRef: Ref.Ref<ServerState>,
   connectionsQueue: Queue.Queue<Server.ClientConnection>
-): Server.Transport<TransportMessage> & { __serverStateRef: Ref.Ref<ServerState> } => ({
+): Server.Transport & { __serverStateRef: Ref.Ref<ServerState> } => ({
   connections: Stream.fromQueue(connectionsQueue),
 
   broadcast: (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
@@ -341,7 +341,7 @@ const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void
 
 const createWebSocketServerTransport = (
   config: WebSocketServerConfig
-): Effect.Effect<Server.Transport<TransportMessage>, Server.ServerStartError, Scope.Scope> =>
+): Effect.Effect<Server.Transport, Server.ServerStartError, Scope.Scope> =>
   Effect.acquireRelease(
     pipe(
       Queue.unbounded<Server.ClientConnection>(),

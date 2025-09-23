@@ -25,7 +25,7 @@ interface WebSocketInternalState {
   readonly subscribers: Set<Queue.Queue<TransportMessage>>;
 }
 
-interface InternalTransport extends Client.Transport<TransportMessage> {
+interface InternalTransport extends Client.Transport {
   readonly __stateRef: Ref.Ref<WebSocketInternalState>;
 }
 
@@ -284,7 +284,7 @@ const cleanupConnection = (
 
 const connectWebSocket = (
   url: string
-): Effect.Effect<Client.Transport<TransportMessage>, ConnectionError, Scope.Scope> =>
+): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope> =>
   Effect.acquireRelease(
     pipe(
       createInitialState(),
@@ -303,7 +303,7 @@ const connectWebSocket = (
 // WebSocket Connector Implementation
 // =============================================================================
 
-const webSocketConnectorImpl: Client.ConnectorInterface<TransportMessage> = {
+const webSocketConnectorImpl: Client.ConnectorInterface = {
   connect: connectWebSocket,
 };
 

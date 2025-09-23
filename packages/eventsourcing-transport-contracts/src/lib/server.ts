@@ -33,9 +33,9 @@ export class ServerStartError extends Data.TaggedError('ServerStartError')<{
  * Represents a single client connection on the server.
  * Each client has a Transport for bidirectional communication.
  */
-export interface ClientConnection<TMessage extends TransportMessage = TransportMessage> {
+export interface ClientConnection {
   readonly clientId: ClientId;
-  readonly transport: ClientTransport<TMessage>;
+  readonly transport: ClientTransport;
   readonly connectedAt: Date;
   readonly metadata: Record<string, unknown>;
 }
@@ -43,14 +43,15 @@ export interface ClientConnection<TMessage extends TransportMessage = TransportM
 /**
  * Server-side transport that manages multiple client connections.
  * Each client gets a Transport for bidirectional communication.
+ * Transport layer only deals with string payloads - doesn't know about content structure.
  * Lifecycle is managed via Scope - when the scope closes, the server shuts down.
  */
-export interface Transport<TMessage extends TransportMessage = TransportMessage> {
+export interface Transport {
   // Accept new client connections
-  readonly connections: Stream.Stream<ClientConnection<TMessage>, never, never>;
+  readonly connections: Stream.Stream<ClientConnection, never, never>;
 
   // Broadcasting to all connected clients
-  readonly broadcast: (message: TMessage) => Effect.Effect<void, TransportError, never>;
+  readonly broadcast: (message: TransportMessage) => Effect.Effect<void, TransportError, never>;
 }
 
 /**
@@ -63,8 +64,8 @@ export interface Transport<TMessage extends TransportMessage = TransportMessage>
  * Configuration is implementation-specific and should be passed
  * when constructing the service implementation.
  */
-export interface AcceptorInterface<TMessage extends TransportMessage = TransportMessage> {
-  readonly start: () => Effect.Effect<Transport<TMessage>, ServerStartError, Scope.Scope>;
+export interface AcceptorInterface {
+  readonly start: () => Effect.Effect<Transport, ServerStartError, Scope.Scope>;
 }
 
 // ============================================================================
