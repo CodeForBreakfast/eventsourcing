@@ -1005,12 +1005,146 @@ describe('Protocol Behavior Tests', () => {
       await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should handle malformed command result - success without position', async () => {
-      // TODO: Implement test for malformed success result missing position
+    test('should handle malformed command result - success without position', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            Effect.sync(() => {
+              const command: Command = {
+                id: crypto.randomUUID(),
+                target: 'user-123',
+                name: 'TestCommand',
+                payload: { data: 'test' },
+              };
+              return command;
+            }),
+            Effect.flatMap((command) =>
+              pipe(
+                Effect.all(
+                  [
+                    // Send the command and expect it to timeout due to malformed response
+                    pipe(
+                      sendCommand(command),
+                      Effect.either,
+                      Effect.provide(ProtocolLive(clientTransport))
+                    ),
+                    // Send malformed success response (missing position field) after small delay
+                    pipe(
+                      Effect.sleep(Duration.millis(50)),
+                      Effect.flatMap(() =>
+                        server.broadcast(
+                          makeTransportMessage(
+                            crypto.randomUUID(),
+                            'command_result',
+                            JSON.stringify({
+                              type: 'command_result',
+                              commandId: command.id,
+                              success: true,
+                              // Missing position field for success result
+                            })
+                          )
+                        )
+                      )
+                    ),
+                    // Advance time to trigger timeout since malformed response should be ignored
+                    TestClock.adjust(Duration.seconds(11)),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.map(([result, _, __]) => result),
+                Effect.tap((result) =>
+                  Effect.sync(() => {
+                    // Should timeout because malformed response is ignored
+                    expect(Either.isLeft(result)).toBe(true);
+                    if (Either.isLeft(result)) {
+                      expect(result.left).toBeInstanceOf(CommandTimeoutError);
+                      if (result.left instanceof CommandTimeoutError) {
+                        expect(result.left.commandId).toBe(command.id);
+                      }
+                    }
+                  })
+                )
+              )
+            )
+          )
+        )
+      );
+
+      await Effect.runPromise(
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+      );
     });
 
-    test.skip('should handle malformed command result - failure without error message', async () => {
-      // TODO: Implement test for malformed failure result missing error message
+    test('should handle malformed command result - failure without error message', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            Effect.sync(() => {
+              const command: Command = {
+                id: crypto.randomUUID(),
+                target: 'user-123',
+                name: 'TestCommand',
+                payload: { data: 'test' },
+              };
+              return command;
+            }),
+            Effect.flatMap((command) =>
+              pipe(
+                Effect.all(
+                  [
+                    // Send the command and expect it to timeout due to malformed response
+                    pipe(
+                      sendCommand(command),
+                      Effect.either,
+                      Effect.provide(ProtocolLive(clientTransport))
+                    ),
+                    // Send malformed failure response (missing error field)
+                    pipe(
+                      Effect.sleep(Duration.millis(50)),
+                      Effect.flatMap(() =>
+                        server.broadcast(
+                          makeTransportMessage(
+                            crypto.randomUUID(),
+                            'command_result',
+                            JSON.stringify({
+                              type: 'command_result',
+                              commandId: command.id,
+                              success: false,
+                              // Missing error field for failure result
+                            })
+                          )
+                        )
+                      )
+                    ),
+                    // Advance time to trigger timeout since malformed response should be ignored
+                    TestClock.adjust(Duration.seconds(11)),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.map(([result, _, __]) => result),
+                Effect.tap((result) =>
+                  Effect.sync(() => {
+                    // Should timeout because malformed response is ignored
+                    expect(Either.isLeft(result)).toBe(true);
+                    if (Either.isLeft(result)) {
+                      expect(result.left).toBeInstanceOf(CommandTimeoutError);
+                      if (result.left instanceof CommandTimeoutError) {
+                        expect(result.left.commandId).toBe(command.id);
+                      }
+                    }
+                  })
+                )
+              )
+            )
+          )
+        )
+      );
+
+      await Effect.runPromise(
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+      );
     });
   });
 
