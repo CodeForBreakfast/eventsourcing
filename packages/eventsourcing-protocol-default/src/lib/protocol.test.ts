@@ -1463,7 +1463,8 @@ describe('Protocol Behavior Tests', () => {
 
   describe('Transport Failure & Recovery', () => {
     test.skip('should clean up pending commands when transport disconnects', async () => {
-      // TODO: Implement test for command cleanup on transport disconnect
+      // TODO: This test needs better understanding of transport behavior
+      // The transport disconnect doesn't immediately fail pending commands
     });
 
     test.skip('should clean up subscriptions when transport fails', async () => {
@@ -1582,8 +1583,146 @@ describe('Protocol Behavior Tests', () => {
       );
     });
 
-    test.skip('should handle very large payloads in commands and events', async () => {
-      // TODO: Implement test for large payload handling
+    test('should handle very large payloads in commands and events', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              (command) => ({
+                _tag: 'Success',
+                position: {
+                  streamId: unsafeCreateStreamId(command.target),
+                  eventNumber: 1,
+                },
+              }),
+              (streamId) => {
+                // Create a large event payload
+                const largeData = {
+                  description: 'A'.repeat(10000), // 10KB string
+                  metadata: {
+                    tags: Array.from({ length: 100 }, (_, i) => `tag-${i}`),
+                    attributes: Object.fromEntries(
+                      Array.from({ length: 50 }, (_, i) => [`attr-${i}`, `value-${i}`.repeat(20)])
+                    ),
+                  },
+                  content: Array.from({ length: 1000 }, (_, i) => ({
+                    id: i,
+                    name: `Item ${i}`,
+                    data: `${'x'.repeat(50)}-${i}`,
+                  })),
+                };
+
+                return [
+                  {
+                    position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                    type: 'LargeDataEvent',
+                    data: largeData,
+                    timestamp: new Date('2024-01-01T10:00:00Z'),
+                  },
+                ];
+              }
+            ),
+            Effect.flatMap(() => {
+              // Create a large command payload
+              const largePayload = {
+                bulkData: Array.from({ length: 500 }, (_, i) => ({
+                  id: `bulk-item-${i}`,
+                  name: `Bulk Item ${i}`,
+                  description: `This is a description for bulk item ${i}. `.repeat(20),
+                  properties: Object.fromEntries(
+                    Array.from({ length: 10 }, (_, j) => [`prop-${j}`, `value-${j}-for-item-${i}`])
+                  ),
+                })),
+                metadata: {
+                  timestamp: new Date().toISOString(),
+                  version: '1.0.0',
+                  source: 'bulk-import-system',
+                  correlationId: crypto.randomUUID(),
+                },
+              };
+
+              const command: Command = {
+                id: crypto.randomUUID(),
+                target: 'bulk-stream',
+                name: 'BulkImportCommand',
+                payload: largePayload,
+              };
+
+              return pipe(
+                Effect.all(
+                  [
+                    // Send the large command and verify it succeeds
+                    pipe(
+                      sendCommand(command),
+                      Effect.tap((result) =>
+                        Effect.sync(() => {
+                          expect(result._tag).toBe('Success');
+                          if (result._tag === 'Success') {
+                            expect(result.position.streamId).toEqual(
+                              unsafeCreateStreamId('bulk-stream')
+                            );
+                            expect(result.position.eventNumber).toBe(1);
+                          }
+                        })
+                      )
+                    ),
+                    // Subscribe to the stream and verify we receive the large event
+                    pipe(
+                      subscribe('bulk-stream'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          eventStream,
+                          Stream.take(1),
+                          Stream.runCollect,
+                          Effect.tap((collectedEvents) =>
+                            Effect.sync(() => {
+                              const events = Array.from(collectedEvents);
+                              expect(events).toHaveLength(1);
+
+                              const event = events[0]!;
+                              expect(event.type).toBe('LargeDataEvent');
+                              expect(event.position.eventNumber).toBe(1);
+
+                              // Verify the large data structure is preserved
+                              const data = event.data as any;
+                              expect(data.description).toHaveLength(10000);
+                              expect(data.description).toBe('A'.repeat(10000));
+                              expect(data.metadata.tags).toHaveLength(100);
+                              expect(data.metadata.tags[0]).toBe('tag-0');
+                              expect(data.metadata.tags[99]).toBe('tag-99');
+                              expect(data.content).toHaveLength(1000);
+                              expect(data.content[0]).toEqual({
+                                id: 0,
+                                name: 'Item 0',
+                                data: `${'x'.repeat(50)}-0`,
+                              });
+                              expect(data.content[999]).toEqual({
+                                id: 999,
+                                name: 'Item 999',
+                                data: `${'x'.repeat(50)}-999`,
+                              });
+
+                              // Verify nested object structure
+                              expect(Object.keys(data.metadata.attributes)).toHaveLength(50);
+                              expect(data.metadata.attributes['attr-0']).toBe('value-0'.repeat(20));
+                            })
+                          )
+                        )
+                      )
+                    ),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test.skip('should handle rapid subscription/unsubscription cycles', async () => {
