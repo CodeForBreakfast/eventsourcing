@@ -6,11 +6,8 @@
  */
 
 import { test, expect, describe } from 'bun:test';
-import { Effect, Layer, Scope, Stream, Queue, Ref } from 'effect';
+import { Effect, Stream, Queue, Ref, Deferred, Either, Fiber } from 'effect';
 import {
-  runDomainContractTests,
-  createMockTransport,
-  createTestLayer,
   generateStreamId,
   generateCommandId,
   createTestCommand,
@@ -19,27 +16,19 @@ import {
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
   type TransportMessage,
+  type ConnectionState,
+  makeMessageId,
   Client,
-  TransportError,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import {
   createProtocolContext,
   type ProtocolContext,
+  CommandError,
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
-import {
-  DefaultProtocolSerializer,
-  createDefaultProtocolSerializer,
-} from './default-protocol-serializer.js';
-import { ProtocolStateManager, createProtocolStateManager } from './protocol-state-manager.js';
-import {
-  DefaultEventSourcingProtocol,
-  createDefaultEventSourcingProtocol,
-} from './default-event-sourcing-protocol.js';
-import {
-  DefaultTransportAdapter,
-  createDefaultTransportAdapter,
-  connectWithCompleteStack,
-} from './default-transport-adapter.js';
+import { createDefaultProtocolSerializer } from './default-protocol-serializer.js';
+import { createProtocolStateManager } from './protocol-state-manager.js';
+import { createDefaultEventSourcingProtocol } from './default-event-sourcing-protocol.js';
+import { createDefaultTransportAdapter } from './default-transport-adapter.js';
 
 // ============================================================================
 // Test Setup Helpers
@@ -71,37 +60,29 @@ const createMockConnectedTransport = (): Effect.Effect<
     const connected = yield* Ref.make(true);
 
     const mockState: MockTransportState = {
-      sentMessages: [],
-      receivedMessages: [],
+      messages: [],
       connected: true,
       errors: [],
     };
 
     const mockStateRef = yield* Ref.make(mockState);
 
-    const transport: Client.Transport<TransportMessage> = {
-      send: (message: TransportMessage) =>
+    const connectionStateQueue = yield* Queue.unbounded<ConnectionState>();
+    yield* Queue.offer(connectionStateQueue, 'connected');
+
+    const transport = {
+      connectionState: Stream.fromQueue(connectionStateQueue),
+
+      publish: (message: TransportMessage) =>
         Effect.gen(function* () {
           yield* Ref.update(sentMessages, (messages) => [...messages, message]);
           yield* Ref.update(mockStateRef, (state) => ({
             ...state,
-            sentMessages: [...state.sentMessages, message],
+            messages: [...state.messages, message],
           }));
         }),
 
-      subscribe: () => Stream.fromQueue(receivedMessages),
-
-      isConnected: () => Ref.get(connected),
-
-      disconnect: () =>
-        Effect.gen(function* () {
-          yield* Ref.set(connected, false);
-          yield* Queue.shutdown(receivedMessages);
-          yield* Ref.update(mockStateRef, (state) => ({
-            ...state,
-            connected: false,
-          }));
-        }),
+      subscribe: () => Effect.succeed(Stream.fromQueue(receivedMessages)),
 
       // Helper for tests to inject messages
       injectMessage: (message: TransportMessage) =>
@@ -109,7 +90,7 @@ const createMockConnectedTransport = (): Effect.Effect<
           yield* Queue.offer(receivedMessages, message);
           yield* Ref.update(mockStateRef, (state) => ({
             ...state,
-            receivedMessages: [...state.receivedMessages, message],
+            messages: [...state.messages, message],
           }));
         }),
     } as Client.Transport<TransportMessage> & {
@@ -213,10 +194,10 @@ describe('ProtocolStateManager', () => {
       const deferred = yield* stateManager.registerPendingCommand(commandId, correlationId, 5000);
 
       // Complete command by correlation
-      const result = {
-        _tag: 'Right' as const,
-        right: { streamId: 'test-stream', eventNumber: 1 },
-      };
+      const result = Either.right({
+        streamId: generateStreamId(),
+        eventNumber: 1,
+      });
 
       yield* stateManager.completePendingCommandByCorrelation(correlationId, result);
 
@@ -436,9 +417,10 @@ describe('Error Handling', () => {
 
       // Inject malformed message
       const malformedMessage: TransportMessage = {
-        id: 'test-message',
+        id: makeMessageId('test-message'),
+        type: 'invalid',
         payload: 'invalid-json-{{{',
-        timestamp: new Date(),
+        metadata: {},
       };
 
       // This should not crash the protocol
@@ -498,7 +480,7 @@ describe('Performance Tests', () => {
         );
 
         // Wait for all to complete or timeout
-        yield* Effect.forEach(commandFibers, (fiber) => Effect.join(fiber));
+        yield* Effect.forEach(commandFibers, (fiber) => Fiber.join(fiber));
 
         // Protocol should still be healthy
         const isConnected = yield* protocol.isConnected();

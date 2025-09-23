@@ -5,7 +5,7 @@
  * Handles conversion between domain objects and protocol messages using Effect schemas.
  */
 
-import { Effect, Schema } from 'effect';
+import { Effect, Either, Layer } from 'effect';
 import {
   type ProtocolSerializer,
   type AggregateCommand,
@@ -13,6 +13,7 @@ import {
   type CommandResult,
   type RequestContext,
   ProtocolSerializationError,
+  CommandError,
 } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 import {
   type ClientMessage,
@@ -35,13 +36,13 @@ export class DefaultProtocolSerializer<TEvent> implements ProtocolSerializer<TEv
     Effect.try({
       try: () =>
         createCommandMessage(command.aggregate, command.commandName, command.payload, {
-          correlationId: context?.correlationId,
+          correlationId: context?.correlationId ?? undefined,
           metadata: {
             ...command.metadata,
             ...context?.metadata,
-            requestId: context?.requestId,
-            sessionId: context?.sessionId,
-            userId: context?.userId,
+            requestId: context?.requestId ?? undefined,
+            sessionId: context?.sessionId ?? undefined,
+            userId: context?.userId ?? undefined,
           },
         }),
       catch: (error) =>
@@ -91,16 +92,16 @@ export class DefaultProtocolSerializer<TEvent> implements ProtocolSerializer<TEv
     Effect.try({
       try: () =>
         createSubscribeMessage(position.streamId, {
-          fromPosition: position.eventNumber,
-          includeMetadata: options?.includeMetadata,
-          batchSize: options?.batchSize,
-          correlationId: context?.correlationId,
+          fromPosition: position.eventNumber ?? undefined,
+          includeMetadata: options?.includeMetadata ?? undefined,
+          batchSize: options?.batchSize ?? undefined,
+          correlationId: context?.correlationId ?? undefined,
           metadata: {
             ...options,
             ...context?.metadata,
-            requestId: context?.requestId,
-            sessionId: context?.sessionId,
-            userId: context?.userId,
+            requestId: context?.requestId ?? undefined,
+            sessionId: context?.sessionId ?? undefined,
+            userId: context?.userId ?? undefined,
           },
         }),
       catch: (error) =>
@@ -128,20 +129,15 @@ export class DefaultProtocolSerializer<TEvent> implements ProtocolSerializer<TEv
       try: (): CommandResult => {
         if (message.success && message.position) {
           // Success case - return Right with position
-          return {
-            _tag: 'Right',
-            right: message.position,
-          };
+          return Either.right(message.position);
         } else if (!message.success && message.error) {
           // Error case - return Left with CommandError
-          return {
-            _tag: 'Left',
-            left: {
-              _tag: 'CommandError',
+          return Either.left(
+            new CommandError({
               message: message.error.message,
               details: message.error.details,
-            },
-          };
+            })
+          );
         } else {
           // Invalid message structure
           throw new Error('Invalid command result message structure');
@@ -189,7 +185,7 @@ export class DefaultProtocolSerializerService<TEvent = unknown> extends Effect.T
  * Layer that provides the default protocol serializer.
  */
 export const DefaultProtocolSerializerLive = <TEvent>() =>
-  Effect.Layer.succeed(
+  Layer.succeed(
     DefaultProtocolSerializerService<TEvent>,
     createDefaultProtocolSerializer<TEvent>()
   );

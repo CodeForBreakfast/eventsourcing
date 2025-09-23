@@ -5,7 +5,7 @@
  * and message correlation. This is the stateful core of the protocol implementation.
  */
 
-import { Effect, Ref, Map, Stream, Queue, Exit, Deferred } from 'effect';
+import { Effect, Ref, HashMap, Stream, Queue, Deferred, Either, Layer } from 'effect';
 import {
   type StreamSubscription,
   type StreamEvent,
@@ -49,9 +49,9 @@ interface PendingCommand {
  * Overall protocol state.
  */
 interface ProtocolState {
-  readonly subscriptions: Map.Map<EventStreamId, SubscriptionState>;
-  readonly pendingCommands: Map.Map<string, PendingCommand>;
-  readonly messageCorrelations: Map.Map<string, string>; // correlationId -> commandId or subscriptionId
+  readonly subscriptions: HashMap.HashMap<EventStreamId, SubscriptionState>;
+  readonly pendingCommands: HashMap.HashMap<string, PendingCommand>;
+  readonly messageCorrelations: HashMap.HashMap<string, string>; // correlationId -> commandId or subscriptionId
 }
 
 // ============================================================================
@@ -89,9 +89,9 @@ export class ProtocolStateManager<TEvent> {
       // Update state
       yield* Ref.update(this.state, (current) => ({
         ...current,
-        subscriptions: Map.set(current.subscriptions, streamId, subscriptionState),
+        subscriptions: HashMap.set(current.subscriptions, streamId, subscriptionState),
         ...(correlationId && {
-          messageCorrelations: Map.set(current.messageCorrelations, correlationId, streamId),
+          messageCorrelations: HashMap.set(current.messageCorrelations, correlationId, streamId),
         }),
       }));
 
@@ -101,7 +101,7 @@ export class ProtocolStateManager<TEvent> {
           // Stop stream when subscription is no longer active
           Effect.gen(this, function* () {
             const state = yield* Ref.get(this.state);
-            const subscription = Map.get(state.subscriptions, streamId);
+            const subscription = HashMap.get(state.subscriptions, streamId);
             return !subscription?.isActive;
           })
         )
@@ -117,7 +117,7 @@ export class ProtocolStateManager<TEvent> {
   ): Effect.Effect<void, StreamError, never> =>
     Effect.gen(this, function* () {
       const state = yield* Ref.get(this.state);
-      const subscription = Map.get(state.subscriptions, streamId);
+      const subscription = HashMap.get(state.subscriptions, streamId);
 
       if (!subscription || !subscription.isActive) {
         return yield* Effect.fail(
@@ -134,7 +134,7 @@ export class ProtocolStateManager<TEvent> {
       // Update position
       yield* Ref.update(this.state, (current) => ({
         ...current,
-        subscriptions: Map.set(current.subscriptions, streamId, {
+        subscriptions: HashMap.set(current.subscriptions, streamId, {
           ...subscription,
           currentPosition: event.position,
         }),
@@ -150,7 +150,7 @@ export class ProtocolStateManager<TEvent> {
   ): Effect.Effect<void, StreamError, never> =>
     Effect.gen(this, function* () {
       const state = yield* Ref.get(this.state);
-      const subscription = Map.get(state.subscriptions, streamId);
+      const subscription = HashMap.get(state.subscriptions, streamId);
 
       if (!subscription) {
         return yield* Effect.fail(
@@ -167,7 +167,7 @@ export class ProtocolStateManager<TEvent> {
       // Update state
       yield* Ref.update(this.state, (current) => ({
         ...current,
-        subscriptions: Map.set(current.subscriptions, streamId, {
+        subscriptions: HashMap.set(current.subscriptions, streamId, {
           ...subscription,
           isActive: false,
         }),
@@ -223,9 +223,9 @@ export class ProtocolStateManager<TEvent> {
       // Update state
       yield* Ref.update(this.state, (current) => ({
         ...current,
-        pendingCommands: Map.set(current.pendingCommands, commandId, pendingCommand),
+        pendingCommands: HashMap.set(current.pendingCommands, commandId, pendingCommand),
         ...(correlationId && {
-          messageCorrelations: Map.set(current.messageCorrelations, correlationId, commandId),
+          messageCorrelations: HashMap.set(current.messageCorrelations, correlationId, commandId),
         }),
       }));
 
@@ -241,7 +241,7 @@ export class ProtocolStateManager<TEvent> {
   ): Effect.Effect<void, never, never> =>
     Effect.gen(this, function* () {
       const state = yield* Ref.get(this.state);
-      const pendingCommand = Map.get(state.pendingCommands, commandId);
+      const pendingCommand = HashMap.get(state.pendingCommands, commandId);
 
       if (!pendingCommand) {
         // Command not found or already completed - ignore
@@ -254,7 +254,7 @@ export class ProtocolStateManager<TEvent> {
       // Remove from state
       yield* Ref.update(this.state, (current) => ({
         ...current,
-        pendingCommands: Map.remove(current.pendingCommands, commandId),
+        pendingCommands: HashMap.remove(current.pendingCommands, commandId),
       }));
     });
 
@@ -267,14 +267,14 @@ export class ProtocolStateManager<TEvent> {
   ): Effect.Effect<void, never, never> =>
     Effect.gen(this, function* () {
       const state = yield* Ref.get(this.state);
-      const commandId = Map.get(state.messageCorrelations, correlationId);
+      const commandId = HashMap.get(state.messageCorrelations, correlationId);
 
       if (commandId) {
         yield* this.completePendingCommand(commandId, result);
         // Clean up correlation
         yield* Ref.update(this.state, (current) => ({
           ...current,
-          messageCorrelations: Map.remove(current.messageCorrelations, correlationId),
+          messageCorrelations: HashMap.remove(current.messageCorrelations, correlationId),
         }));
       }
     });
@@ -296,14 +296,12 @@ export class ProtocolStateManager<TEvent> {
 
       // Complete expired commands with timeout error
       for (const commandId of expiredCommands) {
-        const timeoutResult: CommandResult = {
-          _tag: 'Left',
-          left: {
-            _tag: 'CommandError',
+        const timeoutResult: CommandResult = Either.left(
+          new CommandError({
             message: 'Command timed out',
             details: { reason: 'timeout', commandId },
-          },
-        };
+          })
+        );
         yield* this.completePendingCommand(commandId, timeoutResult);
       }
     });
@@ -331,22 +329,20 @@ export class ProtocolStateManager<TEvent> {
 
       // Fail all pending commands
       for (const [commandId, command] of state.pendingCommands) {
-        const disconnectResult: CommandResult = {
-          _tag: 'Left',
-          left: {
-            _tag: 'CommandError',
+        const disconnectResult: CommandResult = Either.left(
+          new CommandError({
             message: 'Protocol disconnected',
             details: { reason: 'disconnect', commandId },
-          },
-        };
+          })
+        );
         yield* Deferred.succeed(command.deferred, disconnectResult);
       }
 
       // Reset state
       yield* Ref.set(this.state, {
-        subscriptions: Map.empty(),
-        pendingCommands: Map.empty(),
-        messageCorrelations: Map.empty(),
+        subscriptions: HashMap.empty(),
+        pendingCommands: HashMap.empty(),
+        messageCorrelations: HashMap.empty(),
       });
     });
 }
@@ -365,9 +361,9 @@ export const createProtocolStateManager = <TEvent>(): Effect.Effect<
 > =>
   Effect.gen(function* () {
     const state = yield* Ref.make<ProtocolState>({
-      subscriptions: Map.empty(),
-      pendingCommands: Map.empty(),
-      messageCorrelations: Map.empty(),
+      subscriptions: HashMap.empty(),
+      pendingCommands: HashMap.empty(),
+      messageCorrelations: HashMap.empty(),
     });
 
     return new ProtocolStateManager<TEvent>(state);
@@ -432,4 +428,4 @@ export class ProtocolStateManagerService<TEvent = unknown> extends Effect.Tag(
  * Layer that provides the protocol state manager.
  */
 export const ProtocolStateManagerLive = <TEvent>() =>
-  Effect.Layer.effect(ProtocolStateManagerService<TEvent>, createProtocolStateManager<TEvent>());
+  Layer.effect(ProtocolStateManagerService<TEvent>, createProtocolStateManager<TEvent>());
