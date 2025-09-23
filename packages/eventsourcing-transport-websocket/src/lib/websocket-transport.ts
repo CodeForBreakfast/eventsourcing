@@ -67,17 +67,19 @@ const publishMessage =
           );
         }
 
-        return Effect.try({
-          try: () => {
-            const serialized = JSON.stringify(message);
-            state.socket!.send(serialized);
-          },
-          catch: (error) =>
-            new TransportError({
-              message: 'Failed to send message through WebSocket',
-              cause: error,
-            }),
-        });
+        return pipe(
+          Effect.sync(() => JSON.stringify(message)),
+          Effect.flatMap((serialized) =>
+            Effect.try({
+              try: () => state.socket!.send(serialized),
+              catch: (error) =>
+                new TransportError({
+                  message: 'Failed to send message through WebSocket',
+                  cause: error,
+                }),
+            })
+          )
+        );
       })
     );
 
@@ -95,19 +97,17 @@ const subscribeToMessages =
         }))
       ),
       Effect.map((queue) => {
-        let stream = Stream.fromQueue(queue);
+        const baseStream = Stream.fromQueue(queue);
 
-        if (filter) {
-          stream = Stream.filter(stream, (msg) => {
-            try {
-              return filter(msg);
-            } catch {
-              return false;
-            }
-          });
-        }
-
-        return stream;
+        return filter
+          ? Stream.filter(baseStream, (msg) =>
+              pipe(
+                Effect.sync(() => filter(msg)),
+                Effect.catchAll(() => Effect.succeed(false)),
+                Effect.runSync
+              )
+            )
+          : baseStream;
       })
     );
 
@@ -144,26 +144,24 @@ const handleIncomingMessage = (
   pipe(
     Effect.sync(() => {
       try {
-        return JSON.parse(data) as TransportMessage;
+        return { _tag: 'success' as const, message: JSON.parse(data) as TransportMessage };
       } catch {
-        return null;
+        return { _tag: 'error' as const };
       }
     }),
-    Effect.flatMap((message) => {
-      if (message === null) {
-        return Effect.void;
-      }
-
-      return pipe(
-        Ref.get(stateRef),
-        Effect.flatMap((state) =>
-          Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, message), {
-            discard: true,
-          })
-        ),
-        Effect.asVoid
-      );
-    })
+    Effect.flatMap((result) =>
+      result._tag === 'error'
+        ? Effect.void
+        : pipe(
+            Ref.get(stateRef),
+            Effect.flatMap((state) =>
+              Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, result.message), {
+                discard: true,
+              })
+            ),
+            Effect.asVoid
+          )
+    )
   );
 
 const createWebSocketConnection = (
@@ -263,8 +261,12 @@ const cleanupConnection = (
     Effect.flatMap((state) =>
       pipe(
         Effect.sync(() => {
-          if (state.socket && state.socket.readyState !== WebSocket.CLOSED) {
-            state.socket.close();
+          try {
+            if (state.socket && state.socket.readyState !== WebSocket.CLOSED) {
+              state.socket.close();
+            }
+          } catch {
+            // Ignore cleanup errors
           }
         }),
         Effect.flatMap(() =>
@@ -274,10 +276,10 @@ const cleanupConnection = (
             connectionStatePubSub: s.connectionStatePubSub,
             subscribers: new Set<Queue.Queue<TransportMessage>>(),
           }))
-        )
+        ),
+        Effect.asVoid
       )
-    ),
-    Effect.asVoid
+    )
   );
 
 const connectWebSocket = (

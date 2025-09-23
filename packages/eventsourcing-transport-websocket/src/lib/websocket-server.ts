@@ -91,19 +91,17 @@ const subscribeToClientMessages =
         })
       ),
       Effect.map((queue) => {
-        let stream = Stream.fromQueue(queue);
+        const baseStream = Stream.fromQueue(queue);
 
-        if (filter) {
-          stream = Stream.filter(stream, (msg) => {
-            try {
-              return filter(msg);
-            } catch {
-              return false;
-            }
-          });
-        }
-
-        return stream;
+        return filter
+          ? Stream.filter(baseStream, (msg) =>
+              pipe(
+                Effect.sync(() => filter(msg)),
+                Effect.catchAll(() => Effect.succeed(false)),
+                Effect.runSync
+              )
+            )
+          : baseStream;
       })
     );
 
@@ -135,23 +133,21 @@ const handleClientMessage = (
   pipe(
     Effect.sync(() => {
       try {
-        return JSON.parse(data) as TransportMessage;
+        return { _tag: 'success' as const, message: JSON.parse(data) as TransportMessage };
       } catch {
-        return null;
+        return { _tag: 'error' as const };
       }
     }),
-    Effect.flatMap((message) => {
-      if (message === null) {
-        return Effect.void;
-      }
-
-      return pipe(
-        Effect.forEach(clientState.subscribers, (queue) => Queue.offer(queue, message), {
-          discard: true,
-        }),
-        Effect.asVoid
-      );
-    })
+    Effect.flatMap((result) =>
+      result._tag === 'error'
+        ? Effect.void
+        : pipe(
+            Effect.forEach(clientState.subscribers, (queue) => Queue.offer(queue, result.message), {
+              discard: true,
+            }),
+            Effect.asVoid
+          )
+    )
   );
 
 // =============================================================================
@@ -171,12 +167,10 @@ const createWebSocketServer = (
           open: (ws: any) => {
             Effect.runSync(
               pipe(
-                Effect.sync(() => {
-                  const clientId = Server.makeClientId(`client-${Date.now()}-${Math.random()}`);
-                  const connectedAt = new Date();
-
-                  return { clientId, connectedAt };
-                }),
+                Effect.sync(() => ({
+                  clientId: Server.makeClientId(`client-${Date.now()}-${Math.random()}`),
+                  connectedAt: new Date(),
+                })),
                 Effect.flatMap(({ clientId, connectedAt }) =>
                   pipe(
                     Queue.unbounded<ConnectionState>(),
@@ -302,12 +296,15 @@ const createServerTransport = (
       Effect.flatMap((state) =>
         Effect.forEach(
           Array.from(state.clients.values()),
-          (clientState) => publishMessageToClient(clientState)(message),
+          (clientState) =>
+            pipe(
+              publishMessageToClient(clientState)(message),
+              Effect.catchAll(() => Effect.void) // Ignore individual client failures
+            ),
           { discard: true }
         )
       ),
-      Effect.asVoid,
-      Effect.catchAll(() => Effect.void) // Ignore individual client send failures for broadcast
+      Effect.asVoid
     ),
 
   __serverStateRef: serverStateRef,
@@ -319,18 +316,22 @@ const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void
     Effect.flatMap((state) =>
       pipe(
         Effect.sync(() => {
-          // Close all client connections
-          for (const clientState of state.clients.values()) {
-            try {
-              clientState.socket.close();
-            } catch {
-              // Ignore errors during cleanup
+          try {
+            // Close all client connections
+            for (const clientState of state.clients.values()) {
+              try {
+                clientState.socket.close();
+              } catch {
+                // Ignore errors during cleanup
+              }
             }
-          }
 
-          // Stop the server
-          if (state.server && state.server.stop) {
-            state.server.stop();
+            // Stop the server
+            if (state.server && state.server.stop) {
+              state.server.stop();
+            }
+          } catch {
+            // Ignore cleanup errors
           }
         }),
         Effect.asVoid
