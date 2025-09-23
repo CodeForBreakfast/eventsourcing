@@ -12,7 +12,10 @@ import {
   ProtocolLive,
   type ProtocolService,
 } from '@codeforbreakfast/eventsourcing-protocol-default';
-import type { TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import type {
+  TransportError,
+  ConnectionError,
+} from '@codeforbreakfast/eventsourcing-transport-contracts';
 import type { Scope } from 'effect/Scope';
 
 export const DefaultWebSocketConfig = {
@@ -30,7 +33,7 @@ export interface WebSocketConnectOptions {
 export const connect = (
   url: string,
   _options?: WebSocketConnectOptions
-): Effect.Effect<ProtocolService, TransportError, Protocol | Scope> => {
+): Effect.Effect<ProtocolService, TransportError | ConnectionError, Protocol | Scope> => {
   // Create the layer stack
   const protocolLayer = pipe(
     WebSocketConnector.connect(url),
@@ -65,7 +68,7 @@ export const createWebSocketConnector = () => WebSocketConnector;
  */
 export const createWebSocketProtocolStack = (
   url: string
-): Layer.Layer<Protocol, TransportError, Scope> => {
+): Layer.Layer<Protocol, TransportError | ConnectionError, Scope> => {
   return pipe(
     WebSocketConnector.connect(url),
     Effect.map((transport) => ProtocolLive(transport)),
