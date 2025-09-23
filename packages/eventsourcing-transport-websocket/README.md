@@ -1,35 +1,21 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
-WebSocket transport implementation for event sourcing - Protocol-agnostic message transport over WebSocket connections.
+WebSocket transport implementation for event sourcing - Real-time bidirectional message transport over WebSocket connections.
 
 ## Overview
 
-This package provides a minimal, protocol-agnostic WebSocket transport implementation that follows the transport contracts defined in `@codeforbreakfast/eventsourcing-transport-contracts`. It focuses purely on message transport without any event sourcing domain concepts.
+This package provides WebSocket client and server transport implementations that follow the transport contracts defined in `@codeforbreakfast/eventsourcing-transport-contracts`. It enables real-time, bidirectional communication between clients and servers using WebSockets.
 
 ## Key Features
 
-- ✅ **Protocol Agnostic**: Just moves messages - no domain concepts
-- ✅ **Contract Compliant**: Implements all required transport interfaces
+- ✅ **Real-time Communication**: WebSocket-based bidirectional messaging
+- ✅ **Client & Server Support**: Both WebSocket client connector and server acceptor
 - ✅ **Effect-Native**: Built with Effect for composability and type safety
-- ✅ **Real-time**: WebSocket-based bidirectional communication
-- ✅ **Reconnection**: Automatic reconnection with offline buffering
-- ✅ **Multiplexing**: Multiple message types over single connection
-- ✅ **Message Ordering**: Guarantees message order within connection
-- ✅ **Request/Response**: Built-in request/response pattern with timeouts
-
-## Transport Features
-
-```typescript
-export const WEBSOCKET_FEATURES: TransportFeatures = {
-  supportsReconnection: true,
-  supportsOfflineBuffering: true,
-  supportsBackpressure: false,
-  guaranteesOrdering: true,
-  supportsMultiplexing: true,
-  supportsBatching: false,
-  supportsCompression: false,
-} as const;
-```
+- ✅ **Contract Compliant**: Implements transport contract interfaces
+- ✅ **Connection Management**: Handles connection lifecycle with proper cleanup
+- ✅ **Message Filtering**: Subscribe to specific message types
+- ✅ **Broadcasting**: Server can broadcast messages to all connected clients
+- ✅ **Scope-based Resources**: Automatic cleanup with Effect Scope
 
 ## Installation
 
@@ -37,88 +23,48 @@ export const WEBSOCKET_FEATURES: TransportFeatures = {
 bun add @codeforbreakfast/eventsourcing-transport-websocket
 ```
 
-## Basic Usage
+## Client Usage
+
+### Basic Connection
 
 ```typescript
-import { Effect, Scope } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-import type { TransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
-// Create a connector
-const connector = new WebSocketConnector();
-
-// Connect to WebSocket server
 const program = Effect.scoped(
   Effect.gen(function* () {
-    // Connect to server
-    const transport = yield* connector.connect('ws://localhost:8080');
+    // Connect to WebSocket server
+    const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
+
+    // Monitor connection state
+    yield* pipe(
+      transport.connectionState,
+      Stream.runForEach((state) => Effect.sync(() => console.log('Connection state:', state))),
+      Effect.fork
+    );
 
     // Subscribe to messages
-    const messageStream = yield* transport.subscribe((msg) => msg.type === 'chat-message');
+    const subscription = yield* transport.subscribe();
 
     // Handle incoming messages
-    yield* Stream.runForEach(messageStream, (message) =>
-      Effect.sync(() => console.log('Received:', message.payload))
+    yield* pipe(
+      subscription,
+      Stream.runForEach((message) => Effect.sync(() => console.log('Received:', message))),
+      Effect.fork
     );
 
     // Publish a message
-    const chatMessage: TransportMessage = {
-      id: crypto.randomUUID(),
-      type: 'chat-message',
+    yield* transport.publish({
+      id: makeMessageId('msg-1'),
+      type: 'chat.message',
       payload: { text: 'Hello WebSocket!' },
-      timestamp: new Date(),
-    };
-
-    yield* transport.publish(chatMessage);
+    });
   })
 );
 
-// Run the program
-Effect.runPromise(program);
-```
-
-## Request/Response Pattern
-
-```typescript
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    const transport = yield* connector.connect('ws://localhost:8080');
-
-    try {
-      const response = yield* transport.request(
-        { action: 'get-user', userId: '123' },
-        30000 // 30 second timeout
-      );
-      console.log('Response:', response);
-    } catch (error) {
-      console.error('Request failed:', error);
-    }
-  })
-);
-```
-
-## Advanced Features
-
-### Reconnection and Buffering
-
-```typescript
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    const transport = yield* connector.connect('ws://localhost:8080');
-
-    // Messages sent during disconnection are buffered
-    yield* transport.publish(message1);
-    yield* transport.simulateDisconnect(); // Network issue
-    yield* transport.publish(message2); // Buffered
-    yield* transport.publish(message3); // Buffered
-
-    yield* transport.simulateReconnect(); // Reconnects and flushes buffer
-
-    // Check buffer status
-    const bufferedCount = yield* transport.getBufferedMessageCount();
-    console.log('Buffered messages:', bufferedCount);
-  })
-);
+// Run with automatic cleanup
+await Effect.runPromise(program);
 ```
 
 ### Message Filtering
@@ -126,113 +72,259 @@ const program = Effect.scoped(
 ```typescript
 const program = Effect.scoped(
   Effect.gen(function* () {
-    const transport = yield* connector.connect('ws://localhost:8080');
+    const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
 
-    // Subscribe to specific message types
-    const chatMessages = yield* transport.subscribe((msg) => msg.type === 'chat');
+    // Subscribe only to specific message types
+    const chatMessages = yield* transport.subscribe((msg) => msg.type.startsWith('chat.'));
 
-    const notifications = yield* transport.subscribe(
-      (msg) => msg.type === 'notification' && msg.metadata?.priority === 'high'
+    // Handle filtered messages
+    yield* pipe(
+      chatMessages,
+      Stream.runForEach((message) => Effect.sync(() => console.log('Chat message:', message)))
     );
-
-    // Handle different streams separately
-    yield* Effect.fork(Stream.runForEach(chatMessages, handleChatMessage));
-
-    yield* Effect.fork(Stream.runForEach(notifications, handleNotification));
   })
+);
+```
+
+## Server Usage
+
+### Basic Server
+
+```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { WebSocketAcceptor } from '@codeforbreakfast/eventsourcing-transport-websocket';
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    // Create WebSocket server
+    const acceptor = yield* WebSocketAcceptor.make({
+      port: 8080,
+      host: 'localhost',
+    });
+
+    // Start accepting connections
+    const transport = yield* acceptor.start();
+
+    // Handle new client connections
+    yield* pipe(
+      transport.connections,
+      Stream.runForEach((connection) =>
+        Effect.gen(function* () {
+          console.log('Client connected:', connection.clientId);
+
+          // Subscribe to messages from this client
+          const messages = yield* connection.transport.subscribe();
+
+          // Echo messages back to client
+          yield* pipe(
+            messages,
+            Stream.runForEach((message) =>
+              connection.transport.publish({
+                ...message,
+                id: makeMessageId(`echo-${message.id}`),
+                type: 'echo.response',
+              })
+            ),
+            Effect.fork
+          );
+        })
+      )
+    );
+  })
+);
+
+// Run server
+await Effect.runPromise(program);
+```
+
+### Broadcasting to All Clients
+
+```typescript
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const acceptor = yield* WebSocketAcceptor.make({
+      port: 8080,
+      host: 'localhost',
+    });
+
+    const transport = yield* acceptor.start();
+
+    // Broadcast to all connected clients
+    yield* transport.broadcast({
+      id: makeMessageId('broadcast-1'),
+      type: 'server.announcement',
+      payload: { message: 'Server is shutting down in 5 minutes' },
+    });
+  })
+);
+```
+
+## Connection States
+
+The transport tracks connection states:
+
+- `connecting`: Initial connection attempt
+- `connected`: Successfully connected
+- `disconnected`: Connection closed
+- `error`: Connection error occurred
+
+```typescript
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
+
+    // Monitor connection state changes
+    yield* pipe(
+      transport.connectionState,
+      Stream.runForEach((state) =>
+        Effect.sync(() => {
+          switch (state) {
+            case 'connected':
+              console.log('Connected to server');
+              break;
+            case 'disconnected':
+              console.log('Disconnected from server');
+              break;
+            case 'error':
+              console.error('Connection error');
+              break;
+          }
+        })
+      )
+    );
+  })
+);
+```
+
+## Error Handling
+
+The transport uses typed errors from the contracts package:
+
+```typescript
+import {
+  ConnectionError,
+  TransportError,
+} from '@codeforbreakfast/eventsourcing-transport-contracts';
+
+const program = Effect.scoped(
+  pipe(
+    WebSocketConnector.connect('ws://invalid-server:9999'),
+    Effect.catchTag('ConnectionError', (error) =>
+      Effect.sync(() => console.error('Failed to connect:', error.message))
+    )
+  )
 );
 ```
 
 ## Testing
 
-This package includes comprehensive contract tests that validate the transport implementation:
+The package includes comprehensive tests:
 
-```typescript
-import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import {
-  WebSocketConnector,
-  WEBSOCKET_FEATURES,
-} from '@codeforbreakfast/eventsourcing-transport-websocket';
+### Unit Tests
 
-// Run contract tests
-runTransportContractTests('WebSocket', createWebSocketTestContext, WEBSOCKET_FEATURES);
+Tests edge cases using mock WebSockets:
+
+- Connection errors
+- Malformed messages
+- Rapid state changes
+
+### Integration Tests
+
+Tests real WebSocket communication:
+
+- Client-server message exchange
+- Broadcasting
+- Multiple client connections
+- Connection lifecycle
+- Resource cleanup
+
+```bash
+# Run all tests
+bun test packages/eventsourcing-transport-websocket
+
+# Run unit tests only
+bun test packages/eventsourcing-transport-websocket/src/lib/websocket-transport.test.ts
+
+# Run integration tests only
+bun test packages/eventsourcing-transport-websocket/src/tests/integration/
 ```
-
-The tests validate:
-
-- Connection management
-- Message delivery and ordering
-- Request/response patterns
-- Reconnection behavior
-- Buffer management
-- Error handling
-- Stream lifecycle
 
 ## Architecture
 
-This package follows the transport abstraction pattern:
+This package implements the transport layer abstraction:
 
 ```
 ┌─────────────────────────────────────┐
-│           Protocol Layer            │  ← Domain-specific (commands, events)
+│     Application Layer               │  ← Your application
 ├─────────────────────────────────────┤
-│          Transport Layer            │  ← This package (WebSocket)
+│     Protocol Layer                  │  ← Domain protocols (optional)
+├─────────────────────────────────────┤
+│     Transport Layer                 │  ← This package (WebSocket)
 └─────────────────────────────────────┘
 ```
 
-The transport layer is completely protocol-agnostic and just moves `TransportMessage` objects. The protocol layer (not included) would handle domain-specific concepts like commands, events, and aggregates.
+The transport is protocol-agnostic and moves `TransportMessage` objects between clients and servers without understanding their content.
 
 ## API Reference
 
-### WebSocketConnector
+### Client API
 
-Main entry point for creating WebSocket connections.
+#### WebSocketConnector
 
 ```typescript
-class WebSocketConnector implements TransportConnector {
-  connect(url: string): Effect.Effect<ConnectedTransport, ConnectionError, Scope.Scope>;
+const WebSocketConnector: Client.ConnectorInterface<TransportMessage> = {
+  connect(url: string): Effect.Effect<
+    Client.Transport<TransportMessage>,
+    ConnectionError,
+    Scope.Scope
+  >
 }
 ```
 
-### WebSocketTransport
-
-The connected transport instance with all transport operations.
+#### Client.Transport
 
 ```typescript
-class WebSocketTransport implements AdvancedTransport {
-  // Connection management
-  connect(): Effect.Effect<void, ConnectionError, never>;
-  disconnect(): Effect.Effect<void, never, never>;
-  isConnected(): Effect.Effect<boolean, never, never>;
-  getState(): Effect.Effect<ConnectionState, never, never>;
+interface Transport<TMessage> {
+  connectionState: Stream.Stream<ConnectionState, never, never>;
 
-  // Pub/Sub
-  publish(message: TransportMessage): Effect.Effect<void, TransportError, never>;
+  publish(message: TMessage): Effect.Effect<void, TransportError, never>;
+
   subscribe(
-    filter?: (message: TransportMessage) => boolean
-  ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never>;
-
-  // Request/Response
-  request<TRequest, TResponse>(
-    request: TRequest,
-    timeoutMs?: number
-  ): Effect.Effect<TResponse, TransportError, never>;
-
-  // Advanced features
-  simulateDisconnect(): Effect.Effect<void, never, never>;
-  simulateReconnect(): Effect.Effect<void, never, never>;
-  getBufferedMessageCount(): Effect.Effect<number, never, never>;
-  flushBuffer(): Effect.Effect<void, TransportError, never>;
+    filter?: (message: TMessage) => boolean
+  ): Effect.Effect<Stream.Stream<TMessage, never, never>, TransportError, never>;
 }
 ```
 
-## Error Handling
+### Server API
 
-The transport uses structured errors from the contracts package:
+#### WebSocketAcceptor
 
-- `ConnectionError`: WebSocket connection failures
-- `TransportError`: Message serialization/transport errors
-- `MessageParseError`: Incoming message parsing errors
+```typescript
+const WebSocketAcceptor: {
+  make(config: {
+    port: number;
+    host: string;
+  }): Effect.Effect<Server.AcceptorInterface, never, never>;
+};
+```
+
+#### Server.Transport
+
+```typescript
+interface Transport<TMessage> {
+  connections: Stream.Stream<ClientConnection, never, never>;
+
+  broadcast(message: TMessage): Effect.Effect<void, TransportError, never>;
+}
+```
+
+## Implementation Notes
+
+- Uses Bun's native WebSocket implementation for performance
+- Handles connection lifecycle with Effect's Scope for automatic cleanup
+- Message parsing errors are silently dropped to prevent stream corruption
+- Each client subscription gets its own queue for message isolation
+- Server maintains a map of connected clients with their state
 
 ## Contributing
 
