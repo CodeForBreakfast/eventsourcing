@@ -5,7 +5,7 @@
  * Uses Effect.acquireRelease for Scope-based lifecycle management.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, Chunk, pipe, Layer } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer } from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -22,7 +22,6 @@ interface WebSocketInternalState {
   readonly socket: WebSocket | null;
   readonly connectionState: ConnectionState;
   readonly connectionStatePubSub: PubSub.PubSub<ConnectionState>;
-  readonly stateHistory: Chunk.Chunk<ConnectionState>;
   readonly subscribers: Set<Queue.Queue<TransportMessage>>;
 }
 
@@ -45,8 +44,8 @@ const createConnectionStateStream = (
           // Subscribe to future updates
           PubSub.subscribe(state.connectionStatePubSub),
           Effect.map((queue) =>
-            // Provide historical states first, then future updates
-            Stream.concat(Stream.fromChunk(state.stateHistory), Stream.fromQueue(queue))
+            // Provide current state first, then future updates
+            Stream.concat(Stream.succeed(state.connectionState), Stream.fromQueue(queue))
           )
         )
       ),
@@ -133,7 +132,6 @@ const updateConnectionState = (
     Ref.update(stateRef, (state) => ({
       ...state,
       connectionState: newState,
-      stateHistory: Chunk.append(state.stateHistory, newState),
     })),
     Effect.flatMap(() => Ref.get(stateRef)),
     Effect.flatMap((state) => PubSub.publish(state.connectionStatePubSub, newState))
@@ -230,7 +228,6 @@ const createInitialState = (): Effect.Effect<Ref.Ref<WebSocketInternalState>, ne
         socket: null,
         connectionState: 'connecting',
         connectionStatePubSub,
-        stateHistory: Chunk.empty<ConnectionState>(),
         subscribers: new Set(),
       };
       return Ref.make(initialState);
@@ -254,7 +251,6 @@ const cleanupConnection = (
             socket: null,
             connectionState: 'disconnected' as ConnectionState,
             connectionStatePubSub: s.connectionStatePubSub,
-            stateHistory: s.stateHistory,
             subscribers: new Set<Queue.Queue<TransportMessage>>(),
           }))
         )
