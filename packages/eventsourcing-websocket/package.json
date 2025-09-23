@@ -67,7 +67,8 @@
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
-    "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*"
+    "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*",
+    "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.5.2",

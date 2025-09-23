@@ -77,9 +77,9 @@ export const createWebSocketProtocolStack = (
 };
 
 /**
- * Create protocol connector layer
+ * Create protocol connector layer (alias for createWebSocketProtocolStack)
  */
-export const createWebSocketConnectorLayer = createWebSocketProtocolStack;
+export const createWebSocketConnectorLayer = (url: string) => createWebSocketProtocolStack(url);
 
 /**
  * @deprecated Use connect() instead

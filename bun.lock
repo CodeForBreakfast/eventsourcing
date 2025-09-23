@@ -194,6 +194,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
