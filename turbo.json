@@ -4,6 +4,9 @@
     "all": {
       "dependsOn": ["lint", "test", "build"]
     },
+    "ci": {
+      "dependsOn": ["build", "check", "lint", "test", "//#arch:check", "//#deps:check"]
+    },
     "typecheck": {
       "dependsOn": ["^typecheck"],
       "outputs": ["tsconfig.tsbuildinfo"],
