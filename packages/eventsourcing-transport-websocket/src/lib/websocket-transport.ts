@@ -173,8 +173,12 @@ const createWebSocketConnection = (
   Effect.async<void, ConnectionError>((resume) => {
     try {
       const socket = new WebSocket(url);
+      let hasResolved = false;
 
       socket.onopen = () => {
+        if (hasResolved) return;
+        hasResolved = true;
+
         Effect.runSync(
           pipe(
             Ref.update(stateRef, (state) => ({
@@ -188,24 +192,41 @@ const createWebSocketConnection = (
       };
 
       socket.onerror = (event) => {
-        Effect.runSync(updateConnectionState(stateRef, 'error'));
-        resume(
-          Effect.fail(
-            new ConnectionError({
-              message: 'Failed to connect to WebSocket',
-              url,
-              cause: event,
-            })
-          )
-        );
+        if (!hasResolved) {
+          hasResolved = true;
+          Effect.runSync(updateConnectionState(stateRef, 'error'));
+          resume(
+            Effect.fail(
+              new ConnectionError({
+                message: 'Failed to connect to WebSocket',
+                url,
+                cause: event,
+              })
+            )
+          );
+        }
+      };
+
+      socket.onclose = (event) => {
+        Effect.runSync(updateConnectionState(stateRef, 'disconnected'));
+
+        // If we haven't resolved yet and we're closing, it means connection failed
+        if (!hasResolved) {
+          hasResolved = true;
+          resume(
+            Effect.fail(
+              new ConnectionError({
+                message: 'WebSocket connection closed before opening',
+                url,
+                cause: event,
+              })
+            )
+          );
+        }
       };
 
       socket.onmessage = (event) => {
         Effect.runSync(handleIncomingMessage(stateRef, event.data));
-      };
-
-      socket.onclose = () => {
-        Effect.runSync(updateConnectionState(stateRef, 'disconnected'));
       };
     } catch (error) {
       resume(

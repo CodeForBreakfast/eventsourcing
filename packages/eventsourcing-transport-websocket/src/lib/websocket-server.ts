@@ -5,7 +5,7 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, pipe, Data } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -62,26 +62,21 @@ const createClientConnectionStateStream = (
 const publishMessageToClient =
   (clientState: ClientState) =>
   (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
-    pipe(
-      Effect.sync(() => {
+    Effect.try({
+      try: () => {
         if (clientState.connectionState !== 'connected') {
-          throw new TransportError({
-            message: 'Cannot publish message: client is not connected',
-          });
+          throw new Error('Cannot publish message: client is not connected');
         }
 
         const serialized = JSON.stringify(message);
         clientState.socket.send(serialized);
-      }),
-      Effect.catchAll((error) =>
-        Effect.fail(
-          new TransportError({
-            message: 'Failed to send message to client',
-            cause: error,
-          })
-        )
-      )
-    );
+      },
+      catch: (error) =>
+        new TransportError({
+          message: 'Failed to send message to client',
+          cause: error,
+        }),
+    });
 
 const subscribeToClientMessages =
   (clientState: ClientState) =>
