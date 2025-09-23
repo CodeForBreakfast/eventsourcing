@@ -1073,8 +1073,156 @@ describe('Protocol Behavior Tests', () => {
       await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should continue receiving events after re-subscribing to a stream', async () => {
-      // TODO: Implement test for re-subscription behavior
+    test('should continue receiving events after re-subscribing to a stream', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              () => ({
+                _tag: 'Success',
+                position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+              }),
+              (streamId) => {
+                // Simulate a stream that has accumulated events over time
+                if (streamId === 'persistent-stream') {
+                  return [
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                      type: 'EventBeforeResubscribe1',
+                      data: { message: 'First event before resubscribe', value: 1 },
+                      timestamp: new Date('2024-01-01T10:00:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                      type: 'EventBeforeResubscribe2',
+                      data: { message: 'Second event before resubscribe', value: 2 },
+                      timestamp: new Date('2024-01-01T10:01:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 3 },
+                      type: 'EventAfterResubscribe1',
+                      data: { message: 'First event after resubscribe', value: 3 },
+                      timestamp: new Date('2024-01-01T10:02:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 4 },
+                      type: 'EventAfterResubscribe2',
+                      data: { message: 'Second event after resubscribe', value: 4 },
+                      timestamp: new Date('2024-01-01T10:03:00Z'),
+                    },
+                  ];
+                }
+                return [];
+              }
+            ),
+            Effect.flatMap(() => {
+              return pipe(
+                // First subscription - get first 2 events
+                Effect.scoped(
+                  pipe(
+                    subscribe('persistent-stream'),
+                    Effect.flatMap((eventStream) =>
+                      pipe(
+                        eventStream,
+                        Stream.take(2),
+                        Stream.runCollect,
+                        Effect.map((events) => Array.from(events))
+                      )
+                    )
+                  )
+                ),
+                Effect.flatMap((firstBatchEvents) => {
+                  // Verify we got the first batch correctly
+                  return pipe(
+                    Effect.sync(() => {
+                      expect(firstBatchEvents).toHaveLength(2);
+                      expect(firstBatchEvents[0]!.type).toBe('EventBeforeResubscribe1');
+                      expect(firstBatchEvents[1]!.type).toBe('EventBeforeResubscribe2');
+                    }),
+                    Effect.flatMap(() =>
+                      // Second subscription (re-subscribe) - should get all events again
+                      pipe(
+                        subscribe('persistent-stream'),
+                        Effect.flatMap((newEventStream) =>
+                          pipe(
+                            newEventStream,
+                            Stream.take(4), // Take all 4 events this time
+                            Stream.runCollect,
+                            Effect.map((events) => ({
+                              firstBatch: firstBatchEvents,
+                              resubscribeBatch: Array.from(events),
+                            }))
+                          )
+                        )
+                      )
+                    )
+                  );
+                }),
+                Effect.tap(({ firstBatch, resubscribeBatch }) =>
+                  Effect.sync(() => {
+                    // Verify first batch events (from before re-subscribe)
+                    expect(firstBatch).toHaveLength(2);
+                    expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
+                    expect(firstBatch[0]!.data).toEqual({
+                      message: 'First event before resubscribe',
+                      value: 1,
+                    });
+                    expect(firstBatch[1]!.type).toBe('EventBeforeResubscribe2');
+                    expect(firstBatch[1]!.data).toEqual({
+                      message: 'Second event before resubscribe',
+                      value: 2,
+                    });
+
+                    // Verify re-subscribe batch contains all events including new ones
+                    expect(resubscribeBatch).toHaveLength(4);
+
+                    // Events that were already seen before should be delivered again
+                    expect(resubscribeBatch[0]!.type).toBe('EventBeforeResubscribe1');
+                    expect(resubscribeBatch[1]!.type).toBe('EventBeforeResubscribe2');
+
+                    // Plus the new events that accumulated while not subscribed
+                    expect(resubscribeBatch[2]!.type).toBe('EventAfterResubscribe1');
+                    expect(resubscribeBatch[2]!.data).toEqual({
+                      message: 'First event after resubscribe',
+                      value: 3,
+                    });
+                    expect(resubscribeBatch[3]!.type).toBe('EventAfterResubscribe2');
+                    expect(resubscribeBatch[3]!.data).toEqual({
+                      message: 'Second event after resubscribe',
+                      value: 4,
+                    });
+
+                    // Verify event numbers are sequential and correct
+                    expect(resubscribeBatch[0]!.position.eventNumber).toBe(1);
+                    expect(resubscribeBatch[1]!.position.eventNumber).toBe(2);
+                    expect(resubscribeBatch[2]!.position.eventNumber).toBe(3);
+                    expect(resubscribeBatch[3]!.position.eventNumber).toBe(4);
+
+                    // Verify timestamps are preserved correctly
+                    expect(resubscribeBatch[0]!.timestamp).toEqual(
+                      new Date('2024-01-01T10:00:00Z')
+                    );
+                    expect(resubscribeBatch[1]!.timestamp).toEqual(
+                      new Date('2024-01-01T10:01:00Z')
+                    );
+                    expect(resubscribeBatch[2]!.timestamp).toEqual(
+                      new Date('2024-01-01T10:02:00Z')
+                    );
+                    expect(resubscribeBatch[3]!.timestamp).toEqual(
+                      new Date('2024-01-01T10:03:00Z')
+                    );
+                  })
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
