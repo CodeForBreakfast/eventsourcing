@@ -614,8 +614,93 @@ describe('Protocol Behavior Tests', () => {
       await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should handle receiving events while processing commands concurrently', async () => {
-      // TODO: Implement test for concurrent event receiving during command processing
+    test('should handle receiving events while processing commands concurrently', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              (command) => ({
+                _tag: 'Success',
+                position: {
+                  streamId: unsafeCreateStreamId(command.target),
+                  eventNumber: 1,
+                },
+              }),
+              (streamId) => [
+                {
+                  position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                  type: 'UserCreated',
+                  data: { id: streamId, name: 'Concurrent User' },
+                  timestamp: new Date('2024-01-01T10:00:00Z'),
+                },
+                {
+                  position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                  type: 'UserUpdated',
+                  data: { id: streamId, status: 'active' },
+                  timestamp: new Date('2024-01-01T10:01:00Z'),
+                },
+              ]
+            ),
+            Effect.flatMap(() => {
+              const commands: Command[] = [
+                {
+                  id: crypto.randomUUID(),
+                  target: 'user-1',
+                  name: 'CreateUser',
+                  payload: { name: 'Alice' },
+                },
+                {
+                  id: crypto.randomUUID(),
+                  target: 'user-2',
+                  name: 'UpdateUser',
+                  payload: { name: 'Bob' },
+                },
+              ];
+
+              return pipe(
+                Effect.all(
+                  [
+                    // Start subscription and collect events
+                    pipe(
+                      subscribe('user-stream'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(eventStream, Stream.take(2), Stream.runCollect)
+                      )
+                    ),
+                    // Send commands concurrently while events are being received
+                    pipe(
+                      Effect.all(
+                        commands.map((cmd) => sendCommand(cmd)),
+                        { concurrency: 'unbounded' }
+                      )
+                    ),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.tap(([events, commandResults]) =>
+                  Effect.sync(() => {
+                    // Verify events were received
+                    const collectedEvents = Array.from(events);
+                    expect(collectedEvents).toHaveLength(2);
+                    expect(collectedEvents[0]!.type).toBe('UserCreated');
+                    expect(collectedEvents[1]!.type).toBe('UserUpdated');
+
+                    // Verify commands were processed successfully
+                    expect(commandResults).toHaveLength(2);
+                    expect(commandResults[0]!._tag).toBe('Success');
+                    expect(commandResults[1]!._tag).toBe('Success');
+                  })
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
