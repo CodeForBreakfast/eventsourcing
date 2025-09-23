@@ -54,66 +54,26 @@ export {
 
 // Core protocol types and interfaces
 export type {
-  EventSourcingProtocol,
-  EventStreamSubscriber,
-  CommandDispatcher,
-  ProtocolSerializer,
-  EventSourcingTransportAdapter,
-  EventSourcingProtocolConnector,
-  EventSourcingProtocolConnectorInterface,
-  AggregateCommand,
-  StreamEvent,
-  CommandResult,
-  AsyncCommandResult,
-  StreamSubscriptionOptions,
-  StreamSubscription,
-  ProtocolContext,
-  RequestContext,
-  // Convenience type aliases
-  Protocol,
   Command,
   Event,
-  Result,
+  CommandResult,
+  CommandMessage,
+  SubscribeMessage,
+  CommandResultMessage,
+  EventMessage,
+  IncomingMessage,
+  ProtocolService,
 } from '@codeforbreakfast/eventsourcing-protocol-default';
 
 // Protocol implementation exports
 export {
-  DefaultProtocolSerializer,
-  createDefaultProtocolSerializer,
-  DefaultProtocolSerializerService,
-  DefaultProtocolSerializerLive,
-  ProtocolStateManager,
-  createProtocolStateManager,
-  ProtocolStateManagerService,
-  ProtocolStateManagerLive,
-  DefaultEventSourcingProtocol,
-  createDefaultEventSourcingProtocol,
-  DefaultEventSourcingProtocolService,
-  DefaultTransportAdapter,
-  DefaultProtocolConnector,
-  createDefaultTransportAdapter,
-  createDefaultProtocolConnector,
-  DefaultTransportAdapterService,
-  DefaultProtocolConnectorService,
-  DefaultTransportAdapterLive,
-  DefaultProtocolConnectorLive,
-  createDefaultProtocolConnectorLayer,
-  createCompleteProtocolStack,
-  connectWithCompleteStack,
-  DefaultProtocolConfig,
-  createDefaultProtocol,
-  ProtocolImplementationInfo,
-  // Protocol utilities
-  createProtocolContext,
-  createRequestContext,
-  withProtocolErrorHandling,
-} from '@codeforbreakfast/eventsourcing-protocol-default';
-
-// Protocol error types
-export {
-  CommandError,
-  StreamError,
-  ProtocolSerializationError,
+  Protocol,
+  ProtocolLive,
+  sendCommand,
+  subscribe,
+  CommandTimeoutError,
+  ProtocolValidationError,
+  ProtocolStateError,
 } from '@codeforbreakfast/eventsourcing-protocol-default';
 
 // ============================================================================
@@ -121,18 +81,16 @@ export {
 // ============================================================================
 
 // Transport implementation
-export { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
+export {
+  WebSocketTransport,
+  WebSocketServerTransport,
+} from '@codeforbreakfast/eventsourcing-transport-websocket';
 
 // Transport types
 export type {
-  TransportMessage,
-  ConnectionState,
-  ConnectedTransport,
-  TransportConnectorService,
   TransportError,
-  ConnectionError,
-  MessageParseError,
-} from '@codeforbreakfast/eventsourcing-transport-websocket';
+  TransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // ============================================================================
 // Documentation and Metadata

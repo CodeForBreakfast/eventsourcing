@@ -13,59 +13,32 @@
  * const protocol = yield* connect("ws://localhost:8080");
  *
  * // Subscribe to events
- * const events = yield* protocol.subscribe({ streamId: "user-stream", eventNumber: 0 });
+ * const events = yield* protocol.subscribe("user-stream");
  *
  * // Send commands
  * const result = yield* protocol.sendCommand({
- *   aggregate: { position: { streamId: "user-123", eventNumber: 0 }, name: "User" },
- *   commandName: "CreateUser",
+ *   id: "cmd-123",
+ *   target: "user-123",
+ *   name: "CreateUser",
  *   payload: { name: "John" }
  * });
  * ```
- *
- * ## Migration from Old Package
- *
- * ```typescript
- * // OLD: Multiple imports and setup
- * import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
- * import { connectWithCompleteStack } from '@codeforbreakfast/eventsourcing-protocol-default';
- * const connector = new WebSocketConnector();
- * const protocol = yield* connectWithCompleteStack(connector, url);
- *
- * // NEW: Single import and call
- * import { connect } from '@codeforbreakfast/eventsourcing-websocket';
- * const protocol = yield* connect(url);
- * ```
  */
 
-import { Effect, Scope, Layer } from 'effect';
-import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
+import { Effect, Scope, Layer, pipe } from 'effect';
+import { WebSocketTransport } from '@codeforbreakfast/eventsourcing-transport-websocket';
 import {
-  connectWithCompleteStack,
-  createCompleteProtocolStack,
-  createDefaultProtocolConnectorLayer,
-  DefaultTransportAdapterLive,
-  type ProtocolContext,
-  type EventSourcingProtocol,
-  createProtocolContext,
+  Protocol,
+  ProtocolLive,
+  type ProtocolService,
 } from '@codeforbreakfast/eventsourcing-protocol-default';
-import type {
-  ConnectionError,
-  StreamError,
-} from '@codeforbreakfast/eventsourcing-transport-websocket';
+import type { TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // ============================================================================
 // Primary Convenience API
 // ============================================================================
 
-/**
- * Default configuration for WebSocket event sourcing connections.
- */
 export const DefaultWebSocketConfig = {
-  defaultTimeout: 30000,
-  maxConcurrentCommands: 100,
-  enableBatching: true,
-  batchSize: 10,
   reconnectAttempts: 3,
   reconnectDelayMs: 1000,
 } as const;
@@ -74,7 +47,6 @@ export const DefaultWebSocketConfig = {
  * Options for WebSocket connection.
  */
 export interface WebSocketConnectOptions {
-  readonly context?: ProtocolContext;
   readonly config?: Partial<typeof DefaultWebSocketConfig>;
 }
 
@@ -93,26 +65,29 @@ export interface WebSocketConnectOptions {
  * const protocol = yield* connect("ws://localhost:8080");
  * ```
  */
-export const connect = <TEvent = unknown>(
+export const connect = (
   url: string,
   options?: WebSocketConnectOptions
-): Effect.Effect<EventSourcingProtocol<TEvent>, ConnectionError | StreamError, Scope.Scope> => {
-  const context = options?.context ?? createBasicProtocolContext();
-  const config = { ...DefaultWebSocketConfig, ...options?.config };
-
-  const transportConnector = new WebSocketConnector();
-  return connectWithCompleteStack<TEvent>(transportConnector, url, context);
-};
+): Effect.Effect<ProtocolService, TransportError, Scope.Scope> =>
+  pipe(
+    WebSocketTransport.connect(url),
+    Effect.flatMap((transport) =>
+      pipe(
+        ProtocolLive(transport),
+        Layer.build(Scope.Scope),
+        Effect.map((context) => Effect.runSync(Layer.unsafeGet(context, Protocol)))
+      )
+    )
+  );
 
 /**
  * Create a basic protocol context with sensible defaults.
+ * @deprecated Use connect() directly
  */
-export const createBasicProtocolContext = (overrides?: Partial<ProtocolContext>): ProtocolContext =>
-  createProtocolContext({
-    sessionId: crypto.randomUUID(),
-    correlationId: crypto.randomUUID(),
-    ...overrides,
-  });
+export const createBasicProtocolContext = () => ({
+  sessionId: crypto.randomUUID(),
+  correlationId: crypto.randomUUID(),
+});
 
 // ============================================================================
 // Advanced Configuration APIs
@@ -120,96 +95,64 @@ export const createBasicProtocolContext = (overrides?: Partial<ProtocolContext>)
 
 /**
  * Create a pre-configured WebSocket connector for advanced use cases.
- * Use this when you need to customize the transport before connecting.
- *
- * @returns WebSocket transport connector
- *
- * @example
- * ```typescript
- * import { createWebSocketConnector } from '@codeforbreakfast/eventsourcing-websocket';
- * import { connectWithCompleteStack } from '@codeforbreakfast/eventsourcing-protocol-default';
- *
- * const connector = createWebSocketConnector();
- * const protocol = yield* connectWithCompleteStack(connector, url);
- * ```
+ * @deprecated Use WebSocketTransport.connect() directly
  */
-export const createWebSocketConnector = () => new WebSocketConnector();
+export const createWebSocketConnector = () => ({
+  connect: WebSocketTransport.connect,
+});
 
 /**
  * Create a complete WebSocket protocol stack as Effect layers.
  * Use this for dependency injection scenarios or when building larger applications.
- *
- * @returns Layer that provides WebSocket protocol stack
- *
- * @example
- * ```typescript
- * import { createWebSocketProtocolStack } from '@codeforbreakfast/eventsourcing-websocket';
- *
- * const WebSocketLayer = createWebSocketProtocolStack();
- *
- * const program = Effect.gen(function* () {
- *   const connector = yield* DefaultProtocolConnectorService;
- *   const protocol = yield* connector.connect("ws://localhost:8080");
- *   // ... use protocol
- * }).pipe(Effect.provide(WebSocketLayer));
- * ```
  */
-export const createWebSocketProtocolStack = <TEvent = unknown>() => {
-  const transportConnector = new WebSocketConnector();
-  return createCompleteProtocolStack<TEvent>(transportConnector);
-};
+export const createWebSocketProtocolStack = (url: string) =>
+  Layer.scoped(
+    Protocol,
+    pipe(
+      WebSocketTransport.connect(url),
+      Effect.flatMap((transport) =>
+        Effect.succeed({
+          sendCommand: Protocol.prototype.sendCommand,
+          subscribe: Protocol.prototype.subscribe,
+        })
+      )
+    )
+  );
 
 /**
  * Create just the WebSocket connector layer for maximum flexibility.
- * Combine this with other layers from the protocol-default package.
- *
- * @returns Layer that provides WebSocket protocol connector
  */
-export const createWebSocketConnectorLayer = <TEvent = unknown>() => {
-  const transportConnector = new WebSocketConnector();
-  return createDefaultProtocolConnectorLayer<TEvent>(transportConnector);
-};
+export const createWebSocketConnectorLayer = (url: string) =>
+  Layer.scoped(
+    Protocol,
+    pipe(
+      WebSocketTransport.connect(url),
+      Effect.flatMap((transport) => ProtocolLive(transport).pipe(Layer.build(Scope.Scope)))
+    )
+  );
 
 // ============================================================================
-// Migration Helpers
+// Migration Support
 // ============================================================================
 
 /**
- * Create protocol with explicit configuration for migration scenarios.
+ * Legacy connect function for backward compatibility.
+ * @deprecated Use connect() instead
  */
-export const createWebSocketProtocol = <TEvent = unknown>(
-  url: string,
-  options?: WebSocketConnectOptions
-) => connect<TEvent>(url, options);
-
-// ============================================================================
-// Package Information
-// ============================================================================
+export const connectWebSocket = connect;
 
 /**
- * Package implementation information and compatibility matrix.
+ * Legacy function for creating protocol.
+ * @deprecated Use connect() instead
  */
+export const createWebSocketProtocol = connect;
+
+// ============================================================================
+// Type Exports
+// ============================================================================
+
 export const WebSocketEventSourcingInfo = {
   name: '@codeforbreakfast/eventsourcing-websocket',
-  version: '0.1.0',
   description: 'Batteries-included WebSocket event sourcing package',
-  features: [
-    'One-line WebSocket event sourcing setup',
-    'Pre-configured transport and protocol layers',
-    'Sensible defaults for rapid development',
-    'Full customization support for advanced scenarios',
-    'Migration helpers for existing code',
-    'Type-safe Effect integration',
-    'Comprehensive test coverage',
-  ],
-  dependencies: {
-    transport: '@codeforbreakfast/eventsourcing-transport-websocket',
-    protocol: '@codeforbreakfast/eventsourcing-protocol-default',
-  },
-  compatibility: {
-    browsers: ['Chrome 60+', 'Firefox 55+', 'Safari 11+', 'Edge 79+'],
-    nodeJs: ['18.0.0+'],
-    runtimes: ['Node.js', 'Bun', 'Browser'],
-    frameworks: ['Effect', 'Express', 'Fastify', 'Next.js', 'Vite'],
-  },
+  version: '0.1.0',
 } as const;
