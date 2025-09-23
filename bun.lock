@@ -174,7 +174,7 @@
       "version": "0.1.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
-        "@effect/platform": "^0.90.10",
+        "@effect/platform": "0.90.10",
       },
       "devDependencies": {
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
