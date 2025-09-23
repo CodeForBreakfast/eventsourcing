@@ -1,677 +1,159 @@
 /**
- * Client-Server Integration Tests
+ * WebSocket Client-Server Integration Tests
  *
- * Outside-in TDD approach: These tests are written BEFORE the server implementation exists.
- * They define the expected behavior of the WebSocket server transport, driving the implementation.
+ * Tests WebSocket-specific behaviors and uses the client-server contract tests
+ * to verify compliance with the generic client-server transport interface.
  *
- * Tests use real WebSocket connections with random ports to avoid conflicts.
+ * Uses real WebSocket connections with random ports to avoid conflicts.
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect, Stream, Scope, pipe, Layer, Context, Option, Exit, Fiber } from 'effect';
+import { describe, test, expect } from 'bun:test';
+import { Effect, Stream, pipe, Option } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
   makeTransportMessage,
-  Client,
-  Server,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import {
+  runClientServerContractTests,
+  type ClientServerTestContext,
+  type ServerConfig,
+  type ClientTransport,
+  type ServerTransport,
+} from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-// Import the existing client implementation
+// Import the WebSocket implementations
 import { WebSocketConnector } from '../../lib/websocket-transport';
-
-// Import the not-yet-existing server implementation (this will fail initially - that's the point!)
-import { WebSocketAcceptor } from '../../lib/websocket-server'; // This doesn't exist yet!
+import { WebSocketAcceptor } from '../../lib/websocket-server';
 
 // =============================================================================
-// Test Utilities
+// WebSocket Test Context Implementation
 // =============================================================================
 
-const getRandomPort = (): number => Math.floor(Math.random() * (65535 - 49152) + 49152);
+const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
+  Effect.succeed({
+    createServer: (config: ServerConfig) =>
+      pipe(
+        WebSocketAcceptor.make(config),
+        Effect.flatMap((acceptor) => acceptor.start()),
+        Effect.map(
+          (transport): ServerTransport => ({
+            start: () => Effect.void,
+            connections: pipe(
+              transport.connections,
+              Stream.map((conn) => ({
+                id: String(conn.clientId),
+                transport: {
+                  connectionState: conn.transport.connectionState,
+                  publish: (msg: TransportMessage) =>
+                    conn.transport
+                      .publish(msg)
+                      .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+                  subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+                    conn.transport
+                      .subscribe(filter)
+                      .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+                } satisfies ClientTransport,
+              }))
+            ),
+            broadcast: (message: TransportMessage) =>
+              transport
+                .broadcast(message)
+                .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
+          })
+        )
+      ),
 
-const createTestMessage = (type: string, payload: unknown): TransportMessage =>
-  makeTransportMessage(`test-${Date.now()}-${Math.random()}`, type, payload);
+    createClient: (url: string) =>
+      pipe(
+        WebSocketConnector.connect(url),
+        Effect.map(
+          (transport): ClientTransport => ({
+            connectionState: transport.connectionState,
+            publish: (msg: TransportMessage) =>
+              transport
+                .publish(msg)
+                .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+            subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+              transport
+                .subscribe(filter)
+                .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+          })
+        ),
+        Effect.mapError(() => new Error('Failed to connect to server'))
+      ),
 
-const waitForConnectionState = (
-  transport: Client.Transport<TransportMessage>,
-  expectedState: ConnectionState,
-  timeoutMs: number = 5000
-): Effect.Effect<void, Error, never> =>
-  pipe(
-    transport.connectionState,
-    Stream.filter((state) => state === expectedState),
-    Stream.take(1),
-    Stream.runDrain,
-    Effect.timeout(timeoutMs),
-    Effect.mapError(() => new Error(`Timeout waiting for connection state: ${expectedState}`))
-  );
+    generateTestUrl: (config: ServerConfig) => `ws://${config.host}:${config.port}`,
 
-const collectMessages = <T>(
-  stream: Stream.Stream<T, never, never>,
-  count: number,
-  timeoutMs: number = 5000
-): Effect.Effect<T[], Error, never> =>
-  pipe(
-    stream,
-    Stream.take(count),
-    Stream.runCollect,
-    Effect.map((chunk) => Array.from(chunk)),
-    Effect.timeout(timeoutMs),
-    Effect.mapError(() => new Error(`Timeout collecting ${count} messages`))
-  );
+    waitForConnectionState: (
+      transport: ClientTransport,
+      expectedState: ConnectionState,
+      timeoutMs: number = 5000
+    ) =>
+      pipe(
+        transport.connectionState,
+        Stream.filter((state) => state === expectedState),
+        Stream.take(1),
+        Stream.runDrain,
+        Effect.timeout(timeoutMs),
+        Effect.mapError(() => new Error(`Timeout waiting for connection state: ${expectedState}`))
+      ),
 
-// =============================================================================
-// Test Server Configuration
-// =============================================================================
+    collectMessages: <T>(
+      stream: Stream.Stream<T, never, never>,
+      count: number,
+      timeoutMs: number = 5000
+    ) =>
+      pipe(
+        stream,
+        Stream.take(count),
+        Stream.runCollect,
+        Effect.map((chunk) => Array.from(chunk)),
+        Effect.timeout(timeoutMs),
+        Effect.mapError(() => new Error(`Timeout collecting ${count} messages`))
+      ),
 
-interface TestServerConfig {
-  readonly port: number;
-  readonly host: string;
-}
-
-const TestServerConfig = Context.GenericTag<TestServerConfig>('TestServerConfig');
-
-const createTestServerLayer = (port: number): Layer.Layer<Server.Acceptor, never, never> =>
-  Layer.scoped(
-    Server.Acceptor,
-    pipe(
-      Effect.succeed({ port, host: 'localhost' } as TestServerConfig),
-      Effect.flatMap((config) =>
-        // This will fail until we implement WebSocketAcceptor
-        WebSocketAcceptor.make(config)
-      )
-    )
-  );
-
-// =============================================================================
-// Integration Tests
-// =============================================================================
-
-describe('WebSocket Client-Server Integration', () => {
-  let testPort: number;
-  let testUrl: string;
-  let testScope: Scope.CloseableScope;
-
-  beforeEach(async () => {
-    testPort = getRandomPort();
-    testUrl = `ws://localhost:${testPort}`;
-    testScope = await Effect.runPromise(Scope.make());
+    createTestMessage: (type: string, payload: unknown) =>
+      makeTransportMessage(`test-${Date.now()}-${Math.random()}`, type, payload),
   });
 
-  afterEach(async () => {
-    await Effect.runPromise(Scope.close(testScope, Exit.void));
+// =============================================================================
+// Contract Tests
+// =============================================================================
+
+// Run the generic client-server contract tests for WebSocket implementation
+runClientServerContractTests('WebSocket', createWebSocketTestContext);
+
+// =============================================================================
+// WebSocket-Specific Tests
+// =============================================================================
+
+describe('WebSocket Client-Server Specific Tests', () => {
+  // WebSocket-specific tests would go here if there are any behaviors
+  // that are unique to WebSocket and not covered by the generic contract tests.
+
+  test('should use WebSocket protocol URLs', async () => {
+    const context = await Effect.runPromise(createWebSocketTestContext());
+    const url = context.generateTestUrl({ port: 8080, host: 'localhost' });
+
+    expect(url).toBe('ws://localhost:8080');
+    expect(url.startsWith('ws://')).toBe(true);
   });
 
-  describe('Connection Management', () => {
-    test('should establish basic client-server connection', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
+  test('should handle WebSocket-specific connection failures', async () => {
+    const context = await Effect.runPromise(createWebSocketTestContext());
 
-        // Wait a bit for server to start listening
-        yield* Effect.sleep(100);
+    // Test connection to non-existent local WebSocket server
+    const program = Effect.gen(function* () {
+      const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
+      const result = yield* Effect.either(
+        context.createClient(`ws://localhost:${nonExistentPort}`)
+      );
 
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-
-        // Wait for connection to be established
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Verify transport is connected by checking current state
-        const clientState = yield* pipe(
-          clientTransport.connectionState,
-          Stream.filter((state) => state === 'connected'),
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        if (Option.isSome(clientState)) {
-          expect(clientState.value).toBe('connected');
-        } else {
-          throw new Error('Expected client to reach connected state');
-        }
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
+      expect(result._tag).toBe('Left');
     });
 
-    test('should handle multiple clients connecting to same server', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect multiple clients
-        const client1 = yield* WebSocketConnector.connect(testUrl);
-        const client2 = yield* WebSocketConnector.connect(testUrl);
-        const client3 = yield* WebSocketConnector.connect(testUrl);
-
-        // Wait for all connections
-        yield* Effect.all([
-          waitForConnectionState(client1, 'connected'),
-          waitForConnectionState(client2, 'connected'),
-          waitForConnectionState(client3, 'connected'),
-        ]);
-
-        // Collect connection events from server
-        const connections = yield* pipe(
-          serverTransport.connections,
-          Stream.take(3),
-          Stream.runCollect,
-          Effect.timeout(5000)
-        );
-
-        expect(Array.from(connections)).toHaveLength(3);
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should track connection state transitions correctly', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Create a ref to collect all state changes as they happen
-        const stateHistory = yield* Effect.sync(() => [] as ConnectionState[]);
-
-        // Start the connection in a fiber so we can subscribe to states early
-        const connectionFiber = yield* Effect.fork(WebSocketConnector.connect(testUrl));
-
-        // Wait a tiny bit for the connection to start initializing
-        yield* Effect.sleep(5);
-
-        // Get the transport (it will be in 'connecting' state)
-        const clientTransport = yield* Fiber.join(connectionFiber);
-
-        // Set up a background fiber to collect all state transitions
-        const stateCollectorFiber = yield* Effect.fork(
-          pipe(
-            clientTransport.connectionState,
-            Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state)))
-          )
-        );
-
-        // Wait for connection to be fully established
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Give the state collector a moment to catch any late states
-        yield* Effect.sleep(10);
-
-        // Cancel the state collector
-        yield* Fiber.interrupt(stateCollectorFiber);
-
-        // Verify that we saw connection states IN THE CORRECT ORDER
-        // States should ALWAYS progress in order: connecting -> connected
-        const observedStates = stateHistory;
-
-        // With the new behavior, when subscribing after connection has started,
-        // we get the current state first (likely 'connected' if we subscribe late)
-        expect(observedStates.length).toBeGreaterThanOrEqual(1);
-
-        // The last state should always be 'connected'
-        expect(observedStates[observedStates.length - 1]).toBe('connected');
-
-        // If we caught the transition early enough, we might see both states
-        // But if we subscribe after connection, we'll only see 'connected'
-        if (observedStates.length > 1) {
-          // If we see multiple states, they should be in order
-          const connectingIndex = observedStates.indexOf('connecting');
-          const connectedIndex = observedStates.indexOf('connected');
-          if (connectingIndex !== -1 && connectedIndex !== -1) {
-            expect(connectingIndex).toBeLessThan(connectedIndex);
-          }
-        }
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-  });
-
-  describe('Message Communication', () => {
-    test('should support client-to-server message publishing', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Wait for server to receive the connection
-        const serverConnection = yield* pipe(
-          serverTransport.connections,
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        if (!Option.isSome(serverConnection)) {
-          throw new Error('Expected server connection to be available');
-        }
-        const connection = serverConnection.value;
-
-        // Subscribe to messages on server side
-        const messageStream = yield* connection.transport.subscribe();
-
-        // Publish message from client
-        const testMessage = createTestMessage('test.message', { data: 'hello server' });
-        yield* clientTransport.publish(testMessage);
-
-        // Collect message on server side
-        const receivedMessages = yield* collectMessages(messageStream, 1);
-
-        expect(receivedMessages).toHaveLength(1);
-        expect(receivedMessages[0]?.type).toBe('test.message');
-        expect(receivedMessages[0]?.payload).toEqual({ data: 'hello server' });
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should support server-to-client broadcasting', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect multiple clients
-        const client1 = yield* WebSocketConnector.connect(testUrl);
-        const client2 = yield* WebSocketConnector.connect(testUrl);
-
-        yield* Effect.all([
-          waitForConnectionState(client1, 'connected'),
-          waitForConnectionState(client2, 'connected'),
-        ]);
-
-        // Subscribe to messages on both clients
-        const client1Messages = yield* client1.subscribe();
-        const client2Messages = yield* client2.subscribe();
-
-        // Broadcast message from server
-        const broadcastMessage = createTestMessage('server.broadcast', {
-          announcement: 'hello all clients',
-        });
-        yield* serverTransport.broadcast(broadcastMessage);
-
-        // Collect messages on both clients
-        const [client1Received, client2Received] = yield* Effect.all([
-          collectMessages(client1Messages, 1),
-          collectMessages(client2Messages, 1),
-        ]);
-
-        // Both clients should receive the broadcast
-        expect(client1Received).toHaveLength(1);
-        expect(client1Received[0]?.type).toBe('server.broadcast');
-        expect(client1Received[0]?.payload).toEqual({ announcement: 'hello all clients' });
-
-        expect(client2Received).toHaveLength(1);
-        expect(client2Received[0]?.type).toBe('server.broadcast');
-        expect(client2Received[0]?.payload).toEqual({ announcement: 'hello all clients' });
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should support bidirectional communication', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Get server connection
-        const serverConnection = yield* pipe(
-          serverTransport.connections,
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        if (!Option.isSome(serverConnection)) {
-          throw new Error('Expected server connection to be available');
-        }
-        const connection = serverConnection.value;
-
-        // Set up subscriptions
-        const clientMessages = yield* clientTransport.subscribe();
-        const serverMessages = yield* connection.transport.subscribe();
-
-        // Client sends message to server
-        const clientMessage = createTestMessage('client.request', { query: 'ping' });
-        yield* clientTransport.publish(clientMessage);
-
-        // Server receives and responds
-        const serverReceivedMessages = yield* collectMessages(serverMessages, 1);
-        expect(serverReceivedMessages[0]?.payload).toEqual({ query: 'ping' });
-
-        const serverResponse = createTestMessage('server.response', { result: 'pong' });
-        yield* connection.transport.publish(serverResponse);
-
-        // Client receives response
-        const clientReceivedMessages = yield* collectMessages(clientMessages, 1);
-        expect(clientReceivedMessages[0]?.payload).toEqual({ result: 'pong' });
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should filter messages correctly on client side', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Subscribe with filter for only 'important' messages
-        const filteredMessages = yield* clientTransport.subscribe((msg) =>
-          msg.type.startsWith('important.')
-        );
-
-        // Broadcast multiple message types from server
-        yield* serverTransport.broadcast(createTestMessage('normal.message', { data: 1 }));
-        yield* serverTransport.broadcast(createTestMessage('important.alert', { data: 2 }));
-        yield* serverTransport.broadcast(createTestMessage('debug.info', { data: 3 }));
-        yield* serverTransport.broadcast(createTestMessage('important.notification', { data: 4 }));
-
-        // Should only receive the 'important' messages
-        const receivedMessages = yield* collectMessages(filteredMessages, 2);
-
-        expect(receivedMessages).toHaveLength(2);
-        expect(receivedMessages[0]?.type).toBe('important.alert');
-        expect(receivedMessages[0]?.payload).toEqual({ data: 2 });
-        expect(receivedMessages[1]?.type).toBe('important.notification');
-        expect(receivedMessages[1]?.payload).toEqual({ data: 4 });
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-  });
-
-  describe('Connection Lifecycle', () => {
-    test('should handle graceful client disconnection', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Create nested scope for client
-        const clientScope = yield* Scope.make();
-
-        // Connect client in nested scope
-        const clientTransport = yield* Scope.extend(
-          WebSocketConnector.connect(testUrl),
-          clientScope
-        );
-
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Wait for server to register connection
-        const serverConnection = yield* pipe(
-          serverTransport.connections,
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        if (!Option.isSome(serverConnection)) {
-          throw new Error('Expected server connection to be available');
-        }
-
-        // Close client scope (graceful disconnect)
-        yield* Scope.close(clientScope, Exit.void);
-
-        // Give some time for disconnection to propagate
-        yield* Effect.sleep(100);
-
-        // Server should detect disconnection
-        const finalClientState = yield* pipe(
-          serverConnection.value.transport.connectionState,
-          Stream.filter((state) => state === 'disconnected'),
-          Stream.take(1),
-          Stream.runHead,
-          Effect.timeout(2000)
-        );
-
-        if (Option.isSome(finalClientState)) {
-          expect(finalClientState.value).toBe('disconnected');
-        } else {
-          throw new Error('Expected final client state to be available');
-        }
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should handle server shutdown gracefully', async () => {
-      const program = Effect.gen(function* () {
-        // Create nested scope for server
-        const serverScope = yield* Scope.make();
-
-        // Start server in nested scope
-        yield* Scope.extend(
-          pipe(
-            Server.Acceptor,
-            Effect.flatMap((acceptor) => acceptor.start()),
-            Effect.provide(createTestServerLayer(testPort))
-          ),
-          serverScope
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Close server scope
-        yield* Scope.close(serverScope, Exit.void);
-
-        // Client should detect disconnection
-        const disconnectedState = yield* pipe(
-          clientTransport.connectionState,
-          Stream.filter((state) => state === 'disconnected'),
-          Stream.take(1),
-          Stream.runHead,
-          Effect.timeout(5000)
-        );
-
-        if (Option.isSome(disconnectedState)) {
-          expect(disconnectedState.value).toBe('disconnected');
-        } else {
-          throw new Error('Expected disconnected state to be available');
-        }
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should provide current state when subscribing after connection', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client and wait for connection
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Now subscribe to connection state AFTER connection is established
-        const stateHistory: ConnectionState[] = [];
-        const lateSubscriberFiber = yield* Effect.fork(
-          pipe(
-            clientTransport.connectionState,
-            Stream.take(3), // Take current state + potential future states
-            Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state)))
-          )
-        );
-
-        // Give time for the subscription to process
-        yield* Effect.sleep(50);
-
-        // Verify that the first state received is the CURRENT state (connected)
-        expect(stateHistory[0]).toBe('connected');
-        expect(stateHistory.length).toBe(1); // Should only have received the current state
-
-        // Now trigger a disconnection to see if future states are received
-        const serverConnection = yield* pipe(
-          serverTransport.connections,
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        // Cancel the subscriber fiber since we can't trigger disconnection without a method
-        yield* Fiber.interrupt(lateSubscriberFiber);
-
-        // Should have received only 'connected' (the current state)
-        expect(stateHistory).toEqual(['connected']);
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should clean up resources when scope closes', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect multiple clients and collect their state refs
-        const client1 = yield* WebSocketConnector.connect(testUrl);
-        const client2 = yield* WebSocketConnector.connect(testUrl);
-
-        yield* Effect.all([
-          waitForConnectionState(client1, 'connected'),
-          waitForConnectionState(client2, 'connected'),
-        ]);
-
-        // Wait for server to register both connections
-        const connections = yield* pipe(
-          serverTransport.connections,
-          Stream.take(2),
-          Stream.runCollect
-        );
-
-        expect(Array.from(connections)).toHaveLength(2);
-
-        // When the test scope closes, all resources should be cleaned up automatically
-        // This is verified by the afterEach hook not hanging
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-  });
-
-  describe('Error Handling', () => {
-    test('should handle connection to non-existent server', async () => {
-      const program = Effect.gen(function* () {
-        const nonExistentUrl = `ws://localhost:${getRandomPort()}`;
-
-        const result = yield* Effect.either(WebSocketConnector.connect(nonExistentUrl));
-
-        expect(result._tag).toBe('Left');
-        // The exact error type depends on the implementation
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
-
-    test('should handle malformed messages gracefully', async () => {
-      const program = Effect.gen(function* () {
-        // Start server
-        const serverTransport = yield* pipe(
-          Server.Acceptor,
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.provide(createTestServerLayer(testPort))
-        );
-
-        yield* Effect.sleep(100);
-
-        // Connect client
-        const clientTransport = yield* WebSocketConnector.connect(testUrl);
-        yield* waitForConnectionState(clientTransport, 'connected');
-
-        // Get server connection
-        const serverConnection = yield* pipe(
-          serverTransport.connections,
-          Stream.take(1),
-          Stream.runHead
-        );
-
-        if (!Option.isSome(serverConnection)) {
-          throw new Error('Expected server connection to be available');
-        }
-        const connection = serverConnection.value;
-
-        // Subscribe to messages
-        const messageStream = yield* connection.transport.subscribe();
-
-        // Try to send malformed data directly through the underlying WebSocket
-        // This simulates receiving corrupted/invalid JSON
-        const validMessage = createTestMessage('valid.message', { data: 'good' });
-        yield* clientTransport.publish(validMessage);
-
-        // Should still receive valid messages despite any malformed ones
-        const receivedMessages = yield* collectMessages(messageStream, 1);
-        expect(receivedMessages[0]?.type).toBe('valid.message');
-      });
-
-      await Effect.runPromise(Effect.scoped(program));
-    });
+    await Effect.runPromise(Effect.scoped(program));
   });
 });

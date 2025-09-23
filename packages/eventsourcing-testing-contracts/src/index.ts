@@ -47,23 +47,36 @@ export type {
   ScenarioStep,
   ScenarioOutcome,
   ThroughputMetrics,
-} from './lib/test-layer-interfaces.js';
+} from './lib/test-layer-interfaces';
+
+// Client-Server Contract Types
+export type {
+  ClientServerTestContext,
+  ClientServerTestRunner,
+  ServerConfig,
+  ServerTransport,
+  ServerConnection,
+  ClientTransport,
+} from './lib/client-server-contract-tests';
 
 // ============================================================================
 // TEST RUNNERS
 // ============================================================================
 
 // Layer 1: Transport Contract Tests
-export { runTransportContractTests } from './lib/transport-contract-tests.js';
+export { runTransportContractTests } from './lib/transport-contract-tests';
+
+// Client-Server Contract Tests
+export { runClientServerContractTests } from './lib/client-server-contract-tests';
 
 // Layer 2: Protocol Contract Tests
-export { runProtocolContractTests } from './lib/protocol-contract-tests.js';
+export { runProtocolContractTests } from './lib/protocol-contract-tests';
 
 // Layer 3: Domain Contract Tests
-export { runDomainContractTests } from './lib/domain-contract-tests.js';
+export { runDomainContractTests } from './lib/domain-contract-tests';
 
 // Layer 4: Integration Test Suite
-export { runIntegrationTestSuite } from './lib/integration-test-suite.js';
+export { runIntegrationTestSuite } from './lib/integration-test-suite';
 
 // ============================================================================
 // DOCUMENTATION AND GUIDANCE
@@ -101,4 +114,4 @@ export {
   collectStreamWithTimeout,
   createTestLayer,
   TestScenarios,
-} from './lib/test-utilities.js';
+} from './lib/test-utilities';
