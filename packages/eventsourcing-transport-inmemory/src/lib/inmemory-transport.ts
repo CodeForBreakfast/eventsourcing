@@ -299,15 +299,6 @@ const addSubscriber = (
   subscriberQueue: Queue.Queue<TransportMessage>
 ): Effect.Effect<void> => pipe(Ref.update(clientState.subscribers, HashSet.add(subscriberQueue)));
 
-// Keeping this function for potential future use with proper scoped cleanup
-// const removeSubscriber = (
-//   clientState: InMemoryClientState,
-//   subscriberQueue: Queue.Queue<TransportMessage>
-// ): Effect.Effect<void> =>
-//   pipe(
-//     Ref.update(clientState.subscribers, HashSet.remove(subscriberQueue))
-//   );
-
 const forwardToSubscribers = (
   clientState: InMemoryClientState,
   message: TransportMessage,
@@ -610,7 +601,3 @@ export const InMemoryAcceptor = {
 export const InMemoryConnectorRaw = {
   connect: inMemoryConnectRaw,
 };
-
-// Maintain backward compatibility exports
-export const SimpleInMemoryConnector = InMemoryConnector;
-export const SimpleInMemoryAcceptor = InMemoryAcceptor;

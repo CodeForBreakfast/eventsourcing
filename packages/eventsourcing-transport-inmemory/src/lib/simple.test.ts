@@ -4,16 +4,16 @@
 
 import { describe, it, expect } from 'vitest';
 import { Effect, Stream, pipe } from 'effect';
-import { SimpleInMemoryConnector, SimpleInMemoryAcceptor } from './inmemory-transport';
+import { InMemoryConnector, InMemoryAcceptor } from './inmemory-transport';
 
 describe('Simple InMemory Transport', () => {
   it('should connect successfully', async () => {
     await Effect.runPromise(
       Effect.scoped(
         pipe(
-          SimpleInMemoryAcceptor.make({ serverId: 'simple-test' }),
+          InMemoryAcceptor.make({ serverId: 'simple-test' }),
           Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.flatMap(() => SimpleInMemoryConnector.connect('inmemory://simple-test')),
+          Effect.flatMap(() => InMemoryConnector.connect('inmemory://simple-test')),
           Effect.flatMap((clientTransport) =>
             pipe(
               Stream.take(clientTransport.connectionState, 1),
@@ -33,11 +33,11 @@ describe('Simple InMemory Transport', () => {
     await Effect.runPromise(
       Effect.scoped(
         pipe(
-          SimpleInMemoryAcceptor.make({ serverId: 'simple-server-test' }),
+          InMemoryAcceptor.make({ serverId: 'simple-server-test' }),
           Effect.flatMap((acceptor) => acceptor.start()),
           Effect.flatMap((serverTransport) =>
             pipe(
-              SimpleInMemoryConnector.connect('inmemory://simple-server-test'),
+              InMemoryConnector.connect('inmemory://simple-server-test'),
               Effect.flatMap(() =>
                 pipe(
                   Stream.take(serverTransport.connections, 1),
