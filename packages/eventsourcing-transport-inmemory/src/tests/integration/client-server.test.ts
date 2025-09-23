@@ -36,7 +36,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
       // Direct in-memory connection with no configuration needed
 
       // Shared server instance for this transport pair
-      let serverInstance: any = null;
+      let serverInstance: InMemoryServer | null = null;
 
       return {
         createServer: () =>
