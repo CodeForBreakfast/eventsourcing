@@ -26,7 +26,7 @@ import type {
   ProtocolTestRunner,
   StreamEvent,
   GlobalPosition,
-} from './test-layer-interfaces.js';
+} from '../test-layer-interfaces';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
 import type { AggregateCommand } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 

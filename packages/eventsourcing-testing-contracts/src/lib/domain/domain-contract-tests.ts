@@ -21,11 +21,7 @@
 
 import { Effect, pipe, Either } from 'effect';
 import { describe, expect, it, beforeEach, afterEach } from 'bun:test';
-import type {
-  DomainTestContext,
-  DomainFeatures,
-  DomainTestRunner,
-} from './test-layer-interfaces.js';
+import type { DomainTestContext, DomainFeatures, DomainTestRunner } from '../test-layer-interfaces';
 import type { EventStreamId, EventNumber } from '@codeforbreakfast/eventsourcing-store';
 import type { AggregateCommand } from '@codeforbreakfast/eventsourcing-protocol-contracts';
 

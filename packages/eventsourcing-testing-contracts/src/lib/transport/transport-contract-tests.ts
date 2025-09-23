@@ -13,8 +13,8 @@ import type {
   TransportTestRunner,
   ConnectedTransportTestInterface,
   ConnectionState,
-} from './test-layer-interfaces.js';
-import { TransportMessageSchema } from './test-layer-interfaces.js';
+} from '../test-layer-interfaces';
+import { TransportMessageSchema } from '../test-layer-interfaces';
 
 /**
  * Core transport contract tests.

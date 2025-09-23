@@ -57,26 +57,24 @@ export type {
   ServerTransport,
   ServerConnection,
   ClientTransport,
-} from './lib/client-server-contract-tests';
+} from './lib/transport/client-server-contract-tests';
 
 // ============================================================================
 // TEST RUNNERS
 // ============================================================================
 
 // Layer 1: Transport Contract Tests
-export { runTransportContractTests } from './lib/transport-contract-tests';
-
-// Client-Server Contract Tests
-export { runClientServerContractTests } from './lib/client-server-contract-tests';
+export { runTransportContractTests } from './lib/transport/transport-contract-tests';
+export { runClientServerContractTests } from './lib/transport/client-server-contract-tests';
 
 // Layer 2: Protocol Contract Tests
-export { runProtocolContractTests } from './lib/protocol-contract-tests';
+export { runProtocolContractTests } from './lib/protocol/protocol-contract-tests';
 
 // Layer 3: Domain Contract Tests
-export { runDomainContractTests } from './lib/domain-contract-tests';
+export { runDomainContractTests } from './lib/domain/domain-contract-tests';
 
 // Layer 4: Integration Test Suite
-export { runIntegrationTestSuite } from './lib/integration-test-suite';
+export { runIntegrationTestSuite } from './lib/integration/integration-test-suite';
 
 // ============================================================================
 // DOCUMENTATION AND GUIDANCE
