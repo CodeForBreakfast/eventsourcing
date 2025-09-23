@@ -96,7 +96,7 @@ export interface ProtocolTestContext {
 
   // Test utilities
   readonly reset: () => Effect.Effect<void>;
-  readonly simulateProtocolError: (
+  readonly simulateProtocolError?: (
     errorType: 'serialization' | 'version-mismatch' | 'timeout'
   ) => Effect.Effect<void>;
 }

@@ -335,7 +335,7 @@ export const runProtocolContractTests: ProtocolTestRunner = (
     describe('REQUIRED: Protocol Error Handling', () => {
       if (context.simulateProtocolError) {
         it('should handle serialization errors gracefully', async () => {
-          await Effect.runPromise(context.simulateProtocolError('serialization'));
+          await Effect.runPromise(context.simulateProtocolError!('serialization'));
 
           const command: AggregateCommand = {
             aggregate: {
@@ -356,7 +356,7 @@ export const runProtocolContractTests: ProtocolTestRunner = (
         });
 
         it('should handle version mismatch errors gracefully', async () => {
-          await Effect.runPromise(context.simulateProtocolError('version-mismatch'));
+          await Effect.runPromise(context.simulateProtocolError!('version-mismatch'));
 
           const healthy = await Effect.runPromise(
             pipe(
@@ -370,7 +370,7 @@ export const runProtocolContractTests: ProtocolTestRunner = (
         });
 
         it('should handle timeout errors gracefully', async () => {
-          await Effect.runPromise(context.simulateProtocolError('timeout'));
+          await Effect.runPromise(context.simulateProtocolError!('timeout'));
 
           const command: AggregateCommand = {
             aggregate: {

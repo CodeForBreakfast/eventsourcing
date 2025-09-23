@@ -1,15 +1,6 @@
-# @codeforbreakfast/eventsourcing-protocol-default
+# Event Sourcing Protocol
 
-Default implementation of the event sourcing protocol over any transport. This is the standard protocol implementation that provides message serialization, command correlation, and subscription management.
-
-## Features
-
-- 🚀 **Transport-agnostic**: Works with any transport implementation (WebSocket, HTTP, SSE, etc.)
-- 📡 **Message Protocol**: Standard serialization/deserialization of event sourcing messages
-- 🔗 **Command Correlation**: Automatic tracking and correlation of commands to responses
-- 📊 **Subscription Management**: Handle event stream subscriptions with position tracking
-- 🎯 **Type-safe**: Full TypeScript support with Effect integration
-- 🧪 **Fully Tested**: Comprehensive test suite using protocol contract tests
+Protocol implementation for event sourcing over transport abstractions.
 
 ## Installation
 
@@ -19,197 +10,169 @@ bun add @codeforbreakfast/eventsourcing-protocol-default
 
 ## Usage
 
-### Basic Protocol Setup
-
 ```typescript
-import { Effect, Layer } from 'effect';
-import { DefaultProtocolAdapter } from '@codeforbreakfast/eventsourcing-protocol-default';
-import { createProtocolContext } from '@codeforbreakfast/eventsourcing-protocol-contracts';
+import { createProtocol } from '@codeforbreakfast/eventsourcing-protocol-default';
+import { createTransport } from '@codeforbreakfast/eventsourcing-transport-websocket';
 
-// Create protocol context
-const context = createProtocolContext({
-  sessionId: 'my-session',
-  correlationId: 'my-correlation-id',
-});
+// Create protocol with a transport
+const protocol = await Effect.runPromise(createTransport(url).pipe(Effect.flatMap(createProtocol)));
 
-// Create adapter with any transport
-const adapter = DefaultProtocolAdapter.create();
+// Send commands
+const result = await Effect.runPromise(
+  protocol.sendCommand({
+    id: crypto.randomUUID(),
+    aggregate: 'user-123',
+    name: 'UpdateProfile',
+    payload: { name: 'John Doe' },
+  })
+);
 
-// Connect to transport and get protocol
-const program = Effect.gen(function* () {
-  const transport = yield* myTransportConnector.connect('ws://localhost:8080');
-  const protocol = yield* adapter.adapt(transport, serializer, context);
+// Subscribe to events
+const eventStream = await Effect.runPromise(protocol.subscribe('user-123'));
 
-  // Use protocol for event sourcing operations
-  const events = yield* protocol.subscribe({ position: 0 });
-  yield* protocol.sendCommand({
-    id: 'cmd-1',
-    aggregateId: 'user-123',
-    aggregateName: 'User',
-    commandName: 'CreateUser',
-    payload: { name: 'John' },
-  });
-});
+await Effect.runPromise(
+  Stream.runForEach(eventStream, (event) =>
+    Effect.log(`Event: ${event.type} at position ${event.position.eventNumber}`)
+  )
+);
 ```
 
-### Protocol Connector
+## API
 
-```typescript
-import { DefaultProtocolConnector } from '@codeforbreakfast/eventsourcing-protocol-default';
+### `createProtocol(transport)`
 
-// Create connector with transport
-const connector = DefaultProtocolConnector.create(myTransportConnector);
+Creates a protocol instance from a transport connection.
 
-// Connect and get ready-to-use protocol
-const program = Effect.gen(function* () {
-  const protocol = yield* connector.connect('ws://localhost:8080');
+**Parameters:**
 
-  // Protocol is ready to use
-  const events = yield* protocol.subscribe({ position: 0 });
-});
-```
+- `transport: Client.Transport` - Connected transport instance
 
-### Layer Setup
+**Returns:** `Effect<Protocol, TransportError, never>`
 
-```typescript
-// Create layer for dependency injection
-const ProtocolLayer = DefaultProtocolConnector.Live.pipe(Layer.provide(MyTransportConnectorLayer));
+### `Protocol.sendCommand(command)`
 
-// Use in your application
-const program = Effect.gen(function* () {
-  const connector = yield* EventSourcingProtocolConnector;
-  const protocol = yield* connector.connect('ws://localhost:8080');
+Sends a command and waits for the result.
 
-  // Use protocol...
-}).pipe(Effect.provide(ProtocolLayer));
-```
+**Parameters:**
 
-## API Reference
+- `command: Command` - Command to send
+  - `id: string` - Unique command identifier
+  - `aggregate: string` - Aggregate identifier
+  - `name: string` - Command name
+  - `payload: unknown` - Command data
 
-### DefaultProtocolSerializer
+**Returns:** `Effect<CommandResult, TransportError, never>`
 
-Handles serialization between domain objects and protocol messages.
+Result contains:
 
-```typescript
-interface ProtocolSerializer<TEvent> {
-  serializeCommand(command, context?): Effect<ClientMessage, ProtocolSerializationError>;
-  deserializeEvent(message): Effect<StreamEvent<TEvent>, ProtocolSerializationError>;
-  serializeSubscription(
-    position,
-    options?,
-    context?
-  ): Effect<ClientMessage, ProtocolSerializationError>;
-  deserializeCommandResult(message): Effect<CommandResult, ProtocolSerializationError>;
-}
-```
+- `success: boolean` - Whether command succeeded
+- `position?: EventStreamPosition` - New stream position after command
+- `error?: string` - Error message if command failed
 
-### DefaultProtocolAdapter
+Commands automatically timeout after 10 seconds.
 
-Bridges transport layer to event sourcing protocol.
+### `Protocol.subscribe(streamId)`
 
-```typescript
-interface EventSourcingTransportAdapter<TEvent> {
-  adapt(transport, serializer, context): Effect<EventSourcingProtocol<TEvent>>;
-}
-```
+Subscribes to events from a specific stream.
 
-### DefaultProtocolConnector
+**Parameters:**
 
-Complete connector that handles connection and protocol setup.
+- `streamId: string` - Stream identifier to subscribe to
 
-```typescript
-interface EventSourcingProtocolConnector<TEvent> {
-  connect(
-    url,
-    context?
-  ): Effect<EventSourcingProtocol<TEvent>, ConnectionError | StreamError, Scope>;
-  createSerializer(): ProtocolSerializer<TEvent>;
-}
-```
+**Returns:** `Effect<Stream<Event>, TransportError, never>`
 
-## Protocol Messages
+Each event contains:
 
-The default implementation uses a standard JSON-based message format:
+- `position: EventStreamPosition` - Event position in stream
+- `type: string` - Event type name
+- `data: unknown` - Event payload
+- `timestamp: Date` - When event occurred
 
-### Client Messages (to server)
+## Message Format
 
-```typescript
-// Command message
+The protocol exchanges JSON messages over the transport.
+
+### Command Message
+
+```json
 {
-  type: "command",
-  messageId: "msg-123",
-  correlationId: "corr-456",
-  sessionId: "session-789",
-  payload: {
-    commandId: "cmd-1",
-    aggregateId: "user-123",
-    aggregateName: "User",
-    commandName: "CreateUser",
-    payload: { name: "John" }
-  }
-}
-
-// Subscription message
-{
-  type: "subscribe",
-  messageId: "msg-124",
-  correlationId: "corr-457",
-  sessionId: "session-789",
-  payload: {
-    streamId: "*",
-    position: { type: "start" },
-    options: { bufferSize: 100 }
-  }
+  "type": "command",
+  "id": "cmd-123",
+  "aggregate": "user-456",
+  "name": "UpdateProfile",
+  "payload": { "name": "John" }
 }
 ```
 
-### Server Messages (from server)
+### Command Result Message
+
+```json
+{
+  "type": "command_result",
+  "commandId": "cmd-123",
+  "success": true,
+  "position": { "streamId": "user-456", "eventNumber": 42 }
+}
+```
+
+### Subscribe Message
+
+```json
+{
+  "type": "subscribe",
+  "streamId": "user-456"
+}
+```
+
+### Event Message
+
+```json
+{
+  "type": "event",
+  "streamId": "user-456",
+  "position": { "streamId": "user-456", "eventNumber": 42 },
+  "eventType": "ProfileUpdated",
+  "data": { "name": "John" },
+  "timestamp": "2024-01-01T00:00:00Z"
+}
+```
+
+## Error Handling
+
+All operations return Effects that handle:
+
+- Transport errors (connection failures, network issues)
+- Timeout errors (commands timing out after 10 seconds)
+- Parsing errors (gracefully caught and logged)
+
+## Types
 
 ```typescript
-// Event message
-{
-  type: "event",
-  messageId: "msg-125",
-  correlationId: "corr-457",
-  payload: {
-    streamId: "user-123",
-    position: { sequence: 1, timestamp: "2024-01-01T00:00:00Z" },
-    eventName: "UserCreated",
-    payload: { id: "user-123", name: "John" }
-  }
+interface Command {
+  readonly id: string;
+  readonly aggregate: string;
+  readonly name: string;
+  readonly payload: unknown;
 }
 
-// Command result
-{
-  type: "command_result",
-  messageId: "msg-126",
-  correlationId: "corr-456",
-  payload: {
-    commandId: "cmd-1",
-    success: true,
-    result: { aggregateId: "user-123", version: 1 }
-  }
+interface Event {
+  readonly position: EventStreamPosition;
+  readonly type: string;
+  readonly data: unknown;
+  readonly timestamp: Date;
+}
+
+interface CommandResult {
+  readonly success: boolean;
+  readonly position?: EventStreamPosition;
+  readonly error?: string;
+}
+
+interface Protocol {
+  readonly sendCommand: (command: Command) => Effect<CommandResult, TransportError, never>;
+  readonly subscribe: (streamId: string) => Effect<Stream<Event>, TransportError, never>;
 }
 ```
-
-## Testing
-
-This package includes comprehensive tests using the protocol contract test suite:
-
-```typescript
-import { runDomainContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import { DefaultProtocolAdapter } from '@codeforbreakfast/eventsourcing-protocol-default';
-
-// Test with your transport
-await runDomainContractTests({
-  createProtocol: () => DefaultProtocolAdapter.create(),
-  transport: mockTransport,
-});
-```
-
-## Contributing
-
-See the main repository for contribution guidelines.
 
 ## License
 
