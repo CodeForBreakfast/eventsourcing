@@ -2,6 +2,35 @@
 
 Protocol implementation for event sourcing over transport abstractions.
 
+## Protocol Layer Responsibilities
+
+The protocol layer acts as a **generic RPC mechanism for event sourcing** - it's a dumb pipe that shuffles messages between client and server without knowing anything about your domain.
+
+### What the protocol SHOULD know:
+
+1. **Message structure** - How to wrap messages in envelopes (IDs, timestamps, correlation)
+2. **Message types** - Basic routing types: "command", "event", "subscription"
+3. **Wire format** - How to serialize/deserialize for transport
+4. **Message correlation** - Matching responses to requests via IDs
+5. **Connection state** - Managing subscriptions and pending commands
+
+### What it SHOULDN'T know:
+
+1. **Domain logic** - What an "UpdateProfile" command actually does
+2. **Event schemas** - The actual shape of your business events
+3. **Aggregate rules** - Validation, business invariants, etc.
+4. **Command handlers** - How commands get processed
+
+Think of it like HTTP - HTTP doesn't care what your JSON payload contains, it just delivers it. The protocol's `Command` and `Event` interfaces are just **transport containers** with metadata fields (id, aggregate, position) while the actual `payload` and `data` fields remain `unknown`.
+
+The protocol's core responsibilities:
+
+- **Message correlation** - Track which responses belong to which requests
+- **Subscription management** - Route events to the right subscribers
+- **Timeout handling** - Fail commands that take too long
+- **Error propagation** - Pass errors back from server to client
+- **Transport abstraction** - Hide WebSocket/HTTP/whatever details
+
 ## Installation
 
 ```bash
