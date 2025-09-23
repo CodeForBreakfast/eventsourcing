@@ -705,8 +705,173 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Multiple Subscriptions', () => {
-    test.skip('should handle multiple clients subscribing to the same stream', async () => {
-      // TODO: Implement test for multiple clients on same stream
+    test('should handle multiple clients subscribing to the same stream', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport: client1Transport }) =>
+          pipe(
+            // Get a second client connection
+            server.connector(),
+            Effect.flatMap((client2Transport) =>
+              pipe(
+                client2Transport.connectionState,
+                Stream.filter((state) => state === 'connected'),
+                Stream.take(1),
+                Stream.runDrain,
+                Effect.as({ client1Transport, client2Transport })
+              )
+            ),
+            Effect.flatMap(({ client1Transport, client2Transport }) =>
+              pipe(
+                createTestServerProtocol(
+                  server,
+                  () => ({
+                    _tag: 'Success',
+                    position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+                  }),
+                  (streamId) => {
+                    // Return the same events for any subscription to 'shared-stream'
+                    if (streamId === 'shared-stream') {
+                      return [
+                        {
+                          position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                          type: 'SharedEvent1',
+                          data: { message: 'First shared event', clientId: 'all' },
+                          timestamp: new Date('2024-01-01T10:00:00Z'),
+                        },
+                        {
+                          position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                          type: 'SharedEvent2',
+                          data: { message: 'Second shared event', value: 42 },
+                          timestamp: new Date('2024-01-01T10:01:00Z'),
+                        },
+                        {
+                          position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 3 },
+                          type: 'SharedEvent3',
+                          data: { message: 'Third shared event', status: 'completed' },
+                          timestamp: new Date('2024-01-01T10:02:00Z'),
+                        },
+                      ];
+                    }
+                    return [];
+                  }
+                ),
+                Effect.flatMap(() => {
+                  return pipe(
+                    Effect.all(
+                      [
+                        // Client 1 subscribes to shared-stream and collects 3 events
+                        pipe(
+                          subscribe('shared-stream'),
+                          Effect.flatMap((eventStream) =>
+                            pipe(
+                              eventStream,
+                              Stream.take(3),
+                              Stream.runCollect,
+                              Effect.map((events) => ({
+                                clientId: 'client1',
+                                events: Array.from(events),
+                              }))
+                            )
+                          ),
+                          Effect.provide(ProtocolLive(client1Transport))
+                        ),
+                        // Client 2 subscribes to the same shared-stream and also collects 3 events
+                        pipe(
+                          subscribe('shared-stream'),
+                          Effect.flatMap((eventStream) =>
+                            pipe(
+                              eventStream,
+                              Stream.take(3),
+                              Stream.runCollect,
+                              Effect.map((events) => ({
+                                clientId: 'client2',
+                                events: Array.from(events),
+                              }))
+                            )
+                          ),
+                          Effect.provide(ProtocolLive(client2Transport))
+                        ),
+                      ],
+                      { concurrency: 'unbounded' }
+                    ),
+                    Effect.tap((clientResults) =>
+                      Effect.sync(() => {
+                        const client1Results = clientResults.find((r) => r.clientId === 'client1')!;
+                        const client2Results = clientResults.find((r) => r.clientId === 'client2')!;
+
+                        // Both clients should receive exactly the same events
+                        expect(client1Results.events).toHaveLength(3);
+                        expect(client2Results.events).toHaveLength(3);
+
+                        // Verify client 1 received correct events
+                        expect(client1Results.events[0]!.type).toBe('SharedEvent1');
+                        expect(client1Results.events[0]!.data).toEqual({
+                          message: 'First shared event',
+                          clientId: 'all',
+                        });
+                        expect(client1Results.events[1]!.type).toBe('SharedEvent2');
+                        expect(client1Results.events[1]!.data).toEqual({
+                          message: 'Second shared event',
+                          value: 42,
+                        });
+                        expect(client1Results.events[2]!.type).toBe('SharedEvent3');
+                        expect(client1Results.events[2]!.data).toEqual({
+                          message: 'Third shared event',
+                          status: 'completed',
+                        });
+
+                        // Verify client 2 received identical events
+                        expect(client2Results.events[0]!.type).toBe('SharedEvent1');
+                        expect(client2Results.events[0]!.data).toEqual({
+                          message: 'First shared event',
+                          clientId: 'all',
+                        });
+                        expect(client2Results.events[1]!.type).toBe('SharedEvent2');
+                        expect(client2Results.events[1]!.data).toEqual({
+                          message: 'Second shared event',
+                          value: 42,
+                        });
+                        expect(client2Results.events[2]!.type).toBe('SharedEvent3');
+                        expect(client2Results.events[2]!.data).toEqual({
+                          message: 'Third shared event',
+                          status: 'completed',
+                        });
+
+                        // Verify event ordering and positions are consistent across clients
+                        for (let i = 0; i < 3; i++) {
+                          expect(client1Results.events[i]!.position.eventNumber).toBe(
+                            client2Results.events[i]!.position.eventNumber
+                          );
+                          expect(client1Results.events[i]!.timestamp).toEqual(
+                            client2Results.events[i]!.timestamp
+                          );
+                          expect(client1Results.events[i]!.type).toBe(
+                            client2Results.events[i]!.type
+                          );
+                        }
+
+                        // Verify timestamps are preserved correctly
+                        expect(client1Results.events[0]!.timestamp).toEqual(
+                          new Date('2024-01-01T10:00:00Z')
+                        );
+                        expect(client1Results.events[1]!.timestamp).toEqual(
+                          new Date('2024-01-01T10:01:00Z')
+                        );
+                        expect(client1Results.events[2]!.timestamp).toEqual(
+                          new Date('2024-01-01T10:02:00Z')
+                        );
+                      })
+                    )
+                  );
+                })
+              )
+            )
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test('should handle single client subscribing to multiple different streams', async () => {
