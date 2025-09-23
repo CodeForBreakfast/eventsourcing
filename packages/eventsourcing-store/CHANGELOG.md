@@ -1,5 +1,52 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.6.5
+
+### Patch Changes
+
+- [#62](https://github.com/CodeForBreakfast/eventsourcing/pull/62) [`ecd91f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/ecd91f3a05de08f82752ddf8f6f5c6d5238cec78) Thanks [@GraemeF](https://github.com/GraemeF)! - Export InMemoryStore class and make function for testing support
+
+  The `InMemoryStore` class and `make` function (exported as `makeInMemoryStore`) are now available from the main package exports. This allows users to create in-memory event stores for testing scenarios without needing to access internal module paths.
+
+  ## New exports
+  - `InMemoryStore` - The class for managing in-memory event storage
+  - `makeInMemoryStore` - Factory function to create a new InMemoryStore instance
+
+  ## Example usage
+
+  ```typescript
+  import { Effect } from 'effect';
+  import {
+    InMemoryStore,
+    makeInMemoryStore,
+    makeInMemoryEventStore,
+  } from '@codeforbreakfast/eventsourcing-store';
+
+  // Create an in-memory store for testing
+  const store = await Effect.runPromise(makeInMemoryStore<MyEventType>());
+  const eventStore = await Effect.runPromise(makeInMemoryEventStore(store));
+  ```
+
+## 0.6.4
+
+### Patch Changes
+
+- [#60](https://github.com/CodeForBreakfast/eventsourcing/pull/60) [`e61e1da`](https://github.com/CodeForBreakfast/eventsourcing/commit/e61e1da32d2fecafc0e6e638cb0ca0daa49fada7) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix prepublishOnly script to maintain build dependency chain
+
+  The prepublishOnly script was doing a clean build (`clean && build`) which broke the dependency chain established by Turbo's build ordering. This caused packages that depend on other workspace packages to fail TypeScript compilation during publishing because their dependencies' TypeScript definitions weren't available.
+
+  Changed prepublishOnly from `bun run clean && bun run build` to just `bun run build` to maintain the build artifacts and dependency chain established by the main build process.
+
+## 0.6.3
+
+### Patch Changes
+
+- [#58](https://github.com/CodeForBreakfast/eventsourcing/pull/58) [`b391253`](https://github.com/CodeForBreakfast/eventsourcing/commit/b391253c9b298de5d8712b147a4bfefff4295a90) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix TypeScript definition generation in build process
+
+  The build process was not properly generating TypeScript definition files for published packages due to incremental compilation cache issues. This fix adds the `--force` flag to the TypeScript compiler to ensure definition files are always generated during the build process.
+
+  This resolves issues where consumers of these packages would not have proper TypeScript intellisense and type checking.
+
 ## 0.6.2
 
 ### Patch Changes

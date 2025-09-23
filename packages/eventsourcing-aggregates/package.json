@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-aggregates",
-  "version": "0.5.2",
+  "version": "0.5.5",
   "description": "Type-safe aggregate root patterns for event sourcing with Effect - Build bulletproof domain models with functional composition and immutable state management",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,12 +19,12 @@
     "src"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build --force",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "publish:package": "bun publish --access public",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "event-sourcing",

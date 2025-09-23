@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store",
-  "version": "0.6.2",
+  "version": "0.6.5",
   "description": "Type-safe event sourcing store with Effect integration - Build resilient, functional event-driven systems with composable error handling and streaming",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,14 +19,14 @@
     "src"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build --force",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
     "publish:package": "bun publish --access public",
-    "prepublishOnly": "bun run clean && bun run build"
+    "prepublishOnly": "bun run build"
   },
   "keywords": [
     "event-sourcing",

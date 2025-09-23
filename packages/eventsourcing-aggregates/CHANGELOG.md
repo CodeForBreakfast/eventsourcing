@@ -1,5 +1,38 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.5.5
+
+### Patch Changes
+
+- Updated dependencies [[`ecd91f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/ecd91f3a05de08f82752ddf8f6f5c6d5238cec78)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.5
+
+## 0.5.4
+
+### Patch Changes
+
+- [#60](https://github.com/CodeForBreakfast/eventsourcing/pull/60) [`e61e1da`](https://github.com/CodeForBreakfast/eventsourcing/commit/e61e1da32d2fecafc0e6e638cb0ca0daa49fada7) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix prepublishOnly script to maintain build dependency chain
+
+  The prepublishOnly script was doing a clean build (`clean && build`) which broke the dependency chain established by Turbo's build ordering. This caused packages that depend on other workspace packages to fail TypeScript compilation during publishing because their dependencies' TypeScript definitions weren't available.
+
+  Changed prepublishOnly from `bun run clean && bun run build` to just `bun run build` to maintain the build artifacts and dependency chain established by the main build process.
+
+- Updated dependencies [[`e61e1da`](https://github.com/CodeForBreakfast/eventsourcing/commit/e61e1da32d2fecafc0e6e638cb0ca0daa49fada7)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.4
+
+## 0.5.3
+
+### Patch Changes
+
+- [#58](https://github.com/CodeForBreakfast/eventsourcing/pull/58) [`b391253`](https://github.com/CodeForBreakfast/eventsourcing/commit/b391253c9b298de5d8712b147a4bfefff4295a90) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix TypeScript definition generation in build process
+
+  The build process was not properly generating TypeScript definition files for published packages due to incremental compilation cache issues. This fix adds the `--force` flag to the TypeScript compiler to ensure definition files are always generated during the build process.
+
+  This resolves issues where consumers of these packages would not have proper TypeScript intellisense and type checking.
+
+- Updated dependencies [[`b391253`](https://github.com/CodeForBreakfast/eventsourcing/commit/b391253c9b298de5d8712b147a4bfefff4295a90)]:
+  - @codeforbreakfast/eventsourcing-store@0.6.3
+
 ## 0.5.2
 
 ### Patch Changes
