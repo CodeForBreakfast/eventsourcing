@@ -61,7 +61,7 @@ export const createBasicProtocolContext = () => ({
 /**
  * @deprecated Use WebSocketConnector directly
  */
-export const createWebSocketConnector = () => WebSocketConnector;
+export const createWebSocketConnector = (): typeof WebSocketConnector => WebSocketConnector;
 
 /**
  * Create protocol stack as layer
