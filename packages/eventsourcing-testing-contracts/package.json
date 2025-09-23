@@ -66,7 +66,6 @@
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
-    "@codeforbreakfast/eventsourcing-protocol-contracts": "workspace:*",
     "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
