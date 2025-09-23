@@ -18,7 +18,7 @@ import {
 import {
   runClientServerContractTests,
   type ClientServerTestContext,
-  type ServerConfig,
+  type TransportPair,
   type ClientTransport,
   type ServerTransport,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
@@ -33,58 +33,73 @@ import { WebSocketAcceptor } from '../../lib/websocket-server';
 
 const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
   Effect.succeed({
-    createServer: (config: ServerConfig) =>
-      pipe(
-        WebSocketAcceptor.make(config),
-        Effect.flatMap((acceptor) => acceptor.start()),
-        Effect.map(
-          (transport): ServerTransport => ({
-            start: () => Effect.void,
-            connections: pipe(
-              transport.connections,
-              Stream.map((conn) => ({
-                id: String(conn.clientId),
-                transport: {
-                  connectionState: conn.transport.connectionState,
-                  publish: (msg: TransportMessage) =>
-                    conn.transport
-                      .publish(msg)
-                      .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                  subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                    conn.transport
-                      .subscribe(filter)
-                      .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-                } satisfies ClientTransport,
-              }))
+    createTransportPair: (): TransportPair => {
+      // Generate a random port for this pair
+      const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
+      const host = 'localhost';
+      const url = `ws://${host}:${port}`;
+
+      // Server reference - created lazily (unused but kept for potential future use)
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      let serverTransport: unknown = null;
+
+      return {
+        getServer: () =>
+          pipe(
+            WebSocketAcceptor.make({ port, host }),
+            Effect.flatMap((acceptor) => acceptor.start()),
+            Effect.tap((transport) =>
+              Effect.sync(() => {
+                serverTransport = transport;
+              })
             ),
-            broadcast: (message: TransportMessage) =>
-              transport
-                .broadcast(message)
-                .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
-          })
-        )
-      ),
+            Effect.map(
+              (transport): ServerTransport => ({
+                connections: pipe(
+                  transport.connections,
+                  Stream.map((conn) => ({
+                    id: String(conn.clientId),
+                    transport: {
+                      connectionState: conn.transport.connectionState,
+                      publish: (msg: TransportMessage) =>
+                        conn.transport
+                          .publish(msg)
+                          .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+                      subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+                        conn.transport
+                          .subscribe(filter)
+                          .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+                    } satisfies ClientTransport,
+                  }))
+                ),
+                broadcast: (message: TransportMessage) =>
+                  transport
+                    .broadcast(message)
+                    .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
+              })
+            )
+          ),
 
-    createClient: (url: string) =>
-      pipe(
-        WebSocketConnector.connect(url),
-        Effect.map(
-          (transport): ClientTransport => ({
-            connectionState: transport.connectionState,
-            publish: (msg: TransportMessage) =>
-              transport
-                .publish(msg)
-                .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-            subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-              transport
-                .subscribe(filter)
-                .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-          })
-        ),
-        Effect.mapError(() => new Error('Failed to connect to server'))
-      ),
-
-    generateTestUrl: (config: ServerConfig) => `ws://${config.host}:${config.port}`,
+        getClient: () =>
+          pipe(
+            WebSocketConnector.connect(url),
+            Effect.map(
+              (transport): ClientTransport => ({
+                connectionState: transport.connectionState,
+                publish: (msg: TransportMessage) =>
+                  transport
+                    .publish(msg)
+                    .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+                subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+                  transport
+                    .subscribe(filter)
+                    .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+              })
+            ),
+            Effect.mapError(() => new Error('Failed to connect to server'))
+          ),
+      };
+    },
 
     waitForConnectionState: (
       transport: ClientTransport,
@@ -130,25 +145,38 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 // =============================================================================
 
 describe('WebSocket Client-Server Specific Tests', () => {
-  // WebSocket-specific tests would go here if there are any behaviors
-  // that are unique to WebSocket and not covered by the generic contract tests.
+  // WebSocket-specific tests that directly test the WebSocket implementation
 
-  test('should use WebSocket protocol URLs', async () => {
-    const context = await Effect.runPromise(createWebSocketTestContext());
-    const url = context.generateTestUrl({ port: 8080, host: 'localhost' });
+  test('WebSocket server should accept connections on specified port', async () => {
+    const program = Effect.gen(function* () {
+      const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
+      const host = 'localhost';
 
-    expect(url).toBe('ws://localhost:8080');
-    expect(url.startsWith('ws://')).toBe(true);
+      // Create WebSocket server directly
+      const acceptor = yield* WebSocketAcceptor.make({ port, host });
+      yield* acceptor.start();
+
+      // Create WebSocket client directly
+      const client = yield* WebSocketConnector.connect(`ws://${host}:${port}`);
+
+      // Verify connection state
+      const state = yield* pipe(client.connectionState, Stream.take(1), Stream.runHead);
+
+      expect(state._tag).toBe('Some');
+      if (state._tag === 'Some') {
+        expect(state.value).toBe('connected');
+      }
+    });
+
+    await Effect.runPromise(Effect.scoped(program));
   });
 
-  test('should handle WebSocket-specific connection failures', async () => {
-    const context = await Effect.runPromise(createWebSocketTestContext());
-
-    // Test connection to non-existent local WebSocket server
+  test('WebSocket connector should fail for invalid URLs', async () => {
     const program = Effect.gen(function* () {
+      // Test with non-existent server
       const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
       const result = yield* Effect.either(
-        context.createClient(`ws://localhost:${nonExistentPort}`)
+        WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`)
       );
 
       expect(result._tag).toBe('Left');

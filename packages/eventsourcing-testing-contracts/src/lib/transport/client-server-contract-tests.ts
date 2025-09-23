@@ -116,7 +116,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          yield* pair.getServer();
 
           // Wait a bit for server to start
           yield* Effect.sleep(100);
@@ -187,7 +187,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          yield* pair.getServer();
 
           yield* Effect.sleep(100);
 
@@ -477,7 +477,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const serverScope = yield* Scope.make();
 
           // Start server in nested scope
-          const server = yield* Scope.extend(pair.getServer(), serverScope);
+          yield* Scope.extend(pair.getServer(), serverScope);
 
           yield* Effect.sleep(100);
 
@@ -513,7 +513,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          yield* pair.getServer();
 
           yield* Effect.sleep(100);
 

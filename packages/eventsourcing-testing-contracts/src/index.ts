@@ -53,7 +53,7 @@ export type {
 export type {
   ClientServerTestContext,
   ClientServerTestRunner,
-  ServerConfig,
+  TransportPair,
   ServerTransport,
   ServerConnection,
   ClientTransport,
