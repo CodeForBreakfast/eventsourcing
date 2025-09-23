@@ -48,11 +48,7 @@ interface InMemoryServerState {
 }
 
 // The connector function that clients use to connect directly to a server (no configuration needed)
-export type InMemoryConnector = () => Effect.Effect<
-  Client.Transport<TransportMessage>,
-  ConnectionError,
-  Scope.Scope
->;
+export type InMemoryConnector = () => Effect.Effect<Client.Transport, ConnectionError, Scope.Scope>;
 
 // =============================================================================
 // Client State Helpers
@@ -183,16 +179,14 @@ const createServerSideClientTransport = (
   clientToServerQueue: Queue.Queue<TransportMessage>,
   serverToClientQueue: Queue.Queue<TransportMessage>,
   clientState: InMemoryClientState
-): Client.Transport<TransportMessage> => ({
+): Client.Transport => ({
   connectionState: createConnectionStateStream(clientState),
   publish: publishWithConnectionCheck(clientState, serverToClientQueue, 'Client not connected'),
   subscribe: (filter?: (message: TransportMessage) => boolean) =>
     createSimpleSubscription(clientToServerQueue, filter),
 });
 
-const createClientTransport = (
-  clientState: InMemoryClientState
-): Client.Transport<TransportMessage> => ({
+const createClientTransport = (clientState: InMemoryClientState): Client.Transport => ({
   connectionState: createConnectionStateStream(clientState),
   publish: publishWithConnectionCheck(
     clientState,
@@ -334,7 +328,7 @@ const setupClientConnection = (
   connectionStatePubSub: PubSub.PubSub<ConnectionState>,
   clientId: string
 ): Effect.Effect<{
-  transport: Client.Transport<TransportMessage>;
+  transport: Client.Transport;
   cleanup: () => Effect.Effect<void>;
 }> => {
   const inMemoryClientConnection: InMemoryClientConnection = {
