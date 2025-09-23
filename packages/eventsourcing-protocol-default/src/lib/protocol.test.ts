@@ -1477,16 +1477,223 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Server Protocol Integration', () => {
-    test.skip('should emit commands through server protocol onCommand stream', async () => {
-      // TODO: Implement test for server protocol command emission
+    test('should emit commands through server protocol onCommand stream', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            ServerProtocol,
+            Effect.flatMap((serverProtocol) => {
+              const command: Command = {
+                id: crypto.randomUUID(),
+                target: 'user-123',
+                name: 'CreateUser',
+                payload: { name: 'Alice', email: 'alice@example.com' },
+              };
+
+              return pipe(
+                Effect.all(
+                  [
+                    // Listen for commands on the server protocol's onCommand stream
+                    pipe(
+                      serverProtocol.onCommand,
+                      Stream.take(1),
+                      Stream.runCollect,
+                      Effect.map((commands) => Array.from(commands))
+                    ),
+                    // Send a command from the client after a small delay
+                    pipe(
+                      Effect.sleep(Duration.millis(50)),
+                      Effect.flatMap(() =>
+                        pipe(
+                          sendCommand(command),
+                          Effect.provide(ProtocolLive(clientTransport)),
+                          Effect.either
+                        )
+                      )
+                    ),
+                    // Advance the test clock to trigger command timeout
+                    TestClock.adjust(Duration.seconds(11)),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.tap(([receivedCommands, commandResult, _]) =>
+                  Effect.sync(() => {
+                    // Verify the command was received by the server protocol
+                    expect(receivedCommands).toHaveLength(1);
+
+                    const receivedCommand = receivedCommands[0]!;
+                    expect(receivedCommand.id).toBe(command.id);
+                    expect(receivedCommand.target).toBe(command.target);
+                    expect(receivedCommand.name).toBe(command.name);
+                    expect(receivedCommand.payload).toEqual(command.payload);
+
+                    // The command should timeout on the client side since we're not responding
+                    expect(Either.isLeft(commandResult)).toBe(true);
+                    if (Either.isLeft(commandResult)) {
+                      expect(commandResult.left).toBeInstanceOf(CommandTimeoutError);
+                    }
+                  })
+                )
+              );
+            }),
+            Effect.provide(ServerProtocolLive(server))
+          )
+        )
+      );
+
+      await Effect.runPromise(
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+      );
     });
 
-    test.skip('should deliver command results via server protocol sendResult', async () => {
-      // TODO: Implement test for server protocol result delivery
+    test('should deliver command results via server protocol sendResult', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            ServerProtocol,
+            Effect.flatMap((serverProtocol) => {
+              const command: Command = {
+                id: crypto.randomUUID(),
+                target: 'user-456',
+                name: 'UpdateProfile',
+                payload: { name: 'Bob', email: 'bob@example.com' },
+              };
+
+              const successResult: CommandResult = {
+                _tag: 'Success',
+                position: {
+                  streamId: unsafeCreateStreamId('user-456'),
+                  eventNumber: 99,
+                },
+              };
+
+              return pipe(
+                Effect.all(
+                  [
+                    // Send command from client
+                    pipe(sendCommand(command), Effect.provide(ProtocolLive(clientTransport))),
+                    // Server processes the command and sends result
+                    pipe(
+                      serverProtocol.onCommand,
+                      Stream.take(1),
+                      Stream.runCollect,
+                      Effect.flatMap((commands) => {
+                        const receivedCommand = Array.from(commands)[0]!;
+                        // Verify we got the command, then send a result
+                        return pipe(
+                          Effect.sync(() => {
+                            expect(receivedCommand.id).toBe(command.id);
+                            expect(receivedCommand.target).toBe(command.target);
+                            expect(receivedCommand.name).toBe(command.name);
+                          }),
+                          Effect.flatMap(() =>
+                            serverProtocol.sendResult(receivedCommand.id, successResult)
+                          )
+                        );
+                      })
+                    ),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.tap(([clientResult, _]) =>
+                  Effect.sync(() => {
+                    // Verify the client received the correct result
+                    expect(clientResult._tag).toBe('Success');
+                    if (clientResult._tag === 'Success') {
+                      expect(clientResult.position.streamId).toEqual(
+                        unsafeCreateStreamId('user-456')
+                      );
+                      expect(clientResult.position.eventNumber).toBe(99);
+                    }
+                  })
+                )
+              );
+            }),
+            Effect.provide(ServerProtocolLive(server))
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should publish events via server protocol publishEvent', async () => {
-      // TODO: Implement test for server protocol event publishing
+    test('should publish events via server protocol publishEvent', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            ServerProtocol,
+            Effect.flatMap((serverProtocol) => {
+              const testEvent: Event & { streamId: EventStreamId } = {
+                streamId: unsafeCreateStreamId('product-789'),
+                position: {
+                  streamId: unsafeCreateStreamId('product-789'),
+                  eventNumber: 42,
+                },
+                type: 'ProductCreated',
+                data: {
+                  id: 'product-789',
+                  name: 'Super Widget',
+                  price: 99.99,
+                  category: 'electronics',
+                },
+                timestamp: new Date('2024-01-15T14:30:00Z'),
+              };
+
+              return pipe(
+                Effect.all(
+                  [
+                    // Client subscribes to the stream and waits for events
+                    pipe(
+                      subscribe('product-789'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          eventStream,
+                          Stream.take(1),
+                          Stream.runCollect,
+                          Effect.map((events) => Array.from(events))
+                        )
+                      ),
+                      Effect.provide(ProtocolLive(clientTransport))
+                    ),
+                    // Server publishes event after a small delay to ensure subscription is ready
+                    pipe(
+                      Effect.sleep(Duration.millis(50)),
+                      Effect.flatMap(() => serverProtocol.publishEvent(testEvent))
+                    ),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.tap(([receivedEvents, _]) =>
+                  Effect.sync(() => {
+                    // Verify the client received the published event
+                    expect(receivedEvents).toHaveLength(1);
+
+                    const receivedEvent = receivedEvents[0]!;
+                    expect(receivedEvent.type).toBe('ProductCreated');
+                    expect(receivedEvent.position.streamId).toEqual(
+                      unsafeCreateStreamId('product-789')
+                    );
+                    expect(receivedEvent.position.eventNumber).toBe(42);
+                    expect(receivedEvent.data).toEqual({
+                      id: 'product-789',
+                      name: 'Super Widget',
+                      price: 99.99,
+                      category: 'electronics',
+                    });
+                    expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
+                  })
+                )
+              );
+            }),
+            Effect.provide(ServerProtocolLive(server))
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
