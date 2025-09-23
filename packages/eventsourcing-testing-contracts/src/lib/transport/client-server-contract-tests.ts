@@ -217,7 +217,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
           expect(receivedMessages).toHaveLength(1);
           expect(receivedMessages[0]?.type).toBe('test.message');
-          expect(receivedMessages[0]?.payload).toEqual({ data: 'hello server' });
+          expect(receivedMessages[0]?.payload as any).toEqual({ data: 'hello server' });
         });
 
         await Effect.runPromise(Effect.scoped(program));
@@ -261,11 +261,11 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           // Both clients should receive the broadcast
           expect(client1Received).toHaveLength(1);
           expect(client1Received[0]?.type).toBe('server.broadcast');
-          expect(client1Received[0]?.payload).toEqual({ announcement: 'hello all clients' });
+          expect(client1Received[0]?.payload as any).toEqual({ announcement: 'hello all clients' });
 
           expect(client2Received).toHaveLength(1);
           expect(client2Received[0]?.type).toBe('server.broadcast');
-          expect(client2Received[0]?.payload).toEqual({ announcement: 'hello all clients' });
+          expect(client2Received[0]?.payload as any).toEqual({ announcement: 'hello all clients' });
         });
 
         await Effect.runPromise(Effect.scoped(program));
@@ -303,14 +303,14 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
           // Server receives and responds
           const serverReceivedMessages = yield* context.collectMessages(serverMessages, 1);
-          expect(serverReceivedMessages[0]?.payload).toEqual({ query: 'ping' });
+          expect(serverReceivedMessages[0]?.payload as any).toEqual({ query: 'ping' });
 
           const serverResponse = context.createTestMessage('server.response', { result: 'pong' });
           yield* connection.transport.publish(serverResponse);
 
           // Client receives response
           const clientReceivedMessages = yield* context.collectMessages(clientMessages, 1);
-          expect(clientReceivedMessages[0]?.payload).toEqual({ result: 'pong' });
+          expect(clientReceivedMessages[0]?.payload as any).toEqual({ result: 'pong' });
         });
 
         await Effect.runPromise(Effect.scoped(program));
@@ -346,9 +346,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
           expect(receivedMessages).toHaveLength(2);
           expect(receivedMessages[0]?.type).toBe('important.alert');
-          expect(receivedMessages[0]?.payload).toEqual({ data: 2 });
+          expect(receivedMessages[0]?.payload as any).toEqual({ data: 2 });
           expect(receivedMessages[1]?.type).toBe('important.notification');
-          expect(receivedMessages[1]?.payload).toEqual({ data: 4 });
+          expect(receivedMessages[1]?.payload as any).toEqual({ data: 4 });
         });
 
         await Effect.runPromise(Effect.scoped(program));

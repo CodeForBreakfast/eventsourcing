@@ -1,99 +1,93 @@
 /**
- * Basic smoke tests for the testing contracts package
+ * Basic smoke tests for the transport testing contracts package
  */
 
 import { describe, it, expect } from 'bun:test';
-import { Effect, Stream, pipe } from 'effect';
-import {
-  generateStreamId,
-  createTestCommand,
-  createMockTransport,
-  createMockDomainContext,
-  TestScenarios,
-} from '../index.js';
+import { Effect, Stream, pipe, Scope, Fiber, Duration, Chunk } from 'effect';
+import { generateMessageId, createTestTransportMessage, createMockTransport } from '../index.js';
 
-describe('Testing Contracts Package', () => {
+describe('Transport Testing Contracts Package', () => {
   describe('Test Data Generators', () => {
-    it('should generate unique stream IDs', () => {
-      const id1 = generateStreamId();
-      const id2 = generateStreamId();
+    it('should generate unique message IDs', () => {
+      const id1 = generateMessageId();
+      const id2 = generateMessageId();
 
       expect(id1).not.toBe(id2);
-      expect(id1).toMatch(/^test-stream-/);
+      expect(id1).toMatch(/^msg-/);
     });
 
-    it('should create test commands', () => {
-      const command = createTestCommand(
+    it('should create test transport messages', () => {
+      const message = createTestTransportMessage(
+        'test.message',
         { action: 'test', value: 42 },
-        { commandName: 'TestCommand' }
+        { id: 'test-id-123' }
       );
 
-      expect(command.commandName).toBe('TestCommand');
-      expect(command.payload).toEqual({ action: 'test', value: 42 });
-      expect(command.aggregate.name).toBe('TestAggregate');
+      expect(message.id).toBe('test-id-123');
+      expect(message.type).toBe('test.message');
+      expect(message.payload).toEqual({ action: 'test', value: 42 });
     });
   });
 
-  describe('Mock Implementations', () => {
-    it('should create mock transport', async () => {
-      const transportContext = await Effect.runPromise(createMockTransport());
-
-      expect(typeof transportContext.createConnectedTransport).toBe('function');
-      expect(typeof transportContext.simulateDisconnect).toBe('function');
-      expect(typeof transportContext.simulateReconnect).toBe('function');
-
-      // Test basic functionality - create a connected transport and test it
+  describe('Mock Transport Implementation', () => {
+    it('should create mock transport within scope', async () => {
       await Effect.runPromise(
         Effect.scoped(
-          pipe(
-            transportContext.createConnectedTransport('test://localhost'),
-            Effect.flatMap((connectedTransport) =>
-              pipe(
-                connectedTransport.connectionState,
-                Stream.take(1),
-                Stream.runHead,
-                Effect.tap((state) => {
-                  expect(state._tag).toBe('Some');
-                  return Effect.void;
-                })
-              )
-            )
-          )
+          Effect.gen(function* (_) {
+            const transport = yield* _(createMockTransport());
+
+            // Test connection state
+            const statePromise = pipe(transport.connectionState, Stream.take(1), Stream.runHead);
+
+            const state = yield* _(statePromise);
+            expect(state).toBeDefined();
+
+            // Test publish
+            const message = createTestTransportMessage('test', { data: 'hello' });
+            yield* _(transport.publish(message));
+
+            // Test subscribe
+            const subscription = yield* _(transport.subscribe());
+            expect(subscription).toBeDefined();
+          })
         )
       );
     });
 
-    it('should create mock domain context', async () => {
-      const domain = await Effect.runPromise(createMockDomainContext());
+    it('should handle publish and subscribe', async () => {
+      await Effect.runPromise(
+        Effect.scoped(
+          Effect.gen(function* (_) {
+            const transport = yield* _(createMockTransport());
 
-      expect(typeof domain.processCommand).toBe('function');
-      expect(typeof domain.getEventCount).toBe('function');
+            // Set up subscription first
+            const subscription = yield* _(transport.subscribe());
 
-      // Test basic functionality
-      const streamId = generateStreamId();
-      const count = await Effect.runPromise(domain.getEventCount(streamId));
-      expect(count).toBe(0);
-    });
-  });
+            // Publish messages in background after a small delay
+            const publishFiber = yield* _(
+              Effect.fork(
+                Effect.gen(function* (_) {
+                  yield* _(Effect.sleep(Duration.millis(100)));
+                  const msg1 = createTestTransportMessage('test', { count: 1 });
+                  const msg2 = createTestTransportMessage('test', { count: 2 });
+                  yield* _(transport.publish(msg1));
+                  yield* _(transport.publish(msg2));
+                })
+              )
+            );
 
-  describe('Test Scenarios', () => {
-    it('should provide basic command flow scenario', async () => {
-      const domain = await Effect.runPromise(createMockDomainContext());
+            // Collect messages
+            const messages = yield* _(pipe(subscription, Stream.take(2), Stream.runCollect));
 
-      const result = await Effect.runPromise(TestScenarios.basicCommandFlow(domain.processCommand));
+            // Wait for publishing to complete
+            yield* _(Fiber.join(publishFiber));
 
-      expect(result).toBeDefined();
-    });
-
-    it('should provide optimistic concurrency scenario', async () => {
-      const domain = await Effect.runPromise(createMockDomainContext());
-
-      const { result1, result2 } = await Effect.runPromise(
-        TestScenarios.optimisticConcurrency(domain.processCommand)
+            expect(Chunk.size(messages)).toBe(2);
+            expect(Chunk.unsafeGet(messages, 0).payload).toEqual({ count: 1 });
+            expect(Chunk.unsafeGet(messages, 1).payload).toEqual({ count: 2 });
+          })
+        )
       );
-
-      expect(result1).toBeDefined();
-      expect(result2).toBeDefined();
     });
   });
 });

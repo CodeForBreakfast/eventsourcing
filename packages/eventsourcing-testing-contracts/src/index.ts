@@ -1,52 +1,22 @@
 /**
  * @codeforbreakfast/eventsourcing-testing-contracts
  *
- * Layered testing framework for event sourcing implementations.
- * Provides clear separation of concerns across 4 distinct test layers,
- * each focusing on specific responsibilities.
- *
- * LAYER 1: Transport Tests - Pure message delivery mechanics
- * LAYER 2: Protocol Tests - Event sourcing message mapping
- * LAYER 3: Domain Tests - Event sourcing domain invariants
- * LAYER 4: Integration Tests - End-to-end scenarios
- *
- * Each layer has clear interfaces, required behaviors, and optional features.
- * Implementers only need to test the layers they implement.
+ * Transport layer testing contracts for event sourcing implementations.
+ * Validates pure message delivery mechanics, connection management,
+ * and client-server communication patterns.
  */
 
 // ============================================================================
-// LAYER INTERFACES AND TYPES
+// TRANSPORT INTERFACES AND TYPES
 // ============================================================================
 
 export type {
-  // Layer 1: Transport
+  // Transport Test Types
   TransportMessage,
   TransportTestContext,
   TransportTestRunner,
   ConnectedTransportTestInterface,
   ConnectionState,
-
-  // Layer 2: Protocol
-  ProtocolTestContext,
-  ProtocolFeatures,
-  ProtocolTestRunner,
-  StreamEvent,
-  GlobalPosition,
-
-  // Layer 3: Domain
-  DomainTestContext,
-  DomainFeatures,
-  DomainTestRunner,
-
-  // Layer 4: Integration
-  IntegrationTestContext,
-  IntegrationFeatures,
-  IntegrationTestRunner,
-  TestScenario,
-  ScenarioResult,
-  ScenarioStep,
-  ScenarioOutcome,
-  ThroughputMetrics,
 } from './lib/test-layer-interfaces';
 
 // Client-Server Contract Types
@@ -70,28 +40,12 @@ export type {
 } from './lib/transport/server-transport-contract-tests';
 
 // ============================================================================
-// TEST RUNNERS
+// TRANSPORT CONTRACT TEST RUNNERS
 // ============================================================================
 
-// Layer 1: Transport Contract Tests
 export { runClientTransportContractTests } from './lib/transport/client-transport-contract-tests';
 export { runClientServerContractTests } from './lib/transport/client-server-contract-tests';
 export { runServerTransportContractTests } from './lib/transport/server-transport-contract-tests';
-
-// Layer 2: Protocol Contract Tests
-export { runProtocolContractTests } from './lib/protocol/protocol-contract-tests';
-
-// Layer 3: Domain Contract Tests
-export { runDomainContractTests } from './lib/domain/domain-contract-tests';
-
-// Layer 4: Integration Test Suite
-export { runIntegrationTestSuite } from './lib/integration/integration-test-suite';
-
-// ============================================================================
-// DOCUMENTATION AND GUIDANCE
-// ============================================================================
-
-// Documentation exports removed - these are implemented by individual transport packages
 
 // ============================================================================
 // TEST UTILITIES AND HELPERS
@@ -99,28 +53,15 @@ export { runIntegrationTestSuite } from './lib/integration/integration-test-suit
 
 export {
   // Test data generators
-  generateStreamId,
-  generateCommandId,
   generateMessageId,
-  createTestPosition,
-  createTestAggregate,
-  createTestCommand,
-  createTestStreamEvent,
   createTestTransportMessage,
-  generateTestEvents,
-  generateTestCommands,
 
   // Mock implementations
-  createMockCommandError,
   createMockTransport,
-  createMockDomainContext,
   type MockTransportState,
-  type MockDomainState,
 
   // Test helpers
   waitForCondition,
   expectError,
   collectStreamWithTimeout,
-  createTestLayer,
-  TestScenarios,
 } from './lib/test-utilities';

@@ -451,7 +451,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
           expect(receivedMessages).toHaveLength(1);
           expect(receivedMessages[0]?.type).toBe('client.request');
-          expect(receivedMessages[0]?.payload).toEqual({ action: 'ping' });
+          expect(receivedMessages[0]?.payload as any).toEqual({ action: 'ping' });
         });
 
         await Effect.runPromise(Effect.scoped(program));
