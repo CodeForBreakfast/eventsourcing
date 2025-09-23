@@ -1,8 +1,20 @@
-import { Effect, Stream, Queue, Deferred, Duration, Schema } from 'effect';
-import type { Client, TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import {
+  Effect,
+  Stream,
+  Queue,
+  Deferred,
+  Duration,
+  Schema,
+  HashMap,
+  Ref,
+  Data,
+  pipe,
+  Option,
+} from 'effect';
 import {
   makeTransportMessage,
-  MessageParseError,
+  type Client,
+  type TransportError,
   type TransportMessage,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
@@ -11,6 +23,17 @@ import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 // 1. Send command -> get result
 // 2. Subscribe to events
 // That's fucking IT!
+
+// Domain errors
+export class CommandTimeoutError extends Data.TaggedError('CommandTimeoutError')<{
+  readonly commandId: string;
+  readonly timeoutMs: number;
+}> {}
+
+export class ProtocolValidationError extends Data.TaggedError('ProtocolValidationError')<{
+  readonly message: string;
+  readonly rawData: unknown;
+}> {}
 
 export const Command = Schema.Struct({
   id: Schema.String,
@@ -85,75 +108,98 @@ export const IncomingMessage = Schema.Union(CommandResultMessage, EventMessage);
 export type IncomingMessage = typeof IncomingMessage.Type;
 
 interface ProtocolState {
-  readonly pendingCommands: Map<string, Deferred.Deferred<CommandResult>>;
-  readonly subscriptions: Map<string, Queue.Queue<Event>>;
+  readonly pendingCommands: HashMap.HashMap<string, Deferred.Deferred<CommandResult>>;
+  readonly subscriptions: HashMap.HashMap<string, Queue.Queue<Event>>;
 }
 
 export interface Protocol {
-  readonly sendCommand: (command: Command) => Effect.Effect<CommandResult, TransportError, never>;
+  readonly sendCommand: (
+    command: Command
+  ) => Effect.Effect<CommandResult, TransportError | CommandTimeoutError, never>;
   readonly subscribe: (
     streamId: string
   ) => Effect.Effect<Stream.Stream<Event, never, never>, TransportError, never>;
 }
 
 const parseTransportPayload = (message: TransportMessage) =>
-  Effect.try(() => JSON.parse(message.payload)).pipe(
-    Effect.catchAll(() =>
-      Effect.fail(
-        new MessageParseError({
+  pipe(
+    Effect.try(() => JSON.parse(message.payload)),
+    Effect.mapError(
+      () =>
+        new ProtocolValidationError({
           message: 'Failed to parse transport payload as JSON',
           rawData: message.payload,
         })
-      )
     )
   );
 
 const validateIncomingMessage = (rawPayload: unknown) =>
-  Schema.decodeUnknown(IncomingMessage)(rawPayload).pipe(
-    Effect.catchAll(() =>
-      Effect.fail(
-        new MessageParseError({
+  pipe(
+    Schema.decodeUnknown(IncomingMessage)(rawPayload),
+    Effect.mapError(
+      () =>
+        new ProtocolValidationError({
           message: 'Invalid incoming message format',
           rawData: rawPayload,
         })
-      )
     )
   );
 
-const handleCommandResult = (state: ProtocolState) => (message: CommandResultMessage) =>
-  Effect.suspend(() => {
-    const deferred = state.pendingCommands.get(message.commandId);
-    if (!deferred) return Effect.void;
+const handleCommandResult = (stateRef: Ref.Ref<ProtocolState>) => (message: CommandResultMessage) =>
+  pipe(
+    Ref.get(stateRef),
+    Effect.flatMap((state) => {
+      const maybeDeferredOption = HashMap.get(state.pendingCommands, message.commandId);
 
-    state.pendingCommands.delete(message.commandId);
-    const result: CommandResult = message.success
-      ? { _tag: 'Success', position: message.position! }
-      : { _tag: 'Failure', error: message.error! };
-    return Deferred.succeed(deferred, result);
-  });
+      if (Option.isNone(maybeDeferredOption)) {
+        return Effect.void; // Command not found, ignore
+      }
 
-const handleEvent = (state: ProtocolState) => (message: EventMessage) =>
-  Effect.suspend(() => {
-    const queue = state.subscriptions.get(message.streamId);
-    if (!queue) return Effect.void;
+      const deferred = maybeDeferredOption.value;
+      const result: CommandResult = message.success
+        ? { _tag: 'Success', position: message.position! }
+        : { _tag: 'Failure', error: message.error! };
 
-    return Queue.offer(queue, {
-      position: message.position,
-      type: message.eventType,
-      data: message.data,
-      timestamp: new Date(message.timestamp),
-    });
-  });
+      return pipe(
+        Ref.update(stateRef, (state) => ({
+          ...state,
+          pendingCommands: HashMap.remove(state.pendingCommands, message.commandId),
+        })),
+        Effect.flatMap(() => Deferred.succeed(deferred, result))
+      );
+    })
+  );
 
-const handleMessage = (state: ProtocolState) => (message: TransportMessage) =>
-  parseTransportPayload(message).pipe(
+const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: EventMessage) =>
+  pipe(
+    Ref.get(stateRef),
+    Effect.flatMap((state) => {
+      const maybeQueueOption = HashMap.get(state.subscriptions, message.streamId);
+
+      if (Option.isNone(maybeQueueOption)) {
+        return Effect.void; // Subscription not found, ignore
+      }
+
+      const queue = maybeQueueOption.value;
+      return Queue.offer(queue, {
+        position: message.position,
+        type: message.eventType,
+        data: message.data,
+        timestamp: new Date(message.timestamp),
+      });
+    })
+  );
+
+const handleMessage = (stateRef: Ref.Ref<ProtocolState>) => (message: TransportMessage) =>
+  pipe(
+    parseTransportPayload(message),
     Effect.flatMap(validateIncomingMessage),
     Effect.flatMap((wireMessage) => {
       switch (wireMessage.type) {
         case 'command_result':
-          return handleCommandResult(state)(wireMessage);
+          return handleCommandResult(stateRef)(wireMessage);
         case 'event':
-          return handleEvent(state)(wireMessage);
+          return handleEvent(stateRef)(wireMessage);
         default:
           return Effect.void;
       }
@@ -170,25 +216,36 @@ const encodeCommandMessage = (command: Command): CommandMessage => ({
 });
 
 const createCommandSender =
-  (state: ProtocolState, transport: Client.Transport) => (command: Command) =>
-    Deferred.make<CommandResult>().pipe(
-      Effect.tap((deferred) => Effect.sync(() => state.pendingCommands.set(command.id, deferred))),
-      Effect.tap(() => {
-        const wireMessage = encodeCommandMessage(command);
-        return transport.publish(
-          makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
-            timestamp: new Date().toISOString(),
-          })
-        );
-      }),
+  (stateRef: Ref.Ref<ProtocolState>, transport: Client.Transport) => (command: Command) =>
+    pipe(
+      Deferred.make<CommandResult>(),
       Effect.flatMap((deferred) =>
-        Deferred.await(deferred).pipe(
-          Effect.timeout(Duration.seconds(10)),
-          Effect.catchTag('TimeoutException', () =>
-            Effect.succeed({
-              _tag: 'Failure' as const,
-              error: 'Command timed out',
-            })
+        pipe(
+          Ref.update(stateRef, (state) => ({
+            ...state,
+            pendingCommands: HashMap.set(state.pendingCommands, command.id, deferred),
+          })),
+          Effect.flatMap(() => {
+            const wireMessage = encodeCommandMessage(command);
+            return transport.publish(
+              makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
+                timestamp: new Date().toISOString(),
+              })
+            );
+          }),
+          Effect.flatMap(() =>
+            pipe(
+              Deferred.await(deferred),
+              Effect.timeout(Duration.seconds(10)),
+              Effect.catchTag('TimeoutException', () =>
+                Effect.fail(
+                  new CommandTimeoutError({
+                    commandId: command.id,
+                    timeoutMs: 10000,
+                  })
+                )
+              )
+            )
           )
         )
       )
@@ -200,36 +257,45 @@ const encodeSubscribeMessage = (streamId: string): SubscribeMessage => ({
 });
 
 const createSubscriber =
-  (state: ProtocolState, transport: Client.Transport) => (streamId: string) =>
-    Queue.unbounded<Event>().pipe(
-      Effect.tap((queue) => Effect.sync(() => state.subscriptions.set(streamId, queue))),
-      Effect.tap(() => {
-        const wireMessage = encodeSubscribeMessage(streamId);
-        return transport.publish(
-          makeTransportMessage(crypto.randomUUID(), 'subscribe', JSON.stringify(wireMessage), {
-            timestamp: new Date().toISOString(),
-          })
-        );
-      }),
-      Effect.map(Stream.fromQueue)
+  (stateRef: Ref.Ref<ProtocolState>, transport: Client.Transport) => (streamId: string) =>
+    pipe(
+      Queue.unbounded<Event>(),
+      Effect.flatMap((queue) =>
+        pipe(
+          Ref.update(stateRef, (state) => ({
+            ...state,
+            subscriptions: HashMap.set(state.subscriptions, streamId, queue),
+          })),
+          Effect.flatMap(() => {
+            const wireMessage = encodeSubscribeMessage(streamId);
+            return transport.publish(
+              makeTransportMessage(crypto.randomUUID(), 'subscribe', JSON.stringify(wireMessage), {
+                timestamp: new Date().toISOString(),
+              })
+            );
+          }),
+          Effect.as(Stream.fromQueue(queue))
+        )
+      )
     );
 
 export const createProtocol = (
   transport: Client.Transport
 ): Effect.Effect<Protocol, TransportError, never> =>
-  Effect.sync(() => ({
-    pendingCommands: new Map<string, Deferred.Deferred<CommandResult>>(),
-    subscriptions: new Map<string, Queue.Queue<Event>>(),
-  })).pipe(
-    Effect.flatMap((state) =>
-      Effect.forkDaemon(
-        transport
-          .subscribe()
-          .pipe(Effect.flatMap((stream) => Stream.runForEach(stream, handleMessage(state))))
-      ).pipe(
+  pipe(
+    Ref.make<ProtocolState>({
+      pendingCommands: HashMap.empty(),
+      subscriptions: HashMap.empty(),
+    }),
+    Effect.flatMap((stateRef) =>
+      pipe(
+        transport.subscribe(),
+        Effect.flatMap((stream) =>
+          Effect.forkDaemon(Stream.runForEach(stream, handleMessage(stateRef)))
+        ),
         Effect.as({
-          sendCommand: createCommandSender(state, transport),
-          subscribe: createSubscriber(state, transport),
+          sendCommand: createCommandSender(stateRef, transport),
+          subscribe: createSubscriber(stateRef, transport),
         })
       )
     )
