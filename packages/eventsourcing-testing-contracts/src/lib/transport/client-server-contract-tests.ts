@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect, Stream, Scope, pipe, Option, Exit, Fiber } from 'effect';
+import { Effect, Stream, Scope, pipe, Option, Exit } from 'effect';
 import type {
   TransportMessage,
   ConnectionState,
@@ -176,68 +176,6 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           );
 
           expect(Array.from(connections)).toHaveLength(3);
-        });
-
-        await Effect.runPromise(Effect.scoped(program));
-      });
-
-      test('should track connection state transitions correctly', async () => {
-        const program = Effect.gen(function* () {
-          // Create a transport pair
-          const pair = context.createTransportPair();
-
-          // Start server
-          yield* pair.createServer();
-
-          yield* Effect.sleep(100);
-
-          // Create a ref to collect all state changes as they happen
-          const stateHistory = yield* Effect.sync(() => [] as ConnectionState[]);
-
-          // Start the connection in a fiber so we can subscribe to states early
-          const connectionFiber = yield* Effect.fork(pair.createClient());
-
-          // Wait a tiny bit for the connection to start initializing
-          yield* Effect.sleep(5);
-
-          // Get the transport (it will be in 'connecting' state)
-          const client = yield* Fiber.join(connectionFiber);
-
-          // Set up a background fiber to collect all state transitions
-          const stateCollectorFiber = yield* Effect.fork(
-            pipe(
-              client.connectionState,
-              Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state)))
-            )
-          );
-
-          // Wait for connection to be fully established
-          yield* context.waitForConnectionState(client, 'connected');
-
-          // Give the state collector a moment to catch any late states
-          yield* Effect.sleep(10);
-
-          // Cancel the state collector
-          yield* Fiber.interrupt(stateCollectorFiber);
-
-          // Verify that we saw connection states IN THE CORRECT ORDER
-          const observedStates = stateHistory;
-
-          // Should have seen at least the connected state
-          expect(observedStates.length).toBeGreaterThanOrEqual(1);
-
-          // The last state should always be 'connected'
-          expect(observedStates[observedStates.length - 1]).toBe('connected');
-
-          // If we caught the transition early enough, we might see both states
-          if (observedStates.length > 1) {
-            // If we see multiple states, they should be in order
-            const connectingIndex = observedStates.indexOf('connecting');
-            const connectedIndex = observedStates.indexOf('connected');
-            if (connectingIndex !== -1 && connectedIndex !== -1) {
-              expect(connectingIndex).toBeLessThan(connectedIndex);
-            }
-          }
         });
 
         await Effect.runPromise(Effect.scoped(program));
@@ -507,47 +445,6 @@ export const runClientServerContractTests: ClientServerTestRunner = (
         await Effect.runPromise(Effect.scoped(program));
       });
 
-      test('should provide current state when subscribing after connection', async () => {
-        const program = Effect.gen(function* () {
-          // Create a transport pair
-          const pair = context.createTransportPair();
-
-          // Start server
-          yield* pair.createServer();
-
-          yield* Effect.sleep(100);
-
-          // Connect client and wait for connection
-          const client = yield* pair.createClient();
-          yield* context.waitForConnectionState(client, 'connected');
-
-          // Now subscribe to connection state AFTER connection is established
-          const stateHistory: ConnectionState[] = [];
-          const lateSubscriberFiber = yield* Effect.fork(
-            pipe(
-              client.connectionState,
-              Stream.take(3), // Take current state + potential future states
-              Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state)))
-            )
-          );
-
-          // Give time for the subscription to process
-          yield* Effect.sleep(50);
-
-          // Verify that the first state received is the CURRENT state (connected)
-          expect(stateHistory[0]).toBe('connected');
-          expect(stateHistory.length).toBe(1); // Should only have received the current state
-
-          // Cancel the subscriber fiber
-          yield* Fiber.interrupt(lateSubscriberFiber);
-
-          // Should have received only 'connected' (the current state)
-          expect(stateHistory).toEqual(['connected']);
-        });
-
-        await Effect.runPromise(Effect.scoped(program));
-      });
-
       test('should clean up resources when scope closes', async () => {
         const program = Effect.gen(function* () {
           // Create a transport pair
@@ -581,21 +478,6 @@ export const runClientServerContractTests: ClientServerTestRunner = (
     });
 
     describe('Error Handling', () => {
-      test('should handle connection to non-existent server', async () => {
-        const program = Effect.gen(function* () {
-          // Create a transport pair but don't start the server
-          const pair = context.createTransportPair();
-
-          // Try to connect client without starting server first
-          const result = yield* Effect.either(pair.createClient());
-
-          expect(result._tag).toBe('Left');
-          // The exact error type depends on the implementation
-        });
-
-        await Effect.runPromise(Effect.scoped(program));
-      });
-
       test('should handle malformed messages gracefully', async () => {
         const program = Effect.gen(function* () {
           // Create a transport pair

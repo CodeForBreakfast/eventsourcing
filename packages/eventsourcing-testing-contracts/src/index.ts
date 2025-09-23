@@ -59,13 +59,24 @@ export type {
   ClientTransport,
 } from './lib/transport/client-server-contract-tests';
 
+// Server Contract Types
+export type {
+  ServerTestContext,
+  ServerTestRunner,
+  ServerTestFactory,
+  ServerTransportTest,
+  ServerConnectionTest,
+  MockClientTransport,
+} from './lib/transport/server-transport-contract-tests';
+
 // ============================================================================
 // TEST RUNNERS
 // ============================================================================
 
 // Layer 1: Transport Contract Tests
-export { runTransportContractTests } from './lib/transport/transport-contract-tests';
+export { runClientTransportContractTests } from './lib/transport/client-transport-contract-tests';
 export { runClientServerContractTests } from './lib/transport/client-server-contract-tests';
+export { runServerTransportContractTests } from './lib/transport/server-transport-contract-tests';
 
 // Layer 2: Protocol Contract Tests
 export { runProtocolContractTests } from './lib/protocol/protocol-contract-tests';

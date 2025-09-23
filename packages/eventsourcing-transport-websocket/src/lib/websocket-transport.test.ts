@@ -11,7 +11,7 @@ import type {
   ConnectedTransportTestInterface,
   TransportMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import { runClientTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
   Client,
   makeMessageId,
@@ -282,7 +282,7 @@ const createWebSocketTestContext = (): Effect.Effect<TransportTestContext> =>
 // Run Contract Tests
 // =============================================================================
 
-runTransportContractTests('WebSocket', createWebSocketTestContext);
+runClientTransportContractTests('WebSocket', createWebSocketTestContext);
 
 // =============================================================================
 // WebSocket-Specific Tests
