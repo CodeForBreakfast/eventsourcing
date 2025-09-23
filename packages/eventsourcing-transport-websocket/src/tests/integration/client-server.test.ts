@@ -39,48 +39,39 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
       const host = 'localhost';
       const url = `ws://${host}:${port}`;
 
-      // Server effect - created once and reused
-      let serverEffect: Effect.Effect<ServerTransport, Error, Scope.Scope> | null = null;
-
       return {
-        getServer: () => {
-          // Only create the server once, reuse for subsequent calls
-          if (!serverEffect) {
-            serverEffect = pipe(
-              WebSocketAcceptor.make({ port, host }),
-              Effect.flatMap((acceptor) => acceptor.start()),
-              Effect.map((transport): ServerTransport => {
-                const server: ServerTransport = {
-                  connections: pipe(
-                    transport.connections,
-                    Stream.map((conn) => ({
-                      id: String(conn.clientId),
-                      transport: {
-                        connectionState: conn.transport.connectionState,
-                        publish: (msg: TransportMessage) =>
-                          conn.transport
-                            .publish(msg)
-                            .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                        subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                          conn.transport
-                            .subscribe(filter)
-                            .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-                      } satisfies ClientTransport,
-                    }))
-                  ),
-                  broadcast: (message: TransportMessage) =>
-                    transport
-                      .broadcast(message)
-                      .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
-                };
-                return server;
+        createServer: () =>
+          pipe(
+            WebSocketAcceptor.make({ port, host }),
+            Effect.flatMap((acceptor) => acceptor.start()),
+            Effect.map(
+              (transport): ServerTransport => ({
+                connections: pipe(
+                  transport.connections,
+                  Stream.map((conn) => ({
+                    id: String(conn.clientId),
+                    transport: {
+                      connectionState: conn.transport.connectionState,
+                      publish: (msg: TransportMessage) =>
+                        conn.transport
+                          .publish(msg)
+                          .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
+                      subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+                        conn.transport
+                          .subscribe(filter)
+                          .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
+                    } satisfies ClientTransport,
+                  }))
+                ),
+                broadcast: (message: TransportMessage) =>
+                  transport
+                    .broadcast(message)
+                    .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
               })
-            );
-          }
-          return serverEffect;
-        },
+            )
+          ),
 
-        getClient: () =>
+        createClient: () =>
           pipe(
             WebSocketConnector.connect(url),
             Effect.map(

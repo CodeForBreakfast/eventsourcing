@@ -24,8 +24,8 @@ import type {
  * Each call creates a new pair that can communicate with each other.
  */
 export interface TransportPair {
-  readonly getServer: () => Effect.Effect<ServerTransport, Error, Scope.Scope>;
-  readonly getClient: () => Effect.Effect<ClientTransport, Error, Scope.Scope>;
+  readonly createServer: () => Effect.Effect<ServerTransport, Error, Scope.Scope>;
+  readonly createClient: () => Effect.Effect<ClientTransport, Error, Scope.Scope>;
 }
 
 /**
@@ -116,13 +116,13 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          yield* pair.getServer();
+          yield* pair.createServer();
 
           // Wait a bit for server to start
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
 
           // Wait for connection to be established
           yield* context.waitForConnectionState(client, 'connected');
@@ -151,14 +151,14 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect multiple clients
-          const client1 = yield* pair.getClient();
-          const client2 = yield* pair.getClient();
-          const client3 = yield* pair.getClient();
+          const client1 = yield* pair.createClient();
+          const client2 = yield* pair.createClient();
+          const client3 = yield* pair.createClient();
 
           // Wait for all connections
           yield* Effect.all([
@@ -187,7 +187,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          yield* pair.getServer();
+          yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
@@ -195,7 +195,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const stateHistory = yield* Effect.sync(() => [] as ConnectionState[]);
 
           // Start the connection in a fiber so we can subscribe to states early
-          const connectionFiber = yield* Effect.fork(pair.getClient());
+          const connectionFiber = yield* Effect.fork(pair.createClient());
 
           // Wait a tiny bit for the connection to start initializing
           yield* Effect.sleep(5);
@@ -251,12 +251,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Wait for server to receive the connection
@@ -291,13 +291,13 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect multiple clients
-          const client1 = yield* pair.getClient();
-          const client2 = yield* pair.getClient();
+          const client1 = yield* pair.createClient();
+          const client2 = yield* pair.createClient();
 
           yield* Effect.all([
             context.waitForConnectionState(client1, 'connected'),
@@ -339,12 +339,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Get server connection
@@ -384,12 +384,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Subscribe with filter for only 'important' messages
@@ -424,7 +424,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
@@ -432,7 +432,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const clientScope = yield* Scope.make();
 
           // Connect client in nested scope
-          const client = yield* Scope.extend(pair.getClient(), clientScope);
+          const client = yield* Scope.extend(pair.createClient(), clientScope);
 
           yield* context.waitForConnectionState(client, 'connected');
 
@@ -477,12 +477,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const serverScope = yield* Scope.make();
 
           // Start server in nested scope
-          yield* Scope.extend(pair.getServer(), serverScope);
+          yield* Scope.extend(pair.createServer(), serverScope);
 
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Close server scope
@@ -513,12 +513,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          yield* pair.getServer();
+          yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect client and wait for connection
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Now subscribe to connection state AFTER connection is established
@@ -554,13 +554,13 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect multiple clients and collect their state refs
-          const client1 = yield* pair.getClient();
-          const client2 = yield* pair.getClient();
+          const client1 = yield* pair.createClient();
+          const client2 = yield* pair.createClient();
 
           yield* Effect.all([
             context.waitForConnectionState(client1, 'connected'),
@@ -587,7 +587,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Try to connect client without starting server first
-          const result = yield* Effect.either(pair.getClient());
+          const result = yield* Effect.either(pair.createClient());
 
           expect(result._tag).toBe('Left');
           // The exact error type depends on the implementation
@@ -602,12 +602,12 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           const pair = context.createTransportPair();
 
           // Start server
-          const server = yield* pair.getServer();
+          const server = yield* pair.createServer();
 
           yield* Effect.sleep(100);
 
           // Connect client
-          const client = yield* pair.getClient();
+          const client = yield* pair.createClient();
           yield* context.waitForConnectionState(client, 'connected');
 
           // Get server connection
