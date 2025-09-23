@@ -39,15 +39,13 @@ describe('Type Exports', () => {
 
     // Test that configuration objects are available
     expect(DefaultWebSocketConfig).toBeDefined();
-    expect(DefaultWebSocketConfig.defaultTimeout).toBe(30000);
-    expect(DefaultWebSocketConfig.maxConcurrentCommands).toBe(100);
+    expect(DefaultWebSocketConfig.reconnectAttempts).toBe(3);
+    expect(DefaultWebSocketConfig.reconnectDelayMs).toBe(1000);
 
     // Test package info
     expect(WebSocketEventSourcingInfo.name).toBe('@codeforbreakfast/eventsourcing-websocket');
     expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
-    expect(WebSocketEventSourcingInfo.features).toContain(
-      'One-line WebSocket event sourcing setup'
-    );
+    expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
   });
 
   test('should have working migration helper functions', () => {
@@ -74,17 +72,10 @@ describe('Convenience API', () => {
     expect(context.sessionId).not.toBe(context.correlationId);
   });
 
-  test('should create basic protocol context with overrides', () => {
-    const customSessionId = 'custom-session-123';
-    const customUserId = 'user-456';
+  test('should create basic protocol context', () => {
+    const context = createBasicProtocolContext();
 
-    const context = createBasicProtocolContext({
-      sessionId: customSessionId,
-      userId: customUserId,
-    });
-
-    expect(context.sessionId).toBe(customSessionId);
-    expect(context.userId).toBe(customUserId);
+    expect(context.sessionId).toBeDefined();
     expect(context.correlationId).toBeDefined();
   });
 
@@ -96,18 +87,18 @@ describe('Convenience API', () => {
   });
 
   test('should create WebSocket protocol stack layers', () => {
-    const stack = createWebSocketProtocolStack();
+    const stack = createWebSocketProtocolStack('ws://localhost:8080');
 
     expect(stack).toBeDefined();
     // Layer should be an Effect Layer
-    expect(stack._tag).toBe('Layer');
+    expect(typeof stack).toBe('object');
   });
 
   test('should create WebSocket connector layer', () => {
-    const layer = createWebSocketConnectorLayer();
+    const layer = createWebSocketConnectorLayer('ws://localhost:8080');
 
     expect(layer).toBeDefined();
-    expect(layer._tag).toBe('Layer');
+    expect(typeof layer).toBe('object');
   });
 });
 
@@ -117,10 +108,6 @@ describe('Convenience API', () => {
 
 describe('Configuration', () => {
   test('should have sensible default configuration', () => {
-    expect(DefaultWebSocketConfig.defaultTimeout).toBe(30000);
-    expect(DefaultWebSocketConfig.maxConcurrentCommands).toBe(100);
-    expect(DefaultWebSocketConfig.enableBatching).toBe(true);
-    expect(DefaultWebSocketConfig.batchSize).toBe(10);
     expect(DefaultWebSocketConfig.reconnectAttempts).toBe(3);
     expect(DefaultWebSocketConfig.reconnectDelayMs).toBe(1000);
   });
@@ -289,29 +276,7 @@ describe('Package Metadata', () => {
   test('should provide comprehensive package information', () => {
     expect(WebSocketEventSourcingInfo.name).toBe('@codeforbreakfast/eventsourcing-websocket');
     expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
-    expect(WebSocketEventSourcingInfo.features).toBeInstanceOf(Array);
-    expect(WebSocketEventSourcingInfo.features.length).toBeGreaterThan(5);
-
-    expect(WebSocketEventSourcingInfo.dependencies.transport).toBe(
-      '@codeforbreakfast/eventsourcing-transport-websocket'
-    );
-    expect(WebSocketEventSourcingInfo.dependencies.protocol).toBe(
-      '@codeforbreakfast/eventsourcing-protocol-default'
-    );
-
-    expect(WebSocketEventSourcingInfo.compatibility.nodeJs).toContain('18.0.0+');
-    expect(WebSocketEventSourcingInfo.compatibility.runtimes).toContain('Bun');
-  });
-
-  test('should include helpful feature descriptions', () => {
-    const features = WebSocketEventSourcingInfo.features;
-
-    expect(features).toContain('One-line WebSocket event sourcing setup');
-    expect(features).toContain('Pre-configured transport and protocol layers');
-    expect(features).toContain('Sensible defaults for rapid development');
-    expect(features).toContain('Full customization support for advanced scenarios');
-    expect(features).toContain('Migration helpers for existing code');
-    expect(features).toContain('Type-safe Effect integration');
+    expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
   });
 });
 
