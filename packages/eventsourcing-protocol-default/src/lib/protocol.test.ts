@@ -1725,8 +1725,95 @@ describe('Protocol Behavior Tests', () => {
       await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should handle rapid subscription/unsubscription cycles', async () => {
-      // TODO: Implement test for rapid subscription cycling
+    test('should handle rapid subscription/unsubscription cycles', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              () => ({
+                _tag: 'Success',
+                position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+              }),
+              (streamId) => {
+                // Return a simple event for any subscription
+                return [
+                  {
+                    position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                    type: 'CycleTestEvent',
+                    data: { streamId, cycle: true },
+                    timestamp: new Date('2024-01-01T10:00:00Z'),
+                  },
+                ];
+              }
+            ),
+            Effect.flatMap(() => {
+              // Perform rapid subscription/unsubscription cycles
+              const performCycle = (cycleNumber: number) =>
+                pipe(
+                  Effect.scoped(
+                    pipe(
+                      subscribe(`cycle-stream-${cycleNumber}`),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          // Take just 1 event then let scope end (unsubscribe)
+                          eventStream,
+                          Stream.take(1),
+                          Stream.runCollect,
+                          Effect.map((events) => ({
+                            cycleNumber,
+                            eventCount: Array.from(events).length,
+                            firstEvent: Array.from(events)[0],
+                          }))
+                        )
+                      )
+                    )
+                  )
+                );
+
+              // Perform 10 rapid cycles
+              const cycles = Array.from({ length: 10 }, (_, i) => performCycle(i));
+
+              return pipe(
+                Effect.all(cycles, { concurrency: 'unbounded' }),
+                Effect.tap((results) =>
+                  Effect.sync(() => {
+                    // Verify all cycles completed successfully
+                    expect(results).toHaveLength(10);
+
+                    // Each cycle should have received exactly 1 event
+                    results.forEach((result, index) => {
+                      expect(result.cycleNumber).toBe(index);
+                      expect(result.eventCount).toBe(1);
+                      expect(result.firstEvent?.type).toBe('CycleTestEvent');
+                      expect(result.firstEvent?.data).toEqual({
+                        streamId: `cycle-stream-${index}`,
+                        cycle: true,
+                      });
+                      expect(result.firstEvent?.position.eventNumber).toBe(1);
+                    });
+
+                    // Verify we got events for all the different streams
+                    const uniqueStreamIds = new Set(
+                      results.map((r) => r.firstEvent?.data.streamId)
+                    );
+                    expect(uniqueStreamIds.size).toBe(10);
+
+                    // Verify stream names are correct
+                    for (let i = 0; i < 10; i++) {
+                      expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
+                    }
+                  })
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
@@ -1751,6 +1838,73 @@ describe('Protocol Behavior Tests', () => {
               )
             ),
             Effect.provide(ProtocolLive(clientTransport))
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+    });
+
+    test('should handle multiple sequential commands after cleanup', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(server, (command) => ({
+              _tag: 'Success',
+              position: {
+                streamId: unsafeCreateStreamId(command.target),
+                eventNumber: Math.floor(Math.random() * 100) + 1,
+              },
+            })),
+            Effect.flatMap(() => {
+              // Create multiple commands to send sequentially
+              const commands: Command[] = Array.from({ length: 5 }, (_, i) => ({
+                id: crypto.randomUUID(),
+                target: `user-${i + 1}`,
+                name: 'SequentialCommand',
+                payload: { sequence: i + 1, data: `test-data-${i + 1}` },
+              }));
+
+              // Send commands sequentially (not concurrently) to test cleanup between commands
+              const sendSequentially = (
+                cmds: Command[]
+              ): Effect.Effect<CommandResult[], never, never> =>
+                cmds.reduce(
+                  (acc, cmd) =>
+                    pipe(
+                      acc,
+                      Effect.flatMap((results) =>
+                        pipe(
+                          sendCommand(cmd),
+                          Effect.map((result) => [...results, result])
+                        )
+                      )
+                    ),
+                  Effect.succeed([] as CommandResult[])
+                );
+
+              return pipe(
+                sendSequentially(commands),
+                Effect.tap((results) =>
+                  Effect.sync(() => {
+                    // All commands should have succeeded
+                    expect(results).toHaveLength(5);
+                    results.forEach((result, index) => {
+                      expect(result._tag).toBe('Success');
+                      if (result._tag === 'Success') {
+                        expect(result.position.streamId).toEqual(
+                          unsafeCreateStreamId(`user-${index + 1}`)
+                        );
+                        expect(result.position.eventNumber).toBeGreaterThan(0);
+                        expect(result.position.eventNumber).toBeLessThanOrEqual(100);
+                      }
+                    });
+                  })
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
           )
         )
       );
