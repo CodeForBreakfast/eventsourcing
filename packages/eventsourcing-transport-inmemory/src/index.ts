@@ -11,10 +11,23 @@
 
 import { Layer } from 'effect';
 import { Client } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import { InMemoryConnector, InMemoryAcceptor } from './lib/inmemory-transport';
+import {
+  InMemoryConnector,
+  InMemoryAcceptor,
+  InMemoryRegistry,
+  InMemoryRegistryLive,
+  InMemoryConnectorRaw,
+  resetInMemoryRegistry,
+} from './lib/inmemory-transport';
 
 // Main transport implementation and layer
 export { InMemoryConnector, InMemoryAcceptor };
+
+// Advanced exports for dependency injection
+export { InMemoryRegistry, InMemoryRegistryLive, InMemoryConnectorRaw };
+
+// Testing utilities
+export { resetInMemoryRegistry };
 
 // Layer for Effect.Tag usage
 export const InMemoryTransportLive = Layer.succeed(Client.Connector, InMemoryConnector);

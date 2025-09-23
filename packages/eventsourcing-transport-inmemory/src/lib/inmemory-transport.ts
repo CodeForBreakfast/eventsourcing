@@ -14,7 +14,19 @@
  * - Full contract compliance for testing and single-process applications
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe } from 'effect';
+import {
+  Effect,
+  Stream,
+  Scope,
+  Ref,
+  Queue,
+  PubSub,
+  HashMap,
+  HashSet,
+  Option,
+  pipe,
+  Layer,
+} from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -25,204 +37,528 @@ import {
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 // =============================================================================
-// In-Memory Server Registry
+// In-Memory Server Registry Service
 // =============================================================================
 
 interface InMemoryClientState {
-  clientToServerQueue: Queue.Queue<TransportMessage>; // Messages from this client to server
-  serverToClientQueue: Queue.Queue<TransportMessage>; // Messages from server to this client
-  connectionState: ConnectionState;
-  connectionStatePubSub: PubSub.PubSub<ConnectionState>;
-  subscribers: Set<Queue.Queue<TransportMessage>>; // Client-side subscribers
+  readonly clientToServerQueue: Queue.Queue<TransportMessage>;
+  readonly serverToClientQueue: Queue.Queue<TransportMessage>;
+  readonly connectionState: Ref.Ref<ConnectionState>;
+  readonly connectionStatePubSub: PubSub.PubSub<ConnectionState>;
+  readonly subscribers: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
+}
+
+interface InMemoryClientConnection {
+  readonly connection: Server.ClientConnection;
+  readonly clientState: InMemoryClientState;
 }
 
 interface InMemoryServerRegistryEntry {
-  connectionsQueue: Queue.Queue<Server.ClientConnection>;
-  clientConnections: Map<
-    string,
-    {
-      connection: Server.ClientConnection;
-      clientState: InMemoryClientState;
-    }
-  >;
+  readonly connectionsQueue: Queue.Queue<Server.ClientConnection>;
+  readonly clientConnections: Ref.Ref<HashMap.HashMap<string, InMemoryClientConnection>>;
 }
 
-const inMemoryRegistry = new Map<string, InMemoryServerRegistryEntry>();
+interface InMemoryRegistryService {
+  readonly findServer: (
+    serverId: string
+  ) => Effect.Effect<InMemoryServerRegistryEntry, ConnectionError>;
+  readonly registerServer: (
+    serverId: string,
+    serverEntry: InMemoryServerRegistryEntry
+  ) => Effect.Effect<void>;
+  readonly unregisterServer: (serverId: string) => Effect.Effect<void>;
+  readonly registerClientConnection: (
+    serverId: string,
+    clientId: string,
+    clientConnection: InMemoryClientConnection
+  ) => Effect.Effect<void, ConnectionError>;
+  readonly unregisterClientConnection: (serverId: string, clientId: string) => Effect.Effect<void>;
+}
+
+export class InMemoryRegistry extends Effect.Tag('InMemoryRegistry')<
+  InMemoryRegistry,
+  InMemoryRegistryService
+>() {}
+
+const makeInMemoryRegistryService = (): Effect.Effect<InMemoryRegistryService> =>
+  pipe(
+    Ref.make(HashMap.empty<string, InMemoryServerRegistryEntry>()),
+    Effect.map((serversRef) => ({
+      findServer: (serverId: string) =>
+        pipe(
+          Ref.get(serversRef),
+          Effect.flatMap((servers) =>
+            pipe(
+              HashMap.get(servers, serverId),
+              Option.match({
+                onNone: () =>
+                  Effect.fail(
+                    new ConnectionError({
+                      message: `Server not found: ${serverId}`,
+                      url: `inmemory://${serverId}`,
+                    })
+                  ),
+                onSome: (server) => Effect.succeed(server),
+              })
+            )
+          )
+        ),
+
+      registerServer: (serverId: string, serverEntry: InMemoryServerRegistryEntry) =>
+        pipe(Ref.update(serversRef, HashMap.set(serverId, serverEntry))),
+
+      unregisterServer: (serverId: string) =>
+        pipe(
+          Ref.get(serversRef),
+          Effect.flatMap((servers) =>
+            pipe(
+              HashMap.get(servers, serverId),
+              Option.match({
+                onNone: () => Effect.void,
+                onSome: (serverEntry) =>
+                  pipe(
+                    disconnectAllClients(serverEntry),
+                    Effect.zipRight(Ref.update(serversRef, HashMap.remove(serverId)))
+                  ),
+              })
+            )
+          )
+        ),
+
+      registerClientConnection: (
+        serverId: string,
+        clientId: string,
+        clientConnection: InMemoryClientConnection
+      ) =>
+        pipe(
+          Ref.get(serversRef),
+          Effect.flatMap((servers) =>
+            pipe(
+              HashMap.get(servers, serverId),
+              Option.match({
+                onNone: () =>
+                  Effect.fail(
+                    new ConnectionError({
+                      message: `Server not found: ${serverId}`,
+                      url: `inmemory://${serverId}`,
+                    })
+                  ),
+                onSome: (server) =>
+                  pipe(
+                    Ref.update(server.clientConnections, HashMap.set(clientId, clientConnection))
+                  ),
+              })
+            )
+          )
+        ),
+
+      unregisterClientConnection: (serverId: string, clientId: string) =>
+        pipe(
+          Ref.get(serversRef),
+          Effect.flatMap((servers) =>
+            pipe(
+              HashMap.get(servers, serverId),
+              Option.match({
+                onNone: () => Effect.void,
+                onSome: (server) =>
+                  pipe(
+                    Ref.get(server.clientConnections),
+                    Effect.flatMap((connections) =>
+                      pipe(
+                        HashMap.get(connections, clientId),
+                        Option.match({
+                          onNone: () => Effect.void,
+                          onSome: ({ clientState }) =>
+                            pipe(
+                              disconnectClient(clientState),
+                              Effect.zipRight(
+                                Ref.update(server.clientConnections, HashMap.remove(clientId))
+                              )
+                            ),
+                        })
+                      )
+                    )
+                  ),
+              })
+            )
+          )
+        ),
+    }))
+  );
+
+// Create a true singleton registry - this is the only way to ensure
+// server and client share the same registry instance in memory
+let _sharedRegistryInstance: InMemoryRegistryService | null = null;
+
+const getSharedRegistryInstance = (): Effect.Effect<InMemoryRegistryService> =>
+  Effect.sync(() => {
+    if (_sharedRegistryInstance === null) {
+      _sharedRegistryInstance = Effect.runSync(makeInMemoryRegistryService());
+    }
+    return _sharedRegistryInstance;
+  });
+
+export const InMemoryRegistryLive = Layer.effect(InMemoryRegistry, getSharedRegistryInstance());
+
+// For testing purposes - allow resetting the registry
+export const resetInMemoryRegistry = (): Effect.Effect<void> =>
+  Effect.sync(() => {
+    _sharedRegistryInstance = null;
+  });
+
+// =============================================================================
+// Client State Helpers
+// =============================================================================
+
+const disconnectClient = (clientState: InMemoryClientState): Effect.Effect<void> =>
+  pipe(
+    Ref.set(clientState.connectionState, 'disconnected'),
+    Effect.zipRight(PubSub.publish(clientState.connectionStatePubSub, 'disconnected'))
+  );
+
+const disconnectAllClients = (serverEntry: InMemoryServerRegistryEntry): Effect.Effect<void> =>
+  pipe(
+    Ref.get(serverEntry.clientConnections),
+    Effect.flatMap((connections) =>
+      pipe(
+        HashMap.values(connections),
+        Effect.forEach(({ clientState }) => disconnectClient(clientState), { discard: true })
+      )
+    )
+  );
 
 // =============================================================================
 // Client Implementation
 // =============================================================================
 
+const createConnectionStateStream = (
+  clientState: InMemoryClientState
+): Stream.Stream<ConnectionState> =>
+  Stream.unwrapScoped(
+    pipe(
+      PubSub.subscribe(clientState.connectionStatePubSub),
+      Effect.flatMap((queue) =>
+        pipe(
+          Ref.get(clientState.connectionState),
+          Effect.map((currentState) =>
+            Stream.concat(Stream.succeed(currentState), Stream.fromQueue(queue))
+          )
+        )
+      )
+    )
+  );
+
+const publishWithConnectionCheck =
+  (
+    clientState: InMemoryClientState,
+    targetQueue: Queue.Queue<TransportMessage>,
+    errorMessage: string
+  ) =>
+  (message: TransportMessage): Effect.Effect<void, TransportError> =>
+    pipe(
+      Ref.get(clientState.connectionState),
+      Effect.flatMap((state) =>
+        state !== 'connected'
+          ? Effect.fail(new TransportError({ message: errorMessage }))
+          : Queue.offer(targetQueue, message)
+      )
+    );
+
 const createServerSideClientTransport = (
   clientToServerQueue: Queue.Queue<TransportMessage>,
-  serverToClientQueue: Queue.Queue<TransportMessage>
+  serverToClientQueue: Queue.Queue<TransportMessage>,
+  clientState: InMemoryClientState
 ): Client.Transport<TransportMessage> => ({
-  // Server-side connection is always considered connected
-  connectionState: Stream.succeed('connected' as ConnectionState),
-
-  // Publishing from server-side sends to the client
-  publish: (message: TransportMessage) => Queue.offer(serverToClientQueue, message),
-
-  // Subscribing from server-side listens to messages from the client
+  connectionState: createConnectionStateStream(clientState),
+  publish: publishWithConnectionCheck(clientState, serverToClientQueue, 'Client not connected'),
   subscribe: (filter?: (message: TransportMessage) => boolean) =>
-    pipe(
-      Queue.unbounded<TransportMessage>(),
-      Effect.tap((subscriberQueue) => {
-        // Start a background task to forward messages from clientToServerQueue to this subscriber
-        const forwardMessages = Effect.gen(function* () {
-          while (true) {
-            const message = yield* Queue.take(clientToServerQueue);
-            yield* Queue.offer(subscriberQueue, message);
-          }
-        });
-        Effect.runFork(forwardMessages);
-      }),
-      Effect.map((queue) => {
-        const baseStream = Stream.fromQueue(queue);
-        return filter ? Stream.filter(baseStream, filter) : baseStream;
-      })
-    ),
+    createSimpleSubscription(clientToServerQueue, filter),
 });
+
+const createSimpleSubscription = (
+  sourceQueue: Queue.Queue<TransportMessage>,
+  filter?: (message: TransportMessage) => boolean
+): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
+  pipe(
+    Queue.unbounded<TransportMessage>(),
+    Effect.tap((subscriberQueue) =>
+      pipe(
+        Stream.fromQueue(sourceQueue),
+        Stream.runForEach((message) => Queue.offer(subscriberQueue, message)),
+        Effect.forkDaemon
+      )
+    ),
+    Effect.map((queue) => {
+      const baseStream = Stream.fromQueue(queue);
+      return filter ? Stream.filter(baseStream, filter) : baseStream;
+    })
+  );
+
+const addSubscriber = (
+  clientState: InMemoryClientState,
+  subscriberQueue: Queue.Queue<TransportMessage>
+): Effect.Effect<void> => pipe(Ref.update(clientState.subscribers, HashSet.add(subscriberQueue)));
+
+// Keeping this function for potential future use with proper scoped cleanup
+// const removeSubscriber = (
+//   clientState: InMemoryClientState,
+//   subscriberQueue: Queue.Queue<TransportMessage>
+// ): Effect.Effect<void> =>
+//   pipe(
+//     Ref.update(clientState.subscribers, HashSet.remove(subscriberQueue))
+//   );
+
+const forwardToSubscribers = (
+  clientState: InMemoryClientState,
+  message: TransportMessage,
+  excludeQueue?: Queue.Queue<TransportMessage>
+): Effect.Effect<void> =>
+  pipe(
+    Ref.get(clientState.subscribers),
+    Effect.flatMap((subscribers) =>
+      pipe(
+        HashSet.values(subscribers),
+        Effect.forEach(
+          (queue) => {
+            if (excludeQueue && queue === excludeQueue) {
+              return Effect.void;
+            }
+            return Queue.offer(queue, message);
+          },
+          { discard: true }
+        )
+      )
+    )
+  );
+
+const setupSubscriberForwarding = (
+  clientState: InMemoryClientState,
+  subscriberQueue: Queue.Queue<TransportMessage>
+): Effect.Effect<void> =>
+  pipe(
+    addSubscriber(clientState, subscriberQueue),
+    Effect.zipRight(
+      pipe(
+        Stream.fromQueue(clientState.serverToClientQueue),
+        Stream.runForEach((message) =>
+          pipe(
+            Queue.offer(subscriberQueue, message),
+            Effect.zipRight(forwardToSubscribers(clientState, message, subscriberQueue))
+          )
+        ),
+        Effect.forkDaemon
+      )
+    )
+  );
 
 const createInMemoryClientTransport = (
   clientState: InMemoryClientState
 ): Client.Transport<TransportMessage> => ({
-  connectionState: Stream.unwrapScoped(
-    pipe(
-      Effect.succeed(clientState),
-      Effect.flatMap((state) =>
-        pipe(
-          PubSub.subscribe(state.connectionStatePubSub),
-          Effect.map((queue) =>
-            Stream.concat(Stream.succeed(state.connectionState), Stream.fromQueue(queue))
-          )
-        )
-      ),
-      Effect.orDie
-    )
+  connectionState: createConnectionStateStream(clientState),
+  publish: publishWithConnectionCheck(
+    clientState,
+    clientState.clientToServerQueue,
+    'Not connected'
   ),
-
-  publish: (message: TransportMessage) => {
-    if (clientState.connectionState !== 'connected') {
-      return Effect.fail(new TransportError({ message: 'Not connected' }));
-    }
-    return Queue.offer(clientState.clientToServerQueue, message);
-  },
-
-  subscribe: (filter?: (message: TransportMessage) => boolean) =>
+  subscribe: (
+    filter?: (message: TransportMessage) => boolean
+  ): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
-      Effect.tap((subscriberQueue) => {
-        clientState.subscribers.add(subscriberQueue);
-
-        // Start a background task to forward messages from serverToClientQueue to this subscriber
-        const forwardMessages = Effect.gen(function* () {
-          while (true) {
-            const message = yield* Queue.take(clientState.serverToClientQueue);
-            yield* Queue.offer(subscriberQueue, message);
-            // Also forward to other subscribers of this client
-            yield* Effect.forEach(
-              Array.from(clientState.subscribers).filter((q) => q !== subscriberQueue),
-              (queue) => Queue.offer(queue, message),
-              { discard: true }
-            );
-          }
-        });
-        Effect.runFork(forwardMessages);
-      }),
+      Effect.tap((subscriberQueue) => setupSubscriberForwarding(clientState, subscriberQueue)),
       Effect.map((queue) => {
         const baseStream = Stream.fromQueue(queue);
-        return filter ? Stream.filter(baseStream, filter) : baseStream;
+        const filteredStream = filter ? Stream.filter(baseStream, filter) : baseStream;
+        // The stream will be automatically cleaned up when it's no longer referenced
+        return filteredStream;
       })
     ),
 });
 
-const inMemoryConnect = (
-  url: string
-): Effect.Effect<Client.Transport<TransportMessage>, ConnectionError, Scope.Scope> => {
+const createClientState = (
+  clientToServerQueue: Queue.Queue<TransportMessage>,
+  serverToClientQueue: Queue.Queue<TransportMessage>,
+  connectionStatePubSub: PubSub.PubSub<ConnectionState>
+): Effect.Effect<InMemoryClientState> =>
+  pipe(
+    Effect.all([
+      Ref.make<ConnectionState>('connected'),
+      Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
+    ]),
+    Effect.map(([connectionState, subscribers]) => ({
+      clientToServerQueue,
+      serverToClientQueue,
+      connectionState,
+      connectionStatePubSub,
+      subscribers,
+    }))
+  );
+
+const generateClientId = (): string => `client-${Date.now()}-${Math.random()}`;
+
+const parseInMemoryUrl = (url: string): Effect.Effect<string, ConnectionError> => {
   const match = url.match(/^inmemory:\/\/(.+)$/);
-  if (!match) {
-    return Effect.fail(new ConnectionError({ message: 'Invalid URL', url }));
-  }
+  return match
+    ? Effect.succeed(match[1]!)
+    : Effect.fail(new ConnectionError({ message: 'Invalid URL', url }));
+};
 
-  const serverId = match[1]!;
+const createConnectionQueues = (): Effect.Effect<{
+  connectionStatePubSub: PubSub.PubSub<ConnectionState>;
+  clientToServerQueue: Queue.Queue<TransportMessage>;
+  serverToClientQueue: Queue.Queue<TransportMessage>;
+}> =>
+  pipe(
+    Effect.all([
+      PubSub.unbounded<ConnectionState>(),
+      Queue.unbounded<TransportMessage>(),
+      Queue.unbounded<TransportMessage>(),
+    ]),
+    Effect.map(([connectionStatePubSub, clientToServerQueue, serverToClientQueue]) => ({
+      connectionStatePubSub,
+      clientToServerQueue,
+      serverToClientQueue,
+    }))
+  );
 
-  return Effect.acquireRelease(
-    pipe(
-      Effect.all([
-        PubSub.unbounded<ConnectionState>(),
-        Queue.unbounded<TransportMessage>(), // clientToServerQueue
-        Queue.unbounded<TransportMessage>(), // serverToClientQueue
-      ]),
-      Effect.flatMap(([connectionStatePubSub, clientToServerQueue, serverToClientQueue]) =>
+const createClientConnection = (
+  clientId: string,
+  clientToServerQueue: Queue.Queue<TransportMessage>,
+  serverToClientQueue: Queue.Queue<TransportMessage>,
+  clientState: InMemoryClientState
+): Server.ClientConnection => ({
+  clientId: Server.makeClientId(clientId),
+  transport: createServerSideClientTransport(clientToServerQueue, serverToClientQueue, clientState),
+  connectedAt: new Date(),
+  metadata: {},
+});
+
+const setupClientConnection =
+  (
+    serverId: string,
+    server: InMemoryServerRegistryEntry,
+    clientState: InMemoryClientState,
+    clientConnection: Server.ClientConnection,
+    connectionStatePubSub: PubSub.PubSub<ConnectionState>
+  ) =>
+  (
+    clientId: string
+  ): Effect.Effect<
+    {
+      transport: Client.Transport<TransportMessage>;
+      cleanup: () => Effect.Effect<void>;
+    },
+    ConnectionError,
+    InMemoryRegistry
+  > => {
+    const inMemoryClientConnection: InMemoryClientConnection = {
+      connection: clientConnection,
+      clientState,
+    };
+
+    return pipe(
+      InMemoryRegistry,
+      Effect.flatMap((registry) =>
         pipe(
-          Effect.sync(() => {
-            const server = inMemoryRegistry.get(serverId);
-            if (!server) {
-              return null;
-            }
-            return server;
-          }),
-          Effect.flatMap((server) => {
-            if (!server) {
-              return Effect.fail(
-                new ConnectionError({ message: `Server not found: ${serverId}`, url })
-              );
-            }
-            return Effect.succeed(server);
-          }),
-          Effect.flatMap((server) => {
-            const clientState: InMemoryClientState = {
-              clientToServerQueue,
-              serverToClientQueue,
-              connectionState: 'connected',
-              connectionStatePubSub,
-              subscribers: new Set(),
-            };
-
-            return pipe(
-              Effect.sync(() => {
-                const clientId = `client-${Date.now()}-${Math.random()}`;
-
-                // Create server-side view of the client connection
-                const serverSideTransport = createServerSideClientTransport(
-                  clientToServerQueue,
-                  serverToClientQueue
-                );
-
-                const clientConnection: Server.ClientConnection = {
-                  clientId: Server.makeClientId(clientId),
-                  transport: serverSideTransport,
-                  connectedAt: new Date(),
-                  metadata: {},
-                };
-
-                // Register the client connection
-                server.clientConnections.set(clientId, {
-                  connection: clientConnection,
-                  clientState,
-                });
-
-                // Notify about new connection
-                Effect.runFork(Queue.offer(server.connectionsQueue, clientConnection));
-
-                return createInMemoryClientTransport(clientState);
-              }),
-              Effect.flatMap((transport) =>
-                pipe(PubSub.publish(connectionStatePubSub, 'connected'), Effect.as(transport))
-              )
-            );
+          registry.registerClientConnection(serverId, clientId, inMemoryClientConnection),
+          Effect.zipRight(Queue.offer(server.connectionsQueue, clientConnection)),
+          Effect.zipRight(PubSub.publish(connectionStatePubSub, 'connected')),
+          Effect.as({
+            transport: createInMemoryClientTransport(clientState),
+            cleanup: () => registry.unregisterClientConnection(serverId, clientId),
           })
         )
       )
-    ),
-    () => Effect.void
+    );
+  };
+
+const inMemoryConnectRaw = (
+  url: string
+): Effect.Effect<
+  Client.Transport<TransportMessage>,
+  ConnectionError,
+  Scope.Scope | InMemoryRegistry
+> =>
+  pipe(
+    parseInMemoryUrl(url),
+    Effect.flatMap((serverId) =>
+      Effect.acquireRelease(
+        pipe(
+          InMemoryRegistry,
+          Effect.flatMap((registry) => registry.findServer(serverId)),
+          Effect.flatMap((server) =>
+            pipe(
+              createConnectionQueues(),
+              Effect.flatMap(
+                ({ connectionStatePubSub, clientToServerQueue, serverToClientQueue }) =>
+                  pipe(
+                    createClientState(
+                      clientToServerQueue,
+                      serverToClientQueue,
+                      connectionStatePubSub
+                    ),
+                    Effect.flatMap((clientState) => {
+                      const clientId = generateClientId();
+                      const clientConnection = createClientConnection(
+                        clientId,
+                        clientToServerQueue,
+                        serverToClientQueue,
+                        clientState
+                      );
+
+                      return setupClientConnection(
+                        serverId,
+                        server,
+                        clientState,
+                        clientConnection,
+                        connectionStatePubSub
+                      )(clientId);
+                    })
+                  )
+              )
+            )
+          )
+        ),
+        ({ cleanup }) => cleanup()
+      ).pipe(Effect.map(({ transport }) => transport))
+    )
   );
-};
+
+const inMemoryConnect = (
+  url: string
+): Effect.Effect<Client.Transport<TransportMessage>, ConnectionError, Scope.Scope> =>
+  pipe(inMemoryConnectRaw(url), Effect.provide(InMemoryRegistryLive));
 
 // =============================================================================
 // Server Implementation
 // =============================================================================
+
+const createServerRegistryEntry = (
+  connectionsQueue: Queue.Queue<Server.ClientConnection>
+): Effect.Effect<InMemoryServerRegistryEntry> =>
+  pipe(
+    Ref.make(HashMap.empty<string, InMemoryClientConnection>()),
+    Effect.map((clientConnections) => ({
+      connectionsQueue,
+      clientConnections,
+    }))
+  );
+
+const broadcastToClients = (
+  serverEntry: InMemoryServerRegistryEntry,
+  message: TransportMessage
+): Effect.Effect<void> =>
+  pipe(
+    Ref.get(serverEntry.clientConnections),
+    Effect.flatMap((connections) =>
+      pipe(
+        HashMap.values(connections),
+        Effect.forEach(({ clientState }) => Queue.offer(clientState.serverToClientQueue, message), {
+          discard: true,
+        })
+      )
+    )
+  );
 
 const createInMemoryServerTransport = (serverId: string) =>
   Effect.acquireRelease(
@@ -230,46 +566,33 @@ const createInMemoryServerTransport = (serverId: string) =>
       Queue.unbounded<Server.ClientConnection>(),
       Effect.flatMap((connectionsQueue) =>
         pipe(
-          Effect.sync(() => {
-            const clientConnections = new Map<
-              string,
-              {
-                connection: Server.ClientConnection;
-                clientState: InMemoryClientState;
-              }
-            >();
-
-            const serverRegistry: InMemoryServerRegistryEntry = {
-              connectionsQueue,
-              clientConnections,
-            };
-
-            inMemoryRegistry.set(serverId, serverRegistry);
-
-            return { connectionsQueue, clientConnections };
-          }),
-          Effect.map(({ connectionsQueue, clientConnections }) => ({
-            connections: Stream.fromQueue(connectionsQueue),
-            broadcast: (message: TransportMessage) =>
-              Effect.forEach(
-                Array.from(clientConnections.values()),
-                ({ clientState }) => Queue.offer(clientState.serverToClientQueue, message),
-                { discard: true }
-              ),
-          }))
+          createServerRegistryEntry(connectionsQueue),
+          Effect.flatMap((serverEntry) =>
+            pipe(
+              InMemoryRegistry,
+              Effect.flatMap((registry) => registry.registerServer(serverId, serverEntry)),
+              Effect.as({
+                connections: Stream.fromQueue(connectionsQueue),
+                broadcast: (message: TransportMessage) => broadcastToClients(serverEntry, message),
+                cleanup: () =>
+                  pipe(
+                    InMemoryRegistry,
+                    Effect.flatMap((registry) => registry.unregisterServer(serverId))
+                  ),
+              })
+            )
+          )
         )
       )
     ),
-    () =>
-      Effect.sync(() => {
-        inMemoryRegistry.delete(serverId);
-      })
-  );
+    ({ cleanup }) => cleanup()
+  ).pipe(Effect.map(({ connections, broadcast }) => ({ connections, broadcast })));
 
 // =============================================================================
 // Exports
 // =============================================================================
 
+// Main exports with automatic registry layer provision
 export const InMemoryConnector: Client.ConnectorInterface<TransportMessage> = {
   connect: inMemoryConnect,
 };
@@ -277,8 +600,15 @@ export const InMemoryConnector: Client.ConnectorInterface<TransportMessage> = {
 export const InMemoryAcceptor = {
   make: (config: { serverId: string }) =>
     Effect.succeed({
-      start: () => createInMemoryServerTransport(config.serverId),
+      start: () =>
+        pipe(createInMemoryServerTransport(config.serverId), Effect.provide(InMemoryRegistryLive)),
     }),
+};
+
+// For advanced users who want to provide their own registry layer
+// Note: This requires providing InMemoryRegistryLive as a layer
+export const InMemoryConnectorRaw = {
+  connect: inMemoryConnectRaw,
 };
 
 // Maintain backward compatibility exports
