@@ -1,41 +1,30 @@
 /**
  * @codeforbreakfast/eventsourcing-transport-inmemory
  *
- * In-memory transport implementation for event sourcing.
+ * Pure functional in-memory transport implementation for event sourcing.
  * High-performance message transport using in-memory queues and channels.
  *
  * This package provides a fast in-memory transport that implements
- * the transport contracts without any external dependencies. Perfect
- * for testing and single-process applications.
+ * the transport contracts without any external dependencies. Each server
+ * is completely isolated with zero global state, perfect for testing and applications.
  */
 
-import { Layer } from 'effect';
-import { Client } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import {
-  InMemoryConnector,
   InMemoryAcceptor,
-  InMemoryRegistry,
-  InMemoryRegistryLive,
-  InMemoryConnectorRaw,
-  resetInMemoryRegistry,
+  type InMemoryServer,
+  type InMemoryConnector,
 } from './lib/inmemory-transport';
 
-// Main transport implementation and layer
-export { InMemoryConnector, InMemoryAcceptor };
+// Main transport implementation
+export { InMemoryAcceptor };
 
-// Advanced exports for dependency injection
-export { InMemoryRegistry, InMemoryRegistryLive, InMemoryConnectorRaw };
+// New pure functional types
+export type { InMemoryServer };
+export type { InMemoryConnector };
 
-// Testing utilities
-export { resetInMemoryRegistry };
-
-// Layer for Effect.Tag usage
-export const InMemoryTransportLive = Layer.succeed(Client.Connector, InMemoryConnector);
-
-// Configuration type
-export interface InMemoryServerConfig {
-  readonly serverId: string;
-}
+// Legacy export (deprecated - use InMemoryAcceptor.make().start().connector instead)
+// Note: We had to remove this due to TypeScript naming conflicts
+// Use InMemoryAcceptor.make().start().connector instead
 
 // Re-export transport contracts for convenience
 export type {

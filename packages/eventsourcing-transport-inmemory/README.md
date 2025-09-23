@@ -1,117 +1,185 @@
 # @codeforbreakfast/eventsourcing-transport-inmemory
 
-A high-performance in-memory transport implementation for event sourcing applications.
+Pure functional in-memory transport implementation for event sourcing with **zero global state**.
 
-## Features
+## Key Features
 
-- **Direct in-memory message passing** for maximum performance
-- **Multiple client support** - many clients can connect to the same server
-- **Proper connection state management** using Effect's PubSub
-- **Bidirectional message flow** with optional filtering
-- **Resource-safe cleanup** with Effect.acquireRelease
-- **Full contract compliance** for testing and single-process applications
+- **Pure Functional**: No global state, no singletons, no classes
+- **Multiple Isolated Servers**: Each server is completely independent
+- **Direct Connection**: Clients connect directly to specific server instances
+- **Type Safe**: Full TypeScript support with Effect types
+- **High Performance**: Direct in-memory message passing
 
-## Usage
+## Basic Usage
 
-### Basic Client-Server Connection
+### Creating a Server
 
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
-import {
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+
+const program = Effect.gen(function* () {
+  // Create and start a server
+  const acceptor = yield* InMemoryAcceptor.make();
+  const server = yield* acceptor.start();
+
+  // Server provides:
+  // - connections: Stream of client connections
+  // - broadcast: Function to send messages to all clients
+  // - connector: Function for clients to connect to this server
+
+  return server;
+});
+```
+
+### Connecting Clients
+
+```typescript
+const program = Effect.gen(function* () {
+  const acceptor = yield* InMemoryAcceptor.make();
+  const server = yield* acceptor.start();
+
+  // Connect clients using the server's connector
+  const client1 = yield* server.connector('inmemory://client1');
+  const client2 = yield* server.connector('inmemory://client2');
+
+  // Both clients are now connected to the same server
+  return { server, client1, client2 };
+});
+```
+
+### Multiple Isolated Servers
+
+```typescript
+const program = Effect.gen(function* () {
+  // Create two completely isolated servers
+  const [server1, server2] = yield* Effect.all([
+    pipe(
+      InMemoryAcceptor.make(),
+      Effect.flatMap((acceptor) => acceptor.start())
+    ),
+    pipe(
+      InMemoryAcceptor.make(),
+      Effect.flatMap((acceptor) => acceptor.start())
+    ),
+  ]);
+
+  // Connect clients to different servers
+  const client1 = yield* server1.connector('inmemory://test');
+  const client2 = yield* server2.connector('inmemory://test');
+
+  // client1 and client2 are on completely different servers
+  return { server1, server2, client1, client2 };
+});
+```
+
+### Messaging Example
+
+```typescript
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+
+const program = Effect.gen(function* () {
+  const acceptor = yield* InMemoryAcceptor.make();
+  const server = yield* acceptor.start();
+  const client = yield* server.connector('inmemory://test');
+
+  // Subscribe to messages
+  const messageStream = yield* client.subscribe();
+
+  // Broadcast a message
+  const message = makeTransportMessage('msg-1', 'test-event', { data: 'hello' });
+  yield* server.broadcast(message);
+
+  // Receive the message
+  const receivedMessage = yield* pipe(messageStream, Stream.take(1), Stream.runHead);
+
+  console.log('Received:', receivedMessage);
+});
+
+Effect.runPromise(Effect.scoped(program));
+```
+
+## Why This Design?
+
+### Problems with Global State
+
+The old design used a global registry singleton that caused:
+
+- **Test Isolation Issues**: Tests couldn't run in parallel
+- **Memory Leaks**: Cleanup was unreliable
+- **Coupling**: All servers shared the same global state
+- **Functional Impurity**: Global mutable state breaks referential transparency
+
+### Pure Functional Solution
+
+The new design:
+
+- **No Global State**: Each server is completely isolated
+- **Direct Connection**: Clients connect to specific server instances
+- **Resource Safety**: Proper cleanup through Effect's resource management
+- **Composable**: Multiple servers can coexist without interference
+- **Testable**: Perfect isolation between test cases
+
+## Type Safety
+
+```typescript
+import type {
+  InMemoryServer,
   InMemoryConnector,
-  InMemoryAcceptor,
 } from '@codeforbreakfast/eventsourcing-transport-inmemory';
 
-// Start a server
-const serverEffect = Effect.scoped(
-  pipe(
-    InMemoryAcceptor.make({ serverId: 'my-server' }),
-    Effect.flatMap((acceptor) => acceptor.start()),
-    Effect.flatMap((serverTransport) => {
-      // Handle incoming client connections
-      return pipe(
-        serverTransport.connections,
-        Stream.runForEach((connection) => {
-          console.log(`Client connected: ${connection.clientId}`);
-          return Effect.void;
-        })
-      );
-    })
-  )
-);
+// Server type
+const server: InMemoryServer = {
+  connections: Stream<Server.ClientConnection>,
+  broadcast: (message: TransportMessage) => Effect<void>,
+  connector: InMemoryConnector,
+};
 
-// Connect a client
-const clientEffect = Effect.scoped(
-  pipe(
-    InMemoryConnector.connect('inmemory://my-server'),
-    Effect.flatMap((clientTransport) => {
-      // Send a message to the server
-      return clientTransport.publish({
-        id: 'msg-1',
-        type: 'hello',
-        payload: { message: 'Hello server!' },
-        metadata: {},
-      });
-    })
-  )
-);
-
-// Run both effects
-await Effect.runPromise(Effect.all([serverEffect, clientEffect], { concurrency: 2 }));
+// Connector type
+const connector: InMemoryConnector = (url: string) =>
+  Effect<Client.Transport<TransportMessage>, ConnectionError, Scope>;
 ```
 
-### Using with Effect.Tag
+## Migration from Legacy API
+
+The old global `InMemoryConnector` has been removed due to TypeScript naming conflicts. Update your code:
 
 ```typescript
-import { Layer } from 'effect';
-import { Client } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import { InMemoryTransportLive } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+// Old (broken)
+import { InMemoryConnector } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+const client = await InMemoryConnector.connect('inmemory://');
 
-const program = pipe(
-  Client.Connector,
-  Effect.flatMap((connector) => connector.connect('inmemory://test-server')),
-  Effect.provide(InMemoryTransportLive)
-);
+// New (pure functional)
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+const acceptor = await InMemoryAcceptor.make();
+const server = await acceptor.start();
+const client = await server.connector('inmemory://');
 ```
-
-## Configuration
-
-### Server Configuration
-
-```typescript
-interface InMemoryServerConfig {
-  readonly serverId: string;
-}
-```
-
-### URL Format
-
-Clients connect using URLs in the format: `inmemory://<server-id>`
-
-## Architecture
-
-The transport uses a simple registry pattern where:
-
-1. **Server Registration**: When a server starts, it registers itself in a global registry with its server ID
-2. **Client Connection**: Clients connect by looking up the server in the registry
-3. **Message Passing**: Direct queue-to-queue communication for high performance
-4. **Connection Tracking**: Server tracks all client connections and can broadcast to all clients
-
-## Performance
-
-This transport is optimized for single-process applications where maximum performance is needed:
-
-- **Zero serialization overhead** - messages are passed directly as objects
-- **Direct queue operations** - no network or IPC overhead
-- **Minimal state management** - uses Effect's efficient Ref and Queue primitives
 
 ## Testing
 
-The transport includes comprehensive tests and is fully compatible with the transport contract tests:
+Perfect for contract testing with complete isolation:
 
-```bash
-bun test
+```typescript
+describe('My Tests', () => {
+  test('isolated server per test', async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        Effect.gen(function* () {
+          // Each test gets its own isolated server
+          const acceptor = yield* InMemoryAcceptor.make();
+          const server = yield* acceptor.start();
+          const client = yield* server.connector('inmemory://test');
+
+          // Test your logic here...
+        })
+      )
+    );
+  });
+});
 ```
+
+This is how proper functional programming should work - no global state, no surprises, just pure composable functions.
 
 ## License
 

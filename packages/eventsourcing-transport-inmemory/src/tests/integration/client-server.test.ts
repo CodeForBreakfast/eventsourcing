@@ -24,7 +24,7 @@ import {
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the in-memory implementations
-import { InMemoryConnector, InMemoryAcceptor } from '../../lib/inmemory-transport';
+import { InMemoryAcceptor } from '../../lib/inmemory-transport';
 
 // =============================================================================
 // In-Memory Test Context Implementation
@@ -33,15 +33,22 @@ import { InMemoryConnector, InMemoryAcceptor } from '../../lib/inmemory-transpor
 const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
   Effect.succeed({
     createTransportPair: (): TransportPair => {
-      // Generate a unique server ID for this pair to avoid conflicts
-      const serverId = `test-server-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const url = `inmemory://${serverId}`;
+      // URL is now ignored since we connect directly to the server instance
+      const url = `inmemory://test`;
+
+      // Shared server instance for this transport pair
+      let serverInstance: any = null;
 
       return {
         createServer: () =>
           pipe(
-            InMemoryAcceptor.make({ serverId }),
+            InMemoryAcceptor.make(),
             Effect.flatMap((acceptor) => acceptor.start()),
+            Effect.tap((server) =>
+              Effect.sync(() => {
+                serverInstance = server;
+              })
+            ),
             Effect.map(
               (transport): ServerTransport => ({
                 connections: pipe(
@@ -71,7 +78,13 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
         createClient: () =>
           pipe(
-            InMemoryConnector.connect(url),
+            Effect.sync(() => {
+              if (!serverInstance) {
+                throw new Error('Server must be created before client');
+              }
+              return serverInstance;
+            }),
+            Effect.flatMap((server) => server.connector(url)),
             Effect.map(
               (transport): ClientTransport => ({
                 connectionState: transport.connectionState,
@@ -136,16 +149,14 @@ runClientServerContractTests('InMemory', createInMemoryTestContext);
 describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
-  test('in-memory server should accept connections with unique server IDs', async () => {
+  test('in-memory server should accept connections', async () => {
     const program = Effect.gen(function* () {
-      const serverId = `test-server-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
       // Create in-memory server directly
-      const acceptor = yield* InMemoryAcceptor.make({ serverId });
-      yield* acceptor.start();
+      const acceptor = yield* InMemoryAcceptor.make();
+      const server = yield* acceptor.start();
 
-      // Create in-memory client directly
-      const client = yield* InMemoryConnector.connect(`inmemory://${serverId}`);
+      // Create in-memory client directly using the server's connector
+      const client = yield* server.connector(`inmemory://test`);
 
       // Verify connection state
       const state = yield* pipe(client.connectionState, Stream.take(1), Stream.runHead);
@@ -159,13 +170,14 @@ describe('In-Memory Client-Server Specific Tests', () => {
     await Effect.runPromise(Effect.scoped(program));
   });
 
-  test('in-memory connector should fail for non-existent servers', async () => {
+  test('in-memory connector should fail when no server is running', async () => {
     const program = Effect.gen(function* () {
-      // Test with non-existent server ID
-      const nonExistentServerId = `non-existent-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-      const result = yield* Effect.either(
-        InMemoryConnector.connect(`inmemory://${nonExistentServerId}`)
-      );
+      // This test is now meaningless since we removed the global connector
+      // Instead, test that connecting with invalid URL fails
+      const acceptor = yield* InMemoryAcceptor.make();
+      const server = yield* acceptor.start();
+
+      const result = yield* Effect.either(server.connector('not-inmemory://invalid'));
 
       expect(result._tag).toBe('Left');
     });
@@ -175,8 +187,12 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   test('in-memory connector should fail for invalid URLs', async () => {
     const program = Effect.gen(function* () {
+      // Create a server first
+      const acceptor = yield* InMemoryAcceptor.make();
+      const server = yield* acceptor.start();
+
       // Test with invalid URL format
-      const result = yield* Effect.either(InMemoryConnector.connect('invalid-url-format'));
+      const result = yield* Effect.either(server.connector('invalid-url-format'));
 
       expect(result._tag).toBe('Left');
     });
@@ -186,15 +202,13 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   test('multiple clients should be able to connect to the same in-memory server', async () => {
     const program = Effect.gen(function* () {
-      const serverId = `multi-client-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
       // Create server
-      const acceptor = yield* InMemoryAcceptor.make({ serverId });
+      const acceptor = yield* InMemoryAcceptor.make();
       const server = yield* acceptor.start();
 
-      // Create multiple clients
-      const client1 = yield* InMemoryConnector.connect(`inmemory://${serverId}`);
-      const client2 = yield* InMemoryConnector.connect(`inmemory://${serverId}`);
+      // Create multiple clients using the server's connector
+      const client1 = yield* server.connector(`inmemory://test1`);
+      const client2 = yield* server.connector(`inmemory://test2`);
 
       // Verify both clients are connected
       const state1 = yield* pipe(client1.connectionState, Stream.take(1), Stream.runHead);
@@ -226,12 +240,10 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   test('in-memory transport should support instant message delivery', async () => {
     const program = Effect.gen(function* () {
-      const serverId = `instant-delivery-test-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
-
       // Create server and client
-      const acceptor = yield* InMemoryAcceptor.make({ serverId });
+      const acceptor = yield* InMemoryAcceptor.make();
       const server = yield* acceptor.start();
-      const client = yield* InMemoryConnector.connect(`inmemory://${serverId}`);
+      const client = yield* server.connector(`inmemory://test`);
 
       // Wait for connection
       yield* pipe(

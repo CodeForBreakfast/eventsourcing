@@ -1,26 +1,27 @@
 /**
- * Test the simplified implementation
+ * Test the pure functional implementation
  */
 
 import { describe, it, expect } from 'vitest';
 import { Effect, Stream, pipe } from 'effect';
-import { InMemoryConnector, InMemoryAcceptor } from './inmemory-transport';
+import { InMemoryAcceptor } from './inmemory-transport';
 
-describe('Simple InMemory Transport', () => {
+describe('Pure Functional InMemory Transport', () => {
   it('should connect successfully', async () => {
     await Effect.runPromise(
       Effect.scoped(
         pipe(
-          InMemoryAcceptor.make({ serverId: 'simple-test' }),
+          InMemoryAcceptor.make(),
           Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.flatMap(() => InMemoryConnector.connect('inmemory://simple-test')),
+          Effect.flatMap((server) => server.connector('inmemory://test')),
           Effect.flatMap((clientTransport) =>
             pipe(
               Stream.take(clientTransport.connectionState, 1),
               Stream.runCollect,
               Effect.map((states) => {
                 const state = Array.from(states)[0];
-                expect(['connecting', 'connected']).toContain(state);
+                // In-memory connections are instant, so should be 'connected'
+                expect(state).toBe('connected');
               })
             )
           )
@@ -33,14 +34,14 @@ describe('Simple InMemory Transport', () => {
     await Effect.runPromise(
       Effect.scoped(
         pipe(
-          InMemoryAcceptor.make({ serverId: 'simple-server-test' }),
+          InMemoryAcceptor.make(),
           Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.flatMap((serverTransport) =>
+          Effect.flatMap((server) =>
             pipe(
-              InMemoryConnector.connect('inmemory://simple-server-test'),
+              server.connector('inmemory://test'),
               Effect.flatMap(() =>
                 pipe(
-                  Stream.take(serverTransport.connections, 1),
+                  Stream.take(server.connections, 1),
                   Stream.runCollect,
                   Effect.map((connections) => {
                     const connection = Array.from(connections)[0];
@@ -50,6 +51,39 @@ describe('Simple InMemory Transport', () => {
                   })
                 )
               )
+            )
+          )
+        )
+      )
+    );
+  });
+
+  it('should support isolated servers', async () => {
+    await Effect.runPromise(
+      Effect.scoped(
+        pipe(
+          Effect.all([
+            pipe(
+              InMemoryAcceptor.make(),
+              Effect.flatMap((acceptor) => acceptor.start())
+            ),
+            pipe(
+              InMemoryAcceptor.make(),
+              Effect.flatMap((acceptor) => acceptor.start())
+            ),
+          ]),
+          Effect.flatMap(([server1, server2]) =>
+            pipe(
+              Effect.all([
+                server1.connector('inmemory://test1'),
+                server2.connector('inmemory://test2'),
+              ]),
+              Effect.map(([client1, client2]) => {
+                // Both clients should exist and be different instances
+                expect(client1).toBeDefined();
+                expect(client2).toBeDefined();
+                expect(client1).not.toBe(client2);
+              })
             )
           )
         )
