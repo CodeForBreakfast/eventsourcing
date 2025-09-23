@@ -1,11 +1,12 @@
 /**
  * In-Memory Transport Implementation (Pure Functional)
  *
- * A purely functional in-memory transport with zero global state.
+ * A purely functional in-memory transport with zero global state and zero configuration.
  * Each server is completely isolated and returns a connector for clients.
  *
  * Features:
  * - Direct in-memory message passing for maximum performance
+ * - Zero configuration - no URLs, no setup, just pure memory references
  * - Multiple isolated servers (each with their own state)
  * - Proper connection state management with Effect's PubSub
  * - Bidirectional message flow with filtering support
@@ -46,10 +47,12 @@ interface InMemoryServerState {
   readonly clientConnections: Ref.Ref<HashMap.HashMap<string, InMemoryClientConnection>>;
 }
 
-// The connector function that clients use to connect to a specific server
-export type InMemoryConnector = (
-  url: string
-) => Effect.Effect<Client.Transport<TransportMessage>, ConnectionError, Scope.Scope>;
+// The connector function that clients use to connect directly to a server (no configuration needed)
+export type InMemoryConnector = () => Effect.Effect<
+  Client.Transport<TransportMessage>,
+  ConnectionError,
+  Scope.Scope
+>;
 
 // =============================================================================
 // Client State Helpers
@@ -235,11 +238,6 @@ const createClientState = (
 
 const generateClientId = (): string => `client-${Date.now()}-${Math.random()}`;
 
-const parseInMemoryUrl = (url: string): Effect.Effect<void, ConnectionError> => {
-  const match = url.match(/^inmemory:\/\//);
-  return match ? Effect.void : Effect.fail(new ConnectionError({ message: 'Invalid URL', url }));
-};
-
 const createConnectionQueues = (): Effect.Effect<{
   connectionStatePubSub: PubSub.PubSub<ConnectionState>;
   clientToServerQueue: Queue.Queue<TransportMessage>;
@@ -357,40 +355,35 @@ const setupClientConnection = (
 
 const createConnectorForServer =
   (serverState: InMemoryServerState): InMemoryConnector =>
-  (url: string) =>
-    pipe(
-      parseInMemoryUrl(url),
-      Effect.flatMap(() =>
-        Effect.acquireRelease(
+  () =>
+    Effect.acquireRelease(
+      pipe(
+        createConnectionQueues(),
+        Effect.flatMap(({ connectionStatePubSub, clientToServerQueue, serverToClientQueue }) =>
           pipe(
-            createConnectionQueues(),
-            Effect.flatMap(({ connectionStatePubSub, clientToServerQueue, serverToClientQueue }) =>
-              pipe(
-                createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
-                Effect.flatMap((clientState) => {
-                  const clientId = generateClientId();
-                  const clientConnection = createClientConnection(
-                    clientId,
-                    clientToServerQueue,
-                    serverToClientQueue,
-                    clientState
-                  );
+            createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
+            Effect.flatMap((clientState) => {
+              const clientId = generateClientId();
+              const clientConnection = createClientConnection(
+                clientId,
+                clientToServerQueue,
+                serverToClientQueue,
+                clientState
+              );
 
-                  return setupClientConnection(
-                    serverState,
-                    clientState,
-                    clientConnection,
-                    connectionStatePubSub,
-                    clientId
-                  );
-                })
-              )
-            )
-          ),
-          ({ cleanup }) => cleanup()
-        ).pipe(Effect.map(({ transport }) => transport))
-      )
-    );
+              return setupClientConnection(
+                serverState,
+                clientState,
+                clientConnection,
+                connectionStatePubSub,
+                clientId
+              );
+            })
+          )
+        )
+      ),
+      ({ cleanup }) => cleanup()
+    ).pipe(Effect.map(({ transport }) => transport));
 
 const createInMemoryServerTransport = (): Effect.Effect<
   {
@@ -447,7 +440,7 @@ export const InMemoryConnector: Client.ConnectorInterface<TransportMessage> = {
       new ConnectionError({
         message:
           'InMemoryConnector is deprecated. Use the connector returned by InMemoryAcceptor.make().start()',
-        url: 'inmemory://',
+        url: '',
       })
     ),
 };

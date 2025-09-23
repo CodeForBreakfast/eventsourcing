@@ -18,27 +18,27 @@ describe('Multiple Servers Support', () => {
         Effect.gen(function* () {
           // Create three independent servers
           const server1 = yield* pipe(
-            InMemoryAcceptor.make({ serverId: 'server-1' }),
+            InMemoryAcceptor.make(),
             Effect.flatMap((acceptor) => acceptor.start())
           );
 
           const server2 = yield* pipe(
-            InMemoryAcceptor.make({ serverId: 'server-2' }),
+            InMemoryAcceptor.make(),
             Effect.flatMap((acceptor) => acceptor.start())
           );
 
           const server3 = yield* pipe(
-            InMemoryAcceptor.make({ serverId: 'server-3' }),
+            InMemoryAcceptor.make(),
             Effect.flatMap((acceptor) => acceptor.start())
           );
 
           // Connect clients to different servers
-          const client1 = yield* InMemoryConnector.connect('inmemory://server-1');
-          const client2 = yield* InMemoryConnector.connect('inmemory://server-2');
-          const client3 = yield* InMemoryConnector.connect('inmemory://server-3');
+          const client1 = yield* server1.connector();
+          const client2 = yield* server2.connector();
+          const client3 = yield* server3.connector();
 
           // Also connect multiple clients to the same server
-          const client1b = yield* InMemoryConnector.connect('inmemory://server-1');
+          const client1b = yield* server1.connector();
 
           // Set up message subscriptions
           const server1Messages = yield* pipe(

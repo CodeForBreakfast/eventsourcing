@@ -13,7 +13,7 @@ describe('Pure Functional InMemory Transport', () => {
         pipe(
           InMemoryAcceptor.make(),
           Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.flatMap((server) => server.connector('inmemory://test')),
+          Effect.flatMap((server) => server.connector()),
           Effect.flatMap((clientTransport) =>
             pipe(
               Stream.take(clientTransport.connectionState, 1),
@@ -38,7 +38,7 @@ describe('Pure Functional InMemory Transport', () => {
           Effect.flatMap((acceptor) => acceptor.start()),
           Effect.flatMap((server) =>
             pipe(
-              server.connector('inmemory://test'),
+              server.connector(),
               Effect.flatMap(() =>
                 pipe(
                   Stream.take(server.connections, 1),
@@ -74,10 +74,7 @@ describe('Pure Functional InMemory Transport', () => {
           ]),
           Effect.flatMap(([server1, server2]) =>
             pipe(
-              Effect.all([
-                server1.connector('inmemory://test1'),
-                server2.connector('inmemory://test2'),
-              ]),
+              Effect.all([server1.connector(), server2.connector()]),
               Effect.map(([client1, client2]) => {
                 // Both clients should exist and be different instances
                 expect(client1).toBeDefined();

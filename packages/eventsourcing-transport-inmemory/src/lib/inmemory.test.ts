@@ -27,7 +27,7 @@ describe('InMemory Transport Basic Tests', () => {
           Effect.flatMap((server) =>
             pipe(
               // Connect client using server's connector
-              server.connector(`inmemory://test`),
+              server.connector(),
               Effect.flatMap((clientTransport) =>
                 pipe(
                   // Get initial state
@@ -57,7 +57,7 @@ describe('InMemory Transport Basic Tests', () => {
           Effect.flatMap((server) =>
             pipe(
               // Connect client using server's connector
-              server.connector(`inmemory://test`),
+              server.connector(),
               Effect.flatMap((clientTransport) =>
                 pipe(
                   // Get server connection
@@ -83,27 +83,6 @@ describe('InMemory Transport Basic Tests', () => {
     );
   }, 10000);
 
-  it('should handle connection errors for invalid URLs', async () => {
-    await Effect.runPromise(
-      Effect.scoped(
-        pipe(
-          // Start server first
-          InMemoryAcceptor.make(),
-          Effect.flatMap((acceptor) => acceptor.start()),
-          Effect.flatMap((server) => {
-            // Test with invalid URL
-            return pipe(
-              Effect.either(server.connector('invalid-url-format')),
-              Effect.map((result) => {
-                expect(result._tag).toBe('Left');
-              })
-            );
-          })
-        )
-      )
-    );
-  });
-
   it('should support multiple isolated servers', async () => {
     await Effect.runPromise(
       Effect.scoped(
@@ -120,10 +99,7 @@ describe('InMemory Transport Basic Tests', () => {
           ]),
           Effect.flatMap(([server1, server2]) =>
             pipe(
-              Effect.all([
-                server1.connector(`inmemory://server1`),
-                server2.connector(`inmemory://server2`),
-              ]),
+              Effect.all([server1.connector(), server2.connector()]),
               Effect.flatMap(([client1, client2]) =>
                 pipe(
                   Effect.all([

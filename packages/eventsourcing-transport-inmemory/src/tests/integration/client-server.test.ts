@@ -33,8 +33,7 @@ import { InMemoryAcceptor } from '../../lib/inmemory-transport';
 const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
   Effect.succeed({
     createTransportPair: (): TransportPair => {
-      // URL is now ignored since we connect directly to the server instance
-      const url = `inmemory://test`;
+      // Direct in-memory connection with no configuration needed
 
       // Shared server instance for this transport pair
       let serverInstance: any = null;
@@ -84,7 +83,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
               }
               return serverInstance;
             }),
-            Effect.flatMap((server) => server.connector(url)),
+            Effect.flatMap((server) => server.connector()),
             Effect.map(
               (transport): ClientTransport => ({
                 connectionState: transport.connectionState,
@@ -156,7 +155,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       const server = yield* acceptor.start();
 
       // Create in-memory client directly using the server's connector
-      const client = yield* server.connector(`inmemory://test`);
+      const client = yield* server.connector();
 
       // Verify connection state
       const state = yield* pipe(client.connectionState, Stream.take(1), Stream.runHead);
@@ -170,31 +169,20 @@ describe('In-Memory Client-Server Specific Tests', () => {
     await Effect.runPromise(Effect.scoped(program));
   });
 
-  test('in-memory connector should fail when no server is running', async () => {
-    const program = Effect.gen(function* () {
-      // This test is now meaningless since we removed the global connector
-      // Instead, test that connecting with invalid URL fails
-      const acceptor = yield* InMemoryAcceptor.make();
-      const server = yield* acceptor.start();
-
-      const result = yield* Effect.either(server.connector('not-inmemory://invalid'));
-
-      expect(result._tag).toBe('Left');
-    });
-
-    await Effect.runPromise(Effect.scoped(program));
-  });
-
-  test('in-memory connector should fail for invalid URLs', async () => {
+  test('in-memory connector should always succeed with direct connection', async () => {
     const program = Effect.gen(function* () {
       // Create a server first
       const acceptor = yield* InMemoryAcceptor.make();
       const server = yield* acceptor.start();
 
-      // Test with invalid URL format
-      const result = yield* Effect.either(server.connector('invalid-url-format'));
+      // Test that connector always succeeds (no URL validation)
+      const client = yield* server.connector();
+      const state = yield* pipe(client.connectionState, Stream.take(1), Stream.runHead);
 
-      expect(result._tag).toBe('Left');
+      expect(state._tag).toBe('Some');
+      if (state._tag === 'Some') {
+        expect(state.value).toBe('connected');
+      }
     });
 
     await Effect.runPromise(Effect.scoped(program));
@@ -207,8 +195,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
       const server = yield* acceptor.start();
 
       // Create multiple clients using the server's connector
-      const client1 = yield* server.connector(`inmemory://test1`);
-      const client2 = yield* server.connector(`inmemory://test2`);
+      const client1 = yield* server.connector();
+      const client2 = yield* server.connector();
 
       // Verify both clients are connected
       const state1 = yield* pipe(client1.connectionState, Stream.take(1), Stream.runHead);
@@ -243,7 +231,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       // Create server and client
       const acceptor = yield* InMemoryAcceptor.make();
       const server = yield* acceptor.start();
-      const client = yield* server.connector(`inmemory://test`);
+      const client = yield* server.connector();
 
       // Wait for connection
       yield* pipe(
