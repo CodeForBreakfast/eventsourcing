@@ -182,6 +182,7 @@
       "devDependencies": {
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.5.2",
+        "bun-types": "^1.2.22",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.2",
