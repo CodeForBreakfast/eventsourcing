@@ -11,8 +11,6 @@ import {
   Protocol,
   ProtocolLive,
   type ProtocolService,
-  sendCommand as sendCommandEffect,
-  subscribe as subscribeEffect,
 } from '@codeforbreakfast/eventsourcing-protocol-default';
 import type { TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import type { Scope } from 'effect/Scope';
@@ -33,11 +31,9 @@ export const connect = (
   url: string,
   _options?: WebSocketConnectOptions
 ): Effect.Effect<ProtocolService, TransportError, Protocol | Scope> => {
-  const connector = new WebSocketConnector();
-
   // Create the layer stack
   const protocolLayer = pipe(
-    connector.connect(url),
+    WebSocketConnector.connect(url),
     Effect.map((transport) => ProtocolLive(transport)),
     Layer.unwrapScoped
   );
@@ -62,7 +58,7 @@ export const createBasicProtocolContext = () => ({
 /**
  * @deprecated Use WebSocketConnector directly
  */
-export const createWebSocketConnector = () => new WebSocketConnector();
+export const createWebSocketConnector = () => WebSocketConnector;
 
 /**
  * Create protocol stack as layer
@@ -70,9 +66,8 @@ export const createWebSocketConnector = () => new WebSocketConnector();
 export const createWebSocketProtocolStack = (
   url: string
 ): Layer.Layer<Protocol, TransportError, Scope> => {
-  const connector = new WebSocketConnector();
   return pipe(
-    connector.connect(url),
+    WebSocketConnector.connect(url),
     Effect.map((transport) => ProtocolLive(transport)),
     Layer.unwrapScoped
   );
