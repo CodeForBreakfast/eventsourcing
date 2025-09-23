@@ -250,7 +250,7 @@ const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: EventMessage
       pipe(
         HashMap.get(state.subscriptions, message.streamId),
         Option.match({
-          onNone: () => Effect.void, // Subscription not found, ignore
+          onNone: () => Effect.succeed(true), // Subscription not found, ignore
           onSome: (queue) =>
             Queue.offer(queue, {
               position: message.position,
