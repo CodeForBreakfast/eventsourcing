@@ -100,7 +100,7 @@ const handleCommandMessage =
     });
 
 const handleSubscribeMessage =
-  (stateRef: Ref.Ref<ServerState>) => (wireMessage: SubscribeMessage) =>
+  (stateRef: Ref.Ref<ServerState>, connectionId: string) => (wireMessage: SubscribeMessage) =>
     pipe(
       Ref.update(stateRef, (state) => ({
         ...state,
@@ -108,12 +108,12 @@ const handleSubscribeMessage =
           HashMap.get(state.subscriptions, wireMessage.streamId),
           Option.match({
             onNone: () =>
-              HashMap.set(state.subscriptions, wireMessage.streamId, new Set(['global'])),
+              HashMap.set(state.subscriptions, wireMessage.streamId, new Set([connectionId])),
             onSome: (existing) =>
               HashMap.set(
                 state.subscriptions,
                 wireMessage.streamId,
-                new Set([...existing, 'global'])
+                new Set([...existing, connectionId])
               ),
           })
         ),
@@ -121,7 +121,7 @@ const handleSubscribeMessage =
     );
 
 const processIncomingMessage =
-  (commandQueue: Queue.Queue<Command>, stateRef: Ref.Ref<ServerState>) =>
+  (commandQueue: Queue.Queue<Command>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
   (message: TransportMessage) =>
     pipe(
       parseTransportPayload(message),
@@ -130,7 +130,7 @@ const processIncomingMessage =
           return handleCommandMessage(commandQueue)(parsedMessage);
         }
         if (parsedMessage.type === 'subscribe') {
-          return handleSubscribeMessage(stateRef)(parsedMessage);
+          return handleSubscribeMessage(stateRef, connectionId)(parsedMessage);
         }
         return Effect.void;
       }),
@@ -173,7 +173,7 @@ const createEventPublisher =
       Ref.get(stateRef),
       Effect.flatMap((state) =>
         pipe(
-          HashMap.get(state.subscriptions, event.streamId),
+          HashMap.get(state.subscriptions, String(event.streamId)),
           Option.match({
             onNone: () => Effect.void,
             onSome: (_connectionIds) =>
@@ -182,7 +182,7 @@ const createEventPublisher =
                 Effect.flatMap((timestamp) => {
                   const eventMessage: EventMessage = {
                     type: 'event',
-                    streamId: event.streamId,
+                    streamId: String(event.streamId),
                     position: event.position,
                     eventType: event.type,
                     data: event.data,
@@ -222,7 +222,10 @@ const createServerProtocolService = (
             connection.transport.subscribe(),
             Effect.flatMap((messageStream) =>
               Effect.forkScoped(
-                Stream.runForEach(messageStream, processIncomingMessage(commandQueue, stateRef))
+                Stream.runForEach(
+                  messageStream,
+                  processIncomingMessage(commandQueue, stateRef, connection.clientId)
+                )
               )
             ),
             Effect.flatMap(() =>

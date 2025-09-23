@@ -359,16 +359,11 @@ const createSubscriber =
       Queue.unbounded<Event>(),
       Effect.flatMap((queue) =>
         pipe(
-          Effect.acquireRelease(
-            pipe(
-              Ref.update(stateRef, (state) => ({
-                ...state,
-                subscriptions: HashMap.set(state.subscriptions, streamId, queue),
-              })),
-              Effect.as(queue)
-            ),
-            () => cleanupSubscription(stateRef, streamId)
-          ),
+          // First, add the subscription to state
+          Ref.update(stateRef, (state) => ({
+            ...state,
+            subscriptions: HashMap.set(state.subscriptions, streamId, queue),
+          })),
           Effect.flatMap(() =>
             pipe(
               currentTimestamp(),
@@ -388,7 +383,12 @@ const createSubscriber =
               Effect.flatten
             )
           ),
-          Effect.as(Stream.fromQueue(queue))
+          Effect.as(
+            // Return a scoped stream that cleans up the subscription when the stream is closed
+            Stream.acquireRelease(Effect.succeed(queue), () =>
+              cleanupSubscription(stateRef, streamId)
+            ).pipe(Stream.flatMap(Stream.fromQueue))
+          )
         )
       )
     );
@@ -410,8 +410,7 @@ const createProtocolService = (
             Effect.as({
               sendCommand: (command: Command) =>
                 pipe(createCommandSender(stateRef, transport)(command), Effect.scoped),
-              subscribe: (streamId: string) =>
-                pipe(createSubscriber(stateRef, transport)(streamId), Effect.scoped),
+              subscribe: (streamId: string) => createSubscriber(stateRef, transport)(streamId),
             })
           )
         )

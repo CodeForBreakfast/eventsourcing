@@ -1,5 +1,15 @@
 import { describe, test, expect } from 'bun:test';
-import { Effect, Stream, Duration, pipe, TestClock, TestContext, Either, Schema } from 'effect';
+import {
+  Effect,
+  Stream,
+  Duration,
+  pipe,
+  TestClock,
+  TestContext,
+  Either,
+  Schema,
+  Fiber,
+} from 'effect';
 import {
   ProtocolLive,
   sendCommand,
@@ -9,6 +19,7 @@ import {
   CommandResult,
   Event,
 } from './protocol';
+import { ServerProtocolLive, ServerProtocol } from './server-protocol';
 import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
 import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { EventStreamId, toStreamId } from '@codeforbreakfast/eventsourcing-store';
@@ -159,7 +170,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test('should send command and receive failure result', async () => {
@@ -196,7 +207,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test('should handle multiple concurrent commands with proper correlation', async () => {
@@ -261,7 +272,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
@@ -342,7 +353,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 
@@ -371,15 +382,249 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
-    test.skip('should receive events for subscribed streams', async () => {
-      // TODO: Implement test for receiving events on subscribed streams
+    test('should receive events for subscribed streams', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              () => ({
+                _tag: 'Success',
+                position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+              }),
+              (streamId) => [
+                // Return events immediately when subscribed
+                {
+                  position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                  type: 'UserCreated',
+                  data: { id: streamId, name: 'John Doe' },
+                  timestamp: new Date('2024-01-01T10:00:00Z'),
+                },
+                {
+                  position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                  type: 'UserEmailUpdated',
+                  data: { id: streamId, email: 'john@example.com' },
+                  timestamp: new Date('2024-01-01T10:01:00Z'),
+                },
+              ]
+            ),
+            Effect.flatMap(() =>
+              pipe(
+                subscribe('user-123'),
+                Effect.flatMap((eventStream) =>
+                  pipe(
+                    eventStream,
+                    Stream.take(2),
+                    Stream.runCollect,
+                    Effect.tap((collectedEvents) =>
+                      Effect.sync(() => {
+                        const events = Array.from(collectedEvents);
+
+                        // Verify we received exactly 2 events
+                        expect(events).toHaveLength(2);
+
+                        // Verify first event
+                        expect(events[0]!.type).toBe('UserCreated');
+                        expect(events[0]!.data).toEqual({ id: 'user-123', name: 'John Doe' });
+                        expect(events[0]!.position.eventNumber).toBe(1);
+
+                        // Verify second event
+                        expect(events[1]!.type).toBe('UserEmailUpdated');
+                        expect(events[1]!.data).toEqual({
+                          id: 'user-123',
+                          email: 'john@example.com',
+                        });
+                        expect(events[1]!.position.eventNumber).toBe(2);
+
+                        // Verify timestamps are preserved
+                        expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T10:00:00Z'));
+                        expect(events[1]!.timestamp).toEqual(new Date('2024-01-01T10:01:00Z'));
+                      })
+                    )
+                  )
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              )
+            )
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test.skip('should only receive events for the specific subscribed stream (filtering)', async () => {
-      // TODO: Implement test for stream filtering
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            // Set up both protocol and server protocol
+            Effect.all([
+              pipe(
+                // Subscribe only to user-123 stream
+                subscribe('user-123'),
+                Effect.provide(ProtocolLive(clientTransport))
+              ),
+              pipe(ServerProtocol, Effect.provide(ServerProtocolLive(server))),
+            ]),
+            Effect.flatMap(([eventStream, serverProtocol]) =>
+              pipe(
+                // Fork a fiber to collect events from the subscribed stream
+                Effect.forkScoped(
+                  pipe(
+                    eventStream,
+                    Stream.take(2), // Should only get 2 events for user-123
+                    Stream.runCollect
+                  )
+                ),
+                Effect.flatMap((eventsFiber) =>
+                  pipe(
+                    // Give a moment for subscription to be established
+                    Effect.sleep(Duration.millis(50)),
+                    Effect.flatMap(() =>
+                      pipe(
+                        // Publish events for user-123 (should be received)
+                        serverProtocol.publishEvent({
+                          streamId: unsafeCreateStreamId('user-123'),
+                          position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 1 },
+                          type: 'UserCreated',
+                          data: { id: 'user-123', name: 'John Doe' },
+                          timestamp: new Date('2024-01-01T10:00:00Z'),
+                        }),
+                        Effect.flatMap(() =>
+                          serverProtocol.publishEvent({
+                            streamId: unsafeCreateStreamId('user-123'),
+                            position: {
+                              streamId: unsafeCreateStreamId('user-123'),
+                              eventNumber: 2,
+                            },
+                            type: 'UserUpdated',
+                            data: { id: 'user-123', name: 'John Updated' },
+                            timestamp: new Date('2024-01-01T10:01:00Z'),
+                          })
+                        ),
+                        // Publish event for user-456 (should NOT be received)
+                        Effect.flatMap(() =>
+                          serverProtocol.publishEvent({
+                            streamId: unsafeCreateStreamId('user-456'),
+                            position: {
+                              streamId: unsafeCreateStreamId('user-456'),
+                              eventNumber: 1,
+                            },
+                            type: 'OtherUserCreated',
+                            data: { id: 'user-456', name: 'Jane Doe' },
+                            timestamp: new Date('2024-01-01T10:02:00Z'),
+                          })
+                        ),
+                        Effect.flatMap(() =>
+                          pipe(
+                            // Wait for events to be collected
+                            Fiber.join(eventsFiber),
+                            Effect.tap((collectedEvents) =>
+                              Effect.sync(() => {
+                                const events = Array.from(collectedEvents);
+
+                                // Should only receive events for user-123 stream (filtering works)
+                                expect(events).toHaveLength(2);
+
+                                // Verify specific events received
+                                expect(events[0]!.type).toBe('UserCreated');
+                                expect(events[0]!.data).toEqual({
+                                  id: 'user-123',
+                                  name: 'John Doe',
+                                });
+
+                                expect(events[1]!.type).toBe('UserUpdated');
+                                expect(events[1]!.data).toEqual({
+                                  id: 'user-123',
+                                  name: 'John Updated',
+                                });
+
+                                // Verify we did NOT receive events for other streams (filtering works)
+                                const hasOtherStreamEvents = events.some(
+                                  (event) => event.type === 'OtherUserCreated'
+                                );
+                                expect(hasOtherStreamEvents).toBe(false);
+                              })
+                            )
+                          )
+                        )
+                      )
+                    )
+                  )
+                )
+              )
+            )
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+    });
+
+    test.skip('should handle basic event publishing and receiving', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            // Setup server protocol first
+            ServerProtocol,
+            Effect.flatMap((serverProtocol) =>
+              pipe(
+                // Subscribe to stream
+                subscribe('test-stream'),
+                Effect.flatMap((eventStream) =>
+                  pipe(
+                    // Take just 1 event with timeout
+                    eventStream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.timeout(Duration.seconds(1)),
+                    Effect.race(
+                      // Publish an event after a small delay
+                      pipe(
+                        Effect.sleep(Duration.millis(100)),
+                        Effect.flatMap(() =>
+                          serverProtocol.publishEvent({
+                            streamId: unsafeCreateStreamId('test-stream'),
+                            position: {
+                              streamId: unsafeCreateStreamId('test-stream'),
+                              eventNumber: 1,
+                            },
+                            type: 'TestEvent',
+                            data: { test: 'data' },
+                            timestamp: new Date(),
+                          })
+                        ),
+                        Effect.asVoid
+                      )
+                    ),
+                    Effect.tap((result) =>
+                      Effect.sync(() => {
+                        // Should receive the event
+                        if (Array.isArray(result)) {
+                          expect(result).toHaveLength(1);
+                          expect(result[0]!.type).toBe('TestEvent');
+                        } else {
+                          throw new Error('Expected events array, got void from race');
+                        }
+                      })
+                    )
+                  )
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              )
+            ),
+            Effect.provide(ServerProtocolLive(server))
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test.skip('should handle receiving events while processing commands concurrently', async () => {
@@ -440,7 +685,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test('should handle responses for unknown command IDs gracefully', async () => {
@@ -490,7 +735,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test.skip('should handle malformed command result - success without position', async () => {
@@ -569,7 +814,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program));
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
   });
 });
