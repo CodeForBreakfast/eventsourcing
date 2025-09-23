@@ -1,9 +1,5 @@
 /**
  * Test to verify multiple servers can coexist
- *
- * NOTE: This test is disabled because the simplified implementation
- * only supports one server at a time. This is intentional to reduce
- * complexity for contract testing scenarios.
  */
 
 import { describe, test, expect } from 'bun:test';
@@ -12,7 +8,7 @@ import { InMemoryConnector, InMemoryAcceptor } from './inmemory-transport';
 import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
 
 describe('Multiple Servers Support', () => {
-  test.skip('should support multiple independent servers simultaneously', async () => {
+  test('should support multiple independent servers simultaneously', async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
