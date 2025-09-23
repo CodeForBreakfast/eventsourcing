@@ -432,15 +432,3 @@ export const InMemoryAcceptor = {
       start: () => createInMemoryServerTransport(),
     }),
 };
-
-// Legacy interface for backwards compatibility (will be removed)
-export const InMemoryConnector: Client.ConnectorInterface<TransportMessage> = {
-  connect: () =>
-    Effect.fail(
-      new ConnectionError({
-        message:
-          'InMemoryConnector is deprecated. Use the connector returned by InMemoryAcceptor.make().start()',
-        url: '',
-      })
-    ),
-};

@@ -22,10 +22,6 @@ export { InMemoryAcceptor };
 export type { InMemoryServer };
 export type { InMemoryConnector };
 
-// Legacy export (deprecated - use InMemoryAcceptor.make().start().connector instead)
-// Note: We had to remove this due to TypeScript naming conflicts
-// Use InMemoryAcceptor.make().start().connector instead
-
 // Re-export transport contracts for convenience
 export type {
   TransportMessage,
