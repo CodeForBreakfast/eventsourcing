@@ -11,7 +11,7 @@ import {
 } from './protocol';
 import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
 import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { EventStreamId, toStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
 // Test Helpers
@@ -147,7 +147,7 @@ describe('Protocol Behavior Tests', () => {
                   Effect.sync(() => {
                     expect(result._tag).toBe('Success');
                     if (result._tag === 'Success') {
-                      expect(result.position.streamId).toBe('user-123');
+                      expect(result.position.streamId).toEqual(unsafeCreateStreamId('user-123'));
                       expect(result.position.eventNumber).toBe(42);
                     }
                   })
@@ -295,8 +295,10 @@ describe('Protocol Behavior Tests', () => {
                 expect(Either.isLeft(result)).toBe(true);
                 if (Either.isLeft(result)) {
                   expect(result.left).toBeInstanceOf(CommandTimeoutError);
-                  expect(result.left.commandId).toBe(command.id);
-                  expect(result.left.timeoutMs).toBe(10000);
+                  if (result.left instanceof CommandTimeoutError) {
+                    expect(result.left.commandId).toBe(command.id);
+                    expect(result.left.timeoutMs).toBe(10000);
+                  }
                 }
               })
             )
@@ -370,6 +372,32 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(Effect.scoped(program));
+    });
+
+    test.skip('should receive events for subscribed streams', async () => {
+      // TODO: Implement test for receiving events on subscribed streams
+    });
+
+    test.skip('should only receive events for the specific subscribed stream (filtering)', async () => {
+      // TODO: Implement test for stream filtering
+    });
+
+    test.skip('should handle receiving events while processing commands concurrently', async () => {
+      // TODO: Implement test for concurrent event receiving during command processing
+    });
+  });
+
+  describe('Multiple Subscriptions', () => {
+    test.skip('should handle multiple clients subscribing to the same stream', async () => {
+      // TODO: Implement test for multiple clients on same stream
+    });
+
+    test.skip('should handle single client subscribing to multiple different streams', async () => {
+      // TODO: Implement test for single client with multiple stream subscriptions
+    });
+
+    test.skip('should continue receiving events after re-subscribing to a stream', async () => {
+      // TODO: Implement test for re-subscription behavior
     });
   });
 
@@ -463,6 +491,56 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(Effect.scoped(program));
+    });
+
+    test.skip('should handle malformed command result - success without position', async () => {
+      // TODO: Implement test for malformed success result missing position
+    });
+
+    test.skip('should handle malformed command result - failure without error message', async () => {
+      // TODO: Implement test for malformed failure result missing error message
+    });
+  });
+
+  describe('Transport Failure & Recovery', () => {
+    test.skip('should clean up pending commands when transport disconnects', async () => {
+      // TODO: Implement test for command cleanup on transport disconnect
+    });
+
+    test.skip('should clean up subscriptions when transport fails', async () => {
+      // TODO: Implement test for subscription cleanup on transport failure
+    });
+
+    test.skip('should handle transport reconnection gracefully', async () => {
+      // TODO: Implement test for graceful transport reconnection
+    });
+  });
+
+  describe('Server Protocol Integration', () => {
+    test.skip('should emit commands through server protocol onCommand stream', async () => {
+      // TODO: Implement test for server protocol command emission
+    });
+
+    test.skip('should deliver command results via server protocol sendResult', async () => {
+      // TODO: Implement test for server protocol result delivery
+    });
+
+    test.skip('should publish events via server protocol publishEvent', async () => {
+      // TODO: Implement test for server protocol event publishing
+    });
+  });
+
+  describe('Edge Cases', () => {
+    test.skip('should handle duplicate command IDs appropriately', async () => {
+      // TODO: Implement test for duplicate command ID handling
+    });
+
+    test.skip('should handle very large payloads in commands and events', async () => {
+      // TODO: Implement test for large payload handling
+    });
+
+    test.skip('should handle rapid subscription/unsubscription cycles', async () => {
+      // TODO: Implement test for rapid subscription cycling
     });
   });
 
