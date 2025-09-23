@@ -82,8 +82,9 @@ export {
 
 // Transport implementation
 export {
-  WebSocketTransport,
-  WebSocketServerTransport,
+  WebSocketConnector,
+  WebSocketTransportLive,
+  WebSocketAcceptor,
 } from '@codeforbreakfast/eventsourcing-transport-websocket';
 
 // Transport types
