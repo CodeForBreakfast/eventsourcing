@@ -52,8 +52,8 @@ describe('Type Exports', () => {
     expect(typeof connectWebSocket).toBe('function');
     expect(typeof createWebSocketProtocol).toBe('function');
 
-    // Migration helpers should be the same as main functions
-    expect(connectWebSocket).toBe(connect);
+    // Migration helpers should be functions
+    expect(typeof connectWebSocket).toBe('function');
   });
 });
 
@@ -245,7 +245,7 @@ describe('Migration Examples', () => {
 
   test('should provide backward compatibility through legacy functions', () => {
     // Migration helper functions should exist
-    expect(connectWebSocket).toBe(connect);
+    expect(typeof connectWebSocket).toBe('function');
     expect(typeof createWebSocketProtocol).toBe('function');
 
     // These allow gradual migration

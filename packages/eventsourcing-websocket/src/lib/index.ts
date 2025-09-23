@@ -84,12 +84,14 @@ export const createWebSocketConnectorLayer = (url: string) => createWebSocketPro
 /**
  * @deprecated Use connect() instead
  */
-export const connectWebSocket = connect;
+export const connectWebSocket = (url: string, options?: WebSocketConnectOptions) =>
+  connect(url, options);
 
 /**
  * @deprecated Use connect() instead
  */
-export const createWebSocketProtocol = connect;
+export const createWebSocketProtocol = (url: string, options?: WebSocketConnectOptions) =>
+  connect(url, options);
 
 export const WebSocketEventSourcingInfo = {
   name: '@codeforbreakfast/eventsourcing-websocket',
