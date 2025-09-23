@@ -709,8 +709,203 @@ describe('Protocol Behavior Tests', () => {
       // TODO: Implement test for multiple clients on same stream
     });
 
-    test.skip('should handle single client subscribing to multiple different streams', async () => {
-      // TODO: Implement test for single client with multiple stream subscriptions
+    test('should handle single client subscribing to multiple different streams', async () => {
+      const program = pipe(
+        setupTestEnvironment,
+        Effect.flatMap(({ server, clientTransport }) =>
+          pipe(
+            createTestServerProtocol(
+              server,
+              () => ({
+                _tag: 'Success',
+                position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+              }),
+              (streamId) => {
+                // Return different events based on the stream being subscribed to
+                if (streamId === 'user-stream') {
+                  return [
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                      type: 'UserCreated',
+                      data: { id: 'user-1', name: 'Alice' },
+                      timestamp: new Date('2024-01-01T10:00:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                      type: 'UserUpdated',
+                      data: { id: 'user-1', status: 'active' },
+                      timestamp: new Date('2024-01-01T10:01:00Z'),
+                    },
+                  ];
+                }
+                if (streamId === 'order-stream') {
+                  return [
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                      type: 'OrderCreated',
+                      data: { orderId: 'order-1', amount: 100 },
+                      timestamp: new Date('2024-01-01T11:00:00Z'),
+                    },
+                  ];
+                }
+                if (streamId === 'product-stream') {
+                  return [
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+                      type: 'ProductAdded',
+                      data: { productId: 'prod-1', name: 'Widget' },
+                      timestamp: new Date('2024-01-01T12:00:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 2 },
+                      type: 'ProductPriced',
+                      data: { productId: 'prod-1', price: 25.99 },
+                      timestamp: new Date('2024-01-01T12:01:00Z'),
+                    },
+                    {
+                      position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 3 },
+                      type: 'ProductPublished',
+                      data: { productId: 'prod-1', published: true },
+                      timestamp: new Date('2024-01-01T12:02:00Z'),
+                    },
+                  ];
+                }
+                return [];
+              }
+            ),
+            Effect.flatMap(() => {
+              return pipe(
+                Effect.all(
+                  [
+                    // Subscribe to multiple streams concurrently
+                    pipe(
+                      subscribe('user-stream'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          eventStream,
+                          Stream.take(2),
+                          Stream.runCollect,
+                          Effect.map((events) => ({
+                            streamType: 'user',
+                            events: Array.from(events),
+                          }))
+                        )
+                      )
+                    ),
+                    pipe(
+                      subscribe('order-stream'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          eventStream,
+                          Stream.take(1),
+                          Stream.runCollect,
+                          Effect.map((events) => ({
+                            streamType: 'order',
+                            events: Array.from(events),
+                          }))
+                        )
+                      )
+                    ),
+                    pipe(
+                      subscribe('product-stream'),
+                      Effect.flatMap((eventStream) =>
+                        pipe(
+                          eventStream,
+                          Stream.take(3),
+                          Stream.runCollect,
+                          Effect.map((events) => ({
+                            streamType: 'product',
+                            events: Array.from(events),
+                          }))
+                        )
+                      )
+                    ),
+                  ],
+                  { concurrency: 'unbounded' }
+                ),
+                Effect.tap((streamResults) =>
+                  Effect.sync(() => {
+                    // Find results by stream type
+                    const userResults = streamResults.find((r) => r.streamType === 'user')!;
+                    const orderResults = streamResults.find((r) => r.streamType === 'order')!;
+                    const productResults = streamResults.find((r) => r.streamType === 'product')!;
+
+                    // Verify user stream events
+                    expect(userResults.events).toHaveLength(2);
+                    expect(userResults.events[0]!.type).toBe('UserCreated');
+                    expect(userResults.events[0]!.data).toEqual({ id: 'user-1', name: 'Alice' });
+                    expect(userResults.events[1]!.type).toBe('UserUpdated');
+                    expect(userResults.events[1]!.data).toEqual({ id: 'user-1', status: 'active' });
+
+                    // Verify order stream events
+                    expect(orderResults.events).toHaveLength(1);
+                    expect(orderResults.events[0]!.type).toBe('OrderCreated');
+                    expect(orderResults.events[0]!.data).toEqual({
+                      orderId: 'order-1',
+                      amount: 100,
+                    });
+
+                    // Verify product stream events
+                    expect(productResults.events).toHaveLength(3);
+                    expect(productResults.events[0]!.type).toBe('ProductAdded');
+                    expect(productResults.events[0]!.data).toEqual({
+                      productId: 'prod-1',
+                      name: 'Widget',
+                    });
+                    expect(productResults.events[1]!.type).toBe('ProductPriced');
+                    expect(productResults.events[1]!.data).toEqual({
+                      productId: 'prod-1',
+                      price: 25.99,
+                    });
+                    expect(productResults.events[2]!.type).toBe('ProductPublished');
+                    expect(productResults.events[2]!.data).toEqual({
+                      productId: 'prod-1',
+                      published: true,
+                    });
+
+                    // Verify stream isolation - no cross-contamination
+                    const allUserEvents = userResults.events;
+                    const hasOrderEvents = allUserEvents.some((e) => e.type.startsWith('Order'));
+                    const hasProductEvents = allUserEvents.some((e) =>
+                      e.type.startsWith('Product')
+                    );
+                    expect(hasOrderEvents).toBe(false);
+                    expect(hasProductEvents).toBe(false);
+
+                    const allOrderEvents = orderResults.events;
+                    const hasUserEvents = allOrderEvents.some((e) => e.type.startsWith('User'));
+                    expect(hasUserEvents).toBe(false);
+
+                    const allProductEvents = productResults.events;
+                    const hasUserEventsInProduct = allProductEvents.some((e) =>
+                      e.type.startsWith('User')
+                    );
+                    const hasOrderEventsInProduct = allProductEvents.some((e) =>
+                      e.type.startsWith('Order')
+                    );
+                    expect(hasUserEventsInProduct).toBe(false);
+                    expect(hasOrderEventsInProduct).toBe(false);
+
+                    // Verify timestamps are preserved correctly across streams
+                    expect(userResults.events[0]!.timestamp).toEqual(
+                      new Date('2024-01-01T10:00:00Z')
+                    );
+                    expect(orderResults.events[0]!.timestamp).toEqual(
+                      new Date('2024-01-01T11:00:00Z')
+                    );
+                    expect(productResults.events[0]!.timestamp).toEqual(
+                      new Date('2024-01-01T12:00:00Z')
+                    );
+                  })
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              );
+            })
+          )
+        )
+      );
+
+      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
     });
 
     test.skip('should continue receiving events after re-subscribing to a stream', async () => {
