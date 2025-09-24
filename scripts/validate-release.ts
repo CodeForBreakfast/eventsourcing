@@ -24,67 +24,78 @@ async function validateRelease(): Promise<ValidationResult> {
   console.log('🔍 Validating release readiness...\n');
   const errors: string[] = [];
 
-  // Step 1: Check changeset status
-  console.log('📦 Checking changesets status...');
-  try {
-    // In CI, we need to ensure the base branch exists for changesets to work
-    if (process.env.GITHUB_BASE_REF) {
-      try {
-        execSync(`git fetch origin ${process.env.GITHUB_BASE_REF}:${process.env.GITHUB_BASE_REF}`, {
-          cwd: rootDir,
-          stdio: 'pipe',
-        });
-      } catch {
-        // Branch might already exist, that's fine
+  // Check if this is a changeset release branch - skip changeset validation
+  const isChangesetBranch = process.env.GITHUB_HEAD_REF?.startsWith('changeset-release/') ?? false;
+
+  if (isChangesetBranch) {
+    console.log('📦 Skipping changeset validation (version PR)');
+    console.log('');
+  } else {
+    // Step 1: Check changeset status
+    console.log('📦 Checking changesets status...');
+    try {
+      // In CI, we need to ensure the base branch exists for changesets to work
+      if (process.env.GITHUB_BASE_REF) {
+        try {
+          execSync(
+            `git fetch origin ${process.env.GITHUB_BASE_REF}:${process.env.GITHUB_BASE_REF}`,
+            {
+              cwd: rootDir,
+              stdio: 'pipe',
+            }
+          );
+        } catch {
+          // Branch might already exist, that's fine
+        }
       }
-    }
 
-    const output = execSync('bunx changeset status --output=status.json', {
-      cwd: rootDir,
-      encoding: 'utf-8',
-      stdio: 'pipe',
-    });
+      const output = execSync('bunx changeset status --output=status.json', {
+        cwd: rootDir,
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
 
-    // Read the status output
-    const statusJson = execSync('cat status.json', {
-      cwd: rootDir,
-      encoding: 'utf-8',
-      stdio: 'pipe',
-    });
+      // Read the status output
+      const statusJson = execSync('cat status.json', {
+        cwd: rootDir,
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
 
-    // Clean up the status file
-    execSync('rm -f status.json', { cwd: rootDir });
+      // Clean up the status file
+      execSync('rm -f status.json', { cwd: rootDir });
 
-    const status = JSON.parse(statusJson);
+      const status = JSON.parse(statusJson);
 
-    if (status.changesets.length === 0 && status.releases.length > 0) {
-      // There are package changes but no changesets
-      errors.push(
-        `Package changes detected but no changesets found.\n` +
-          `Packages that would be released:\n` +
-          status.releases.map((r: any) => `  - ${r.name}: ${r.type}`).join('\n') +
-          `\n\nRun 'bun changeset' to create a changeset.`
-      );
-      console.log('❌ Missing changesets for package changes\n');
-    } else if (status.changesets.length > 0) {
-      console.log(`✅ Found ${status.changesets.length} changeset(s)\n`);
-    } else {
-      console.log('✅ No changes requiring changesets\n');
-    }
-  } catch (error: any) {
-    // changeset status exits with code 1 if there are problems
-    const message = error.stdout || error.stderr || error.message;
-    if (message.includes('No changesets present')) {
-      console.log('✅ No changesets needed (no changes)\n');
-    } else if (message.includes('There are changed packages with no changesets')) {
-      errors.push(
-        `Changed packages found without changesets.\n` +
-          `Run 'bun changeset' to create a changeset for your changes.`
-      );
-      console.log('❌ Changed packages without changesets\n');
-    } else {
-      errors.push(`Changeset status check failed: ${message}`);
-      console.log('❌ Changeset status check failed\n');
+      if (status.changesets.length === 0 && status.releases.length > 0) {
+        // There are package changes but no changesets
+        errors.push(
+          `Package changes detected but no changesets found.\n` +
+            `Packages that would be released:\n` +
+            status.releases.map((r: any) => `  - ${r.name}: ${r.type}`).join('\n') +
+            `\n\nRun 'bun changeset' to create a changeset.`
+        );
+        console.log('❌ Missing changesets for package changes\n');
+      } else if (status.changesets.length > 0) {
+        console.log(`✅ Found ${status.changesets.length} changeset(s)\n`);
+      } else {
+        console.log('✅ No changes requiring changesets\n');
+      }
+    } catch (error: any) {
+      // changeset status exits with code 1 if there are problems
+      const message = error.stdout || error.stderr || error.message;
+      if (message.includes('No changesets present')) {
+        console.log('✅ No changesets needed (no changes)\n');
+      } else if (message.includes('There are changed packages with no changesets')) {
+        errors.push(
+          `Changed packages found without changesets.\n` +
+            `Run 'bun changeset' to create a changeset for your changes.`
+        );
+        console.log('❌ Changed packages without changesets\n');
+      } else {
+        errors.push(`Changeset status check failed: ${message}`);
+        console.log('❌ Changeset status check failed\n');
+      }
     }
   }
 
