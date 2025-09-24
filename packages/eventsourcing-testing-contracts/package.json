@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-testing-contracts",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Comprehensive testing utilities for event sourcing implementations - Test contracts for transport and protocol implementations with mock utilities and test data generators",
   "type": "module",
   "main": "./dist/index.js",

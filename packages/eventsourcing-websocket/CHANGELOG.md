@@ -1,5 +1,26 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.2.1
+
+### Patch Changes
+
+- [#73](https://github.com/CodeForBreakfast/eventsourcing/pull/73) [`7cec47a`](https://github.com/CodeForBreakfast/eventsourcing/commit/7cec47a3cf6741febd99f96dec4cadb1923543c2) Thanks [@GraemeF](https://github.com/GraemeF)! - Documentation updates to match current codebase implementation:
+  - Fixed incorrect package names and import paths
+  - Updated API examples and function signatures
+  - Corrected WebSocket usage patterns
+  - Removed outdated temporary documentation
+
+- [#74](https://github.com/CodeForBreakfast/eventsourcing/pull/74) [`ff5231c`](https://github.com/CodeForBreakfast/eventsourcing/commit/ff5231c27122a47839b3aedf162c00f30f5e3257) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved CI validation to prevent release failures. The changeset validation now:
+  - Detects when code changes are made without changesets (preventing npm republish failures)
+  - Checks if package versions already exist on npm
+  - Provides clear guidance on creating changesets with consumer-focused messages
+  - Distinguishes between code changes (requiring changesets) and documentation-only changes (optional)
+
+- Updated dependencies [[`7cec47a`](https://github.com/CodeForBreakfast/eventsourcing/commit/7cec47a3cf6741febd99f96dec4cadb1923543c2), [`ff5231c`](https://github.com/CodeForBreakfast/eventsourcing/commit/ff5231c27122a47839b3aedf162c00f30f5e3257)]:
+  - @codeforbreakfast/eventsourcing-protocol-default@0.2.1
+  - @codeforbreakfast/eventsourcing-transport-contracts@0.2.1
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.2.1
+
 ## 0.2.0
 
 ### Minor Changes

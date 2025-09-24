@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-protocol-default",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Default implementation of the event sourcing protocol over any transport - Standard protocol implementation with message serialization, command correlation, and subscription management",
   "type": "module",
   "main": "./dist/index.js",
