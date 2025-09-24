@@ -59,7 +59,8 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "workspace:*",
+    "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.5.2",
