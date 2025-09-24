@@ -7,6 +7,7 @@
  */
 import type * as Duration from 'effect/Duration';
 import type * as Effect from 'effect/Effect';
+import * as Logger from 'effect/Logger';
 import { test, expect, describe, afterAll, beforeAll } from 'bun:test';
 import * as internal from './internal/internal.js';
 
@@ -66,6 +67,16 @@ export const flakyTest: <A, E, R>(
   self: Effect.Effect<A, E, R>,
   timeout?: Duration.DurationInput
 ) => Effect.Effect<A, never, R> = internal.flakyTest;
+
+/**
+ * A silent logger that discards all log messages, useful for testing.
+ *
+ * @since 1.0.0
+ */
+export const silentLogger = Logger.replace(
+  Logger.defaultLogger,
+  Logger.make(() => {})
+);
 
 /** @ignored */
 const methods = { effect, live, flakyTest, scoped, scopedLive, layer } as const;

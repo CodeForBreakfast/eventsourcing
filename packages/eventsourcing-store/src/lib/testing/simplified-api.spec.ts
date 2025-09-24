@@ -1,5 +1,6 @@
-import { Effect, Stream, pipe, Chunk, Schema, ParseResult, Layer, Logger, Fiber } from 'effect';
+import { Effect, Stream, pipe, Chunk, Schema, ParseResult, Layer, Fiber } from 'effect';
 import { describe, it, expect, beforeEach } from 'bun:test';
+import { silentLogger } from '@codeforbreakfast/buntest';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
 import type { EventStore } from '../services';
 import { FooEventStore } from './eventstore-test-suite';
@@ -7,7 +8,7 @@ import { encodedEventStore } from '../eventstore';
 import { makeInMemoryEventStore } from '../inMemory';
 import * as InMemoryStore from '../inMemory/InMemoryStore';
 
-const LoggerLive = Logger.pretty;
+const LoggerLive = silentLogger;
 
 const FooEvent = Schema.Struct({
   bar: Schema.String,
