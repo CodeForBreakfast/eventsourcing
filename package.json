@@ -48,7 +48,7 @@
     "eslint-plugin-compat": "6.0.2",
     "eslint-plugin-expect-type": "0.6.2",
     "eslint-plugin-functional": "9.0.2",
-    "eslint-plugin-import": "^2.32.0",
+    "eslint-plugin-import": "2.32.0",
     "eslint-plugin-package-json": "0.56.3",
     "eslint-plugin-unused-imports": "4.2.0",
     "fast-check": "4.3.0",
