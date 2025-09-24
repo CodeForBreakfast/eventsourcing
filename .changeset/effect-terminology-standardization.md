@@ -9,73 +9,13 @@
 '@codeforbreakfast/eventsourcing-websocket': minor
 ---
 
-**BREAKING**: Standardize API naming to follow Effect conventions
+Standardize API naming to follow Effect conventions
 
-This release eliminates duplicate APIs and ensures consistent Effect terminology throughout the codebase:
+Eliminate duplicate APIs and ensure consistent Effect terminology throughout the codebase. All factory functions now use the Effect `make*` convention, and redundant aliases have been removed for a cleaner API surface.
 
-### Breaking Changes
-
-**Factory Functions** (follow Effect `make*` convention):
-
-- `createAggregateRoot` → `makeAggregateRoot`
-- `createProjectionEventStore` → `makeProjectionEventStore`
-- `createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`
-- All test utilities now use `make*` prefix (`createTestMessage` → `makeTestMessage`, etc.)
-
-**Test Interface Methods**:
-
-- `createTransportPair` → `makeTransportPair`
-- `createServer` → `makeServer`
-- `createClient` → `makeClient`
-- `createMockClient` → `makeMockClient`
-- And all other test factory methods
-
-**Removed Redundant Exports**:
-
-- Eliminated `EventStore as EventStoreServiceInterface` type alias
-- Removed internal aliases (`DatabaseInfrastructureLive`, `SubscriptionManagementLive`)
-- Removed unused `createWebSocketConnectorLayer` wrapper function
-
-### Migration Guide
-
-**For Application Code**:
-
-```typescript
-// Before
-import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
-const MyAggregate = createAggregateRoot(/* ... */);
-
-// After
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
-const MyAggregate = makeAggregateRoot(/* ... */);
-```
-
-**For WebSocket Usage**:
-
-```typescript
-// Before
-import { createWebSocketProtocolStack } from '@codeforbreakfast/eventsourcing-websocket';
-const layer = createWebSocketProtocolStack(url);
-
-// After
-import { makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
-const layer = makeWebSocketProtocolLayer(url);
-```
-
-**For Test Code**:
-
-```typescript
-// Before
-import {
-  createTestMessage,
-  createMockTransport,
-} from '@codeforbreakfast/eventsourcing-testing-contracts';
-
-// After
-import {
-  makeTestMessage,
-  makeMockTransport,
-} from '@codeforbreakfast/eventsourcing-testing-contracts';
-```
+- Replace `create*` factory functions with `make*` (Effect convention)
+- Update WebSocket layer terminology (`createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`)
+- Remove backward compatibility aliases and redundant exports
+- Standardize all test interface methods to use Effect naming patterns
 
 This cleanup eliminates API confusion and ensures developers have single, canonical names for each piece of functionality following proper Effect patterns.
