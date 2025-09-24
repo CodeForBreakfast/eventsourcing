@@ -1,5 +1,30 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.6.7
+
+### Patch Changes
+
+- [#79](https://github.com/CodeForBreakfast/eventsourcing/pull/79) [`5720964`](https://github.com/CodeForBreakfast/eventsourcing/commit/57209643dd18db0fb876d898fd48796042270eaa) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix release pipeline failures caused by TypeScript build issues
+
+  The release process was failing because packages with `workspace:*` dependencies were rebuilding during publish via `prepublishOnly` hooks. This caused TypeScript compilation errors when dependent packages tried to build in parallel without access to their dependencies' declaration files.
+
+  **Solution:**
+  - Removed `prepublishOnly` hooks from all packages (turbo already handles build order correctly)
+  - Updated release script to use `changeset publish` directly instead of custom turbo publish tasks
+  - Ensured all packages are built in dependency order before publishing begins
+
+  This ensures a smooth release process where:
+  1. All packages build in correct dependency order (respecting workspace dependencies)
+  2. Changesets handles publishing with proper version resolution
+  3. No parallel rebuild issues during the publish phase
+
+- [#79](https://github.com/CodeForBreakfast/eventsourcing/pull/79) [`5720964`](https://github.com/CodeForBreakfast/eventsourcing/commit/57209643dd18db0fb876d898fd48796042270eaa) Thanks [@GraemeF](https://github.com/GraemeF)! - Simplified release validation using changesets' native tools. The CI now validates:
+  - Changeset status to ensure changes have appropriate version bumps
+  - Build success for all packages
+  - Publish readiness via changesets publish --dry-run
+
+  This provides focused, relevant validation without unnecessary checks, ensuring smooth releases while keeping CI fast and maintainable.
+
 ## 0.6.6
 
 ### Patch Changes
