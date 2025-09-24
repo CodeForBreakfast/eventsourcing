@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-transport-websocket",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "WebSocket transport implementation for event sourcing - Protocol-agnostic message transport over WebSocket connections",
   "type": "module",
   "main": "./dist/index.js",
