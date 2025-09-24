@@ -15,7 +15,7 @@
     "publish:packages": "turbo run publish:package",
     "changeset": "changeset",
     "version": "changeset version && bun update",
-    "release": "bun run build && bun run publish:packages && changeset tag",
+    "release": "bun run build && changeset publish",
     "prepare": "husky",
     "arch:check": "dependency-cruiser packages --validate",
     "deps:check": "knip --include dependencies,unlisted,binaries,unresolved,duplicates",
