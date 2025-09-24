@@ -2,7 +2,7 @@
   "$schema": "https://turborepo.org/schema.json",
   "tasks": {
     "all": {
-      "dependsOn": ["lint", "test", "build"]
+      "dependsOn": ["ci"]
     },
     "ci": {
       "dependsOn": ["build", "check", "lint", "test", "//#arch:check", "//#deps:check"]
