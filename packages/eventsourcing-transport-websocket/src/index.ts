@@ -11,7 +11,7 @@
 // Main transport implementation and layer
 export { WebSocketConnector, WebSocketTransportLive } from './lib/websocket-transport';
 
-// Server transport implementation (TDD placeholder)
+// Server transport implementation
 export { WebSocketAcceptor } from './lib/websocket-server';
 
 // Re-export transport contracts for convenience

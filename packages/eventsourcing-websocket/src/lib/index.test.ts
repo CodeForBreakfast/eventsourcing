@@ -6,13 +6,7 @@
 
 import { describe, test, expect } from 'vitest';
 import { Effect } from 'effect';
-import {
-  connect,
-  makeWebSocketProtocolLayer,
-  DefaultWebSocketConfig,
-  WebSocketEventSourcingInfo,
-  type WebSocketConnectOptions,
-} from '../index.js';
+import { connect, makeWebSocketProtocolLayer } from '../index.js';
 
 // ============================================================================
 // Type Tests - Ensure all exports are properly typed
@@ -24,15 +18,9 @@ describe('Type Exports', () => {
     expect(typeof connect).toBe('function');
     expect(typeof makeWebSocketProtocolLayer).toBe('function');
 
-    // Test that configuration objects are available
-    expect(DefaultWebSocketConfig).toBeDefined();
-    expect(DefaultWebSocketConfig.reconnectAttempts).toBe(3);
-    expect(DefaultWebSocketConfig.reconnectDelayMs).toBe(1000);
-
-    // Test package info
-    expect(WebSocketEventSourcingInfo.name).toBe('@codeforbreakfast/eventsourcing-websocket');
-    expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
-    expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
+    // Basic smoke test
+    expect(connect).toBeDefined();
+    expect(makeWebSocketProtocolLayer).toBeDefined();
   });
 });
 
@@ -54,27 +42,6 @@ describe('Convenience API', () => {
 // Configuration Tests
 // ============================================================================
 
-describe('Configuration', () => {
-  test('should have sensible default configuration', () => {
-    expect(DefaultWebSocketConfig.reconnectAttempts).toBe(3);
-    expect(DefaultWebSocketConfig.reconnectDelayMs).toBe(1000);
-  });
-
-  test('should support connection options interface', () => {
-    const config = {
-      reconnectAttempts: 5,
-      reconnectDelayMs: 2000,
-    };
-
-    const options: WebSocketConnectOptions = {
-      config,
-    };
-
-    expect(options.config?.reconnectAttempts).toBe(5);
-    expect(options.config?.reconnectDelayMs).toBe(2000);
-  });
-});
-
 // ============================================================================
 // Integration Tests (Mock-based)
 // ============================================================================
@@ -91,34 +58,12 @@ describe('Integration Patterns', () => {
 
         // For testing, we'll just verify the function exists and has the right signature
         expect(typeof connect).toBe('function');
-        expect(connect.length).toBe(2); // url and optional options
+        expect(connect.length).toBe(1); // Just url
 
         return 'Connection pattern validated';
       });
 
     expect(connectionPattern).toBeDefined();
-  });
-
-  test('should demonstrate advanced configuration pattern', () => {
-    const advancedPattern = () =>
-      Effect.gen(function* () {
-        const options: WebSocketConnectOptions = {
-          config: {
-            reconnectAttempts: 5,
-            reconnectDelayMs: 1500,
-          },
-        };
-
-        // Advanced configuration usage
-        // const protocol = yield* connect("ws://localhost:8080", options);
-
-        expect(options.config?.reconnectAttempts).toBe(5);
-        expect(options.config?.reconnectDelayMs).toBe(1500);
-
-        return 'Advanced pattern validated';
-      });
-
-    expect(advancedPattern).toBeDefined();
   });
 
   test('should demonstrate Layer-based dependency injection pattern', () => {
@@ -171,14 +116,6 @@ describe('API Usage Examples', () => {
 // Package Metadata Tests
 // ============================================================================
 
-describe('Package Metadata', () => {
-  test('should provide comprehensive package information', () => {
-    expect(WebSocketEventSourcingInfo.name).toBe('@codeforbreakfast/eventsourcing-websocket');
-    expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
-    expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
-  });
-});
-
 // ============================================================================
 // Performance and Best Practices Tests
 // ============================================================================
@@ -203,26 +140,5 @@ describe('Performance and Best Practices', () => {
       });
 
     expect(connectionReusePattern).toBeDefined();
-  });
-
-  test('should demonstrate configuration best practices', () => {
-    const configBestPractices = () =>
-      Effect.gen(function* () {
-        // Configure reconnection based on your use case
-        const options: WebSocketConnectOptions = {
-          config: {
-            // Always configure reconnection
-            reconnectAttempts: 5,
-            reconnectDelayMs: 2000,
-          },
-        };
-
-        // const protocol = yield* connect("ws://localhost:8080", options);
-
-        expect(options.config?.reconnectAttempts).toBe(5);
-        return 'Configuration best practices shown';
-      });
-
-    expect(configBestPractices).toBeDefined();
   });
 });

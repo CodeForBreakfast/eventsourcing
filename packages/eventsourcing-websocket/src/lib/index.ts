@@ -18,21 +18,11 @@ import type {
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import type { Scope } from 'effect/Scope';
 
-export const DefaultWebSocketConfig = {
-  reconnectAttempts: 3,
-  reconnectDelayMs: 1000,
-} as const;
-
-export interface WebSocketConnectOptions {
-  readonly config?: Partial<typeof DefaultWebSocketConfig>;
-}
-
 /**
  * Connect to a WebSocket event sourcing server
  */
 export const connect = (
-  url: string,
-  _options?: WebSocketConnectOptions
+  url: string
 ): Effect.Effect<ProtocolService, TransportError | ConnectionError, Protocol | Scope> => {
   // Create the layer stack
   const protocolLayer = pipe(
@@ -62,9 +52,3 @@ export const makeWebSocketProtocolLayer = (
     Layer.unwrapScoped
   );
 };
-
-export const WebSocketEventSourcingInfo = {
-  name: '@codeforbreakfast/eventsourcing-websocket',
-  description: 'Batteries-included WebSocket event sourcing package',
-  version: '0.1.0',
-} as const;
