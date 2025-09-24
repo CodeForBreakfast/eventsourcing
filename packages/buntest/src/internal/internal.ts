@@ -65,10 +65,13 @@ const runTest =
   <E, A>(effect: Effect.Effect<A, E>) =>
     runPromise(ctx)(effect);
 
-/** @internal */
-const TestEnv = TestEnvironment.TestContext.pipe(
-  Layer.provide(Logger.remove(Logger.defaultLogger))
+const silentLogger = Logger.replace(
+  Logger.defaultLogger,
+  Logger.make(() => {})
 );
+
+/** @internal */
+const TestEnv = TestEnvironment.TestContext.pipe(Layer.provide(silentLogger));
 
 // Bun test doesn't have expect.addEqualityTesters, so we'll add custom matchers
 /** @internal */

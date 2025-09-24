@@ -1,5 +1,6 @@
-import { Logger, Effect, Layer, Schema, Stream, pipe, ParseResult } from 'effect';
+import { Effect, Layer, Schema, Stream, pipe, ParseResult } from 'effect';
 import { describe, expect, it } from 'bun:test';
+import { silentLogger } from '@codeforbreakfast/buntest';
 import {
   runEventStoreTestSuite,
   FooEventStore,
@@ -17,7 +18,7 @@ import {
   makePgConfigurationLive,
 } from './index';
 
-const LoggerLive = Logger.pretty;
+const LoggerLive = silentLogger;
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;

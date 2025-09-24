@@ -1,10 +1,11 @@
-import { Logger, Effect, Layer, Schema, pipe } from 'effect';
+import { Effect, Layer, Schema, pipe } from 'effect';
+import { silentLogger } from '@codeforbreakfast/buntest';
 import { runEventStoreTestSuite, FooEventStore } from '../testing/eventstore-test-suite';
 import { encodedEventStore } from '../eventstore';
 import { makeInMemoryEventStore } from './index';
 import * as InMemoryStore from './InMemoryStore';
 
-const LoggerLive = Logger.pretty;
+const LoggerLive = silentLogger;
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
