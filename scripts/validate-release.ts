@@ -109,7 +109,7 @@ async function validateRelease(): Promise<ValidationResult> {
   console.log('📦 Validating package configurations...');
 
   try {
-    // Validate that packages can be packed correctly using npm pack --dry-run
+    // Validate that packages can be packed correctly using bun pm pack --dry-run
     console.log('   Checking package configurations...');
 
     // Get list of packages that would be published
@@ -137,7 +137,7 @@ async function validateRelease(): Promise<ValidationResult> {
       for (const release of status.releases) {
         try {
           const packageDir = release.name.replace('@codeforbreakfast/', '');
-          execSync(`npm pack --dry-run`, {
+          execSync(`bun pm pack --dry-run`, {
             cwd: join(rootDir, 'packages', packageDir),
             stdio: 'pipe',
           });
