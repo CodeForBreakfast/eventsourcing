@@ -109,7 +109,7 @@ async function validateRelease(): Promise<ValidationResult> {
   console.log('📦 Validating package configurations...');
 
   try {
-    // Use npm pack --dry-run to validate package.json configurations without actually publishing
+    // Validate that packages can be packed correctly using npm pack --dry-run
     console.log('   Checking package configurations...');
 
     // Get list of packages that would be published
