@@ -27,6 +27,18 @@ async function validateRelease(): Promise<ValidationResult> {
   // Step 1: Check changeset status
   console.log('📦 Checking changesets status...');
   try {
+    // In CI, we need to ensure the base branch exists for changesets to work
+    if (process.env.GITHUB_BASE_REF) {
+      try {
+        execSync(`git fetch origin ${process.env.GITHUB_BASE_REF}:${process.env.GITHUB_BASE_REF}`, {
+          cwd: rootDir,
+          stdio: 'pipe',
+        });
+      } catch {
+        // Branch might already exist, that's fine
+      }
+    }
+
     const output = execSync('bunx changeset status --output=status.json', {
       cwd: rootDir,
       encoding: 'utf-8',
