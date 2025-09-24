@@ -1,6 +1,7 @@
 import typescript from '@typescript-eslint/eslint-plugin';
 import parser from '@typescript-eslint/parser';
 import unusedImports from 'eslint-plugin-unused-imports';
+import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 
 export default [
@@ -16,18 +17,25 @@ export default [
     plugins: {
       '@typescript-eslint': typescript,
       'unused-imports': unusedImports,
+      import: importPlugin,
     },
     rules: {
       ...typescript.configs['recommended'].rules,
       ...prettier.rules,
       'unused-imports/no-unused-imports': 'error',
-      '@typescript-eslint/no-unused-vars': [
-        'error',
-        { argsIgnorePattern: '^_' }
-      ],
+      '@typescript-eslint/no-unused-vars': ['error', { argsIgnorePattern: '^_' }],
       '@typescript-eslint/explicit-function-return-type': 'off',
       '@typescript-eslint/explicit-module-boundary-types': 'off',
       '@typescript-eslint/no-explicit-any': 'error',
+      'import/extensions': [
+        'error',
+        'never',
+        {
+          js: 'never',
+          ts: 'never',
+          tsx: 'never',
+        },
+      ],
     },
   },
   {
