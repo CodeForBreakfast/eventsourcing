@@ -26,7 +26,7 @@ bun add @codeforbreakfast/eventsourcing-store effect
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
 import {
-  inMemoryEventStore,
+  makeInMemoryEventStore,
   toStreamId,
   beginning,
   EventNumber,
@@ -48,7 +48,7 @@ interface UserEmailUpdated {
 type UserEvent = UserRegistered | UserEmailUpdated;
 
 // Create an in-memory event store
-const eventStoreLayer = inMemoryEventStore<UserEvent>();
+const eventStoreLayer = makeInMemoryEventStore<UserEvent>();
 
 // Example: Writing events to a stream
 const appendEvents = (eventStore: EventStore<UserEvent>) => (userId: string, events: UserEvent[]) =>
@@ -119,7 +119,7 @@ The main service interface for reading and writing events:
 
 ```typescript
 interface EventStore<TEvent> {
-  readonly write: (
+  readonly append: (
     to: EventStreamPosition
   ) => Sink.Sink<
     EventStreamPosition,
@@ -130,11 +130,19 @@ interface EventStore<TEvent> {
 
   readonly read: (
     from: EventStreamPosition
-  ) => Effect.Effect<Stream.Stream<TEvent>, EventStoreError>;
+  ) => Effect.Effect<
+    Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
+    EventStoreError,
+    never
+  >;
 
   readonly subscribe: (
     from: EventStreamPosition
-  ) => Effect.Effect<Stream.Stream<TEvent>, EventStoreError>;
+  ) => Effect.Effect<
+    Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>,
+    EventStoreError,
+    never
+  >;
 }
 ```
 
@@ -162,9 +170,9 @@ interface EventStreamPosition {
 Perfect for testing and development:
 
 ```typescript
-import { inMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
 
-const eventStoreLayer = inMemoryEventStore<MyEvent>();
+const eventStoreLayer = makeInMemoryEventStore<MyEvent>();
 ```
 
 ### Subscribable In-Memory Store

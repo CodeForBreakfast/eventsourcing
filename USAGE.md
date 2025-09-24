@@ -32,7 +32,7 @@ bun add @codeforbreakfast/eventsourcing-aggregates
 bun add @codeforbreakfast/eventsourcing-projections
 
 # WebSocket transport for real-time streaming
-bun add @codeforbreakfast/eventsourcing-websocket-transport
+bun add @codeforbreakfast/eventsourcing-transport-websocket
 
 # Don't forget Effect as a peer dependency
 bun add effect
@@ -102,6 +102,7 @@ const EventStoreLive = SqlEventStore.Live.pipe(
 
 ```typescript
 import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { EventStoreService } from '@codeforbreakfast/eventsourcing-store';
 import { Schema, Effect, Option, Chunk, pipe } from 'effect';
 
 // Define aggregate state
@@ -145,7 +146,7 @@ const UserAggregate = createAggregateRoot(
     ),
 
   // Event store tag for dependency injection
-  UserEventStore,
+  EventStoreService,
 
   // Commands: functions that take parameters and return a state transformer
   // Note: Commands don't include aggregate IDs - those are implicit from the stream
@@ -278,22 +279,36 @@ const program = pipe(
 ### 5. Real-time Event Streaming with WebSockets
 
 ```typescript
-import { WebSocketTransport } from '@codeforbreakfast/eventsourcing-websocket-transport';
-import { Stream, Effect } from 'effect';
+import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { Stream, Effect, pipe } from 'effect';
 
-// Set up WebSocket transport
-const transport = WebSocketTransport.make({
-  url: 'ws://localhost:8080/events',
-});
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    // Connect to WebSocket server
+    const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
 
-// Subscribe to events
-const subscription = transport.subscribe('user-events').pipe(
-  Stream.tap((event) => Effect.log(`Received event: ${event.type}`)),
-  Stream.runDrain
+    // Subscribe to events
+    const subscription = yield* transport.subscribe();
+
+    // Handle incoming messages
+    yield* pipe(
+      subscription,
+      Stream.runForEach((message) => Effect.sync(() => console.log('Received event:', message))),
+      Effect.fork
+    );
+
+    // Publish an event
+    yield* transport.publish({
+      id: makeMessageId('event-1'),
+      type: 'user.registered',
+      payload: { userId: '123', email: 'test@example.com' },
+    });
+  })
 );
 
-// Run with proper resource management
-Effect.runPromise(subscription.pipe(Effect.scoped, Effect.provide(WebSocketTransportLive)));
+// Run with automatic cleanup
+await Effect.runPromise(program);
 ```
 
 ## Advanced Patterns
@@ -363,8 +378,13 @@ const snapshot = pipe(
 ## Testing
 
 ```typescript
-import { TestClock, Effect, pipe, Layer } from 'effect';
-import { EventStore, InMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { TestClock, Effect, pipe, Layer, Stream } from 'effect';
+import {
+  EventStoreService,
+  makeInMemoryEventStore,
+  toStreamId,
+  beginning,
+} from '@codeforbreakfast/eventsourcing-store';
 
 describe('UserAggregate', () => {
   it('should register user', async () => {
@@ -386,9 +406,17 @@ describe('UserAggregate', () => {
           ),
           // Read back from event store to verify
           Effect.flatMap(() =>
-            EventStore.read({
-              streamId: userId,
-            })
+            pipe(
+              EventStoreService,
+              Effect.flatMap((eventStore) =>
+                pipe(
+                  toStreamId(userId),
+                  Effect.flatMap(beginning),
+                  Effect.flatMap(eventStore.read),
+                  Effect.flatMap(Stream.runCollect)
+                )
+              )
+            )
           ),
           // Assert on the stored events
           Effect.tap((storedEvents) =>
@@ -402,7 +430,7 @@ describe('UserAggregate', () => {
     );
 
     await Effect.runPromise(
-      pipe(program, Effect.provide(Layer.merge(InMemoryEventStore.Live, TestClock.layer)))
+      pipe(program, Effect.provide(Layer.merge(makeInMemoryEventStore(), TestClock.layer)))
     );
   });
 });
