@@ -25,3 +25,5 @@
 3. `bun release` - publish to npm
 
 - Start each new piece of work in a new branch from the latest origin/main. Changes are always submitted via a PR.
+- With each commit, review and update pending changesets accordingly.
+- Changesets must be written with the package consumer in mind, telling them what they need to know about changes, not just what changed.
