@@ -205,3 +205,54 @@ export const collectStreamWithTimeout = <A, E>(
       onTimeout: () => 'timeout' as const,
     })
   ) as Effect.Effect<Chunk.Chunk<A>, E | 'timeout', never>;
+
+// ============================================================================
+// Client-Server Test Helper Implementations
+// ============================================================================
+
+/**
+ * Default implementation of waitForConnectionState for testing
+ * Waits for a specific connection state to be emitted
+ */
+export const waitForConnectionState = (
+  connectionStateStream: Stream.Stream<ConnectionState, never, never>,
+  expectedState: ConnectionState,
+  timeoutMs: number = 5000
+): Effect.Effect<void, Error, never> =>
+  pipe(
+    connectionStateStream,
+    Stream.filter((state) => state === expectedState),
+    Stream.take(1),
+    Stream.runDrain,
+    Effect.timeout(timeoutMs),
+    Effect.mapError(() => new Error(`Timeout waiting for connection state: ${expectedState}`))
+  );
+
+/**
+ * Default implementation of collectMessages for testing
+ * Collects a specific number of messages from a stream
+ */
+export const collectMessages = <T>(
+  stream: Stream.Stream<T, never, never>,
+  count: number,
+  timeoutMs: number = 5000
+): Effect.Effect<T[], Error, never> =>
+  pipe(
+    stream,
+    Stream.take(count),
+    Stream.runCollect,
+    Effect.map((chunk) => Array.from(chunk)),
+    Effect.timeout(timeoutMs),
+    Effect.mapError(() => new Error(`Timeout collecting ${count} messages`))
+  );
+
+/**
+ * Default implementation of createTestMessage for testing
+ * Creates a test message with unique ID
+ */
+export const createTestMessage = (type: string, payload: unknown): TransportMessage => ({
+  id: `test-${Date.now()}-${Math.random()}`,
+  type,
+  payload,
+  metadata: undefined,
+});

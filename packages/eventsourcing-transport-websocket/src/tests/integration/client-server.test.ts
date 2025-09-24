@@ -13,7 +13,6 @@ import { Effect, Stream, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
-  makeTransportMessage,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import {
   runClientServerContractTests,
@@ -21,6 +20,9 @@ import {
   type TransportPair,
   type ClientTransport,
   type ServerTransport,
+  waitForConnectionState as defaultWaitForConnectionState,
+  collectMessages as defaultCollectMessages,
+  createTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the WebSocket implementations
@@ -95,33 +97,12 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
     waitForConnectionState: (
       transport: ClientTransport,
       expectedState: ConnectionState,
-      timeoutMs: number = 5000
-    ) =>
-      pipe(
-        transport.connectionState,
-        Stream.filter((state) => state === expectedState),
-        Stream.take(1),
-        Stream.runDrain,
-        Effect.timeout(timeoutMs),
-        Effect.mapError(() => new Error(`Timeout waiting for connection state: ${expectedState}`))
-      ),
+      timeoutMs?: number
+    ) => defaultWaitForConnectionState(transport.connectionState, expectedState, timeoutMs),
 
-    collectMessages: <T>(
-      stream: Stream.Stream<T, never, never>,
-      count: number,
-      timeoutMs: number = 5000
-    ) =>
-      pipe(
-        stream,
-        Stream.take(count),
-        Stream.runCollect,
-        Effect.map((chunk) => Array.from(chunk)),
-        Effect.timeout(timeoutMs),
-        Effect.mapError(() => new Error(`Timeout collecting ${count} messages`))
-      ),
+    collectMessages: defaultCollectMessages,
 
-    createTestMessage: (type: string, payload: unknown) =>
-      makeTransportMessage(`test-${Date.now()}-${Math.random()}`, type, payload),
+    createTestMessage: defaultCreateTestMessage,
   });
 
 // =============================================================================
