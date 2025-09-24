@@ -13,6 +13,7 @@ This command automates the entire process of getting changes merged into main:
 3. **Run checks**
    - Run `bun run all` to ensure all tests and checks pass before proceeding
    - Fix any issues if checks fail
+   - Assume all failures are due to your changes, not external factors
 4. **Create a changeset file**
    - Manually create a new changeset file in `.changeset/` with a summary of changes and type of release (patch or minor only, because we are still pre-1.0.0)
    - Changes must be described from the perspective of a user of the package, not internal implementation details
@@ -24,7 +25,7 @@ This command automates the entire process of getting changes merged into main:
    - If no PR exists, create one with a descriptive title and body
 7. **Enable automerge** on the PR (squash merge)
 8. **Monitor the PR** until it's merged:
-   - Use `gh pr checks --watch` to monitor check statuses in real-time
+   - Use `gh pr checks --watch` to wait for checks to complete
    - After checks pass, verify merge status
    - Alert when merged successfully or if merge fails
 9. **Clean up** after successful merge:
