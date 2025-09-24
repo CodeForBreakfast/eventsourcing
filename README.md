@@ -10,43 +10,78 @@ This library prioritizes leveraging Effect's existing APIs and patterns rather t
 
 This monorepo contains the following packages:
 
-### [@codeforbreakfast/eventsourcing-store](./packages/eventsourcing-store)
+### Core Packages
+
+#### [@codeforbreakfast/eventsourcing-store](./packages/eventsourcing-store)
 
 Core event sourcing types, interfaces, and in-memory storage implementation. This is the foundation package that defines the EventStore interface and provides an in-memory implementation for development and testing.
 
-### [@codeforbreakfast/eventsourcing-store-postgres](./packages/eventsourcing-store-postgres)
+#### [@codeforbreakfast/eventsourcing-store-postgres](./packages/eventsourcing-store-postgres)
 
 PostgreSQL implementation of the EventStore interface. Includes SQL migrations, connection management, and LISTEN/NOTIFY support for real-time event streaming.
 
-### [@codeforbreakfast/eventsourcing-aggregates](./packages/eventsourcing-aggregates)
+#### [@codeforbreakfast/eventsourcing-aggregates](./packages/eventsourcing-aggregates)
 
 Aggregate root patterns for domain-driven design with event sourcing. Focuses purely on write-side concerns and command handling.
 
-### [@codeforbreakfast/eventsourcing-projections](./packages/eventsourcing-projections)
+#### [@codeforbreakfast/eventsourcing-projections](./packages/eventsourcing-projections)
 
 Read-side projection building from event streams. Handles the transformation of events into read models.
 
-### [@codeforbreakfast/eventsourcing-websocket-transport](./packages/eventsourcing-websocket-transport)
+### Transport Layer
 
-Real-time WebSocket transport for event streaming.
+#### [@codeforbreakfast/eventsourcing-transport-contracts](./packages/eventsourcing-transport-contracts)
+
+Transport layer contracts and interfaces for message delivery systems. Provides protocol-agnostic abstractions for event streaming.
+
+#### [@codeforbreakfast/eventsourcing-transport-inmemory](./packages/eventsourcing-transport-inmemory)
+
+In-memory transport implementation for testing and development. Provides immediate message delivery without network overhead.
+
+#### [@codeforbreakfast/eventsourcing-transport-websocket](./packages/eventsourcing-transport-websocket)
+
+WebSocket transport implementation for real-time event streaming over WebSocket connections.
+
+### Protocol Layer
+
+#### [@codeforbreakfast/eventsourcing-protocol-default](./packages/eventsourcing-protocol-default)
+
+Default protocol implementation for event sourcing messages. Handles message formatting, serialization, and routing.
+
+### WebSocket Integration
+
+#### [@codeforbreakfast/eventsourcing-websocket](./packages/eventsourcing-websocket)
+
+High-level WebSocket integration combining transport and protocol layers for complete real-time event streaming functionality.
+
+### Testing
+
+#### [@codeforbreakfast/eventsourcing-testing-contracts](./packages/eventsourcing-testing-contracts)
+
+Testing contracts and utilities for verifying event sourcing implementations. Provides standard test suites for compliance testing.
 
 ## Installation
 
 ```bash
-# Core package with interfaces and in-memory implementation
+# Core packages
 npm install @codeforbreakfast/eventsourcing-store
+npm install @codeforbreakfast/eventsourcing-store-postgres  # PostgreSQL implementation (optional)
+npm install @codeforbreakfast/eventsourcing-aggregates      # Aggregate patterns for write-side
+npm install @codeforbreakfast/eventsourcing-projections     # Projection patterns for read-side
 
-# PostgreSQL storage implementation (optional)
-npm install @codeforbreakfast/eventsourcing-store-postgres
+# Transport layer (choose one or more)
+npm install @codeforbreakfast/eventsourcing-transport-contracts  # Transport contracts
+npm install @codeforbreakfast/eventsourcing-transport-inmemory   # In-memory transport for testing
+npm install @codeforbreakfast/eventsourcing-transport-websocket  # WebSocket transport
 
-# Aggregate patterns for write-side
-npm install @codeforbreakfast/eventsourcing-aggregates
+# Protocol layer
+npm install @codeforbreakfast/eventsourcing-protocol-default     # Default message protocol
 
-# Projection patterns for read-side
-npm install @codeforbreakfast/eventsourcing-projections
+# WebSocket integration (high-level)
+npm install @codeforbreakfast/eventsourcing-websocket            # Complete WebSocket functionality
 
-# WebSocket transport for real-time events
-npm install @codeforbreakfast/eventsourcing-websocket-transport
+# Testing utilities
+npm install @codeforbreakfast/eventsourcing-testing-contracts    # Testing contracts
 ```
 
 ## Requirements
