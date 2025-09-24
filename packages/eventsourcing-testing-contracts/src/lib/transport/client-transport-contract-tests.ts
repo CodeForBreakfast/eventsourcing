@@ -42,7 +42,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Transport should be connected
               const initialState = yield* pipe(
@@ -66,7 +66,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              transport = yield* context.createConnectedTransport('test://localhost');
+              transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Set up a listener for connection state changes
               const stateMonitoring = yield* pipe(
@@ -99,7 +99,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const stateHistory: ConnectionState[] = [];
               const stateMonitoring = yield* pipe(
@@ -121,7 +121,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
 
       it('should handle connection errors gracefully', async () => {
         const result = await Effect.runPromise(
-          Effect.scoped(pipe(context.createConnectedTransport('invalid://bad-url'), Effect.either))
+          Effect.scoped(pipe(context.makeConnectedTransport('invalid://bad-url'), Effect.either))
         );
 
         expect(result._tag).toBe('Left');
@@ -131,7 +131,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         // Try to connect to a non-existent endpoint
         const result = await Effect.runPromise(
           Effect.scoped(
-            pipe(context.createConnectedTransport('test://non-existent-server'), Effect.either)
+            pipe(context.makeConnectedTransport('test://non-existent-server'), Effect.either)
           )
         );
 
@@ -145,7 +145,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const messageInput = {
                 id: 'test-1',
@@ -164,7 +164,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const messages: TransportMessage[] = [
                 {
@@ -211,7 +211,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const message: TransportMessage = {
                 id: 'meta-msg',
@@ -234,7 +234,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Try to publish an invalid message (empty ID)
               const message: TransportMessage = {
@@ -262,7 +262,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const messagePromise = yield* pipe(
                 transport.subscribe(),
@@ -301,7 +301,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const subscription1 = yield* pipe(
                 transport.subscribe((msg) => msg.type === 'type-a'),
@@ -359,7 +359,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const FilteredPayloadSchema = Schema.Struct({
                 priority: Schema.Literal('high'),
@@ -432,7 +432,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const result = yield* pipe(
                 transport.subscribe(() => {
@@ -455,7 +455,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               const stateHistory: ConnectionState[] = [];
               const stateMonitoring = yield* pipe(
@@ -495,7 +495,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
 
               // Start the connection in a fiber so we can subscribe to states early
               const connectionFiber = yield* Effect.fork(
-                context.createConnectedTransport('test://localhost')
+                context.makeConnectedTransport('test://localhost')
               );
 
               // Wait a tiny bit for the connection to start initializing
@@ -554,7 +554,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             Effect.gen(function* () {
               // Connect and wait for connection
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Wait for connection to be established
               yield* pipe(
@@ -599,7 +599,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              transport = yield* context.createConnectedTransport('test://localhost');
+              transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Set up subscription
               const subscription = yield* transport.subscribe();
@@ -633,7 +633,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             Effect.gen(function* () {
-              const transport = yield* context.createConnectedTransport('test://localhost');
+              const transport = yield* context.makeConnectedTransport('test://localhost');
 
               // Start multiple concurrent operations
               const operations = Array.from({ length: 5 }, (_, i) =>

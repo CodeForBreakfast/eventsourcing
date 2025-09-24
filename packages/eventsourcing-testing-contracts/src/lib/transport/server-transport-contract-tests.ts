@@ -23,8 +23,8 @@ import type {
  * Factory for creating server transports and mock clients for testing
  */
 export interface ServerTestFactory {
-  readonly createServer: () => Effect.Effect<ServerTransportTest, Error, Scope.Scope>;
-  readonly createMockClient: () => Effect.Effect<MockClientTransport, Error, Scope.Scope>;
+  readonly makeServer: () => Effect.Effect<ServerTransportTest, Error, Scope.Scope>;
+  readonly makeMockClient: () => Effect.Effect<MockClientTransport, Error, Scope.Scope>;
 }
 
 /**
@@ -33,7 +33,7 @@ export interface ServerTestFactory {
  */
 export interface ServerTestContext {
   // Create a new server transport for testing
-  readonly createServerFactory: () => ServerTestFactory;
+  readonly makeServerFactory: () => ServerTestFactory;
 
   // Test utilities
   readonly waitForConnectionCount: (
@@ -46,7 +46,7 @@ export interface ServerTestContext {
     count: number,
     timeoutMs?: number
   ) => Effect.Effect<ServerConnectionTest[], Error, never>;
-  readonly createTestMessage: (type: string, payload: unknown) => TransportMessage;
+  readonly makeTestMessage: (type: string, payload: unknown) => TransportMessage;
 }
 
 /**
@@ -117,15 +117,15 @@ export const runServerTransportContractTests: ServerTestRunner = (
     describe('Connection Management', () => {
       test('should track client connections', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Initially no connections
           const initialCount = yield* server.connectionCount();
           expect(initialCount).toBe(0);
 
           // Connect a client
-          yield* factory.createMockClient();
+          yield* factory.makeMockClient();
 
           // Wait for server to register the connection
           yield* context.waitForConnectionCount(server, 1);
@@ -139,13 +139,13 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should track multiple client connections', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Connect multiple clients
-          yield* factory.createMockClient();
-          yield* factory.createMockClient();
-          yield* factory.createMockClient();
+          yield* factory.makeMockClient();
+          yield* factory.makeMockClient();
+          yield* factory.makeMockClient();
 
           // Wait for server to register all connections
           yield* context.waitForConnectionCount(server, 3);
@@ -168,12 +168,12 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should remove connections when clients disconnect', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Connect clients
-          const client1 = yield* factory.createMockClient();
-          yield* factory.createMockClient();
+          const client1 = yield* factory.makeMockClient();
+          yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 2);
 
@@ -194,10 +194,10 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should handle client connection state changes', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
-          const client = yield* factory.createMockClient();
+          const client = yield* factory.makeMockClient();
 
           // Get the server-side connection
           const serverConnection = yield* pipe(server.connections, Stream.take(1), Stream.runHead);
@@ -238,13 +238,13 @@ export const runServerTransportContractTests: ServerTestRunner = (
     describe('Message Broadcasting', () => {
       test('should broadcast messages to all connected clients', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Connect multiple clients
-          const client1 = yield* factory.createMockClient();
-          const client2 = yield* factory.createMockClient();
-          const client3 = yield* factory.createMockClient();
+          const client1 = yield* factory.makeMockClient();
+          const client2 = yield* factory.makeMockClient();
+          const client3 = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 3);
 
@@ -254,7 +254,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
           const client3Messages = yield* client3.subscribe();
 
           // Broadcast a message from server
-          const broadcastMessage = context.createTestMessage('server.announcement', {
+          const broadcastMessage = context.makeTestMessage('server.announcement', {
             message: 'hello all clients',
             timestamp: Date.now(),
           });
@@ -300,12 +300,12 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should not broadcast to disconnected clients', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Connect clients
-          const client1 = yield* factory.createMockClient();
-          const client2 = yield* factory.createMockClient();
+          const client1 = yield* factory.makeMockClient();
+          const client2 = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 2);
 
@@ -317,7 +317,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
           yield* context.waitForConnectionCount(server, 1);
 
           // Broadcast message
-          const broadcastMessage = context.createTestMessage('server.test', { data: 'test' });
+          const broadcastMessage = context.makeTestMessage('server.test', { data: 'test' });
           yield* server.broadcast(broadcastMessage);
 
           yield* Effect.sleep(Duration.millis(100));
@@ -342,11 +342,11 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should handle broadcast errors gracefully', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Try to broadcast without any connected clients
-          const broadcastMessage = context.createTestMessage('server.empty', {
+          const broadcastMessage = context.makeTestMessage('server.empty', {
             data: 'no clients',
           });
 
@@ -365,12 +365,12 @@ export const runServerTransportContractTests: ServerTestRunner = (
     describe('Individual Connection Communication', () => {
       test('should support direct communication with individual connections', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Connect clients
-          const client1 = yield* factory.createMockClient();
-          const client2 = yield* factory.createMockClient();
+          const client1 = yield* factory.makeMockClient();
+          const client2 = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 2);
 
@@ -383,7 +383,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
           const client2Messages = yield* client2.subscribe();
 
           // Send message to only one connection
-          const directMessage = context.createTestMessage('server.direct', { target: 'client1' });
+          const directMessage = context.makeTestMessage('server.direct', { target: 'client1' });
           yield* connection1!.publish(directMessage);
 
           yield* Effect.sleep(Duration.millis(100));
@@ -418,10 +418,10 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should receive messages from individual clients', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
-          const client = yield* factory.createMockClient();
+          const client = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 1);
 
@@ -438,7 +438,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
           const serverMessages = yield* connection.subscribe();
 
           // Client sends message
-          const clientMessage = context.createTestMessage('client.request', { action: 'ping' });
+          const clientMessage = context.makeTestMessage('client.request', { action: 'ping' });
           yield* client.publish(clientMessage);
 
           // Server should receive the message
@@ -461,15 +461,15 @@ export const runServerTransportContractTests: ServerTestRunner = (
     describe('Resource Management', () => {
       test('should clean up all connections when server shuts down', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
+          const factory = context.makeServerFactory();
 
           // Create nested scope for server
           const serverScope = yield* Scope.make();
-          const server = yield* Scope.extend(factory.createServer(), serverScope);
+          const server = yield* Scope.extend(factory.makeServer(), serverScope);
 
           // Connect clients
-          const client1 = yield* factory.createMockClient();
-          const client2 = yield* factory.createMockClient();
+          const client1 = yield* factory.makeMockClient();
+          const client2 = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 2);
 
@@ -512,19 +512,19 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should handle concurrent client operations during server shutdown', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
+          const factory = context.makeServerFactory();
 
           // Create nested scope for server
           const serverScope = yield* Scope.make();
-          const server = yield* Scope.extend(factory.createServer(), serverScope);
+          const server = yield* Scope.extend(factory.makeServer(), serverScope);
 
-          const client = yield* factory.createMockClient();
+          const client = yield* factory.makeMockClient();
 
           yield* context.waitForConnectionCount(server, 1);
 
           // Start concurrent operations
           const operations = Array.from({ length: 5 }, (_, i) =>
-            Effect.fork(client.publish(context.createTestMessage(`concurrent-${i}`, { index: i })))
+            Effect.fork(client.publish(context.makeTestMessage(`concurrent-${i}`, { index: i })))
           );
 
           const fibers = yield* Effect.all(operations);
@@ -532,7 +532,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
           // Start a broadcast operation
           const broadcastFiber = yield* Effect.fork(
             server.broadcast(
-              context.createTestMessage('server.shutdown', { message: 'shutting down' })
+              context.makeTestMessage('server.shutdown', { message: 'shutting down' })
             )
           );
 
@@ -553,12 +553,12 @@ export const runServerTransportContractTests: ServerTestRunner = (
 
       test('should track connection lifecycle properly', async () => {
         const program = Effect.gen(function* () {
-          const factory = context.createServerFactory();
-          const server = yield* factory.createServer();
+          const factory = context.makeServerFactory();
+          const server = yield* factory.makeServer();
 
           // Create client in nested scope
           const clientScope = yield* Scope.make();
-          yield* Scope.extend(factory.createMockClient(), clientScope);
+          yield* Scope.extend(factory.makeMockClient(), clientScope);
 
           yield* context.waitForConnectionCount(server, 1);
 

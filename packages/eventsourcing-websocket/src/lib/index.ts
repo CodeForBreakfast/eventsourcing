@@ -51,9 +51,9 @@ export const connect = (
 };
 
 /**
- * Create protocol stack as layer
+ * Make WebSocket protocol layer
  */
-export const createWebSocketProtocolStack = (
+export const makeWebSocketProtocolLayer = (
   url: string
 ): Layer.Layer<Protocol, TransportError | ConnectionError, Scope> => {
   return pipe(
@@ -62,11 +62,6 @@ export const createWebSocketProtocolStack = (
     Layer.unwrapScoped
   );
 };
-
-/**
- * Create protocol connector layer (alias for createWebSocketProtocolStack)
- */
-export const createWebSocketConnectorLayer = (url: string) => createWebSocketProtocolStack(url);
 
 export const WebSocketEventSourcingInfo = {
   name: '@codeforbreakfast/eventsourcing-websocket',

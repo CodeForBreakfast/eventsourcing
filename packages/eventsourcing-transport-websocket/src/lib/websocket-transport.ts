@@ -312,7 +312,7 @@ const webSocketConnectorImpl: Client.ConnectorInterface = {
 // =============================================================================
 
 /**
- * WebSocket connector implementation that can be used directly
+ * WebSocket connector implementation
  */
 export const WebSocketConnector = webSocketConnectorImpl;
 

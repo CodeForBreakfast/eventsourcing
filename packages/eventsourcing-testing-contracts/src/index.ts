@@ -54,10 +54,10 @@ export { runServerTransportContractTests } from './lib/transport/server-transpor
 export {
   // Test data generators
   generateMessageId,
-  createTestTransportMessage,
+  makeTestTransportMessage,
 
   // Mock implementations
-  createMockTransport,
+  makeMockTransport,
   type MockTransportState,
 
   // Test helpers
@@ -68,5 +68,5 @@ export {
   // Client-Server test helpers
   waitForConnectionState,
   collectMessages,
-  createTestMessage,
+  makeTestMessage,
 } from './lib/test-utilities';

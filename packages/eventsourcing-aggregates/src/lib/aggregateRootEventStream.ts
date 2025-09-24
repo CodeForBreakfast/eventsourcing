@@ -120,9 +120,9 @@ const commit =
  * @since 0.4.0
  * @example
  * ```typescript
- * import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+ * import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
  *
- * const UserAggregate = createAggregateRoot(
+ * const UserAggregate = makeAggregateRoot(
  *   UserId,
  *   applyUserEvent,
  *   UserEventStoreTag,
@@ -153,7 +153,7 @@ const commit =
  * @throws {ParseResult.ParseError} If events cannot be parsed
  * @throws {EventStoreError} If the event store operations fail
  */
-export const createAggregateRoot = <TId extends string, TEvent, TState, TCommands, TTag>(
+export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands, TTag>(
   _idSchema: Schema.Schema<TId, string>,
   apply: (
     state: Readonly<Option.Option<TState>>

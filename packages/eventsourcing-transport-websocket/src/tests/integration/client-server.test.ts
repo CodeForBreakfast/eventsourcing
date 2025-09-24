@@ -22,7 +22,7 @@ import {
   type ServerTransport,
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
-  createTestMessage as defaultCreateTestMessage,
+  makeTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the WebSocket implementations
@@ -35,14 +35,14 @@ import { WebSocketAcceptor } from '../../lib/websocket-server';
 
 const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
   Effect.succeed({
-    createTransportPair: (): TransportPair => {
+    makeTransportPair: (): TransportPair => {
       // Generate a random port for this pair
       const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
       const host = 'localhost';
       const url = `ws://${host}:${port}`;
 
       return {
-        createServer: () =>
+        makeServer: () =>
           pipe(
             WebSocketAcceptor.make({ port, host }),
             Effect.flatMap((acceptor) => acceptor.start()),
@@ -73,7 +73,7 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
             )
           ),
 
-        createClient: () =>
+        makeClient: () =>
           pipe(
             WebSocketConnector.connect(url),
             Effect.map(
@@ -102,7 +102,7 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
     collectMessages: defaultCollectMessages,
 
-    createTestMessage: defaultCreateTestMessage,
+    makeTestMessage: defaultCreateTestMessage,
   });
 
 // =============================================================================

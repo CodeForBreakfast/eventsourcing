@@ -41,7 +41,7 @@ export type ConnectionState = CoreConnectionState;
  */
 export interface TransportTestContext {
   // Transport factory using Effect's Scope for lifecycle management
-  readonly createConnectedTransport: (
+  readonly makeConnectedTransport: (
     url: string
   ) => Effect.Effect<ConnectedTransportTestInterface, TransportError, Scope.Scope>;
 

@@ -111,31 +111,19 @@ export const makeEventRowService: Effect.Effect<
 export const EventRowServiceLive = Layer.effect(EventRowService, makeEventRowService);
 
 /**
- * Database infrastructure layer - provides core database connectivity
- * Exported for testing and reuse in other components
- */
-export const DatabaseInfrastructureLive = ConnectionManagerLive;
-
-/**
  * Event tracking layer - provides event ordering and deduplication services
  * Depends on database infrastructure for connection management
  */
 export const EventTrackingLive = EventStreamTrackerLive().pipe(
-  Layer.provide(DatabaseInfrastructureLive)
+  Layer.provide(ConnectionManagerLive)
 );
-
-/**
- * Subscription management layer - provides in-memory subscription handling
- * Standalone service with no external dependencies
- */
-export const SubscriptionManagementLive = SubscriptionManagerLive;
 
 /**
  * Notification infrastructure layer - provides PostgreSQL LISTEN/NOTIFY handling
  * Depends on database infrastructure for connection management
  */
 export const NotificationInfrastructureLive = NotificationListenerLive.pipe(
-  Layer.provide(DatabaseInfrastructureLive)
+  Layer.provide(ConnectionManagerLive)
 );
 
 /**
@@ -143,7 +131,7 @@ export const NotificationInfrastructureLive = NotificationListenerLive.pipe(
  * Organized into logical groups for better understanding and testability
  */
 export const EventSubscriptionServicesLive = Layer.mergeAll(
-  SubscriptionManagementLive,
+  SubscriptionManagerLive,
   EventTrackingLive,
   NotificationInfrastructureLive
 );

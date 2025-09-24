@@ -8,8 +8,7 @@ import { describe, test, expect } from 'vitest';
 import { Effect } from 'effect';
 import {
   connect,
-  createWebSocketProtocolStack,
-  createWebSocketConnectorLayer,
+  makeWebSocketProtocolLayer,
   DefaultWebSocketConfig,
   WebSocketEventSourcingInfo,
   type WebSocketConnectOptions,
@@ -23,8 +22,7 @@ describe('Type Exports', () => {
   test('should export all necessary types', () => {
     // Test that main types are available
     expect(typeof connect).toBe('function');
-    expect(typeof createWebSocketProtocolStack).toBe('function');
-    expect(typeof createWebSocketConnectorLayer).toBe('function');
+    expect(typeof makeWebSocketProtocolLayer).toBe('function');
 
     // Test that configuration objects are available
     expect(DefaultWebSocketConfig).toBeDefined();
@@ -43,18 +41,11 @@ describe('Type Exports', () => {
 // ============================================================================
 
 describe('Convenience API', () => {
-  test('should create WebSocket protocol stack layers', () => {
-    const stack = createWebSocketProtocolStack('ws://localhost:8080');
-
-    expect(stack).toBeDefined();
-    // Layer should be an Effect Layer
-    expect(typeof stack).toBe('object');
-  });
-
-  test('should create WebSocket connector layer', () => {
-    const layer = createWebSocketConnectorLayer('ws://localhost:8080');
+  test('should create WebSocket protocol layers', () => {
+    const layer = makeWebSocketProtocolLayer('ws://localhost:8080');
 
     expect(layer).toBeDefined();
+    // Layer should be an Effect Layer
     expect(typeof layer).toBe('object');
   });
 });
@@ -133,7 +124,7 @@ describe('Integration Patterns', () => {
   test('should demonstrate Layer-based dependency injection pattern', () => {
     const layerPattern = () =>
       Effect.gen(function* () {
-        const WebSocketLayer = createWebSocketProtocolStack('ws://localhost:8080');
+        const WebSocketLayer = makeWebSocketProtocolLayer('ws://localhost:8080');
 
         const program = Effect.gen(function* () {
           // In real usage:

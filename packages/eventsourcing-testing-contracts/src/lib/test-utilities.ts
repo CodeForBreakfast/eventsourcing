@@ -24,9 +24,9 @@ export const generateMessageId = (): string =>
   `msg-${Math.random().toString(36).substring(7)}-${Date.now()}`;
 
 /**
- * Creates a test transport message
+ * Make a test transport message
  */
-export const createTestTransportMessage = <TPayload = unknown>(
+export const makeTestTransportMessage = <TPayload = unknown>(
   type: string,
   payload: TPayload,
   options?: {
@@ -57,7 +57,7 @@ export interface MockTransportState {
 /**
  * Creates a mock transport for testing
  */
-export const createMockTransport = (): Effect.Effect<
+export const makeMockTransport = (): Effect.Effect<
   ConnectedTransportTestInterface,
   never,
   Scope.Scope
@@ -247,10 +247,10 @@ export const collectMessages = <T>(
   );
 
 /**
- * Default implementation of createTestMessage for testing
+ * Default implementation of makeTestMessage for testing
  * Creates a test message with unique ID
  */
-export const createTestMessage = (type: string, payload: unknown): TransportMessage => ({
+export const makeTestMessage = (type: string, payload: unknown): TransportMessage => ({
   id: `test-${Date.now()}-${Math.random()}`,
   type,
   payload,
