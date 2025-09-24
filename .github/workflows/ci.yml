@@ -38,7 +38,7 @@ jobs:
           bun-version: latest
 
       - name: Cache node modules
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         id: node-cache
         with:
           path: |
@@ -59,7 +59,7 @@ jobs:
         if: github.event_name == 'pull_request'
 
       - name: Cache turbo
-        uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
         with:
           path: |
             .turbo/cache
