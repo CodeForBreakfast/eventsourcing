@@ -54,6 +54,10 @@ jobs:
         run: bun scripts/validate-changesets.ts
         if: github.event_name == 'pull_request'
 
+      - name: Validate release readiness
+        run: bun scripts/validate-release.ts
+        if: github.event_name == 'pull_request'
+
       - name: Cache turbo
         uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
         with:
