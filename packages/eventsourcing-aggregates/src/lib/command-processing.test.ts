@@ -1,5 +1,5 @@
 import { Effect, Layer, pipe, Stream } from 'effect';
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStreamPosition,
   EventStoreService,
@@ -57,7 +57,7 @@ const createMockRouter = (handlers: Map<string, CommandHandler> = new Map()): Co
 });
 
 const successHandler: CommandHandler = {
-  execute: () => Effect.succeed([createTestEvent('user', 1)]),
+  execute: () => Effect.succeed([createTestEvent('user-1', 1)]),
 };
 
 const failingHandler: CommandHandler = {
@@ -78,214 +78,192 @@ const testLayer = Layer.effect(
   pipe(makeInMemoryStore<unknown>(), Effect.flatMap(makeInMemoryEventStore))
 );
 
-const runTest = <A, E>(effect: Effect.Effect<A, E, EventStoreService>): Promise<A> =>
-  Effect.runPromise(pipe(effect, Effect.provide(testLayer)));
-
 // ============================================================================
 // Tests
 // ============================================================================
 
 describe('Command Processing Service', () => {
-  describe('Interface', () => {
-    it('should have processCommand method', async () => {
-      const router = createMockRouter();
+  it.effect('should have processCommand method', () => {
+    const router = createMockRouter();
 
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.map((service) => {
-          expect(typeof service.processCommand).toBe('function');
-        })
-      );
-
-      await runTest(program);
-    });
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.map((service) => {
+        expect(typeof service.processCommand).toBe('function');
+      }),
+      Effect.provide(testLayer)
+    );
   });
 
-  describe('Success Path', () => {
-    it('should process command successfully', async () => {
-      const handlers = new Map([['user:CreateUser', successHandler]]);
-      const router = createMockRouter(handlers);
+  it.effect('should process command successfully', () => {
+    const handlers = new Map([['user:CreateUser', successHandler]]);
+    const router = createMockRouter(handlers);
 
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.flatMap((service) => service.processCommand(testCommand)),
-        Effect.map((result) => {
-          expect(result._tag).toBe('Success');
-          if (result._tag === 'Success') {
-            expect(result.position).toBeDefined();
-          }
-        })
-      );
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.map((result) => {
+        expect(result._tag).toBe('Success');
+        if (result._tag === 'Success') {
+          expect(result.position).toBeDefined();
+        }
+      }),
+      Effect.provide(testLayer)
+    );
+  });
 
-      await runTest(program);
-    });
+  it.effect('should store events in EventStore', () => {
+    const handlers = new Map([['user:CreateUser', successHandler]]);
+    const router = createMockRouter(handlers);
 
-    it('should store events in EventStore', async () => {
-      const handlers = new Map([['user:CreateUser', successHandler]]);
-      const router = createMockRouter(handlers);
-
-      const program = pipe(
-        Effect.all([createCommandProcessingService(router), EventStoreService]),
-        Effect.flatMap(([service, eventStore]) =>
-          pipe(
-            service.processCommand(testCommand),
-            Effect.flatMap(() =>
-              pipe(
-                toStreamId('user'),
-                Effect.flatMap(beginning),
-                Effect.flatMap((startPosition) =>
-                  pipe(
-                    eventStore.read(startPosition),
-                    Stream.runCollect,
-                    Effect.map((eventArray) => {
-                      expect(eventArray).toHaveLength(1);
-                    })
-                  )
+    return pipe(
+      Effect.all([createCommandProcessingService(router), EventStoreService]),
+      Effect.flatMap(([service, eventStore]) =>
+        pipe(
+          service.processCommand(testCommand),
+          Effect.flatMap(() =>
+            pipe(
+              toStreamId('user-1'),
+              Effect.flatMap(beginning),
+              Effect.flatMap((startPosition) =>
+                pipe(
+                  eventStore.read(startPosition),
+                  Stream.runCollect,
+                  Effect.map((eventArray) => {
+                    expect(eventArray).toHaveLength(1);
+                  })
                 )
               )
             )
           )
         )
-      );
-
-      await runTest(program);
-    });
+      ),
+      Effect.provide(testLayer)
+    );
   });
 
-  describe('Failure Paths', () => {
-    it('should handle routing failures', async () => {
-      const router = createMockRouter();
+  it.effect('should handle routing failures', () => {
+    const router = createMockRouter();
 
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.flatMap((service) => service.processCommand(testCommand)),
-        Effect.map((result) => {
-          expect(result._tag).toBe('Failure');
-          if (result._tag === 'Failure') {
-            expect(result.error).toContain('No handler found');
-          }
-        })
-      );
-
-      await runTest(program);
-    });
-
-    it('should handle handler execution failures', async () => {
-      const handlers = new Map([['user:CreateUser', failingHandler]]);
-      const router = createMockRouter(handlers);
-
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.flatMap((service) => service.processCommand(testCommand)),
-        Effect.map((result) => {
-          expect(result._tag).toBe('Failure');
-          if (result._tag === 'Failure') {
-            expect(result.error).toContain('Handler execution failed');
-          }
-        })
-      );
-
-      await runTest(program);
-    });
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.map((result) => {
+        expect(result._tag).toBe('Failure');
+        if (result._tag === 'Failure') {
+          expect(result.error).toContain('No handler found');
+        }
+      }),
+      Effect.provide(testLayer)
+    );
   });
 
-  describe('Command Routing', () => {
-    it('should route commands to correct handlers', async () => {
-      let handlerCalled = false;
-      const testHandler: CommandHandler = {
-        execute: () => {
-          handlerCalled = true;
-          return Effect.succeed([createTestEvent('user', 1)]);
-        },
-      };
+  it.effect('should handle handler execution failures', () => {
+    const handlers = new Map([['user:CreateUser', failingHandler]]);
+    const router = createMockRouter(handlers);
 
-      const handlers = new Map([['user:CreateUser', testHandler]]);
-      const router = createMockRouter(handlers);
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.map((result) => {
+        expect(result._tag).toBe('Failure');
+        if (result._tag === 'Failure') {
+          expect(result.error).toContain('Handler execution failed');
+        }
+      }),
+      Effect.provide(testLayer)
+    );
+  });
 
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.flatMap((service) => service.processCommand(testCommand)),
-        Effect.map(() => {
-          expect(handlerCalled).toBe(true);
-        })
-      );
+  it.effect('should route commands to correct handlers', () => {
+    let handlerCalled = false;
+    const testHandler: CommandHandler = {
+      execute: () => {
+        handlerCalled = true;
+        return Effect.succeed([createTestEvent('user', 1)]);
+      },
+    };
 
-      await runTest(program);
-    });
+    const handlers = new Map([['user:CreateUser', testHandler]]);
+    const router = createMockRouter(handlers);
 
-    it('should support multiple command handlers', async () => {
-      const updateUserHandler: CommandHandler = {
-        execute: () => Effect.succeed([createTestEvent('user', 2)]),
-      };
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.map(() => {
+        expect(handlerCalled).toBe(true);
+      }),
+      Effect.provide(testLayer)
+    );
+  });
 
-      const createOrderHandler: CommandHandler = {
-        execute: () => Effect.succeed([createTestEvent('order', 1)]),
-      };
+  it.effect('should support multiple command handlers', () => {
+    const updateUserHandler: CommandHandler = {
+      execute: () => Effect.succeed([createTestEvent('user-2', 1)]),
+    };
 
-      const handlers = new Map([
-        ['user:CreateUser', successHandler],
-        ['user:UpdateUser', updateUserHandler],
-        ['order:CreateOrder', createOrderHandler],
-      ]);
-      const router = createMockRouter(handlers);
+    const createOrderHandler: CommandHandler = {
+      execute: () => Effect.succeed([createTestEvent('order', 1)]),
+    };
 
-      const orderCommand: Command = {
-        ...testCommand,
-        id: 'cmd-order-123',
-        target: 'order',
-        name: 'CreateOrder',
-      };
+    const handlers = new Map([
+      ['user:CreateUser', successHandler],
+      ['user:UpdateUser', updateUserHandler],
+      ['order:CreateOrder', createOrderHandler],
+    ]);
+    const router = createMockRouter(handlers);
 
-      const updateCommand: Command = {
-        ...testCommand,
-        id: 'cmd-update-123',
-        target: 'user2',
-        name: 'UpdateUser',
-      };
+    const orderCommand: Command = {
+      ...testCommand,
+      id: 'cmd-order-123',
+      target: 'order',
+      name: 'CreateOrder',
+    };
 
-      const program = pipe(
-        createCommandProcessingService(router),
-        Effect.flatMap((service) =>
-          pipe(
-            Effect.all([
-              service.processCommand(testCommand),
-              service.processCommand(orderCommand),
-              service.processCommand(updateCommand),
-            ]),
-            Effect.map(([userResult, orderResult, updateResult]) => {
-              expect(userResult._tag).toBe('Success');
-              expect(orderResult._tag).toBe('Success');
-              expect(updateResult._tag).toBe('Failure');
-            })
-          )
+    const updateCommand: Command = {
+      ...testCommand,
+      id: 'cmd-update-123',
+      target: 'nonexistent',
+      name: 'NonExistentCommand',
+    };
+
+    return pipe(
+      createCommandProcessingService(router),
+      Effect.flatMap((service) =>
+        pipe(
+          Effect.all([
+            service.processCommand(testCommand),
+            service.processCommand(orderCommand),
+            service.processCommand(updateCommand),
+          ]),
+          Effect.map(([userResult, orderResult, updateResult]) => {
+            expect(userResult._tag).toBe('Success');
+            expect(orderResult._tag).toBe('Success');
+            expect(updateResult._tag).toBe('Failure');
+          })
         )
-      );
-
-      await runTest(program);
-    });
+      ),
+      Effect.provide(testLayer)
+    );
   });
 
-  describe('Service Layer Integration', () => {
-    it('should work as Effect service', async () => {
-      const handlers = new Map([['user:CreateUser', successHandler]]);
-      const router = createMockRouter(handlers);
+  it.effect('should work as Effect service', () => {
+    const handlers = new Map([['user:CreateUser', successHandler]]);
+    const router = createMockRouter(handlers);
 
-      const ServiceLayer = Layer.effect(
-        CommandProcessingService,
-        createCommandProcessingService(router)
-      );
+    const ServiceLayer = Layer.effect(
+      CommandProcessingService,
+      createCommandProcessingService(router)
+    );
 
-      const program = pipe(
-        CommandProcessingService,
-        Effect.flatMap((service) => service.processCommand(testCommand)),
-        Effect.map((result) => {
-          expect(result._tag).toBe('Success');
-        })
-      );
-
-      await Effect.runPromise(
-        pipe(program, Effect.provide(ServiceLayer), Effect.provide(testLayer))
-      );
-    });
+    return pipe(
+      CommandProcessingService,
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.map((result) => {
+        expect(result._tag).toBe('Success');
+      }),
+      Effect.provide(ServiceLayer),
+      Effect.provide(testLayer)
+    );
   });
 });

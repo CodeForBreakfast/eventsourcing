@@ -1,6 +1,6 @@
 import { Effect, pipe } from 'effect';
 
-import { describe, expect, it } from 'bun:test';
+import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStoreError,
   EventStoreConnectionError,
@@ -34,15 +34,15 @@ describe('Event Sourcing Errors', () => {
       expect(error.recoveryHint).toBe('Check permissions');
     });
 
-    it('should work with Effect error handling', async () => {
-      const program = pipe(
+    it.effect('should work with Effect error handling', () =>
+      pipe(
         Effect.fail(eventStoreError.read('stream-1', 'Stream not found')),
-        Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`))
-      );
-
-      const result = await Effect.runPromise(program);
-      expect(result).toBe('Caught: Stream not found');
-    });
+        Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`)),
+        Effect.map((result) => {
+          expect(result).toBe('Caught: Stream not found');
+        })
+      )
+    );
 
     it('should support type guards', () => {
       const error = eventStoreError.write('stream-1', 'Write failed');
