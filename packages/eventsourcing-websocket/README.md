@@ -1,75 +1,70 @@
 # @codeforbreakfast/eventsourcing-websocket
 
-**WebSocket integration package** - Combines WebSocket transport with event sourcing protocols (coming soon).
+**WebSocket integration package** - Combines WebSocket transport with event sourcing protocols for rapid development.
 
-> ⚠️ **Note**: This package will provide a batteries-included WebSocket event sourcing solution once the protocol layer is implemented. For now, use the transport package directly.
+## Features
 
-## Current Status
+- ✅ **WebSocket Transport** - Full client and server WebSocket implementation
+- ✅ **Protocol Layer** - Command/event protocol with optimistic concurrency
+- ✅ **Convenience API** - One-line setup for event sourcing over WebSocket
 
-This package is under development. It will combine:
+## Installation
 
-- ✅ **WebSocket Transport** (`@codeforbreakfast/eventsourcing-transport-websocket`) - COMPLETED
-- 🚧 **Protocol Layer** (`@codeforbreakfast/eventsourcing-protocol-default`) - IN PROGRESS
-- 🔜 **Convenience API** - PLANNED
+```bash
+bun add @codeforbreakfast/eventsourcing-websocket
+```
 
-## Available Now
+## Quick Start
 
-While the convenience package is being developed, you can use the WebSocket transport directly:
+```typescript
+import { connect } from '@codeforbreakfast/eventsourcing-websocket';
+import { Effect, pipe } from 'effect';
+
+const program = Effect.scoped(
+  Effect.gen(function* () {
+    // Connect with batteries-included protocol
+    const protocol = yield* connect('ws://localhost:8080');
+
+    // Send commands and receive events seamlessly
+    const result = yield* protocol.sendCommand({
+      id: 'cmd-1',
+      target: 'user:123',
+      type: 'user.register',
+      payload: { email: 'user@example.com' },
+    });
+
+    // Subscribe to events
+    const events = yield* protocol.subscribeToEvents('user:123');
+  })
+);
+```
+
+## Advanced Usage
+
+### Custom Configuration
+
+```typescript
+import { connect, makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
+import { Layer, Effect } from 'effect';
+
+// Create a custom layer for dependency injection
+const customLayer = makeWebSocketProtocolLayer('ws://localhost:8080');
+
+const program = Effect.gen(function* () {
+  const protocol = yield* Protocol;
+  // Use protocol...
+}).pipe(Effect.provide(customLayer));
+```
+
+### Server-side Usage
+
+For server implementations, use the transport package directly:
 
 ```bash
 bun add @codeforbreakfast/eventsourcing-transport-websocket
 ```
 
-```typescript
-import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-import { Effect, Stream, pipe } from 'effect';
-
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    // Connect to WebSocket server
-    const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
-
-    // Use the transport for messaging
-    yield* transport.publish({
-      id: makeMessageId('msg-1'),
-      type: 'my.message',
-      payload: { data: 'Hello!' },
-    });
-  })
-);
-```
-
-See the [WebSocket Transport README](../eventsourcing-transport-websocket/README.md) for complete documentation.
-
-## Coming Soon
-
-Once the protocol layer is complete, this package will provide:
-
-- **One-line setup** for event sourcing over WebSocket
-- **Pre-configured stack** with transport and protocol layers
-- **Sensible defaults** for production use
-- **Full customization** when needed
-- **Migration helpers** from separate packages
-
-## Roadmap
-
-1. ✅ **Phase 1**: WebSocket Transport (COMPLETED)
-   - Client connector implementation
-   - Server acceptor implementation
-   - Connection management
-   - Message delivery
-
-2. 🚧 **Phase 2**: Protocol Layer (IN PROGRESS)
-   - Command handling
-   - Event streaming
-   - Aggregate management
-   - Optimistic concurrency
-
-3. 🔜 **Phase 3**: Convenience Package
-   - Simplified API
-   - Default configurations
-   - Migration helpers
-   - Documentation
+See the [WebSocket Transport README](../eventsourcing-transport-websocket/README.md) for server setup.
 
 ## Contributing
 

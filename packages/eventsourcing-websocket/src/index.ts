@@ -4,10 +4,4 @@
  * Batteries-included WebSocket event sourcing package.
  */
 
-export {
-  connect,
-  makeWebSocketProtocolLayer,
-  DefaultWebSocketConfig,
-  WebSocketEventSourcingInfo,
-  type WebSocketConnectOptions,
-} from './lib/index.js';
+export { connect, makeWebSocketProtocolLayer } from './lib/index.js';
