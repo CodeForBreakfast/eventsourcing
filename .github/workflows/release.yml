@@ -50,6 +50,10 @@ jobs:
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
       # Generate a GitHub App token for verified commits
+      # Validate workspace dependencies before attempting release
+      - name: Validate workspace dependencies
+        run: bun scripts/validate-workspace-deps.ts
+
       - name: Generate GitHub App Token
         id: github-app-token
         uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2
