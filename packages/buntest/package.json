@@ -1,0 +1,19 @@
+{
+  "name": "@codeforbreakfast/buntest",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Internal testing utilities for Effect with Bun (adapted from @effect/vitest)",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "echo 'Using root lint config'",
+    "test": "bun test"
+  },
+  "dependencies": {
+    "effect": "^3.0.0"
+  }
+}
