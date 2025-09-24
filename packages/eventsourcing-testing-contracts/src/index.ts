@@ -64,4 +64,9 @@ export {
   waitForCondition,
   expectError,
   collectStreamWithTimeout,
+
+  // Client-Server test helpers
+  waitForConnectionState,
+  collectMessages,
+  createTestMessage,
 } from './lib/test-utilities';
