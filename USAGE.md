@@ -101,7 +101,7 @@ const EventStoreLive = SqlEventStore.Live.pipe(
 > - This separation allows commands to focus on business logic without infrastructure concerns
 
 ```typescript
-import { createAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStoreService } from '@codeforbreakfast/eventsourcing-store';
 import { Schema, Effect, Option, Chunk, pipe } from 'effect';
 
@@ -114,7 +114,7 @@ interface UserState {
 }
 
 // Create aggregate root with event application and commands
-const UserAggregate = createAggregateRoot(
+const UserAggregate = makeAggregateRoot(
   // ID schema
   Schema.String,
 

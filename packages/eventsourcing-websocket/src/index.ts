@@ -35,8 +35,7 @@
 // Primary convenience functions
 export {
   connect,
-  createWebSocketProtocolStack,
-  createWebSocketConnectorLayer,
+  makeWebSocketProtocolLayer,
   DefaultWebSocketConfig,
   WebSocketEventSourcingInfo,
   // Types

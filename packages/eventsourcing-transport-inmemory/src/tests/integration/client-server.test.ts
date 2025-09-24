@@ -22,7 +22,7 @@ import {
   type ServerTransport,
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
-  createTestMessage as defaultCreateTestMessage,
+  makeTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the in-memory implementations
@@ -34,14 +34,14 @@ import { InMemoryAcceptor, type InMemoryServer } from '../../lib/inmemory-transp
 
 const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
   Effect.succeed({
-    createTransportPair: (): TransportPair => {
+    makeTransportPair: (): TransportPair => {
       // Direct in-memory connection with no configuration needed
 
       // Shared server instance for this transport pair
       let serverInstance: InMemoryServer | null = null;
 
       return {
-        createServer: () =>
+        makeServer: () =>
           pipe(
             InMemoryAcceptor.make(),
             Effect.flatMap((acceptor) => acceptor.start()),
@@ -77,7 +77,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
             )
           ),
 
-        createClient: () =>
+        makeClient: () =>
           pipe(
             Effect.sync(() => {
               if (!serverInstance) {
@@ -112,7 +112,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
     collectMessages: defaultCollectMessages,
 
-    createTestMessage: defaultCreateTestMessage,
+    makeTestMessage: defaultCreateTestMessage,
   });
 
 // =============================================================================

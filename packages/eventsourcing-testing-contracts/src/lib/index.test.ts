@@ -4,7 +4,7 @@
 
 import { describe, it, expect } from 'bun:test';
 import { Effect, Stream, pipe, Scope, Fiber, Duration, Chunk } from 'effect';
-import { generateMessageId, createTestTransportMessage, createMockTransport } from '../index.js';
+import { generateMessageId, makeTestTransportMessage, makeMockTransport } from '../index.js';
 
 describe('Transport Testing Contracts Package', () => {
   describe('Test Data Generators', () => {
@@ -17,7 +17,7 @@ describe('Transport Testing Contracts Package', () => {
     });
 
     it('should create test transport messages', () => {
-      const message = createTestTransportMessage(
+      const message = makeTestTransportMessage(
         'test.message',
         { action: 'test', value: 42 },
         { id: 'test-id-123' }
@@ -34,7 +34,7 @@ describe('Transport Testing Contracts Package', () => {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* (_) {
-            const transport = yield* _(createMockTransport());
+            const transport = yield* _(makeMockTransport());
 
             // Test connection state
             const statePromise = pipe(transport.connectionState, Stream.take(1), Stream.runHead);
@@ -43,7 +43,7 @@ describe('Transport Testing Contracts Package', () => {
             expect(state).toBeDefined();
 
             // Test publish
-            const message = createTestTransportMessage('test', { data: 'hello' });
+            const message = makeTestTransportMessage('test', { data: 'hello' });
             yield* _(transport.publish(message));
 
             // Test subscribe
@@ -58,7 +58,7 @@ describe('Transport Testing Contracts Package', () => {
       await Effect.runPromise(
         Effect.scoped(
           Effect.gen(function* (_) {
-            const transport = yield* _(createMockTransport());
+            const transport = yield* _(makeMockTransport());
 
             // Set up subscription first
             const subscription = yield* _(transport.subscribe());
@@ -68,8 +68,8 @@ describe('Transport Testing Contracts Package', () => {
               Effect.fork(
                 Effect.gen(function* (_) {
                   yield* _(Effect.sleep(Duration.millis(100)));
-                  const msg1 = createTestTransportMessage('test', { count: 1 });
-                  const msg2 = createTestTransportMessage('test', { count: 2 });
+                  const msg1 = makeTestTransportMessage('test', { count: 1 });
+                  const msg2 = makeTestTransportMessage('test', { count: 2 });
                   yield* _(transport.publish(msg1));
                   yield* _(transport.publish(msg2));
                 })

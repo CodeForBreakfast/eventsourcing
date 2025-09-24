@@ -26,7 +26,7 @@ bun add @codeforbreakfast/eventsourcing-aggregates effect
 ```typescript
 import {
   // Main aggregate creation function
-  createAggregateRoot,
+  makeAggregateRoot,
 
   // Core interfaces and types
   AggregateState,
@@ -54,7 +54,7 @@ import {
 ```typescript
 import { Effect, Schema, Option, Chunk, Context, pipe } from 'effect';
 import {
-  createAggregateRoot,
+  makeAggregateRoot,
   AggregateState,
   CommandContext,
   CommandContextTest,
@@ -168,7 +168,7 @@ const updateUserEmail = (newEmail: string) => (currentState: AggregateState<User
   );
 
 // 7. Create the aggregate root
-const UserAggregate = createAggregateRoot(UserId, applyUserEvent, UserEventStore, {
+const UserAggregate = makeAggregateRoot(UserId, applyUserEvent, UserEventStore, {
   registerUser,
   updateUserEmail,
 });
@@ -240,12 +240,12 @@ interface AggregateState<TData> {
 }
 ```
 
-### createAggregateRoot
+### makeAggregateRoot
 
 The main function for creating aggregate roots with event sourcing capabilities:
 
 ```typescript
-const MyAggregate = createAggregateRoot(
+const MyAggregate = makeAggregateRoot(
   IdSchema, // Schema for aggregate ID validation
   applyEventFunction, // Function to apply events to state
   EventStoreTag, // Effect service tag for the event store

@@ -27,9 +27,9 @@ export interface ProjectionEventStore<TEvent> {
 }
 
 /**
- * Create a projection-specific view of an EventStore
+ * Make a projection-specific view of an EventStore
  */
-export const createProjectionEventStore = <TEvent>(
+export const makeProjectionEventStore = <TEvent>(
   original: FullEventStore<TEvent>
 ): ProjectionEventStore<TEvent> => ({
   read: (from: EventStreamPosition) => original.read(from),
