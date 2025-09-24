@@ -20,6 +20,8 @@
   ],
   "scripts": {
     "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build --force",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
@@ -59,7 +61,8 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "workspace:*",
+    "@codeforbreakfast/eventsourcing-protocol-default": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.5.2",
