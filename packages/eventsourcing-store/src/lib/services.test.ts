@@ -49,20 +49,29 @@ describe('Service Definitions', () => {
 
     it.layer(
       Layer.succeed(EventStoreService, {
-        write: () => {
+        append: () => {
           throw new Error('Not implemented');
         },
-        read: (from) => Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
-        subscribe: (from) => Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
-      } as EventStoreServiceInterface<unknown>)
+        read: (from: EventStreamPosition) =>
+          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
+        subscribe: (from: EventStreamPosition) =>
+          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
+      } as EventStore<unknown>)
     )('should work with dependency injection', (it) => {
       it.effect('can handle dependency injection and error catching', () =>
         pipe(
           EventStoreService,
-          Effect.flatMap((store) => store.read({ streamId: 'test' as EventStreamId })),
-          Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`)),
+          Effect.flatMap((store) =>
+            store.read({
+              streamId: 'test' as EventStreamId,
+              eventNumber: 0,
+            } as EventStreamPosition)
+          ),
+          Effect.catchTag('EventStoreError', (error) =>
+            Effect.succeed(`Caught error: ${error.message}`)
+          ),
           Effect.map((result) => {
-            expect(result).toBe('Caught: Not implemented');
+            expect(result).toContain('Caught error:');
           })
         )
       );
@@ -70,12 +79,12 @@ describe('Service Definitions', () => {
 
     it.layer(
       Layer.succeed(MyEventStoreService, {
-        write: () => {
+        append: () => {
           throw new Error('Not implemented');
         },
         read: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
         subscribe: () => Effect.succeed(Stream.empty as Stream.Stream<MyEvent, never>),
-      } as EventStoreServiceInterface<MyEvent>)
+      } as EventStore<MyEvent>)
     )('should support typed event stores', (it) => {
       it.effect('can work with typed events', () =>
         pipe(
@@ -103,7 +112,7 @@ describe('Service Definitions', () => {
 
     it.layer(
       Layer.succeed(UserProjectionStoreService, {
-        get: (id) =>
+        get: (id: string) =>
           id === 'user-1'
             ? Effect.succeed({
                 id: 'user-1',
@@ -115,7 +124,7 @@ describe('Service Definitions', () => {
         delete: () => Effect.succeed(undefined),
         list: () => Effect.succeed(['user-1', 'user-2']),
         clear: () => Effect.succeed(undefined),
-      } as ProjectionStoreServiceInterface<UserProjection>)
+      } as ProjectionStore<UserProjection>)
     )('should work with dependency injection', (it) => {
       it.effect('can get user projections', () =>
         pipe(
@@ -139,7 +148,7 @@ describe('Service Definitions', () => {
     it.layer(
       Layer.succeed(AggregateSnapshotStoreService, {
         save: () => Effect.succeed(undefined),
-        load: (aggregateId, version) =>
+        load: (aggregateId: string, version?: number) =>
           aggregateId === 'agg-1'
             ? Effect.succeed({
                 version: version ?? 10,
@@ -148,7 +157,7 @@ describe('Service Definitions', () => {
             : Effect.succeed(null),
         delete: () => Effect.succeed(undefined),
         list: () => Effect.succeed([1, 5, 10]),
-      } as SnapshotStoreServiceInterface<AggregateSnapshot>)
+      } as SnapshotStore<AggregateSnapshot>)
     )('should work with dependency injection', (it) => {
       it.effect('can load aggregate snapshots', () =>
         pipe(
@@ -167,25 +176,25 @@ describe('Service Definitions', () => {
     it.layer(
       Layer.mergeAll(
         Layer.succeed(EventStoreService, {
-          write: () => {
+          append: () => {
             throw new Error('Not implemented');
           },
           read: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
           subscribe: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
-        } as EventStoreServiceInterface<unknown>),
+        } as EventStore<unknown>),
         Layer.succeed(ProjectionStoreService, {
           get: () => Effect.succeed(null),
           save: () => Effect.succeed(undefined),
           delete: () => Effect.succeed(undefined),
           list: () => Effect.succeed([]),
           clear: () => Effect.succeed(undefined),
-        } as ProjectionStoreServiceInterface<unknown>),
+        } as ProjectionStore<unknown>),
         Layer.succeed(SnapshotStoreService, {
           save: () => Effect.succeed(undefined),
           load: () => Effect.succeed(null),
           delete: () => Effect.succeed(undefined),
           list: () => Effect.succeed([]),
-        } as SnapshotStoreServiceInterface<unknown>)
+        } as SnapshotStore<unknown>)
       )
     )('should allow combining multiple services', (it) => {
       it.effect('can access all services simultaneously', () =>

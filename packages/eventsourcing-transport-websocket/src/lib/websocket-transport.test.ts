@@ -14,9 +14,12 @@
  */
 
 import { Effect, Stream, pipe, Duration, Fiber } from 'effect';
-import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import {
+  makeMessageId,
+  makeTransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { WebSocketConnector } from './websocket-transport';
-import { describe, it, expect, beforeEach, afterEach } from 'bun:test';
+import { describe, it, expect, beforeAll, afterAll } from '@codeforbreakfast/buntest';
 
 // =============================================================================
 // Minimal WebSocket Mock for Testing Transport Logic
@@ -138,13 +141,13 @@ const originalWebSocket = globalThis.WebSocket;
 describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
   let mockWs: MockWebSocketInstance;
 
-  beforeEach(() => {
+  beforeAll(() => {
     // Install mock WebSocket for controlled testing
     globalThis.WebSocket = MockWebSocket as any;
     globalThis.lastCreatedWebSocket = undefined;
   });
 
-  afterEach(() => {
+  afterAll(() => {
     // Restore original WebSocket
     if (originalWebSocket) {
       globalThis.WebSocket = originalWebSocket;
@@ -161,7 +164,6 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
             WebSocketConnector.connect('ws://test-unit.com')
           );
 
-          // Wait for WebSocket to be created
           yield* Effect.sleep(Duration.millis(10));
           mockWs = globalThis.lastCreatedWebSocket!;
           expect(mockWs).toBeDefined();
@@ -239,11 +241,11 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
           yield* Effect.sleep(Duration.millis(10));
 
           // Simulate incoming message
-          const testMessage = {
-            id: makeMessageId('test-msg-1'),
-            type: 'test-type',
-            payload: { data: 'test-data' },
-          };
+          const testMessage = makeTransportMessage(
+            'test-msg-1',
+            'test-type',
+            JSON.stringify({ data: 'test-data' })
+          );
 
           mockWs.simulateMessage(JSON.stringify(testMessage));
 
@@ -251,7 +253,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
           expect(receivedMessages).toHaveLength(1);
           expect(receivedMessages[0]?.id).toBe('test-msg-1' as any);
           expect(receivedMessages[0]?.type).toBe('test-type');
-          expect(receivedMessages[0]?.payload).toEqual({ data: 'test-data' });
+          expect(receivedMessages[0]?.payload).toBe(JSON.stringify({ data: 'test-data' }));
         })
       )
     );
@@ -293,7 +295,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
           mockWs.simulateMessage('invalid-json{');
 
           // Send valid message after malformed one
-          const validMessage = { id: makeMessageId('valid'), type: 'test', payload: 'data' };
+          const validMessage = makeTransportMessage('valid', 'test', 'data');
           mockWs.simulateMessage(JSON.stringify(validMessage));
 
           const result = yield* Fiber.join(messagesFiber);
@@ -393,11 +395,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
           yield* Effect.sleep(Duration.millis(10));
 
           const result = yield* pipe(
-            transport.publish({
-              id: makeMessageId('test'),
-              type: 'test',
-              payload: 'should fail',
-            }),
+            transport.publish(makeTransportMessage('test', 'test', 'should fail')),
             Effect.either
           );
 

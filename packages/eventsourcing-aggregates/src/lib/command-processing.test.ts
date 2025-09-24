@@ -117,21 +117,26 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      Effect.all([createCommandProcessingService(router), EventStoreService]),
-      Effect.flatMap(([service, eventStore]) =>
+      createCommandProcessingService(router),
+      Effect.flatMap((service) =>
         pipe(
-          service.processCommand(testCommand),
-          Effect.flatMap(() =>
+          EventStoreService,
+          Effect.flatMap((eventStore) =>
             pipe(
-              toStreamId('user-1'),
-              Effect.flatMap(beginning),
-              Effect.flatMap((startPosition) =>
+              service.processCommand(testCommand),
+              Effect.flatMap(() =>
                 pipe(
-                  eventStore.read(startPosition),
-                  Stream.runCollect,
-                  Effect.map((eventArray) => {
-                    expect(eventArray).toHaveLength(1);
-                  })
+                  toStreamId('user-1'),
+                  Effect.flatMap(beginning),
+                  Effect.flatMap((startPosition) =>
+                    pipe(
+                      eventStore.read(startPosition),
+                      Stream.runCollect,
+                      Effect.map((eventArray) => {
+                        expect(eventArray).toHaveLength(1);
+                      })
+                    )
+                  )
                 )
               )
             )
@@ -227,22 +232,21 @@ describe('Command Processing Service', () => {
       name: 'NonExistentCommand',
     };
 
+    const testCommands = [testCommand, orderCommand, updateCommand];
+
     return pipe(
       createCommandProcessingService(router),
       Effect.flatMap((service) =>
         pipe(
-          Effect.all([
-            service.processCommand(testCommand),
-            service.processCommand(orderCommand),
-            service.processCommand(updateCommand),
-          ]),
-          Effect.map(([userResult, orderResult, updateResult]) => {
-            expect(userResult._tag).toBe('Success');
-            expect(orderResult._tag).toBe('Success');
-            expect(updateResult._tag).toBe('Failure');
-          })
+          Effect.all(testCommands.map((cmd) => service.processCommand(cmd))),
+          Effect.map((results) => results)
         )
       ),
+      Effect.map(([userResult, orderResult, updateResult]) => {
+        expect(userResult._tag).toBe('Success');
+        expect(orderResult._tag).toBe('Success');
+        expect(updateResult._tag).toBe('Failure');
+      }),
       Effect.provide(testLayer)
     );
   });
