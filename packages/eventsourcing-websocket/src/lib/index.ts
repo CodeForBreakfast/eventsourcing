@@ -51,19 +51,6 @@ export const connect = (
 };
 
 /**
- * @deprecated Use connect() directly
- */
-export const createBasicProtocolContext = () => ({
-  sessionId: crypto.randomUUID(),
-  correlationId: crypto.randomUUID(),
-});
-
-/**
- * @deprecated Use WebSocketConnector directly
- */
-export const createWebSocketConnector = (): typeof WebSocketConnector => WebSocketConnector;
-
-/**
  * Create protocol stack as layer
  */
 export const createWebSocketProtocolStack = (
@@ -80,18 +67,6 @@ export const createWebSocketProtocolStack = (
  * Create protocol connector layer (alias for createWebSocketProtocolStack)
  */
 export const createWebSocketConnectorLayer = (url: string) => createWebSocketProtocolStack(url);
-
-/**
- * @deprecated Use connect() instead
- */
-export const connectWebSocket = (url: string, options?: WebSocketConnectOptions) =>
-  connect(url, options);
-
-/**
- * @deprecated Use connect() instead
- */
-export const createWebSocketProtocol = (url: string, options?: WebSocketConnectOptions) =>
-  connect(url, options);
 
 export const WebSocketEventSourcingInfo = {
   name: '@codeforbreakfast/eventsourcing-websocket',

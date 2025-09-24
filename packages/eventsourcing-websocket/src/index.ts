@@ -35,15 +35,10 @@
 // Primary convenience functions
 export {
   connect,
-  createBasicProtocolContext,
-  createWebSocketConnector,
   createWebSocketProtocolStack,
   createWebSocketConnectorLayer,
   DefaultWebSocketConfig,
   WebSocketEventSourcingInfo,
-  // Migration helpers
-  connectWebSocket,
-  createWebSocketProtocol,
   // Types
   type WebSocketConnectOptions,
 } from './lib/index.js';
@@ -142,9 +137,9 @@ const protocol = yield* connect("ws://localhost:8080");
     description: 'Migrating from deprecated websocket packages',
     before: `
 // OLD: Legacy WebSocket event sourcing package
-import { connectWebSocketEventSourcing } from '@old/websocket-eventsourcing';
+import { connectWebSocket } from '@old/websocket-eventsourcing';
 
-const client = yield* connectWebSocketEventSourcing(url, options);
+const client = yield* connectWebSocket(url, options);
     `,
     after: `
 // NEW: Modern Effect-based package
@@ -165,14 +160,12 @@ import { connect } from '@codeforbreakfast/eventsourcing-websocket';
 const protocol = yield* connect("ws://localhost:8080");
   `,
   withCustomContext: `
-import { connect, createBasicProtocolContext } from '@codeforbreakfast/eventsourcing-websocket';
+import { connect } from '@codeforbreakfast/eventsourcing-websocket';
 
-const context = createBasicProtocolContext({
-  sessionId: "my-session-id",
-  userId: "user-123"
-});
+const sessionId = crypto.randomUUID();
+const correlationId = crypto.randomUUID();
 
-const protocol = yield* connect("ws://localhost:8080", { context });
+const protocol = yield* connect("ws://localhost:8080");
   `,
   withConfiguration: `
 import { connect } from '@codeforbreakfast/eventsourcing-websocket';

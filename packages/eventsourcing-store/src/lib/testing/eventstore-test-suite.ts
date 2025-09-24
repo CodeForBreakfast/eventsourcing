@@ -1,7 +1,7 @@
 import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
-import { type EventStore, StreamEndMovedError } from '../eventstore';
+import { type EventStore, ConcurrencyConflictError } from '../eventstore';
 
 // Helper functions for converting stream events
 const toArraySafely = <A>(chunk: Chunk.Chunk<A>): readonly A[] => Chunk.toReadonlyArray(chunk);
@@ -110,7 +110,7 @@ export function runEventStoreTestSuite<E>(
                   Stream.run(eventstore.append(streamBeginning)),
                   Effect.flip,
                   Effect.map((error) => {
-                    expect(error).toBeInstanceOf(StreamEndMovedError);
+                    expect(error).toBeInstanceOf(ConcurrencyConflictError);
                   })
                 )
               )
@@ -200,7 +200,7 @@ export function runEventStoreTestSuite<E>(
                     Stream.run(eventstore.append(result)),
                     Effect.flip,
                     Effect.map((error) => {
-                      expect(error).toBeInstanceOf(StreamEndMovedError);
+                      expect(error).toBeInstanceOf(ConcurrencyConflictError);
                     })
                   )
                 )
@@ -269,7 +269,7 @@ export function runEventStoreTestSuite<E>(
                 Stream.run(eventstore.append(emptyStreamWrongEnd)),
                 Effect.flip,
                 Effect.map((error) => {
-                  expect(error).toBeInstanceOf(StreamEndMovedError);
+                  expect(error).toBeInstanceOf(ConcurrencyConflictError);
                 })
               )
             )

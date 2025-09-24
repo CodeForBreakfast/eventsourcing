@@ -75,8 +75,6 @@ export type { EventStore as EventStoreServiceInterface } from './services'; // A
 export { EventStoreService } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
-// StreamEndMovedError is deprecated - re-export as alias for backward compatibility
-export { ConcurrencyConflictError as StreamEndMovedError } from './errors';
 
 /**
  * Creates an event store that encodes/decodes events using a schema

@@ -15,9 +15,6 @@ import {
   isEventSourcingError,
 } from './errors';
 
-// StreamEndMovedError is now an alias for ConcurrencyConflictError
-const StreamEndMovedError = ConcurrencyConflictError;
-
 describe('Event Sourcing Errors', () => {
   describe('EventStoreError', () => {
     it('should create error with all fields', () => {
@@ -61,20 +58,6 @@ describe('Event Sourcing Errors', () => {
 
       expect(retryable.retryable).toBe(true);
       expect(fatal.retryable).toBe(false);
-    });
-  });
-
-  describe('StreamEndMovedError', () => {
-    it('should contain version information', () => {
-      const error = new StreamEndMovedError({
-        streamId: 'test-stream',
-        expectedVersion: 5,
-        actualVersion: 10,
-      });
-
-      expect(error.streamId).toBe('test-stream');
-      expect(error.expectedVersion).toBe(5);
-      expect(error.actualVersion).toBe(10);
     });
   });
 

@@ -1,27 +1,18 @@
 /**
  * Tests for the convenience WebSocket event sourcing package.
  *
- * This test file demonstrates both the API usage and migration patterns
- * from the old separate packages to the new batteries-included approach.
+ * This test file demonstrates the simplified API after removing deprecated functions.
  */
 
 import { describe, test, expect } from 'vitest';
-import { Effect, Scope } from 'effect';
+import { Effect } from 'effect';
 import {
   connect,
-  createBasicProtocolContext,
-  createWebSocketConnector,
   createWebSocketProtocolStack,
   createWebSocketConnectorLayer,
   DefaultWebSocketConfig,
   WebSocketEventSourcingInfo,
-  connectWebSocket,
-  createWebSocketProtocol,
   type WebSocketConnectOptions,
-  type EventSourcingProtocol,
-  type AggregateCommand,
-  type StreamEvent,
-  type ProtocolContext,
 } from '../index.js';
 
 // ============================================================================
@@ -32,8 +23,6 @@ describe('Type Exports', () => {
   test('should export all necessary types', () => {
     // Test that main types are available
     expect(typeof connect).toBe('function');
-    expect(typeof createBasicProtocolContext).toBe('function');
-    expect(typeof createWebSocketConnector).toBe('function');
     expect(typeof createWebSocketProtocolStack).toBe('function');
     expect(typeof createWebSocketConnectorLayer).toBe('function');
 
@@ -47,45 +36,13 @@ describe('Type Exports', () => {
     expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
     expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
   });
-
-  test('should have working migration helper functions', () => {
-    expect(typeof connectWebSocket).toBe('function');
-    expect(typeof createWebSocketProtocol).toBe('function');
-
-    // Migration helpers should be functions
-    expect(typeof connectWebSocket).toBe('function');
-  });
 });
 
 // ============================================================================
-// Basic Convenience API Tests
+// Convenience API Tests
 // ============================================================================
 
 describe('Convenience API', () => {
-  test('should create basic protocol context with sensible defaults', () => {
-    const context = createBasicProtocolContext();
-
-    expect(context.sessionId).toBeDefined();
-    expect(context.correlationId).toBeDefined();
-    expect(typeof context.sessionId).toBe('string');
-    expect(typeof context.correlationId).toBe('string');
-    expect(context.sessionId).not.toBe(context.correlationId);
-  });
-
-  test('should create basic protocol context', () => {
-    const context = createBasicProtocolContext();
-
-    expect(context.sessionId).toBeDefined();
-    expect(context.correlationId).toBeDefined();
-  });
-
-  test('should create WebSocket connector', () => {
-    const connector = createWebSocketConnector();
-
-    expect(connector).toBeDefined();
-    expect(typeof connector.connect).toBe('function');
-  });
-
   test('should create WebSocket protocol stack layers', () => {
     const stack = createWebSocketProtocolStack('ws://localhost:8080');
 
@@ -113,20 +70,17 @@ describe('Configuration', () => {
   });
 
   test('should support connection options interface', () => {
-    const context = createBasicProtocolContext();
     const config = {
-      defaultTimeout: 60000,
-      maxConcurrentCommands: 50,
+      reconnectAttempts: 5,
+      reconnectDelayMs: 2000,
     };
 
     const options: WebSocketConnectOptions = {
-      context,
       config,
     };
 
-    expect(options.context).toBe(context);
-    expect(options.config?.defaultTimeout).toBe(60000);
-    expect(options.config?.maxConcurrentCommands).toBe(50);
+    expect(options.config?.reconnectAttempts).toBe(5);
+    expect(options.config?.reconnectDelayMs).toBe(2000);
   });
 });
 
@@ -157,25 +111,18 @@ describe('Integration Patterns', () => {
   test('should demonstrate advanced configuration pattern', () => {
     const advancedPattern = () =>
       Effect.gen(function* () {
-        const context = createBasicProtocolContext({
-          sessionId: 'test-session',
-          userId: 'test-user',
-        });
-
         const options: WebSocketConnectOptions = {
-          context,
           config: {
-            defaultTimeout: 45000,
-            maxConcurrentCommands: 75,
             reconnectAttempts: 5,
+            reconnectDelayMs: 1500,
           },
         };
 
         // Advanced configuration usage
         // const protocol = yield* connect("ws://localhost:8080", options);
 
-        expect(options.context?.sessionId).toBe('test-session');
-        expect(options.config?.defaultTimeout).toBe(45000);
+        expect(options.config?.reconnectAttempts).toBe(5);
+        expect(options.config?.reconnectDelayMs).toBe(1500);
 
         return 'Advanced pattern validated';
       });
@@ -186,12 +133,12 @@ describe('Integration Patterns', () => {
   test('should demonstrate Layer-based dependency injection pattern', () => {
     const layerPattern = () =>
       Effect.gen(function* () {
-        const WebSocketLayer = createWebSocketProtocolStack();
+        const WebSocketLayer = createWebSocketProtocolStack('ws://localhost:8080');
 
         const program = Effect.gen(function* () {
           // In real usage:
-          // const connector = yield* DefaultProtocolConnectorService;
-          // const protocol = yield* connector.connect("ws://localhost:8080");
+          // const protocol = yield* Protocol;
+          // const events = yield* protocol.subscribe({...});
 
           return 'Connected via layers';
         });
@@ -209,25 +156,11 @@ describe('Integration Patterns', () => {
 });
 
 // ============================================================================
-// Migration Examples Tests
+// API Usage Examples
 // ============================================================================
 
-describe('Migration Examples', () => {
-  test('should demonstrate migration from separate packages', () => {
-    // OLD PATTERN (what users used to have to do):
-    const oldPattern = () =>
-      Effect.gen(function* () {
-        // import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-        // import { connectWithCompleteStack } from '@codeforbreakfast/eventsourcing-protocol-default';
-
-        const connector = createWebSocketConnector(); // This was manual
-        // const protocol = yield* connectWithCompleteStack(connector, "ws://localhost:8080");
-
-        expect(connector).toBeDefined();
-        return 'Old pattern requires manual connector creation';
-      });
-
-    // NEW PATTERN (what they can do now):
+describe('API Usage Examples', () => {
+  test('should demonstrate simplified API pattern', () => {
     const newPattern = () =>
       Effect.gen(function* () {
         // import { connect } from '@codeforbreakfast/eventsourcing-websocket';
@@ -239,37 +172,12 @@ describe('Migration Examples', () => {
         return 'New pattern is one line!';
       });
 
-    expect(oldPattern).toBeDefined();
     expect(newPattern).toBeDefined();
-  });
-
-  test('should provide backward compatibility through legacy functions', () => {
-    // Migration helper functions should exist
-    expect(typeof connectWebSocket).toBe('function');
-    expect(typeof createWebSocketProtocol).toBe('function');
-
-    // These allow gradual migration
-    const migrationStep1 = () =>
-      Effect.gen(function* () {
-        // Users can change import but keep function name
-        // const protocol = yield* connectWebSocket("ws://localhost:8080");
-        return 'Step 1: Change import, keep function';
-      });
-
-    const migrationStep2 = () =>
-      Effect.gen(function* () {
-        // Then they can change to the new function name
-        // const protocol = yield* connect("ws://localhost:8080");
-        return 'Step 2: Use new function name';
-      });
-
-    expect(migrationStep1).toBeDefined();
-    expect(migrationStep2).toBeDefined();
   });
 });
 
 // ============================================================================
-// Documentation and Metadata Tests
+// Package Metadata Tests
 // ============================================================================
 
 describe('Package Metadata', () => {
@@ -277,93 +185,6 @@ describe('Package Metadata', () => {
     expect(WebSocketEventSourcingInfo.name).toBe('@codeforbreakfast/eventsourcing-websocket');
     expect(WebSocketEventSourcingInfo.description).toContain('Batteries-included');
     expect(WebSocketEventSourcingInfo.version).toBe('0.1.0');
-  });
-});
-
-// ============================================================================
-// Real-world Usage Examples (Commented)
-// ============================================================================
-
-describe('Real-world Usage Examples', () => {
-  test('should show typical event sourcing workflow', () => {
-    const typicalWorkflow = () =>
-      Effect.gen(function* () {
-        // 1. Connect to server
-        // const protocol = yield* connect("ws://localhost:8080");
-
-        // 2. Define event and command types
-        interface UserCreated {
-          type: 'UserCreated';
-          userId: string;
-          name: string;
-          email: string;
-        }
-
-        interface CreateUserCommand {
-          type: 'CreateUser';
-          name: string;
-          email: string;
-        }
-
-        // 3. Subscribe to events
-        // const events = yield* protocol.subscribe({
-        //   streamId: "user-events",
-        //   eventNumber: 0
-        // });
-
-        // 4. Send commands
-        // const result = yield* protocol.sendCommand({
-        //   aggregate: {
-        //     position: { streamId: "user-123", eventNumber: 0 },
-        //     name: "User"
-        //   },
-        //   commandName: "CreateUser",
-        //   payload: { name: "John Doe", email: "john@example.com" }
-        // });
-
-        return 'Typical workflow demonstrated';
-      });
-
-    expect(typicalWorkflow).toBeDefined();
-  });
-
-  test('should show error handling patterns', () => {
-    const errorHandlingPattern = () =>
-      Effect.gen(function* () {
-        // const result = yield* connect("ws://invalid-url").pipe(
-        //   Effect.catchTag("ConnectionError", (error) => {
-        //     console.error("Failed to connect:", error.message);
-        //     return Effect.succeed(null);
-        //   }),
-        //   Effect.catchTag("StreamError", (error) => {
-        //     console.error("Stream error:", error.message);
-        //     return Effect.succeed(null);
-        //   })
-        // );
-
-        return 'Error handling patterns shown';
-      });
-
-    expect(errorHandlingPattern).toBeDefined();
-  });
-
-  test('should show cleanup patterns with Scope', () => {
-    const cleanupPattern = () =>
-      Effect.gen(function* () {
-        // yield* Effect.scoped(
-        //   Effect.gen(function* () {
-        //     const protocol = yield* connect("ws://localhost:8080");
-        //
-        //     // Use protocol...
-        //
-        //     // Connection automatically cleaned up when scope exits
-        //   })
-        // );
-
-        return 'Cleanup patterns demonstrated';
-      });
-
-    expect(cleanupPattern).toBeDefined();
   });
 });
 
@@ -396,17 +217,9 @@ describe('Performance and Best Practices', () => {
   test('should demonstrate configuration best practices', () => {
     const configBestPractices = () =>
       Effect.gen(function* () {
-        // Configure timeouts based on your use case
+        // Configure reconnection based on your use case
         const options: WebSocketConnectOptions = {
           config: {
-            // For real-time apps: shorter timeouts
-            defaultTimeout: 10000,
-            maxConcurrentCommands: 200,
-
-            // For background processing: longer timeouts
-            // defaultTimeout: 120000,
-            // maxConcurrentCommands: 50,
-
             // Always configure reconnection
             reconnectAttempts: 5,
             reconnectDelayMs: 2000,
@@ -415,7 +228,7 @@ describe('Performance and Best Practices', () => {
 
         // const protocol = yield* connect("ws://localhost:8080", options);
 
-        expect(options.config?.defaultTimeout).toBe(10000);
+        expect(options.config?.reconnectAttempts).toBe(5);
         return 'Configuration best practices shown';
       });
 
