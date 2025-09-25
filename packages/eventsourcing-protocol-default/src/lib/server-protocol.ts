@@ -19,9 +19,8 @@ import {
   type Server,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import {
-  Command,
-  CommandResult,
   Event,
   CommandMessage,
   CommandResultMessage,

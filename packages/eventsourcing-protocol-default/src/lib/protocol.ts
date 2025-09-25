@@ -46,8 +46,8 @@ export class ProtocolStateError extends Data.TaggedError('ProtocolStateError')<{
   readonly reason: string;
 }> {}
 
-// Re-export domain types for convenience
-export { Command, Event, CommandResult };
+// Re-export Event for convenience
+export { Event };
 
 // ============================================================================
 // Timestamp Schema

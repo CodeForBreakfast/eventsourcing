@@ -20,10 +20,10 @@ Separate CQRS command types into dedicated package for better architecture
 - Store package now focuses purely on event streaming and storage concepts
 - Updated description to reflect pure event streaming focus
 
-**Improvements for other packages:**
+**Updated packages:**
 
 - `@codeforbreakfast/eventsourcing-aggregates`: Updated to import command types from commands package
-- `@codeforbreakfast/eventsourcing-protocol-default`: Updated to import command types from commands package, maintains backward compatibility through re-exports
+- `@codeforbreakfast/eventsourcing-protocol-default`: Updated to import command types from commands package
 
 This change establishes cleaner architectural boundaries:
 
@@ -31,5 +31,3 @@ This change establishes cleaner architectural boundaries:
 - **Commands**: CQRS command types and schemas
 - **Aggregates**: Domain modeling (uses both events and commands)
 - **Protocol**: Transport implementation (uses both events and commands)
-
-The refactor maintains full backward compatibility at the protocol level while improving the underlying architecture.
