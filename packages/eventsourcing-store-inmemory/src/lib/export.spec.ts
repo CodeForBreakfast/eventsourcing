@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'bun:test';
 import { Effect } from 'effect';
-import * as MainExports from '../../index';
+import * as MainExports from '../index';
 
 describe('InMemoryStore Exports', () => {
   it('should export InMemoryStore class', () => {

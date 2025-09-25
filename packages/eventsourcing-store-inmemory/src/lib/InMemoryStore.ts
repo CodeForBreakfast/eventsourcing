@@ -1,16 +1,10 @@
 /* eslint-disable functional/no-expression-statements */
+import { Chunk, Effect, HashMap, Option, PubSub, Stream, SynchronizedRef, pipe } from 'effect';
 import {
-  Chunk,
-  Effect,
-  HashMap,
-  Option,
-  PubSub,
-  Stream,
-  SynchronizedRef,
-  pipe,
-} from 'effect';
-import { EventStreamId, EventStreamPosition } from '../streamTypes';
-import { ConcurrencyConflictError } from '../eventstore';
+  EventStreamId,
+  EventStreamPosition,
+  ConcurrencyConflictError,
+} from '@codeforbreakfast/eventsourcing-store';
 
 interface EventStream<V> {
   readonly events: Chunk.Chunk<V>;
@@ -23,7 +17,7 @@ const emptyStream = <V>(): Effect.Effect<EventStream<V>, never, never> =>
     Effect.map((pubsub) => ({
       events: Chunk.empty<V>(),
       pubsub,
-    })),
+    }))
   );
 
 const appendToExistingEventStream =
@@ -34,14 +28,14 @@ const appendToExistingEventStream =
           pipe(eventStream, (eventStream) => ({
             events: Chunk.appendAll(newEvents)(eventStream.events),
             pubsub: eventStream.pubsub,
-          })),
+          }))
         )
       : Effect.fail(
           new ConcurrencyConflictError({
             expectedVersion: position.eventNumber,
             actualVersion: eventStream.events.length,
             streamId: position.streamId,
-          }),
+          })
         );
 
 const appendToEventStream =
@@ -49,21 +43,14 @@ const appendToEventStream =
   ({
     eventStreamsById,
     allEventsStream,
-  }: Readonly<Value<V>>): Effect.Effect<
-    Value<V>,
-    ConcurrencyConflictError,
-    never
-  > =>
+  }: Readonly<Value<V>>): Effect.Effect<Value<V>, ConcurrencyConflictError, never> =>
     pipe(
       eventStreamsById,
       HashMap.get(streamEnd.streamId),
       Option.match({
         onSome: appendToExistingEventStream<V>(streamEnd, newEvents),
         onNone: () =>
-          pipe(
-            emptyStream<V>(),
-            Effect.flatMap(appendToExistingEventStream(streamEnd, newEvents)),
-          ),
+          pipe(emptyStream<V>(), Effect.flatMap(appendToExistingEventStream(streamEnd, newEvents))),
       }),
       Effect.flatMap((updatedEventStream: Readonly<EventStream<V>>) =>
         pipe(
@@ -74,12 +61,10 @@ const appendToEventStream =
             Effect.annotateLogs(Effect.logInfo(`Appended events to stream`), {
               newEvents,
               streamEnd,
-            }),
+            })
           ),
-          Effect.tap(() =>
-            pipe(updatedEventStream.pubsub, PubSub.publishAll(newEvents)),
-          ),
-        ),
+          Effect.tap(() => pipe(updatedEventStream.pubsub, PubSub.publishAll(newEvents)))
+        )
       ),
       Effect.map((eventStreamsById) => ({
         eventStreamsById,
@@ -87,12 +72,12 @@ const appendToEventStream =
           events: Chunk.appendAll(
             pipe(
               newEvents,
-              Chunk.map((event) => ({ streamId: streamEnd.streamId, event })),
-            ),
+              Chunk.map((event) => ({ streamId: streamEnd.streamId, event }))
+            )
           )(allEventsStream.events),
           pubsub: allEventsStream.pubsub,
         },
-      })),
+      }))
     );
 
 const ensureEventStream =
@@ -110,13 +95,12 @@ const ensureEventStream =
             streamId,
             Option.match({
               onNone: () => Option.some(emptyStream),
-              onSome: (existing: Readonly<EventStream<V>>) =>
-                Option.some(existing),
-            }),
-          ),
-        ),
+              onSome: (existing: Readonly<EventStream<V>>) => Option.some(existing),
+            })
+          )
+        )
       ),
-      Effect.map((eventStreamsById) => ({ eventStreamsById, allEventsStream })),
+      Effect.map((eventStreamsById) => ({ eventStreamsById, allEventsStream }))
     );
 
 interface Value<V> {
@@ -126,15 +110,15 @@ interface Value<V> {
 
 export class InMemoryStore<V = never> {
   readonly append: (
-    to: EventStreamPosition,
+    to: EventStreamPosition
   ) => (
-    events: Chunk.Chunk<V>,
+    events: Chunk.Chunk<V>
   ) => Effect.Effect<EventStreamPosition, ConcurrencyConflictError, never>;
   readonly get: (
-    streamId: EventStreamId,
+    streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, never>;
   readonly getHistorical: (
-    streamId: EventStreamId,
+    streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, never>;
   readonly getAll: () => Effect.Effect<
     Stream.Stream<{ streamId: EventStreamId; event: V }, never, never>,
@@ -153,7 +137,7 @@ export class InMemoryStore<V = never> {
         Effect.map(() => ({
           ...streamEnd,
           eventNumber: streamEnd.eventNumber + newEvents.length,
-        })),
+        }))
       );
 
     this.get = (streamId: EventStreamId) =>
@@ -167,19 +151,19 @@ export class InMemoryStore<V = never> {
             Option.match({
               onNone: () =>
                 Effect.dieMessage(
-                  'Event stream not found - this should not happen because we ensure it exists',
+                  'Event stream not found - this should not happen because we ensure it exists'
                 ),
               onSome: (eventStream: Readonly<EventStream<V>>) =>
                 Effect.succeed(
                   pipe(
                     eventStream.events,
                     Stream.fromChunk,
-                    Stream.concat(Stream.fromPubSub(eventStream.pubsub)),
-                  ),
+                    Stream.concat(Stream.fromPubSub(eventStream.pubsub))
+                  )
                 ),
-            }),
-          ),
-        ),
+            })
+          )
+        )
       );
 
     this.getHistorical = (streamId: EventStreamId) =>
@@ -193,13 +177,13 @@ export class InMemoryStore<V = never> {
             Option.match({
               onNone: () =>
                 Effect.dieMessage(
-                  'Event stream not found - this should not happen because we ensure it exists',
+                  'Event stream not found - this should not happen because we ensure it exists'
                 ),
               onSome: (eventStream: Readonly<EventStream<V>>) =>
                 Effect.succeed(pipe(eventStream.events, Stream.fromChunk)),
-            }),
-          ),
-        ),
+            })
+          )
+        )
       );
 
     this.getAll = () =>
@@ -210,9 +194,9 @@ export class InMemoryStore<V = never> {
           pipe(
             allEventsStream.events,
             Stream.fromChunk,
-            Stream.concat(Stream.fromPubSub(allEventsStream.pubsub)),
-          ),
-        ),
+            Stream.concat(Stream.fromPubSub(allEventsStream.pubsub))
+          )
+        )
       );
   }
 }
@@ -221,18 +205,11 @@ export const make = <V>() =>
   pipe(
     emptyStream<{ streamId: EventStreamId; event: V }>(),
     Effect.flatMap(
-      (
-        allEventsStream: Readonly<
-          EventStream<{ streamId: EventStreamId; event: V }>
-        >,
-      ) =>
+      (allEventsStream: Readonly<EventStream<{ streamId: EventStreamId; event: V }>>) =>
         SynchronizedRef.make<Value<V>>({
           eventStreamsById: HashMap.empty<EventStreamId, EventStream<V>>(),
           allEventsStream,
-        }),
+        })
     ),
-    Effect.map(
-      (value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
-        new InMemoryStore<V>(value),
-    ),
+    Effect.map((value: SynchronizedRef.SynchronizedRef<Value<V>>) => new InMemoryStore<V>(value))
   );

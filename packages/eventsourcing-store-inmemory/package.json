@@ -1,7 +1,7 @@
 {
-  "name": "@codeforbreakfast/eventsourcing-testing-contracts",
-  "version": "0.2.2",
-  "description": "Comprehensive testing utilities for event sourcing implementations - Test contracts for transport and protocol implementations with mock utilities and test data generators",
+  "name": "@codeforbreakfast/eventsourcing-store-inmemory",
+  "version": "0.1.0",
+  "description": "In-memory event store implementation for development and testing - Fast in-memory storage with complete EventStore interface implementation",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -28,45 +28,42 @@
     "publish:package": "npm publish --access public"
   },
   "keywords": [
-    "testing",
-    "test-contracts",
-    "test-utilities",
-    "mocks",
-    "test-data",
     "event-sourcing",
-    "transport",
-    "protocol",
-    "contracts",
-    "validation",
-    "compliance",
-    "bun-test",
-    "jest",
+    "event-store",
+    "in-memory",
+    "testing",
+    "development",
+    "storage",
+    "cqrs",
     "effect",
     "effect-ts",
     "functional-programming",
     "fp",
     "typescript",
-    "type-safe"
+    "type-safe",
+    "fast",
+    "memory-store"
   ],
   "author": "Code for Breakfast",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/codeforbreakfast/eventsourcing.git",
-    "directory": "packages/eventsourcing-testing-contracts"
+    "directory": "packages/eventsourcing-store-inmemory"
   },
   "bugs": {
     "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
   },
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
-    "effect": "^3.17.0"
+    "effect": "^3.17.0",
+    "@effect/platform": "^0.90.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
-    "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
+    "@codeforbreakfast/buntest": "workspace:*",
     "@types/node": "24.5.2",
     "effect": "3.17.14",
     "typescript": "5.9.2",

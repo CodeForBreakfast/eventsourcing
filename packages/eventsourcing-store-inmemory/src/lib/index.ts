@@ -1,3 +1,3 @@
 export * from './inMemoryEventStore';
 export * from './subscriptionManager';
-export * from './InMemoryStore';
+export { InMemoryStore, make as makeInMemoryStore } from './InMemoryStore';

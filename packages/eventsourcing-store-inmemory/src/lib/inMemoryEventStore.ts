@@ -1,7 +1,10 @@
 import { Chunk, Effect, Scope, Sink, Stream, pipe } from 'effect';
-import { EventStreamPosition } from '../streamTypes';
-import type { EventStore } from '../services';
-import { eventStoreError, EventStoreError } from '../errors';
+import {
+  EventStreamPosition,
+  EventStore,
+  eventStoreError,
+  EventStoreError,
+} from '@codeforbreakfast/eventsourcing-store';
 import * as InMemoryStore from './InMemoryStore';
 
 export interface SubscribableEventStore<T> extends EventStore<T> {
