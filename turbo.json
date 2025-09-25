@@ -51,12 +51,11 @@
     "//#arch:check": {
       "outputs": [],
       "inputs": [
-        "packages/**/*.ts",
-        "packages/**/*.tsx",
-        "packages/**/*.js",
-        "packages/**/*.mjs",
-        "packages/**/*.cjs",
+        "packages/**/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "packages/**/src/**/*.test.{ts,tsx,js,jsx}",
+        "packages/**/src/**/*.spec.{ts,tsx,js,jsx}",
         "packages/**/package.json",
+        "packages/**/tsconfig*.json",
         ".dependency-cruiser.js",
         ".dependency-cruiser.json"
       ],

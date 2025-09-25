@@ -67,35 +67,11 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
-      - name: Build packages
-        run: bun run build
-
-      - name: Run typecheck
-        run: bun run check
-
-      - name: Run lint
-        run: bun run lint
-
-      - name: Run tests
-        run: bun run test
+      - name: Build, lint, test, and validate architecture
+        run: bun run all
         env:
           TEST_PG_USERNAME: postgres
           TEST_PG_PASSWORD: postgres
           TEST_PG_DATABASE: test
           TEST_PG_HOST: localhost
           TEST_PG_PORT: 5432
-
-      - name: Check architecture boundaries
-        run: bun run arch:check
-
-      - name: Check for unused dependencies
-        run: bun run deps:check
-
-      # Gitleaks requires a license for organizations
-      # For now, we run it locally via pre-commit hooks
-      # To enable in CI: add GITLEAKS_LICENSE secret to the repository
-      # - name: Check for secrets
-      #   uses: gitleaks/gitleaks-action@v2
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
