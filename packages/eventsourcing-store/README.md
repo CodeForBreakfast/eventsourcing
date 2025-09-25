@@ -17,7 +17,7 @@ bun add @codeforbreakfast/eventsourcing-store effect
 - **Effect First**: Built from the ground up with Effect for composable, type-safe event sourcing
 - **Functional Programming**: Immutable data structures and pure functional APIs
 - **Type Safety**: Full TypeScript support with branded types for stream IDs and event numbers
-- **Multiple Implementations**: In-memory stores for testing and development
+- **Clean Abstractions**: Core interfaces and types without implementation dependencies
 - **Streaming Support**: Built-in support for event streaming with backpressure handling
 - **Testing Utilities**: Comprehensive test suite utilities for validating custom event store implementations
 
@@ -26,11 +26,15 @@ bun add @codeforbreakfast/eventsourcing-store effect
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
 import {
-  makeInMemoryEventStore,
+  EventStore,
   toStreamId,
   beginning,
   EventNumber,
 } from '@codeforbreakfast/eventsourcing-store';
+import {
+  makeInMemoryStore,
+  makeInMemoryEventStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
 
 // Define your events
 interface UserRegistered {
@@ -47,8 +51,11 @@ interface UserEmailUpdated {
 
 type UserEvent = UserRegistered | UserEmailUpdated;
 
-// Create an in-memory event store
-const eventStoreLayer = makeInMemoryEventStore<UserEvent>();
+// Create an in-memory event store (from separate package)
+const createEventStore = Effect.gen(function* () {
+  const store = yield* makeInMemoryStore<UserEvent>();
+  return yield* makeInMemoryEventStore(store);
+});
 
 // Example: Writing events to a stream
 const appendEvents = (eventStore: EventStore<UserEvent>) => (userId: string, events: UserEvent[]) =>
@@ -165,24 +172,38 @@ interface EventStreamPosition {
 
 ## Available Implementations
 
+This package provides core interfaces and types. For concrete implementations, use:
+
 ### In-Memory Event Store
 
 Perfect for testing and development:
 
-```typescript
-import { makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
-
-const eventStoreLayer = makeInMemoryEventStore<MyEvent>();
+```bash
+bun add @codeforbreakfast/eventsourcing-store-inmemory
 ```
 
-### Subscribable In-Memory Store
+```typescript
+import {
+  makeInMemoryStore,
+  makeInMemoryEventStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
 
-Includes additional features like stream tracking:
+const createEventStore = Effect.gen(function* () {
+  const store = yield* makeInMemoryStore<MyEvent>();
+  return yield* makeInMemoryEventStore(store);
+});
+```
+
+### PostgreSQL Event Store
+
+For production use with PostgreSQL:
+
+```bash
+bun add @codeforbreakfast/eventsourcing-store-postgres
+```
 
 ```typescript
-import { makeSubscribableInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
-
-const subscribableLayer = makeSubscribableInMemoryEventStore<MyEvent>();
+import { makePostgresEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
 ```
 
 ## Utility Functions
@@ -264,7 +285,8 @@ const handleErrors = (effect: Effect.Effect<A, EventStoreError | ConcurrencyConf
 
 ## Related Packages
 
-- **[@codeforbreakfast/eventsourcing-store-postgres](../eventsourcing-store-postgres)** - PostgreSQL implementation
+- **[@codeforbreakfast/eventsourcing-store-inmemory](../eventsourcing-store-inmemory)** - In-memory implementation for testing and development
+- **[@codeforbreakfast/eventsourcing-store-postgres](../eventsourcing-store-postgres)** - PostgreSQL implementation for production
 - **[@codeforbreakfast/eventsourcing-aggregates](../eventsourcing-aggregates)** - Aggregate root patterns
 - **[@codeforbreakfast/eventsourcing-projections](../eventsourcing-projections)** - Read-side projection patterns
 - **[@codeforbreakfast/eventsourcing-websocket-transport](../eventsourcing-websocket-transport)** - Real-time event streaming

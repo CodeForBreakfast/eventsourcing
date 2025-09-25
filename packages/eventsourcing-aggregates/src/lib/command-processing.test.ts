@@ -3,12 +3,14 @@ import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStreamPosition,
   EventStoreService,
-  makeInMemoryEventStore,
-  makeInMemoryStore,
   beginning,
   toStreamId,
   Event,
 } from '@codeforbreakfast/eventsourcing-store';
+import {
+  makeInMemoryEventStore,
+  makeInMemoryStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
 import { Command } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';

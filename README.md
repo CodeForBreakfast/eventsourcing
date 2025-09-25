@@ -28,6 +28,10 @@ Aggregate root patterns for domain-driven design with event sourcing. Focuses pu
 
 Read-side projection building from event streams. Handles the transformation of events into read models.
 
+#### [@codeforbreakfast/eventsourcing-commands](./packages/eventsourcing-commands)
+
+CQRS command types and schemas for event sourcing. Provides type-safe command and result definitions with Effect Schema validation.
+
 ### Transport Layer
 
 #### [@codeforbreakfast/eventsourcing-transport-contracts](./packages/eventsourcing-transport-contracts)
@@ -66,6 +70,7 @@ Testing contracts and utilities for verifying event sourcing implementations. Pr
 # Core packages
 npm install @codeforbreakfast/eventsourcing-store
 npm install @codeforbreakfast/eventsourcing-store-postgres  # PostgreSQL implementation (optional)
+npm install @codeforbreakfast/eventsourcing-commands        # CQRS command types and schemas
 npm install @codeforbreakfast/eventsourcing-aggregates      # Aggregate patterns for write-side
 npm install @codeforbreakfast/eventsourcing-projections     # Projection patterns for read-side
 

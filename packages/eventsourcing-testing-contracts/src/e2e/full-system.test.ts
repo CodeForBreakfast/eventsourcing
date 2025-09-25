@@ -1,6 +1,6 @@
 import { test, expect } from 'bun:test';
 import { Effect, Layer, Stream, Data } from 'effect';
-import { makeInMemoryStore } from '@codeforbreakfast/eventsourcing-store';
+import { makeInMemoryStore } from '@codeforbreakfast/eventsourcing-store-inmemory';
 
 // Domain types for better type safety
 interface TestCommand {

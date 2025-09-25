@@ -5,14 +5,7 @@ export * from './lib/errors';
 export * from './lib/services';
 export * from './lib/eventstore';
 
-// In-memory implementation
-export {
-  makeInMemoryEventStore,
-  makeSubscribableInMemoryEventStore,
-  type SubscribableEventStore,
-  InMemoryStore,
-  make as makeInMemoryStore,
-} from './lib/inMemory';
+// Note: In-memory implementation moved to @codeforbreakfast/eventsourcing-store-inmemory
 
 // Streaming utilities
 export {

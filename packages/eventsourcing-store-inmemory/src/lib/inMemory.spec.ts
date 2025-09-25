@@ -1,7 +1,10 @@
 import { Effect, Layer, Schema, pipe } from 'effect';
 import { silentLogger } from '@codeforbreakfast/buntest';
-import { runEventStoreTestSuite, FooEventStore } from '../testing/eventstore-test-suite';
-import { encodedEventStore } from '../eventstore';
+import {
+  runEventStoreTestSuite,
+  FooEventStore,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 import { makeInMemoryEventStore } from './index';
 import * as InMemoryStore from './InMemoryStore';
 

@@ -123,6 +123,24 @@
         "effect": "^3.17.0",
       },
     },
+    "packages/eventsourcing-store-inmemory": {
+      "name": "@codeforbreakfast/eventsourcing-store-inmemory",
+      "version": "0.1.0",
+      "dependencies": {
+        "@codeforbreakfast/eventsourcing-store": "workspace:*",
+      },
+      "devDependencies": {
+        "@codeforbreakfast/buntest": "workspace:*",
+        "@types/node": "24.5.2",
+        "effect": "3.17.14",
+        "eslint": "9.36.0",
+        "typescript": "5.9.2",
+      },
+      "peerDependencies": {
+        "@effect/platform": "^0.90.0",
+        "effect": "^3.17.0",
+      },
+    },
     "packages/eventsourcing-store-postgres": {
       "name": "@codeforbreakfast/eventsourcing-store-postgres",
       "version": "0.5.7",
@@ -289,6 +307,8 @@
     "@codeforbreakfast/eventsourcing-protocol": ["@codeforbreakfast/eventsourcing-protocol@workspace:packages/eventsourcing-protocol"],
 
     "@codeforbreakfast/eventsourcing-store": ["@codeforbreakfast/eventsourcing-store@workspace:packages/eventsourcing-store"],
+
+    "@codeforbreakfast/eventsourcing-store-inmemory": ["@codeforbreakfast/eventsourcing-store-inmemory@workspace:packages/eventsourcing-store-inmemory"],
 
     "@codeforbreakfast/eventsourcing-store-postgres": ["@codeforbreakfast/eventsourcing-store-postgres@workspace:packages/eventsourcing-store-postgres"],
 

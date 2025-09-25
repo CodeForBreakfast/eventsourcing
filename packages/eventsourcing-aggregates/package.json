@@ -67,6 +67,7 @@
   "devDependencies": {
     "@types/node": "24.5.2",
     "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
     "effect": "3.17.14",
     "typescript": "5.9.2",
     "eslint": "9.36.0"
