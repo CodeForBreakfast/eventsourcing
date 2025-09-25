@@ -1,7 +1,7 @@
 {
-  "name": "@codeforbreakfast/eventsourcing-aggregates",
-  "version": "0.5.7",
-  "description": "Type-safe aggregate root patterns for event sourcing with Effect - Build bulletproof domain models with functional composition and immutable state management",
+  "name": "@codeforbreakfast/eventsourcing-commands",
+  "version": "0.1.0",
+  "description": "CQRS command types and schemas for event sourcing - Core command handling abstractions with type-safe command and result definitions",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -28,10 +28,10 @@
     "publish:package": "npm publish --access public"
   },
   "keywords": [
-    "event-sourcing",
-    "aggregates",
-    "aggregate-root",
     "cqrs",
+    "commands",
+    "command-query-separation",
+    "event-sourcing",
     "domain-driven-design",
     "ddd",
     "effect",
@@ -40,18 +40,15 @@
     "fp",
     "typescript",
     "type-safe",
-    "immutable",
-    "domain-modeling",
-    "event-driven",
-    "composable",
-    "state-management"
+    "schemas",
+    "domain-modeling"
   ],
   "author": "Code for Breakfast",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/codeforbreakfast/eventsourcing.git",
-    "directory": "packages/eventsourcing-aggregates"
+    "directory": "packages/eventsourcing-commands"
   },
   "bugs": {
     "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
@@ -61,12 +58,10 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*",
-    "@codeforbreakfast/eventsourcing-commands": "workspace:*"
+    "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
     "@types/node": "24.5.2",
-    "@codeforbreakfast/buntest": "workspace:*",
     "effect": "3.17.14",
     "typescript": "5.9.2",
     "eslint": "9.36.0"

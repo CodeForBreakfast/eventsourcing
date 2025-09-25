@@ -544,6 +544,7 @@ const productionProgram = pipe(myAggregateOperation, Effect.provide(postgresEven
 
 ## Related Packages
 
+- **[@codeforbreakfast/eventsourcing-commands](../eventsourcing-commands)** - CQRS command types and schemas
 - **[@codeforbreakfast/eventsourcing-store](../eventsourcing-store)** - Core event store interfaces and in-memory implementation
 - **[@codeforbreakfast/eventsourcing-store-postgres](../eventsourcing-store-postgres)** - PostgreSQL event store implementation
 - **[@codeforbreakfast/eventsourcing-projections](../eventsourcing-projections)** - Read-side projection patterns
