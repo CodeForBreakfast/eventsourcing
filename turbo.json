@@ -50,7 +50,15 @@
     },
     "//#arch:check": {
       "outputs": [],
-      "inputs": ["packages/**", ".dependency-cruiser.js", ".dependency-cruiser.json"],
+      "inputs": [
+        "packages/**/src/**/*.{ts,tsx,js,jsx,mjs,cjs}",
+        "packages/**/src/**/*.test.{ts,tsx,js,jsx}",
+        "packages/**/src/**/*.spec.{ts,tsx,js,jsx}",
+        "packages/**/package.json",
+        "packages/**/tsconfig*.json",
+        ".dependency-cruiser.js",
+        ".dependency-cruiser.json"
+      ],
       "cache": true
     },
     "lint": {
