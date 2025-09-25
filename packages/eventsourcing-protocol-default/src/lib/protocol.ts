@@ -21,7 +21,12 @@ import {
   type TransportError,
   type TransportMessage,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
+import {
+  EventStreamPosition,
+  Command,
+  Event,
+  CommandResult,
+} from '@codeforbreakfast/eventsourcing-store';
 
 // Minimum protocol needs:
 // 1. Send command -> get result
@@ -45,33 +50,8 @@ export class ProtocolStateError extends Data.TaggedError('ProtocolStateError')<{
   readonly reason: string;
 }> {}
 
-export const Command = Schema.Struct({
-  id: Schema.String,
-  target: Schema.String,
-  name: Schema.String,
-  payload: Schema.Unknown,
-});
-export type Command = typeof Command.Type;
-
-export const Event = Schema.Struct({
-  position: EventStreamPosition,
-  type: Schema.String,
-  data: Schema.Unknown,
-  timestamp: Schema.Date,
-});
-export type Event = typeof Event.Type;
-
-export const CommandResult = Schema.Union(
-  Schema.Struct({
-    _tag: Schema.Literal('Success'),
-    position: EventStreamPosition,
-  }),
-  Schema.Struct({
-    _tag: Schema.Literal('Failure'),
-    error: Schema.String,
-  })
-);
-export type CommandResult = typeof CommandResult.Type;
+// Re-export domain types for convenience
+export { Command, Event, CommandResult };
 
 // ============================================================================
 // Timestamp Schema

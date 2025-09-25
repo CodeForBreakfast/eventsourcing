@@ -1,5 +1,6 @@
 // Core types
 export * from './lib/streamTypes';
+export * from './lib/domainTypes';
 export * from './lib/errors';
 export * from './lib/services';
 export * from './lib/eventstore';
