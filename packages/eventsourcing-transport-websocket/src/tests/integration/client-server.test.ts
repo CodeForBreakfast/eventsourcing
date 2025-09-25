@@ -125,8 +125,8 @@ describe('WebSocket Client-Server Specific Tests', () => {
 
     const program = pipe(
       WebSocketAcceptor.make({ port, host }),
-      Effect.tap((acceptor) => acceptor.start()),
-      Effect.flatMap((acceptor) =>
+      Effect.flatMap((acceptor) => acceptor.start()),
+      Effect.flatMap((_server) =>
         pipe(
           WebSocketConnector.connect(`ws://${host}:${port}`),
           Effect.flatMap((client) =>
