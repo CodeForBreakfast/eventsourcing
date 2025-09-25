@@ -48,6 +48,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
+        "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
@@ -95,7 +96,7 @@
       "dependencies": {
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
       },
       "devDependencies": {
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
@@ -166,10 +167,10 @@
       "name": "@codeforbreakfast/eventsourcing-testing-contracts",
       "version": "0.2.2",
       "dependencies": {
-        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
       },
       "devDependencies": {
-        "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
@@ -179,8 +180,8 @@
         "effect": "^3.17.0",
       },
     },
-    "packages/eventsourcing-transport-contracts": {
-      "name": "@codeforbreakfast/eventsourcing-transport-contracts",
+    "packages/eventsourcing-transport": {
+      "name": "@codeforbreakfast/eventsourcing-transport",
       "version": "0.2.2",
       "devDependencies": {
         "@types/node": "24.5.2",
@@ -196,7 +197,7 @@
       "name": "@codeforbreakfast/eventsourcing-transport-inmemory",
       "version": "0.2.2",
       "dependencies": {
-        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -214,7 +215,7 @@
       "name": "@codeforbreakfast/eventsourcing-transport-websocket",
       "version": "0.2.2",
       "dependencies": {
-        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
         "@effect/platform": "0.90.10",
       },
       "devDependencies": {
@@ -235,7 +236,7 @@
       "version": "0.2.2",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-protocol": "workspace:*",
-        "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
@@ -314,7 +315,7 @@
 
     "@codeforbreakfast/eventsourcing-testing-contracts": ["@codeforbreakfast/eventsourcing-testing-contracts@workspace:packages/eventsourcing-testing-contracts"],
 
-    "@codeforbreakfast/eventsourcing-transport-contracts": ["@codeforbreakfast/eventsourcing-transport-contracts@workspace:packages/eventsourcing-transport-contracts"],
+    "@codeforbreakfast/eventsourcing-transport": ["@codeforbreakfast/eventsourcing-transport@workspace:packages/eventsourcing-transport"],
 
     "@codeforbreakfast/eventsourcing-transport-inmemory": ["@codeforbreakfast/eventsourcing-transport-inmemory@workspace:packages/eventsourcing-transport-inmemory"],
 

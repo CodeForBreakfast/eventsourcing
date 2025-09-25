@@ -1,4 +1,4 @@
-# @codeforbreakfast/eventsourcing-transport-contracts
+# @codeforbreakfast/eventsourcing-transport
 
 ## 0.2.2
 

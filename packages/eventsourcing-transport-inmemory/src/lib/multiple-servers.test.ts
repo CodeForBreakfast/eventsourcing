@@ -5,7 +5,7 @@
 import { describe, test, expect } from 'bun:test';
 import { Effect, Stream, pipe } from 'effect';
 import { InMemoryConnector, InMemoryAcceptor } from './inmemory-transport';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
 describe('Multiple Servers Support', () => {
   test('should support multiple independent servers simultaneously', async () => {

@@ -14,10 +14,7 @@
  */
 
 import { Effect, Stream, pipe, Duration, Fiber } from 'effect';
-import {
-  makeMessageId,
-  makeTransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeMessageId, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import { WebSocketConnector } from './websocket-transport';
 import { describe, it, expect, beforeAll, afterAll } from '@codeforbreakfast/buntest';
 

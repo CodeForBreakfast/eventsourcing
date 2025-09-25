@@ -10,10 +10,7 @@
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
 import { Effect, Stream, Scope, pipe, Option, Exit, Fiber, Duration, Chunk } from 'effect';
-import type {
-  TransportMessage,
-  ConnectionState,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import type { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
 // Server Test Context Interface

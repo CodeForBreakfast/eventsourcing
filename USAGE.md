@@ -280,7 +280,7 @@ const program = pipe(
 
 ```typescript
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
 import { Stream, Effect, pipe } from 'effect';
 
 const program = Effect.scoped(

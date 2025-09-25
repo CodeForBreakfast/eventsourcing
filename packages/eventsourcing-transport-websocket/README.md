@@ -4,7 +4,7 @@ WebSocket transport implementation for event sourcing - Real-time bidirectional 
 
 ## Overview
 
-This package provides WebSocket client and server transport implementations that follow the transport contracts defined in `@codeforbreakfast/eventsourcing-transport-contracts`. It enables real-time, bidirectional communication between clients and servers using WebSockets.
+This package provides WebSocket client and server transport implementations that follow the transport contracts defined in `@codeforbreakfast/eventsourcing-transport`. It enables real-time, bidirectional communication between clients and servers using WebSockets.
 
 ## Key Features
 
@@ -30,7 +30,7 @@ bun add @codeforbreakfast/eventsourcing-transport-websocket
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
 
 const program = Effect.scoped(
   Effect.gen(function* () {
@@ -201,10 +201,7 @@ const program = Effect.scoped(
 The transport uses typed errors from the contracts package:
 
 ```typescript
-import {
-  ConnectionError,
-  TransportError,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { ConnectionError, TransportError } from '@codeforbreakfast/eventsourcing-transport';
 
 const program = Effect.scoped(
   pipe(

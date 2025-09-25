@@ -23,7 +23,7 @@ import {
   type ConnectionState,
   Client,
   Server,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
 // Core Types (No Global State)

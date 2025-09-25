@@ -27,7 +27,7 @@
 
 - Updated dependencies [[`5720964`](https://github.com/CodeForBreakfast/eventsourcing/commit/57209643dd18db0fb876d898fd48796042270eaa), [`5720964`](https://github.com/CodeForBreakfast/eventsourcing/commit/57209643dd18db0fb876d898fd48796042270eaa)]:
   - @codeforbreakfast/eventsourcing-store@0.6.7
-  - @codeforbreakfast/eventsourcing-transport-contracts@0.2.2
+  - @codeforbreakfast/eventsourcing-transport@0.2.2
 
 ## 0.2.1
 
@@ -47,7 +47,7 @@
 
 - Updated dependencies [[`7cec47a`](https://github.com/CodeForBreakfast/eventsourcing/commit/7cec47a3cf6741febd99f96dec4cadb1923543c2), [`ff5231c`](https://github.com/CodeForBreakfast/eventsourcing/commit/ff5231c27122a47839b3aedf162c00f30f5e3257)]:
   - @codeforbreakfast/eventsourcing-store@0.6.6
-  - @codeforbreakfast/eventsourcing-transport-contracts@0.2.1
+  - @codeforbreakfast/eventsourcing-transport@0.2.1
 
 ## 0.2.0
 
@@ -83,4 +83,4 @@
 ### Patch Changes
 
 - Updated dependencies [[`b7da1d2`](https://github.com/CodeForBreakfast/eventsourcing/commit/b7da1d24b822cf3b7853f659a6df161b7c6126e5)]:
-  - @codeforbreakfast/eventsourcing-transport-contracts@0.2.0
+  - @codeforbreakfast/eventsourcing-transport@0.2.0

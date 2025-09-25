@@ -9,7 +9,7 @@ import { Effect, Stream, Scope, Schema } from 'effect';
 import type {
   ConnectionState as CoreConnectionState,
   TransportError,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
 // TRANSPORT CONTRACT TEST INTERFACES

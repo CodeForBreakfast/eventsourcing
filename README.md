@@ -34,7 +34,7 @@ CQRS command types and schemas for event sourcing. Provides type-safe command an
 
 ### Transport Layer
 
-#### [@codeforbreakfast/eventsourcing-transport-contracts](./packages/eventsourcing-transport-contracts)
+#### [@codeforbreakfast/eventsourcing-transport](./packages/eventsourcing-transport-contracts)
 
 Transport layer contracts and interfaces for message delivery systems. Provides protocol-agnostic abstractions for event streaming.
 
@@ -75,7 +75,7 @@ npm install @codeforbreakfast/eventsourcing-aggregates      # Aggregate patterns
 npm install @codeforbreakfast/eventsourcing-projections     # Projection patterns for read-side
 
 # Transport layer (choose one or more)
-npm install @codeforbreakfast/eventsourcing-transport-contracts  # Transport contracts
+npm install @codeforbreakfast/eventsourcing-transport  # Transport contracts
 npm install @codeforbreakfast/eventsourcing-transport-inmemory   # In-memory transport for testing
 npm install @codeforbreakfast/eventsourcing-transport-websocket  # WebSocket transport
 

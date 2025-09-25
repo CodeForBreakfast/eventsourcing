@@ -1,5 +1,5 @@
 {
-  "name": "@codeforbreakfast/eventsourcing-transport-contracts",
+  "name": "@codeforbreakfast/eventsourcing-transport",
   "version": "0.2.2",
   "description": "Pure transport layer abstractions and contracts for event sourcing - Define transport interfaces that any implementation (WebSocket, HTTP, SSE) can implement",
   "type": "module",
@@ -50,7 +50,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/codeforbreakfast/eventsourcing.git",
-    "directory": "packages/eventsourcing-transport-contracts"
+    "directory": "packages/eventsourcing-transport"
   },
   "bugs": {
     "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
