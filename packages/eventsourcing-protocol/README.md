@@ -50,7 +50,7 @@ const protocol = await Effect.runPromise(createTransport(url).pipe(Effect.flatMa
 const result = await Effect.runPromise(
   protocol.sendCommand({
     id: crypto.randomUUID(),
-    aggregate: 'user-123',
+    target: 'user-123',
     name: 'UpdateProfile',
     payload: { name: 'John Doe' },
   })
@@ -86,17 +86,16 @@ Sends a command and waits for the result.
 
 - `command: Command` - Command to send
   - `id: string` - Unique command identifier
-  - `aggregate: string` - Aggregate identifier
+  - `target: string` - Target aggregate or service
   - `name: string` - Command name
   - `payload: unknown` - Command data
 
 **Returns:** `Effect<CommandResult, TransportError, never>`
 
-Result contains:
+Result is a tagged union:
 
-- `success: boolean` - Whether command succeeded
-- `position?: EventStreamPosition` - New stream position after command
-- `error?: string` - Error message if command failed
+- `Success`: `{ _tag: 'Success'; position: EventStreamPosition }`
+- `Failure`: `{ _tag: 'Failure'; error: string }`
 
 Commands automatically timeout after 10 seconds.
 
@@ -176,14 +175,24 @@ All operations return Effects that handle:
 
 ## Types
 
+The protocol works with types defined in other packages:
+
+- **Commands and Results**: Import from `@codeforbreakfast/eventsourcing-commands`
+- **Events**: Import from `@codeforbreakfast/eventsourcing-store`
+
 ```typescript
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import { Event } from '@codeforbreakfast/eventsourcing-store';
+
+// Command schema
 interface Command {
   readonly id: string;
-  readonly aggregate: string;
+  readonly target: string; // Target aggregate or service
   readonly name: string;
   readonly payload: unknown;
 }
 
+// Event schema
 interface Event {
   readonly position: EventStreamPosition;
   readonly type: string;
@@ -191,11 +200,10 @@ interface Event {
   readonly timestamp: Date;
 }
 
-interface CommandResult {
-  readonly success: boolean;
-  readonly position?: EventStreamPosition;
-  readonly error?: string;
-}
+// CommandResult is a tagged union
+type CommandResult =
+  | { _tag: 'Success'; position: EventStreamPosition }
+  | { _tag: 'Failure'; error: string };
 
 interface Protocol {
   readonly sendCommand: (command: Command) => Effect<CommandResult, TransportError, never>;
