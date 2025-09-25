@@ -1,11 +1,6 @@
 import { Effect, pipe, Stream } from 'effect';
-import {
-  EventStoreService,
-  beginning,
-  toStreamId,
-  Command,
-  CommandResult,
-} from '@codeforbreakfast/eventsourcing-store';
+import { EventStoreService, beginning, toStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingServiceInterface } from './commandProcessingService';
 import { CommandRouter } from './commandHandling';
 

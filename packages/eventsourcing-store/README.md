@@ -1,6 +1,6 @@
 # @codeforbreakfast/eventsourcing-store
 
-Core types and event store implementations for event sourcing with Effect integration. This package provides the foundational interfaces and in-memory implementations needed to build event-sourced applications using functional programming patterns.
+Pure event streaming and storage for event sourcing with Effect integration. This package provides the foundational event storage interfaces and implementations needed to build event-sourced applications using functional programming patterns.
 
 ## Installation
 

@@ -21,12 +21,8 @@ import {
   type TransportError,
   type TransportMessage,
 } from '@codeforbreakfast/eventsourcing-transport-contracts';
-import {
-  EventStreamPosition,
-  Command,
-  Event,
-  CommandResult,
-} from '@codeforbreakfast/eventsourcing-store';
+import { EventStreamPosition, Event } from '@codeforbreakfast/eventsourcing-store';
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 
 // Minimum protocol needs:
 // 1. Send command -> get result
