@@ -75,12 +75,3 @@ jobs:
           TEST_PG_DATABASE: test
           TEST_PG_HOST: localhost
           TEST_PG_PORT: 5432
-
-      # Gitleaks requires a license for organizations
-      # For now, we run it locally via pre-commit hooks
-      # To enable in CI: add GITLEAKS_LICENSE secret to the repository
-      # - name: Check for secrets
-      #   uses: gitleaks/gitleaks-action@v2
-      #   env:
-      #     GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-      #     GITLEAKS_LICENSE: ${{ secrets.GITLEAKS_LICENSE }}
