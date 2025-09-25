@@ -54,7 +54,7 @@
     "fast-check": "4.3.0",
     "husky": "9.1.7",
     "knip": "5.64.0",
-    "lint-staged": "16.1.6",
+    "lint-staged": "16.2.0",
     "only-allow": "1.2.1",
     "prettier": "3.6.2",
     "turbo": "2.5.6",
