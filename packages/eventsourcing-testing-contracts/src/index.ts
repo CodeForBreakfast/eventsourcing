@@ -70,9 +70,3 @@ export {
   collectMessages,
   makeTestMessage,
 } from './lib/test-utilities';
-
-// ============================================================================
-// END-TO-END SYSTEM INTEGRATION TESTS
-// ============================================================================
-
-export { EventSourcingClient, ServerProtocolHandler, EventPublisher } from './e2e/full-system.test';
