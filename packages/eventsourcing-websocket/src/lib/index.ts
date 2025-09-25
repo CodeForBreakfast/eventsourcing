@@ -11,7 +11,7 @@ import {
   Protocol,
   ProtocolLive,
   type ProtocolService,
-} from '@codeforbreakfast/eventsourcing-protocol-default';
+} from '@codeforbreakfast/eventsourcing-protocol';
 import type {
   TransportError,
   ConnectionError,

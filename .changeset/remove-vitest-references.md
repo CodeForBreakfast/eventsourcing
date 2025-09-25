@@ -1,7 +1,7 @@
 ---
 '@codeforbreakfast/eventsourcing-aggregates': patch
 '@codeforbreakfast/eventsourcing-projections': patch
-'@codeforbreakfast/eventsourcing-protocol-default': patch
+'@codeforbreakfast/eventsourcing-protocol': patch
 '@codeforbreakfast/eventsourcing-store': patch
 '@codeforbreakfast/eventsourcing-store-postgres': patch
 '@codeforbreakfast/eventsourcing-testing-contracts': patch

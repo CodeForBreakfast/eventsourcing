@@ -1,7 +1,7 @@
 ---
 '@codeforbreakfast/eventsourcing-store': minor
 '@codeforbreakfast/eventsourcing-aggregates': patch
-'@codeforbreakfast/eventsourcing-protocol-default': patch
+'@codeforbreakfast/eventsourcing-protocol': patch
 ---
 
 Improve package architecture and domain type organization
@@ -17,7 +17,7 @@ Improve package architecture and domain type organization
 - Aggregate roots now only depend on store abstractions, creating cleaner layer separation
 - Import domain types directly from store package instead of protocol package
 
-**Improvements for `@codeforbreakfast/eventsourcing-protocol-default`:**
+**Improvements for `@codeforbreakfast/eventsourcing-protocol`:**
 
 - Domain types (`Command`, `Event`, `CommandResult`) are now imported from store package and re-exported for convenience
 - Maintains backward compatibility while improving architectural boundaries

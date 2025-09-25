@@ -70,4 +70,4 @@ This package sits between the domain layer (aggregates) and infrastructure layer
 
 - `@codeforbreakfast/eventsourcing-store` - Event storage and streaming
 - `@codeforbreakfast/eventsourcing-aggregates` - Domain aggregate patterns
-- `@codeforbreakfast/eventsourcing-protocol-default` - Protocol implementations
+- `@codeforbreakfast/eventsourcing-protocol` - Protocol implementation
