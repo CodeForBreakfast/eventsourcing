@@ -206,6 +206,9 @@ module.exports = {
       path: 'node_modules',
     },
     includeOnly: ['^packages/'],
+    exclude: {
+      path: 'packages/.*/dist/.*',
+    },
     tsPreCompilationDeps: true,
     tsConfig: {
       fileName: 'tsconfig.json',
