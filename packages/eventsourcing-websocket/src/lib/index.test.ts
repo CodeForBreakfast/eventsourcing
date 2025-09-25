@@ -4,7 +4,7 @@
  * This test file demonstrates the simplified API after removing deprecated functions.
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test, expect } from 'bun:test';
 import { Effect } from 'effect';
 import { connect, makeWebSocketProtocolLayer } from '../index.js';
 

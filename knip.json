@@ -6,8 +6,7 @@
     "@effect/language-service",
     "@effect/platform",
     "eslint-plugin-*",
-    "fast-check",
-    "vitest"
+    "fast-check"
   ],
   "ignoreBinaries": ["publish"],
   "workspaces": {

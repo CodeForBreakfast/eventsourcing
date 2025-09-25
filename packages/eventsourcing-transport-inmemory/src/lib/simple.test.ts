@@ -2,7 +2,7 @@
  * Test the pure functional implementation
  */
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 import { Effect, Stream, pipe } from 'effect';
 import { InMemoryAcceptor } from './inmemory-transport';
 
