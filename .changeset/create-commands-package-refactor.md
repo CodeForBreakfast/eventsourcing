@@ -1,6 +1,6 @@
 ---
-'@codeforbreakfast/eventsourcing-commands': major
-'@codeforbreakfast/eventsourcing-store': major
+'@codeforbreakfast/eventsourcing-commands': minor
+'@codeforbreakfast/eventsourcing-store': minor
 '@codeforbreakfast/eventsourcing-aggregates': patch
 '@codeforbreakfast/eventsourcing-protocol-default': patch
 ---
