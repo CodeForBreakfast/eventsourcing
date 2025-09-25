@@ -34,13 +34,13 @@ The protocol's core responsibilities:
 ## Installation
 
 ```bash
-bun add @codeforbreakfast/eventsourcing-protocol-default
+bun add @codeforbreakfast/eventsourcing-protocol
 ```
 
 ## Usage
 
 ```typescript
-import { createProtocol } from '@codeforbreakfast/eventsourcing-protocol-default';
+import { createProtocol } from '@codeforbreakfast/eventsourcing-protocol';
 import { createTransport } from '@codeforbreakfast/eventsourcing-transport-websocket';
 
 // Create protocol with a transport

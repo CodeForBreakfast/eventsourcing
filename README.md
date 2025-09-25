@@ -44,9 +44,9 @@ WebSocket transport implementation for real-time event streaming over WebSocket 
 
 ### Protocol Layer
 
-#### [@codeforbreakfast/eventsourcing-protocol-default](./packages/eventsourcing-protocol-default)
+#### [@codeforbreakfast/eventsourcing-protocol](./packages/eventsourcing-protocol)
 
-Default protocol implementation for event sourcing messages. Handles message formatting, serialization, and routing.
+Protocol implementation for event sourcing messages. Handles message formatting, serialization, and routing.
 
 ### WebSocket Integration
 
@@ -75,7 +75,7 @@ npm install @codeforbreakfast/eventsourcing-transport-inmemory   # In-memory tra
 npm install @codeforbreakfast/eventsourcing-transport-websocket  # WebSocket transport
 
 # Protocol layer
-npm install @codeforbreakfast/eventsourcing-protocol-default     # Default message protocol
+npm install @codeforbreakfast/eventsourcing-protocol               # Message protocol
 
 # WebSocket integration (high-level)
 npm install @codeforbreakfast/eventsourcing-websocket            # Complete WebSocket functionality

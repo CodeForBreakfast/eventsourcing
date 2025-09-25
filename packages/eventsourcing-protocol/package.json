@@ -1,7 +1,7 @@
 {
-  "name": "@codeforbreakfast/eventsourcing-protocol-default",
+  "name": "@codeforbreakfast/eventsourcing-protocol",
   "version": "0.2.2",
-  "description": "Default implementation of the event sourcing protocol over any transport - Standard protocol implementation with message serialization, command correlation, and subscription management",
+  "description": "Event sourcing protocol implementation over any transport - Protocol implementation with message serialization, command correlation, and subscription management",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -31,7 +31,6 @@
     "event-sourcing",
     "protocol",
     "implementation",
-    "default",
     "standard",
     "transport-agnostic",
     "websocket",
@@ -56,7 +55,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/codeforbreakfast/eventsourcing.git",
-    "directory": "packages/eventsourcing-protocol-default"
+    "directory": "packages/eventsourcing-protocol"
   },
   "bugs": {
     "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
