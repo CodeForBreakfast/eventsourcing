@@ -2,7 +2,7 @@
 '@codeforbreakfast/eventsourcing-commands': minor
 '@codeforbreakfast/eventsourcing-store': minor
 '@codeforbreakfast/eventsourcing-aggregates': patch
-'@codeforbreakfast/eventsourcing-protocol-default': patch
+'@codeforbreakfast/eventsourcing-protocol': patch
 ---
 
 Separate CQRS command types into dedicated package for better architecture
