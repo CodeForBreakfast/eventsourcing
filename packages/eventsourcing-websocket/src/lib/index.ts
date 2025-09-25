@@ -12,10 +12,7 @@ import {
   ProtocolLive,
   type ProtocolService,
 } from '@codeforbreakfast/eventsourcing-protocol';
-import type {
-  TransportError,
-  ConnectionError,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import type { TransportError, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
 import type { Scope } from 'effect/Scope';
 
 /**

@@ -59,7 +59,7 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-transport-contracts": "workspace:*",
+    "@codeforbreakfast/eventsourcing-transport": "workspace:*",
     "@effect/platform": "0.90.10"
   },
   "devDependencies": {

@@ -1,4 +1,4 @@
-# @codeforbreakfast/eventsourcing-transport-contracts
+# @codeforbreakfast/eventsourcing-transport
 
 Pure transport layer abstractions and contracts for event sourcing. Define transport interfaces that any implementation (WebSocket, HTTP, SSE) can implement.
 
@@ -69,7 +69,7 @@ The package provides standardized error types:
 Use `runTransportContractTests` to verify your transport implementation meets all requirements:
 
 ```typescript
-import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-transport';
 
 runTransportContractTests('My Transport', () => setupMyTransport(), {
   supportsReconnection: true,
@@ -102,7 +102,7 @@ import { Effect, Stream } from 'effect';
 import type {
   TransportConnector,
   TransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // Define your message types
 interface MyMessage extends TransportMessage<string> {

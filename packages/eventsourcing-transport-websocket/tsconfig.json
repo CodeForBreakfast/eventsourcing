@@ -11,7 +11,7 @@
   "exclude": ["dist", "node_modules", "**/*.test.ts"],
   "references": [
     {
-      "path": "../eventsourcing-transport-contracts"
+      "path": "../eventsourcing-transport"
     }
   ]
 }

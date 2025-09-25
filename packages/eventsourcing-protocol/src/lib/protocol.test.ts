@@ -21,7 +21,7 @@ import {
 } from './protocol';
 import { ServerProtocolLive, ServerProtocol } from './server-protocol';
 import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId, toStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================

@@ -8,7 +8,7 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Scope, Stream, pipe } from 'effect';
 import { InMemoryAcceptor } from '../index';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
 describe('InMemory Transport Basic Tests', () => {
   it.effect('should create acceptor without errors', () =>

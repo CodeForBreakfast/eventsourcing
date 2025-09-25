@@ -6,7 +6,7 @@
  */
 
 import { Effect, Stream, pipe, Chunk, Ref, Duration, Scope } from 'effect';
-import { TransportError } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
 import type {
   TransportMessage,
   ConnectedTransportTestInterface,

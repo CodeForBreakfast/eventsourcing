@@ -17,7 +17,7 @@ import {
   type TransportError,
   type TransportMessage,
   type Server,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import {

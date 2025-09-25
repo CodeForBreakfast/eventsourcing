@@ -23,7 +23,7 @@ export type {
   MessageParseError,
   MessageId,
   TransportId,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // Re-export client and server namespaces
-export { Client, Server } from '@codeforbreakfast/eventsourcing-transport-contracts';
+export { Client, Server } from '@codeforbreakfast/eventsourcing-transport';

@@ -12,7 +12,7 @@ import {
   type TransportMessage,
   type ConnectionState,
   Client,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
 // Internal State Types

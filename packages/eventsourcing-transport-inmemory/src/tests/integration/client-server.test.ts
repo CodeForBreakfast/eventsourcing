@@ -10,10 +10,7 @@
 
 import { describe, test, expect } from 'bun:test';
 import { Effect, Stream, pipe } from 'effect';
-import {
-  TransportMessage,
-  ConnectionState,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 import {
   runClientServerContractTests,
   type ClientServerTestContext,

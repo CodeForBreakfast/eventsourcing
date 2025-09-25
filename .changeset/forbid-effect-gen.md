@@ -5,7 +5,7 @@
 '@codeforbreakfast/eventsourcing-store': patch
 '@codeforbreakfast/eventsourcing-store-postgres': patch
 '@codeforbreakfast/eventsourcing-testing-contracts': patch
-'@codeforbreakfast/eventsourcing-transport-contracts': patch
+'@codeforbreakfast/eventsourcing-transport': patch
 '@codeforbreakfast/eventsourcing-transport-inmemory': patch
 '@codeforbreakfast/eventsourcing-transport-websocket': patch
 '@codeforbreakfast/eventsourcing-websocket': patch

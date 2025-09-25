@@ -20,7 +20,7 @@ import {
   type Client,
   type TransportError,
   type TransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamPosition, Event } from '@codeforbreakfast/eventsourcing-store';
 import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 

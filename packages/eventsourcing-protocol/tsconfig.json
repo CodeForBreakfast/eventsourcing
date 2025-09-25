@@ -11,8 +11,5 @@
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "node_modules", "**/*.test.ts", "**/*.spec.ts"],
-  "references": [
-    { "path": "../eventsourcing-transport-contracts" },
-    { "path": "../eventsourcing-store" }
-  ]
+  "references": [{ "path": "../eventsourcing-transport" }, { "path": "../eventsourcing-store" }]
 }

@@ -12,7 +12,7 @@ import {
   TransportError,
   Server,
   Client,
-} from '@codeforbreakfast/eventsourcing-transport-contracts';
+} from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
 // Internal State Types

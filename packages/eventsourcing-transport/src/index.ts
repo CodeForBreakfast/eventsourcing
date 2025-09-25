@@ -1,5 +1,5 @@
 /**
- * @codeforbreakfast/eventsourcing-transport-contracts
+ * @codeforbreakfast/eventsourcing-transport
  *
  * Pure transport layer abstractions and contracts for event sourcing.
  * Define transport interfaces that any implementation (WebSocket, HTTP, SSE) can implement.

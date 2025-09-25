@@ -76,7 +76,7 @@ const program = Effect.gen(function* () {
 ### Messaging Example
 
 ```typescript
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport-contracts';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
 const program = Effect.gen(function* () {
   const acceptor = yield* InMemoryAcceptor.make();
