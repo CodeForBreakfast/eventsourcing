@@ -120,39 +120,48 @@ describe('WebSocket Client-Server Specific Tests', () => {
   // WebSocket-specific tests that directly test the WebSocket implementation
 
   test('WebSocket server should accept connections on specified port', async () => {
-    const program = Effect.gen(function* () {
-      const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
-      const host = 'localhost';
+    const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
+    const host = 'localhost';
 
-      // Create WebSocket server directly
-      const acceptor = yield* WebSocketAcceptor.make({ port, host });
-      yield* acceptor.start();
-
-      // Create WebSocket client directly
-      const client = yield* WebSocketConnector.connect(`ws://${host}:${port}`);
-
-      // Verify connection state
-      const state = yield* pipe(client.connectionState, Stream.take(1), Stream.runHead);
-
-      expect(state._tag).toBe('Some');
-      if (state._tag === 'Some') {
-        expect(state.value).toBe('connected');
-      }
-    });
+    const program = pipe(
+      WebSocketAcceptor.make({ port, host }),
+      Effect.tap((acceptor) => acceptor.start()),
+      Effect.flatMap((acceptor) =>
+        pipe(
+          WebSocketConnector.connect(`ws://${host}:${port}`),
+          Effect.flatMap((client) =>
+            pipe(
+              client.connectionState,
+              Stream.take(1),
+              Stream.runHead,
+              Effect.tap((state) => {
+                expect(state._tag).toBe('Some');
+                if (state._tag === 'Some') {
+                  expect(state.value).toBe('connected');
+                }
+                return Effect.void;
+              })
+            )
+          )
+        )
+      )
+    );
 
     await Effect.runPromise(Effect.scoped(program));
   });
 
   test('WebSocket connector should fail for invalid URLs', async () => {
-    const program = Effect.gen(function* () {
-      // Test with non-existent server
-      const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
-      const result = yield* Effect.either(
-        WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`)
-      );
+    // Test with non-existent server
+    const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
 
-      expect(result._tag).toBe('Left');
-    });
+    const program = pipe(
+      WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`),
+      Effect.either,
+      Effect.tap((result) => {
+        expect(result._tag).toBe('Left');
+        return Effect.void;
+      })
+    );
 
     await Effect.runPromise(Effect.scoped(program));
   });

@@ -36,6 +36,17 @@ export default [
           tsx: 'never',
         },
       ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="gen"]',
+          message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
+        },
+        {
+          selector: 'MemberExpression[object.name="Effect"][property.name="gen"]',
+          message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
+        },
+      ],
     },
   },
   {
