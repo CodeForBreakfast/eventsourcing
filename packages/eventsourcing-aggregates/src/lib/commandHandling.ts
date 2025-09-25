@@ -1,5 +1,5 @@
 import { Effect } from 'effect';
-import { Command, Event } from '@codeforbreakfast/eventsourcing-protocol-default';
+import { Command, Event } from '@codeforbreakfast/eventsourcing-store';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 
 export interface CommandHandler {

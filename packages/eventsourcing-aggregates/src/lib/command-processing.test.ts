@@ -7,8 +7,9 @@ import {
   makeInMemoryStore,
   beginning,
   toStreamId,
+  Command,
+  Event,
 } from '@codeforbreakfast/eventsourcing-store';
-import { Command, Event } from '@codeforbreakfast/eventsourcing-protocol-default';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';

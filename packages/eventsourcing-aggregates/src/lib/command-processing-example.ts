@@ -6,7 +6,7 @@ import {
   CommandRoutingError,
   createCommandProcessingService,
 } from '../index';
-import { Command, Event } from '@codeforbreakfast/eventsourcing-protocol-default';
+import { Command, Event } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
 // Example Usage of Command Processing Service
