@@ -430,7 +430,7 @@ const applyBankAccountEvent =
 Test aggregate behavior in isolation:
 
 ```typescript
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect } from 'bun:test';
 
 describe('UserAggregate', () => {
   it('should register a new user', async () => {

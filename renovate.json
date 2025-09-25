@@ -46,7 +46,7 @@
     },
     {
       "description": "Automatically merge test dependencies",
-      "matchPackageNames": ["vitest", "fast-check"],
+      "matchPackageNames": ["fast-check"],
       "matchDepTypes": ["devDependencies"],
       "automerge": true
     },

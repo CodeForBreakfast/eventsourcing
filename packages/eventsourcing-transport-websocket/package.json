@@ -69,8 +69,7 @@
     "bun-types": "1.2.22",
     "effect": "3.17.14",
     "eslint": "9.36.0",
-    "typescript": "5.9.2",
-    "vitest": "3.2.4"
+    "typescript": "5.9.2"
   },
   "publishConfig": {
     "access": "public"

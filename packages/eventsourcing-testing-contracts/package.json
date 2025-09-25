@@ -40,7 +40,6 @@
     "validation",
     "compliance",
     "bun-test",
-    "vitest",
     "jest",
     "effect",
     "effect-ts",
