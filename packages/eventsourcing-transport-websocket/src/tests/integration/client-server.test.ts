@@ -8,7 +8,7 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
 import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 import {
@@ -116,11 +116,11 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 describe('WebSocket Client-Server Specific Tests', () => {
   // WebSocket-specific tests that directly test the WebSocket implementation
 
-  test('WebSocket server should accept connections on specified port', async () => {
+  it.scoped('WebSocket server should accept connections on specified port', () => {
     const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
     const host = 'localhost';
 
-    const program = pipe(
+    return pipe(
       WebSocketAcceptor.make({ port, host }),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((_server) =>
@@ -143,15 +143,13 @@ describe('WebSocket Client-Server Specific Tests', () => {
         )
       )
     );
-
-    await Effect.runPromise(Effect.scoped(program));
   });
 
-  test('WebSocket connector should fail for invalid URLs', async () => {
+  it.scoped('WebSocket connector should fail for invalid URLs', () => {
     // Test with non-existent server
     const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
 
-    const program = pipe(
+    return pipe(
       WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`),
       Effect.either,
       Effect.tap((result) => {
@@ -159,7 +157,5 @@ describe('WebSocket Client-Server Specific Tests', () => {
         return Effect.void;
       })
     );
-
-    await Effect.runPromise(Effect.scoped(program));
   });
 });

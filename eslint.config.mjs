@@ -46,7 +46,14 @@ export default [
   },
   {
     name: 'effect-coding-standards',
-    files: ['**/*.ts', '**/*.tsx'],
+    files: [
+      '**/*.ts',
+      '**/*.tsx',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+    ],
     languageOptions: commonLanguageOptions,
     plugins: {
       '@typescript-eslint': typescript,
