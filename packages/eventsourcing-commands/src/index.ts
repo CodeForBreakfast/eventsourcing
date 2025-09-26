@@ -6,3 +6,5 @@
  */
 
 export * from './lib/commands';
+export * from './lib/command-registry';
+export * from './lib/examples';
