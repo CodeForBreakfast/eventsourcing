@@ -1,8 +1,13 @@
 /**
  * @codeforbreakfast/eventsourcing-commands
  *
- * CQRS command types and schemas for event sourcing.
- * Core command handling abstractions with type-safe command and result definitions.
+ * Wire command validation and dispatch for event sourcing systems.
+ * Provides the external boundary layer for command processing.
+ *
+ * Usage:
+ * - Wire Commands: External APIs requiring validation
+ * - Aggregate Commands: Use makeAggregateRoot from @codeforbreakfast/eventsourcing-aggregates
  */
 
 export * from './lib/commands';
+export * from './lib/command-registry';

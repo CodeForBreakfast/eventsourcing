@@ -159,7 +159,10 @@ describe('Command Processing Service', () => {
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
         if (result._tag === 'Failure') {
-          expect(result.error).toContain('No handler found');
+          expect(result.error._tag).toBe('UnknownError');
+          if (result.error._tag === 'UnknownError') {
+            expect(result.error.message).toContain('No handler found');
+          }
         }
       }),
       Effect.provide(testLayer)
@@ -176,7 +179,10 @@ describe('Command Processing Service', () => {
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
         if (result._tag === 'Failure') {
-          expect(result.error).toContain('Handler execution failed');
+          expect(result.error._tag).toBe('UnknownError');
+          if (result.error._tag === 'UnknownError') {
+            expect(result.error.message).toContain('Handler execution failed');
+          }
         }
       }),
       Effect.provide(testLayer)

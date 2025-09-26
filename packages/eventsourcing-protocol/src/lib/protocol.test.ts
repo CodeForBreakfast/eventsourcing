@@ -196,7 +196,10 @@ describe('Protocol Behavior Tests', () => {
                   Effect.sync(() => {
                     expect(result._tag).toBe('Failure');
                     if (result._tag === 'Failure') {
-                      expect(result.error).toBe('Validation failed: Name is required');
+                      expect(result.error._tag).toBe('UnknownError');
+                      if (result.error._tag === 'UnknownError') {
+                        expect(result.error.message).toBe('Validation failed: Name is required');
+                      }
                     }
                   })
                 ),

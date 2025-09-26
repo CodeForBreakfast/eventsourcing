@@ -1,7 +1,7 @@
 {
   "name": "@codeforbreakfast/eventsourcing-commands",
   "version": "0.1.0",
-  "description": "CQRS command types and schemas for event sourcing - Core command handling abstractions with type-safe command and result definitions",
+  "description": "Wire command validation and dispatch for event sourcing systems - External boundary layer with schema validation",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
