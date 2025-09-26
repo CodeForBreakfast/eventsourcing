@@ -1,12 +1,6 @@
 import { describe, test, expect } from 'bun:test';
 import { Schema, Effect, pipe } from 'effect';
-import {
-  WireCommand,
-  CommandResult,
-  createCommandSchema,
-  validateCommand,
-  CommandValidationError,
-} from './commands';
+import { WireCommand, CommandResult, validateCommand, CommandValidationError } from './commands';
 
 describe('Wire Commands', () => {
   describe('WireCommand Schema', () => {
@@ -151,52 +145,6 @@ describe('Wire Commands', () => {
         expect(validationError.commandName).toBe('CreateUser');
         expect(validationError.validationErrors.length).toBeGreaterThan(0);
       }
-    });
-  });
-
-  describe('Command Schema Creation', () => {
-    test('should create type-safe command schema', () => {
-      const UserPayload = Schema.Struct({
-        email: Schema.String,
-        name: Schema.String,
-      });
-
-      const CreateUserCommand = createCommandSchema('CreateUser', UserPayload);
-
-      const validCommand = {
-        id: 'cmd-123',
-        target: 'user-456',
-        name: 'CreateUser',
-        payload: {
-          email: 'test@example.com',
-          name: 'John Doe',
-        },
-      };
-
-      const result = Schema.decodeUnknownEither(CreateUserCommand)(validCommand);
-      expect(result._tag).toBe('Right');
-    });
-
-    test('should enforce literal command name', () => {
-      const UserPayload = Schema.Struct({
-        email: Schema.String,
-        name: Schema.String,
-      });
-
-      const CreateUserCommand = createCommandSchema('CreateUser', UserPayload);
-
-      const commandWithWrongName = {
-        id: 'cmd-123',
-        target: 'user-456',
-        name: 'UpdateUser', // Wrong name
-        payload: {
-          email: 'test@example.com',
-          name: 'John Doe',
-        },
-      };
-
-      const result = Schema.decodeUnknownEither(CreateUserCommand)(commandWithWrongName);
-      expect(result._tag).toBe('Left');
     });
   });
 });

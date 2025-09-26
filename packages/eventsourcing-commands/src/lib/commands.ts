@@ -29,7 +29,7 @@ export type Command = WireCommand;
 
 /**
  * Base domain command interface
- * The validated, type-safe internal representation
+ * The validated internal representation
  */
 export interface DomainCommand<TPayload = unknown> {
   readonly id: string;
@@ -132,7 +132,7 @@ export type CommandResult = typeof CommandResult.Type;
 // ============================================================================
 
 /**
- * Creates a type-safe command schema with validation
+ * Creates a command schema with validation
  */
 export const createCommandSchema = <TName extends string, TPayload, TPayloadInput>(
   name: TName,
