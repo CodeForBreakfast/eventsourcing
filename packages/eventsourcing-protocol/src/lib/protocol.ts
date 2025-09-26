@@ -185,7 +185,15 @@ const createCommandResult = (
                 reason: 'Failure result missing error',
               })
             ),
-          onSome: (error) => Effect.succeed({ _tag: 'Failure' as const, error }),
+          onSome: (error) =>
+            Effect.succeed({
+              _tag: 'Failure' as const,
+              error: {
+                _tag: 'UnknownError' as const,
+                commandId: message.commandId,
+                message: error,
+              },
+            }),
         })
       )
     ),

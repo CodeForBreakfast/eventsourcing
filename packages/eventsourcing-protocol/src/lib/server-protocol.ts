@@ -152,7 +152,7 @@ const createResultSender =
             type: 'command_result' as const,
             commandId,
             success: false,
-            error: res.error,
+            error: JSON.stringify(res.error),
           })),
           Match.exhaustive
         );

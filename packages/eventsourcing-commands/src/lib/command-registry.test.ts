@@ -1,7 +1,11 @@
 import { describe, test, expect } from 'bun:test';
 import { Schema, Effect } from 'effect';
 import { WireCommand, DomainCommand, CommandHandler } from './commands';
-import { makeCommandRegistry } from './command-registry';
+import {
+  makeCommandRegistry,
+  createCommandRegistration,
+  buildCommandRegistrations,
+} from './command-registry';
 
 describe('Command Registry', () => {
   const UserPayload = Schema.Struct({
@@ -18,10 +22,10 @@ describe('Command Registry', () => {
   };
 
   test('should register and dispatch commands successfully', async () => {
-    const registry = await Effect.runPromise(makeCommandRegistry());
-
-    // Register the command handler
-    await Effect.runPromise(registry.register('CreateUser', UserPayload, createUserHandler));
+    const registrations = buildCommandRegistrations({
+      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
+    });
+    const registry = makeCommandRegistry(registrations);
 
     // Create a valid wire command
     const wireCommand: WireCommand = {
@@ -44,9 +48,10 @@ describe('Command Registry', () => {
   });
 
   test('should handle validation errors', async () => {
-    const registry = await Effect.runPromise(makeCommandRegistry());
-
-    await Effect.runPromise(registry.register('CreateUser', UserPayload, createUserHandler));
+    const registrations = buildCommandRegistrations({
+      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
+    });
+    const registry = makeCommandRegistry(registrations);
 
     const invalidCommand: WireCommand = {
       id: 'cmd-123',
@@ -72,7 +77,10 @@ describe('Command Registry', () => {
   });
 
   test('should handle unknown commands', async () => {
-    const registry = await Effect.runPromise(makeCommandRegistry());
+    const registrations = buildCommandRegistrations({
+      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
+    });
+    const registry = makeCommandRegistry(registrations);
 
     const unknownCommand: WireCommand = {
       id: 'cmd-123',
@@ -88,7 +96,7 @@ describe('Command Registry', () => {
       expect(result.error._tag).toBe('HandlerNotFound');
       if (result.error._tag === 'HandlerNotFound') {
         expect(result.error.commandName).toBe('UnknownCommand');
-        expect(result.error.availableHandlers).toEqual([]);
+        expect(result.error.availableHandlers).toEqual(['CreateUser']);
       }
     }
   });
@@ -98,9 +106,10 @@ describe('Command Registry', () => {
       handle: () => Effect.die(new Error('Something went wrong')),
     };
 
-    const registry = await Effect.runPromise(makeCommandRegistry());
-
-    await Effect.runPromise(registry.register('CreateUser', UserPayload, failingHandler));
+    const registrations = buildCommandRegistrations({
+      CreateUser: createCommandRegistration(UserPayload, failingHandler),
+    });
+    const registry = makeCommandRegistry(registrations);
 
     const wireCommand: WireCommand = {
       id: 'cmd-123',
@@ -133,15 +142,11 @@ describe('Command Registry', () => {
         }),
     };
 
-    const registry = await Effect.runPromise(makeCommandRegistry());
-
-    // Register multiple handlers
-    await Effect.runPromise(
-      Effect.all([
-        registry.register('CreateUser', UserPayload, createUserHandler),
-        registry.register('UpdateEmail', UpdateEmailPayload, updateEmailHandler),
-      ])
-    );
+    const registrations = buildCommandRegistrations({
+      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
+      UpdateEmail: createCommandRegistration(UpdateEmailPayload, updateEmailHandler),
+    });
+    const registry = makeCommandRegistry(registrations);
 
     // Test both commands work
     const createCommand: WireCommand = {

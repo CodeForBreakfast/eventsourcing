@@ -33,7 +33,11 @@ export const createCommandProcessingService = (
             (error): Effect.Effect<CommandResult, never, never> =>
               Effect.succeed({
                 _tag: 'Failure',
-                error: String(error),
+                error: {
+                  _tag: 'UnknownError',
+                  commandId: command.id,
+                  message: String(error),
+                },
               })
           )
         ),

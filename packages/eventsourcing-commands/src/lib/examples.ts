@@ -8,7 +8,12 @@
 
 import { Effect, Schema, pipe } from 'effect';
 import { DomainCommand, CommandHandler, WireCommand } from './commands';
-import { registerCommand, dispatchCommand } from './command-registry';
+import {
+  dispatchCommand,
+  createCommandRegistration,
+  buildCommandRegistrations,
+  makeCommandRegistryLayer,
+} from './command-registry';
 
 // ============================================================================
 // Tier 1: Wire Commands for External APIs
@@ -63,9 +68,13 @@ const createUserWireHandler: CommandHandler<DomainCommand<typeof CreateUserPaylo
     ),
 };
 
-// Register wire command handler
-export const setupWireCommands = () =>
-  registerCommand('CreateUser', CreateUserPayload, createUserWireHandler);
+// Build command registrations for application setup
+export const wireCommandRegistrations = buildCommandRegistrations({
+  CreateUser: createCommandRegistration(CreateUserPayload, createUserWireHandler),
+});
+
+// Create registry layer for application setup
+export const WireCommandRegistryLayer = makeCommandRegistryLayer(wireCommandRegistrations);
 
 // ============================================================================
 // Example: HTTP API Usage (Wire Commands)
@@ -94,7 +103,8 @@ export const httpApiExample = () => {
           console.error(`HTTP API: Command failed:`, result.error);
         }
       })
-    )
+    ),
+    Effect.provide(WireCommandRegistryLayer) // Provide the immutable registry
   );
 };
 
@@ -205,6 +215,7 @@ export const errorHandlingExample = () => {
           console.error('Wire command validation failed:', result.error.validationErrors);
         }
       })
-    )
+    ),
+    Effect.provide(WireCommandRegistryLayer)
   );
 };
