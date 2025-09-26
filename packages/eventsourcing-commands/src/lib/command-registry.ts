@@ -97,20 +97,22 @@ export const makeCommandRegistry = (): Effect.Effect<CommandRegistry, never, nev
           }
 
           const domainCommand = validationResult.right;
-          const handlerResult = yield* Effect.either(registration.handler.handle(domainCommand));
 
-          if (handlerResult._tag === 'Left') {
+          // Handle both failures and defects (like Effect.die)
+          const handlerResult = yield* Effect.exit(registration.handler.handle(domainCommand));
+
+          if (handlerResult._tag === 'Failure') {
             return {
               _tag: 'Failure' as const,
               error: {
                 _tag: 'UnknownError' as const,
                 commandId: wireCommand.id,
-                message: String(handlerResult.left),
+                message: String(handlerResult.cause),
               },
             };
           }
 
-          return handlerResult.right;
+          return handlerResult.value;
         }),
     };
   });
