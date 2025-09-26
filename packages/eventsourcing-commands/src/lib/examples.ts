@@ -9,10 +9,10 @@
 import { Effect, Schema, pipe } from 'effect';
 import { DomainCommand, CommandHandler, WireCommand } from './commands';
 import {
-  dispatchCommand,
   createCommandRegistration,
   buildCommandRegistrations,
   makeCommandRegistryLayer,
+  dispatchCommand,
 } from './command-registry';
 
 // ============================================================================
@@ -68,13 +68,11 @@ const createUserWireHandler: CommandHandler<DomainCommand<typeof CreateUserPaylo
     ),
 };
 
-// Build command registrations for application setup
 export const wireCommandRegistrations = buildCommandRegistrations({
   CreateUser: createCommandRegistration(CreateUserPayload, createUserWireHandler),
 });
 
-// Create registry layer for application setup
-export const WireCommandRegistryLayer = makeCommandRegistryLayer(wireCommandRegistrations);
+const WireCommandRegistryLayer = makeCommandRegistryLayer(wireCommandRegistrations);
 
 // ============================================================================
 // Example: HTTP API Usage (Wire Commands)
@@ -104,7 +102,7 @@ export const httpApiExample = () => {
         }
       })
     ),
-    Effect.provide(WireCommandRegistryLayer) // Provide the immutable registry
+    Effect.provide(WireCommandRegistryLayer)
   );
 };
 
@@ -218,4 +216,47 @@ export const errorHandlingExample = () => {
     ),
     Effect.provide(WireCommandRegistryLayer)
   );
+};
+
+// ============================================================================
+// Clean API Example
+// ============================================================================
+
+// Simple example showing the cleaned up API
+export const simpleExample = () => {
+  // Define a basic payload
+  const MessagePayload = Schema.Struct({
+    text: Schema.String.pipe(Schema.minLength(1)),
+  });
+
+  // Define a handler
+  const messageHandler: CommandHandler<DomainCommand<typeof MessagePayload.Type>> = {
+    handle: (command) =>
+      Effect.succeed({
+        _tag: 'Success' as const,
+        position: { streamId: command.target as any, eventNumber: 1 },
+      }),
+  };
+
+  // Build registrations
+  const registrations = buildCommandRegistrations({
+    SendMessage: createCommandRegistration(MessagePayload, messageHandler),
+  });
+
+  // Create layer
+  const messageLayer = makeCommandRegistryLayer(registrations);
+
+  // Use it
+  const sendMessage = (text: string) => {
+    const wireCommand: WireCommand = {
+      id: crypto.randomUUID(),
+      target: 'chat-123',
+      name: 'SendMessage',
+      payload: { text },
+    };
+
+    return pipe(dispatchCommand(wireCommand), Effect.provide(messageLayer));
+  };
+
+  return { sendMessage };
 };
