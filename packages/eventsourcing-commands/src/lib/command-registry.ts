@@ -1,10 +1,9 @@
-import { Effect, HashMap, pipe, Ref, Layer } from 'effect';
+import { Schema, Effect, HashMap, Ref, Layer } from 'effect';
 import {
-  CommandRegistry,
-  CommandHandler,
-  DomainCommand,
-  LocalCommand,
   WireCommand,
+  DomainCommand,
+  CommandHandler,
+  CommandResult,
   CommandValidationError,
   validateCommand,
 } from './commands';
@@ -13,136 +12,108 @@ import {
 // Command Registry Implementation
 // ============================================================================
 
-interface RegistryEntry {
-  readonly validate: (
-    wireCommand: WireCommand
-  ) => Effect.Effect<DomainCommand, CommandValidationError, never>;
-  readonly handler: CommandHandler<DomainCommand, any>;
+interface CommandRegistration<TPayload, TPayloadInput> {
+  readonly payloadSchema: Schema.Schema<TPayload, TPayloadInput>;
+  readonly handler: CommandHandler<DomainCommand<TPayload>>;
 }
 
-interface CommandRegistryState {
-  readonly handlers: HashMap.HashMap<string, RegistryEntry>;
+/**
+ * Command registry for wire command validation and dispatch
+ */
+export interface CommandRegistry {
+  readonly register: <TPayload, TPayloadInput>(
+    commandName: string,
+    payloadSchema: Schema.Schema<TPayload, TPayloadInput>,
+    handler: CommandHandler<DomainCommand<TPayload>>
+  ) => Effect.Effect<void, never, never>;
+
+  readonly dispatch: (wireCommand: WireCommand) => Effect.Effect<CommandResult, never, never>;
 }
 
-const makeCommandRegistry = (): Effect.Effect<CommandRegistry, never, never> =>
-  pipe(
-    Ref.make<CommandRegistryState>({ handlers: HashMap.empty() }),
-    Effect.map((stateRef) => ({
-      register: <TPayload, TPayloadInput, TError>(
+export const makeCommandRegistry = (): Effect.Effect<CommandRegistry, never, never> =>
+  Effect.gen(function* () {
+    const registrationsRef = yield* Ref.make(
+      HashMap.empty<string, CommandRegistration<any, any>>()
+    );
+
+    return {
+      register: <TPayload, TPayloadInput>(
         commandName: string,
         payloadSchema: Schema.Schema<TPayload, TPayloadInput>,
-        handler: CommandHandler<DomainCommand<TPayload>, TError>
+        handler: CommandHandler<DomainCommand<TPayload>>
       ) =>
-        pipe(
-          Ref.update(stateRef, (state) => ({
-            handlers: HashMap.set(state.handlers, commandName, {
-              validate: validateCommand(payloadSchema),
-              handler: handler as CommandHandler<DomainCommand, any>,
-            }),
-          })),
-          Effect.asVoid
+        Ref.update(registrationsRef, (registrations) =>
+          HashMap.set(registrations, commandName, {
+            payloadSchema,
+            handler,
+          })
         ),
 
       dispatch: (wireCommand: WireCommand) =>
-        pipe(
-          Ref.get(stateRef),
-          Effect.flatMap((state) => {
-            const maybeEntry = HashMap.get(state.handlers, wireCommand.name);
+        Effect.gen(function* () {
+          const registrations = yield* Ref.get(registrationsRef);
+          const maybeRegistration = HashMap.get(registrations, wireCommand.name);
 
-            if (maybeEntry._tag === 'None') {
-              return Effect.succeed({
+          if (maybeRegistration._tag === 'None') {
+            return {
+              _tag: 'Failure' as const,
+              error: {
+                _tag: 'HandlerNotFound' as const,
+                commandId: wireCommand.id,
+                commandName: wireCommand.name,
+                availableHandlers: Array.from(HashMap.keys(registrations)),
+              },
+            };
+          }
+
+          const registration = maybeRegistration.value;
+
+          const validationResult = yield* Effect.either(
+            validateCommand(registration.payloadSchema)(wireCommand)
+          );
+
+          if (validationResult._tag === 'Left') {
+            const error = validationResult.left;
+            if (error instanceof CommandValidationError) {
+              return {
                 _tag: 'Failure' as const,
                 error: {
-                  _tag: 'HandlerNotFound' as const,
-                  commandId: wireCommand.id,
-                  commandName: wireCommand.name,
-                  availableHandlers: Array.from(HashMap.keys(state.handlers)),
+                  _tag: 'ValidationError' as const,
+                  commandId: error.commandId,
+                  commandName: error.commandName,
+                  validationErrors: error.validationErrors,
                 },
-              });
+              };
             }
 
-            const entry = maybeEntry.value;
+            return {
+              _tag: 'Failure' as const,
+              error: {
+                _tag: 'UnknownError' as const,
+                commandId: wireCommand.id,
+                message: String(error),
+              },
+            };
+          }
 
-            return pipe(
-              entry.validate(wireCommand),
-              Effect.matchEffect({
-                onFailure: (validationError) =>
-                  Effect.succeed({
-                    _tag: 'Failure' as const,
-                    error: {
-                      _tag: 'ValidationError' as const,
-                      commandId: wireCommand.id,
-                      commandName: wireCommand.name,
-                      validationErrors:
-                        validationError._tag === 'CommandValidationError'
-                          ? validationError.validationErrors
-                          : ['Unknown validation error'],
-                    },
-                  }),
-                onSuccess: (domainCommand) =>
-                  pipe(
-                    entry.handler.handle(domainCommand),
-                    Effect.matchEffect({
-                      onFailure: (cause) =>
-                        Effect.succeed({
-                          _tag: 'Failure' as const,
-                          error: {
-                            _tag: 'ExecutionError' as const,
-                            commandId: wireCommand.id,
-                            commandName: wireCommand.name,
-                            message: cause instanceof Error ? cause.message : String(cause),
-                          },
-                        }),
-                      onSuccess: (result) => Effect.succeed(result),
-                    })
-                  ),
-              })
-            );
-          })
-        ),
+          const domainCommand = validationResult.right;
+          const handlerResult = yield* Effect.either(registration.handler.handle(domainCommand));
 
-      // New: Local command dispatch without validation overhead
-      dispatchLocal: <TPayload>(command: LocalCommand<TPayload>) =>
-        pipe(
-          Ref.get(stateRef),
-          Effect.flatMap((state) => {
-            const maybeEntry = HashMap.get(state.handlers, command.name);
+          if (handlerResult._tag === 'Left') {
+            return {
+              _tag: 'Failure' as const,
+              error: {
+                _tag: 'UnknownError' as const,
+                commandId: wireCommand.id,
+                message: String(handlerResult.left),
+              },
+            };
+          }
 
-            if (maybeEntry._tag === 'None') {
-              return Effect.succeed({
-                _tag: 'Failure' as const,
-                error: {
-                  _tag: 'HandlerNotFound' as const,
-                  commandId: command.id,
-                  commandName: command.name,
-                  availableHandlers: Array.from(HashMap.keys(state.handlers)),
-                },
-              });
-            }
-
-            const entry = maybeEntry.value;
-
-            // Skip validation for local commands - trust compile-time types
-            return pipe(
-              entry.handler.handle(command as DomainCommand),
-              Effect.matchEffect({
-                onFailure: (cause) =>
-                  Effect.succeed({
-                    _tag: 'Failure' as const,
-                    error: {
-                      _tag: 'ExecutionError' as const,
-                      commandId: command.id,
-                      commandName: command.name,
-                      message: cause instanceof Error ? cause.message : String(cause),
-                    },
-                  }),
-                onSuccess: (result) => Effect.succeed(result),
-              })
-            );
-          })
-        ),
-    }))
-  );
+          return handlerResult.right;
+        }),
+    };
+  });
 
 // ============================================================================
 // Service Definition
@@ -159,24 +130,18 @@ export const CommandRegistryLive = Layer.effect(CommandRegistryService, makeComm
 // Convenience Functions
 // ============================================================================
 
-export const registerCommand = <TPayload, TPayloadInput, TError>(
+export const registerCommand = <TPayload, TPayloadInput>(
   commandName: string,
   payloadSchema: Schema.Schema<TPayload, TPayloadInput>,
-  handler: CommandHandler<DomainCommand<TPayload>, TError>
+  handler: CommandHandler<DomainCommand<TPayload>>
 ) =>
-  pipe(
-    CommandRegistryService,
-    Effect.flatMap((registry) => registry.register(commandName, payloadSchema, handler))
-  );
+  Effect.gen(function* () {
+    const registry = yield* CommandRegistryService;
+    yield* registry.register(commandName, payloadSchema, handler);
+  });
 
 export const dispatchCommand = (wireCommand: WireCommand) =>
-  pipe(
-    CommandRegistryService,
-    Effect.flatMap((registry) => registry.dispatch(wireCommand))
-  );
-
-export const dispatchLocalCommand = <TPayload>(command: LocalCommand<TPayload>) =>
-  pipe(
-    CommandRegistryService,
-    Effect.flatMap((registry) => registry.dispatchLocal(command))
-  );
+  Effect.gen(function* () {
+    const registry = yield* CommandRegistryService;
+    return yield* registry.dispatch(wireCommand);
+  });
