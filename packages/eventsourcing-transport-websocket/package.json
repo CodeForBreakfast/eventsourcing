@@ -60,7 +60,7 @@
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-    "@effect/platform": "0.90.10"
+    "@effect/platform": "0.91.0"
   },
   "devDependencies": {
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",

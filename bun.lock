@@ -9,7 +9,7 @@
         "@commitlint/cli": "19.8.1",
         "@commitlint/config-conventional": "19.8.1",
         "@effect/language-service": "0.40.0",
-        "@effect/platform": "0.90.10",
+        "@effect/platform": "0.91.0",
         "@types/bun": "latest",
         "@typescript-eslint/eslint-plugin": "8.44.1",
         "@typescript-eslint/parser": "8.44.1",
@@ -120,7 +120,7 @@
         "typescript": "5.9.2",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0",
+        "@effect/platform": "^0.90.0 || ^0.91.0",
         "effect": "^3.17.0",
       },
     },
@@ -138,7 +138,7 @@
         "typescript": "5.9.2",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0",
+        "@effect/platform": "^0.90.0 || ^0.91.0",
         "effect": "^3.17.0",
       },
     },
@@ -147,9 +147,9 @@
       "version": "0.5.7",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "@effect/experimental": "0.54.6",
-        "@effect/sql": "0.44.2",
-        "@effect/sql-pg": "0.45.1",
+        "@effect/experimental": "0.55.0",
+        "@effect/sql": "0.45.0",
+        "@effect/sql-pg": "0.46.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -159,7 +159,7 @@
         "typescript": "5.9.2",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0",
+        "@effect/platform": "^0.90.0 || ^0.91.0",
         "effect": "^3.17.0",
       },
     },
@@ -170,7 +170,6 @@
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
       },
       "devDependencies": {
-        "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.5.2",
         "effect": "3.17.14",
         "eslint": "9.36.0",
@@ -216,7 +215,7 @@
       "version": "0.2.2",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-        "@effect/platform": "0.90.10",
+        "@effect/platform": "0.91.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -357,15 +356,15 @@
 
     "@commitlint/types": ["@commitlint/types@19.8.1", "", { "dependencies": { "@types/conventional-commits-parser": "^5.0.0", "chalk": "^5.3.0" } }, "sha512-/yCrWGCoA1SVKOks25EGadP9Pnj0oAIHGpl2wH2M2Y46dPM2ueb8wyCVOD7O3WCTkaJ0IkKvzhl1JY7+uCT2Dw=="],
 
-    "@effect/experimental": ["@effect/experimental@0.54.6", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.90.2", "effect": "^3.17.7", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-UqHMvCQmrZT6kUVoUC0lqyno4Yad+j9hBGCdUjW84zkLwAq08tPqySiZUKRwY+Ae5B2Ab8rISYJH7nQvct9DMQ=="],
+    "@effect/experimental": ["@effect/experimental@0.55.0", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.91.0", "effect": "^3.17.14", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-vUzWXSqBrPyVJXcZqmASZR1c5GqmeeJp/OZspT265GdHaqvt8PiLfKear9Lh48vzm6nKySnVT0mQrcygo+1qlA=="],
 
     "@effect/language-service": ["@effect/language-service@0.40.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-VHikOhYXm+ECy+mLSszHgCfP9YyKQyB9GLFGBKY2nbnru9xwgCnar8pBLA0AkSUjAgn3hc/mdcFdb/XL9uywLQ=="],
 
-    "@effect/platform": ["@effect/platform@0.90.10", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.17.13" } }, "sha512-QhDPgCaLfIMQKOCoCPQvRUS+Y34iYJ07jdZ/CBAvYFvg/iUBebsmFuHL63RCD/YZH9BuK/kqqLYAA3M0fmUEgg=="],
+    "@effect/platform": ["@effect/platform@0.91.0", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.17.14" } }, "sha512-1ldaoX5Xn7lai4htMemjI+vapaBzkJwW0bcfa3QkxzYGmnAbTKNm4VIJf9SkHhj+uGfG43NxA8sZPSQZkBBscw=="],
 
-    "@effect/sql": ["@effect/sql@0.44.2", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/experimental": "^0.54.6", "@effect/platform": "^0.90.4", "effect": "^3.17.7" } }, "sha512-DEcvriHvj88zu7keruH9NcHQzam7yQzLNLJO6ucDXMCAwWzYZSJOsmkxBznRFv8ylFtccSclKH2fuj+wRKPjCQ=="],
+    "@effect/sql": ["@effect/sql@0.45.0", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/experimental": "^0.55.0", "@effect/platform": "^0.91.0", "effect": "^3.17.14" } }, "sha512-250w6apb25GTj5T5zxXN1Yw3RJPeaE4xozghOImx5iZn/DHYXWPrTvEM9b/RNmSX5+JaeComObeNgpZbMzKfVQ=="],
 
-    "@effect/sql-pg": ["@effect/sql-pg@0.45.1", "", { "dependencies": { "postgres": "^3.4.4" }, "peerDependencies": { "@effect/experimental": "^0.54.6", "@effect/platform": "^0.90.4", "@effect/sql": "^0.44.2", "effect": "^3.17.7" } }, "sha512-nhJO1cdZ8j19yALZ3Iy9Zyi6JQtcS8SNe4MEp9DSSx0JdX5ZC1dN3zT4gYxWoEwcMqp3oQnq3vtV+mdsSWsTXQ=="],
+    "@effect/sql-pg": ["@effect/sql-pg@0.46.0", "", { "dependencies": { "postgres": "^3.4.4" }, "peerDependencies": { "@effect/experimental": "^0.55.0", "@effect/platform": "^0.91.0", "@effect/sql": "^0.45.0", "effect": "^3.17.14" } }, "sha512-7MgAjN+Eie9/fSe634GNDKAFlX11MQgA0HYWI/HPhhdwLM27U6QV5DMhRe01EKGqe9fkzDpZjJiPr8ITfQmTwQ=="],
 
     "@emnapi/core": ["@emnapi/core@1.5.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-sbP8GzB1WDzacS8fgNPpHlp6C9VZe+SJP3F90W9rLemaQj2PzIuTEl1qDOYQf58YIpyjViI24y9aPWCjEzY2cg=="],
 
