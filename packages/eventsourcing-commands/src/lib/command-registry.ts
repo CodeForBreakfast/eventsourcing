@@ -1,13 +1,11 @@
-import { Effect, Schema, HashMap, pipe, Ref, Layer } from 'effect';
+import { Effect, HashMap, pipe, Ref, Layer } from 'effect';
 import {
   CommandRegistry,
   CommandHandler,
   DomainCommand,
+  LocalCommand,
   WireCommand,
-  CommandResult,
   CommandValidationError,
-  CommandHandlerNotFoundError,
-  CommandExecutionError,
   validateCommand,
 } from './commands';
 
@@ -102,6 +100,47 @@ const makeCommandRegistry = (): Effect.Effect<CommandRegistry, never, never> =>
             );
           })
         ),
+
+      // New: Local command dispatch without validation overhead
+      dispatchLocal: <TPayload>(command: LocalCommand<TPayload>) =>
+        pipe(
+          Ref.get(stateRef),
+          Effect.flatMap((state) => {
+            const maybeEntry = HashMap.get(state.handlers, command.name);
+
+            if (maybeEntry._tag === 'None') {
+              return Effect.succeed({
+                _tag: 'Failure' as const,
+                error: {
+                  _tag: 'HandlerNotFound' as const,
+                  commandId: command.id,
+                  commandName: command.name,
+                  availableHandlers: Array.from(HashMap.keys(state.handlers)),
+                },
+              });
+            }
+
+            const entry = maybeEntry.value;
+
+            // Skip validation for local commands - trust compile-time types
+            return pipe(
+              entry.handler.handle(command as DomainCommand),
+              Effect.matchEffect({
+                onFailure: (cause) =>
+                  Effect.succeed({
+                    _tag: 'Failure' as const,
+                    error: {
+                      _tag: 'ExecutionError' as const,
+                      commandId: command.id,
+                      commandName: command.name,
+                      message: cause instanceof Error ? cause.message : String(cause),
+                    },
+                  }),
+                onSuccess: (result) => Effect.succeed(result),
+              })
+            );
+          })
+        ),
     }))
   );
 
@@ -134,4 +173,10 @@ export const dispatchCommand = (wireCommand: WireCommand) =>
   pipe(
     CommandRegistryService,
     Effect.flatMap((registry) => registry.dispatch(wireCommand))
+  );
+
+export const dispatchLocalCommand = <TPayload>(command: LocalCommand<TPayload>) =>
+  pipe(
+    CommandRegistryService,
+    Effect.flatMap((registry) => registry.dispatchLocal(command))
   );
