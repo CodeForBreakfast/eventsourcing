@@ -60,13 +60,13 @@
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
     "effect": "^3.17.0",
-    "@effect/platform": "^0.90.0"
+    "@effect/platform": "^0.90.0 || ^0.91.0"
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
-    "@effect/sql": "0.44.2",
-    "@effect/sql-pg": "0.45.1",
-    "@effect/experimental": "0.54.6"
+    "@effect/sql": "0.45.0",
+    "@effect/sql-pg": "0.46.0",
+    "@effect/experimental": "0.55.0"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
