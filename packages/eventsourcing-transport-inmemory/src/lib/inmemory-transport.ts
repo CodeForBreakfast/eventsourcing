@@ -63,10 +63,13 @@ const disconnectClient = (clientState: InMemoryClientState): Effect.Effect<void>
 const disconnectAllClients = (serverState: InMemoryServerState): Effect.Effect<void> =>
   pipe(
     Ref.get(serverState.clientConnections),
-    Effect.flatMap((connections) =>
+    Effect.flatMap((connections: HashMap.HashMap<string, InMemoryClientConnection>) =>
       pipe(
         HashMap.values(connections),
-        Effect.forEach(({ clientState }) => disconnectClient(clientState), { discard: true })
+        Effect.forEach(
+          ({ clientState }: InMemoryClientConnection) => disconnectClient(clientState),
+          { discard: true }
+        )
       )
     )
   );
@@ -81,10 +84,10 @@ const createConnectionStateStream = (
   Stream.unwrapScoped(
     pipe(
       PubSub.subscribe(clientState.connectionStatePubSub),
-      Effect.flatMap((queue) =>
+      Effect.flatMap((queue: Queue.Dequeue<ConnectionState>) =>
         pipe(
           Ref.get(clientState.connectionState),
-          Effect.map((currentState) =>
+          Effect.map((currentState: ConnectionState) =>
             Stream.concat(Stream.succeed(currentState), Stream.fromQueue(queue))
           )
         )
@@ -101,7 +104,7 @@ const publishWithConnectionCheck =
   (message: TransportMessage): Effect.Effect<void, TransportError> =>
     pipe(
       Ref.get(clientState.connectionState),
-      Effect.flatMap((state) =>
+      Effect.flatMap((state: ConnectionState) =>
         state !== 'connected'
           ? Effect.fail(new TransportError({ message: errorMessage }))
           : Queue.offer(targetQueue, message)
@@ -114,14 +117,14 @@ const createSimpleSubscription = (
 ): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
   pipe(
     Queue.unbounded<TransportMessage>(),
-    Effect.tap((subscriberQueue) =>
+    Effect.tap((subscriberQueue: Queue.Queue<TransportMessage>) =>
       pipe(
         Stream.fromQueue(sourceQueue),
-        Stream.runForEach((message) => Queue.offer(subscriberQueue, message)),
+        Stream.runForEach((message: TransportMessage) => Queue.offer(subscriberQueue, message)),
         Effect.forkDaemon
       )
     ),
-    Effect.map((queue) => {
+    Effect.map((queue: Queue.Queue<TransportMessage>) => {
       const baseStream = Stream.fromQueue(queue);
       return filter ? Stream.filter(baseStream, filter) : baseStream;
     })
@@ -139,11 +142,11 @@ const forwardToSubscribers = (
 ): Effect.Effect<void> =>
   pipe(
     Ref.get(clientState.subscribers),
-    Effect.flatMap((subscribers) =>
+    Effect.flatMap((subscribers: HashSet.HashSet<Queue.Queue<TransportMessage>>) =>
       pipe(
         HashSet.values(subscribers),
         Effect.forEach(
-          (queue) => {
+          (queue: Queue.Queue<TransportMessage>) => {
             if (excludeQueue && queue === excludeQueue) {
               return Effect.void;
             }
@@ -164,7 +167,7 @@ const setupSubscriberForwarding = (
     Effect.zipRight(
       pipe(
         Stream.fromQueue(clientState.serverToClientQueue),
-        Stream.runForEach((message) =>
+        Stream.runForEach((message: TransportMessage) =>
           pipe(
             Queue.offer(subscriberQueue, message),
             Effect.zipRight(forwardToSubscribers(clientState, message, subscriberQueue))
@@ -198,8 +201,10 @@ const createClientTransport = (clientState: InMemoryClientState): Client.Transpo
   ): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
-      Effect.tap((subscriberQueue) => setupSubscriberForwarding(clientState, subscriberQueue)),
-      Effect.map((queue) => {
+      Effect.tap((subscriberQueue: Queue.Queue<TransportMessage>) =>
+        setupSubscriberForwarding(clientState, subscriberQueue)
+      ),
+      Effect.map((queue: Queue.Queue<TransportMessage>) => {
         const baseStream = Stream.fromQueue(queue);
         const filteredStream = filter ? Stream.filter(baseStream, filter) : baseStream;
         return filteredStream;
@@ -221,13 +226,18 @@ const createClientState = (
       Ref.make<ConnectionState>('connected'),
       Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
     ]),
-    Effect.map(([connectionState, subscribers]) => ({
-      clientToServerQueue,
-      serverToClientQueue,
-      connectionState,
-      connectionStatePubSub,
-      subscribers,
-    }))
+    Effect.map(
+      ([connectionState, subscribers]: [
+        Ref.Ref<ConnectionState>,
+        Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>,
+      ]) => ({
+        clientToServerQueue,
+        serverToClientQueue,
+        connectionState,
+        connectionStatePubSub,
+        subscribers,
+      })
+    )
   );
 
 const generateClientId = (): string => `client-${Date.now()}-${Math.random()}`;
@@ -243,11 +253,17 @@ const createConnectionQueues = (): Effect.Effect<{
       Queue.unbounded<TransportMessage>(),
       Queue.unbounded<TransportMessage>(),
     ]),
-    Effect.map(([connectionStatePubSub, clientToServerQueue, serverToClientQueue]) => ({
-      connectionStatePubSub,
-      clientToServerQueue,
-      serverToClientQueue,
-    }))
+    Effect.map(
+      ([connectionStatePubSub, clientToServerQueue, serverToClientQueue]: [
+        PubSub.PubSub<ConnectionState>,
+        Queue.Queue<TransportMessage>,
+        Queue.Queue<TransportMessage>,
+      ]) => ({
+        connectionStatePubSub,
+        clientToServerQueue,
+        serverToClientQueue,
+      })
+    )
   );
 
 const createClientConnection = (
@@ -271,7 +287,7 @@ const createServerState = (
 ): Effect.Effect<InMemoryServerState> =>
   pipe(
     Ref.make(HashMap.empty<string, InMemoryClientConnection>()),
-    Effect.map((clientConnections) => ({
+    Effect.map((clientConnections: Ref.Ref<HashMap.HashMap<string, InMemoryClientConnection>>) => ({
       connectionsQueue,
       clientConnections,
     }))
@@ -283,12 +299,16 @@ const broadcastToClients = (
 ): Effect.Effect<void> =>
   pipe(
     Ref.get(serverState.clientConnections),
-    Effect.flatMap((connections) =>
+    Effect.flatMap((connections: HashMap.HashMap<string, InMemoryClientConnection>) =>
       pipe(
         HashMap.values(connections),
-        Effect.forEach(({ clientState }) => Queue.offer(clientState.serverToClientQueue, message), {
-          discard: true,
-        })
+        Effect.forEach(
+          ({ clientState }: InMemoryClientConnection) =>
+            Queue.offer(clientState.serverToClientQueue, message),
+          {
+            discard: true,
+          }
+        )
       )
     )
   );
@@ -306,12 +326,12 @@ const unregisterClientConnection = (
 ): Effect.Effect<void> =>
   pipe(
     Ref.get(serverState.clientConnections),
-    Effect.flatMap((connections) =>
+    Effect.flatMap((connections: HashMap.HashMap<string, InMemoryClientConnection>) =>
       pipe(
         HashMap.get(connections, clientId),
         Option.match({
           onNone: () => Effect.void,
-          onSome: ({ clientState }) =>
+          onSome: ({ clientState }: InMemoryClientConnection) =>
             pipe(
               disconnectClient(clientState),
               Effect.zipRight(Ref.update(serverState.clientConnections, HashMap.remove(clientId)))
@@ -350,13 +370,21 @@ const setupClientConnection = (
 const createConnectorForServer =
   (serverState: InMemoryServerState): InMemoryConnector =>
   () =>
-    Effect.acquireRelease(
-      pipe(
-        createConnectionQueues(),
-        Effect.flatMap(({ connectionStatePubSub, clientToServerQueue, serverToClientQueue }) =>
+    pipe(
+      createConnectionQueues(),
+      Effect.flatMap(
+        ({
+          connectionStatePubSub,
+          clientToServerQueue,
+          serverToClientQueue,
+        }: {
+          connectionStatePubSub: PubSub.PubSub<ConnectionState>;
+          clientToServerQueue: Queue.Queue<TransportMessage>;
+          serverToClientQueue: Queue.Queue<TransportMessage>;
+        }) =>
           pipe(
             createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
-            Effect.flatMap((clientState) => {
+            Effect.flatMap((clientState: InMemoryClientState) => {
               const clientId = generateClientId();
               const clientConnection = createClientConnection(
                 clientId,
@@ -365,19 +393,25 @@ const createConnectorForServer =
                 clientState
               );
 
-              return setupClientConnection(
-                serverState,
-                clientState,
-                clientConnection,
-                connectionStatePubSub,
-                clientId
+              return pipe(
+                setupClientConnection(
+                  serverState,
+                  clientState,
+                  clientConnection,
+                  connectionStatePubSub,
+                  clientId
+                ),
+                Effect.flatMap(({ transport, cleanup }) =>
+                  pipe(
+                    Effect.addFinalizer(() => cleanup()),
+                    Effect.as(transport)
+                  )
+                )
               );
             })
           )
-        )
-      ),
-      ({ cleanup }) => cleanup()
-    ).pipe(Effect.map(({ transport }) => transport));
+      )
+    );
 
 const createInMemoryServerTransport = (): Effect.Effect<
   {
@@ -388,24 +422,23 @@ const createInMemoryServerTransport = (): Effect.Effect<
   never,
   Scope.Scope
 > =>
-  Effect.acquireRelease(
-    pipe(
-      Queue.unbounded<Server.ClientConnection>(),
-      Effect.flatMap((connectionsQueue) =>
-        pipe(
-          createServerState(connectionsQueue),
-          Effect.map((serverState) => ({
-            connections: Stream.fromQueue(connectionsQueue),
-            broadcast: (message: TransportMessage) => broadcastToClients(serverState, message),
-            connector: createConnectorForServer(serverState),
-            cleanup: () => disconnectAllClients(serverState),
-          }))
+  pipe(
+    Queue.unbounded<Server.ClientConnection>(),
+    Effect.flatMap((connectionsQueue: Queue.Queue<Server.ClientConnection>) =>
+      pipe(
+        createServerState(connectionsQueue),
+        Effect.flatMap((serverState: InMemoryServerState) =>
+          pipe(
+            Effect.addFinalizer(() => disconnectAllClients(serverState)),
+            Effect.as({
+              connections: Stream.fromQueue(connectionsQueue),
+              broadcast: (message: TransportMessage) => broadcastToClients(serverState, message),
+              connector: createConnectorForServer(serverState),
+            })
+          )
         )
       )
-    ),
-    ({ cleanup }) => cleanup()
-  ).pipe(
-    Effect.map(({ connections, broadcast, connector }) => ({ connections, broadcast, connector }))
+    )
   );
 
 // =============================================================================

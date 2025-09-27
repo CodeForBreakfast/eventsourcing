@@ -13,7 +13,8 @@
  * This approach ensures we test transport behavior, not mock behavior.
  */
 
-import { Effect, Stream, pipe, Duration, Fiber } from 'effect';
+import { Effect, Stream, pipe, Fiber } from 'effect';
+import * as Duration from 'effect/Duration';
 import { makeTransportMessage, makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
 import { WebSocketConnector } from './websocket-transport';
 import { describe, it, expect, beforeAll, afterAll } from '@codeforbreakfast/buntest';
@@ -155,233 +156,276 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
 
   it.effect('should handle connection lifecycle correctly', () =>
     Effect.scoped(
-      Effect.gen(function* () {
-        const transportFiber = yield* Effect.fork(WebSocketConnector.connect('ws://test-unit.com'));
+      pipe(
+        Effect.fork(WebSocketConnector.connect('ws://test-unit.com')),
+        Effect.flatMap((transportFiber) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              expect(mockWs).toBeDefined();
+              expect(mockWs.readyState).toBe(WebSocketConstants.CONNECTING);
 
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-        expect(mockWs).toBeDefined();
-        expect(mockWs.readyState).toBe(WebSocketConstants.CONNECTING);
+              // Manually trigger connection open
+              mockWs.simulateOpen();
 
-        // Manually trigger connection open
-        mockWs.simulateOpen();
-
-        const transport = yield* Fiber.join(transportFiber);
-
-        // Verify connection state
-        const state = yield* pipe(transport.connectionState, Stream.take(1), Stream.runHead);
-
-        expect(state._tag).toBe('Some');
-        if (state._tag === 'Some') {
-          expect(state.value).toBe('connected');
-        }
-      })
+              return Fiber.join(transportFiber);
+            }),
+            Effect.flatMap((transport) =>
+              pipe(
+                transport.connectionState,
+                Stream.take(1),
+                Stream.runHead,
+                Effect.tap((state) => {
+                  expect(state._tag).toBe('Some');
+                  if (state._tag === 'Some') {
+                    expect(state.value).toBe('connected');
+                  }
+                  return Effect.void;
+                })
+              )
+            )
+          )
+        )
+      )
     )
   );
 
   it.effect('should handle connection errors correctly', () =>
     Effect.scoped(
-      Effect.gen(function* () {
-        const transportFiber = yield* Effect.fork(
-          pipe(WebSocketConnector.connect('ws://test-error.com'), Effect.either)
-        );
-
-        // Wait for WebSocket to be created
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-
-        // Manually trigger connection error
-        mockWs.simulateError();
-
-        const result = yield* Fiber.join(transportFiber);
-        expect(result._tag).toBe('Left');
-      })
+      pipe(
+        Effect.fork(pipe(WebSocketConnector.connect('ws://test-error.com'), Effect.either)),
+        Effect.flatMap((transportFiber) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              mockWs.simulateError();
+              return Fiber.join(transportFiber);
+            }),
+            Effect.tap((result) => {
+              expect(result._tag).toBe('Left');
+              return Effect.void;
+            })
+          )
+        )
+      )
     )
   );
 
   it.effect('should handle incoming messages correctly', () =>
     Effect.scoped(
-      Effect.gen(function* () {
-        // Create transport
-        const transportFiber = yield* Effect.fork(
-          WebSocketConnector.connect('ws://test-messages.com')
-        );
-
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-        mockWs.simulateOpen();
-
-        const transport = yield* Fiber.join(transportFiber);
-
-        // Set up subscription
-        const messagesFiber = yield* pipe(
-          transport.subscribe(),
-          Effect.flatMap((stream) =>
-            pipe(
-              stream,
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.fork
+      pipe(
+        Effect.fork(WebSocketConnector.connect('ws://test-messages.com')),
+        Effect.flatMap((transportFiber) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              mockWs.simulateOpen();
+              return Fiber.join(transportFiber);
+            }),
+            Effect.flatMap((transport) =>
+              pipe(
+                transport.subscribe(),
+                Effect.flatMap((stream) =>
+                  pipe(
+                    stream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk)),
+                    Effect.fork
+                  )
+                ),
+                Effect.flatMap((messagesFiber) =>
+                  pipe(
+                    Effect.sleep(Duration.millis(10)),
+                    Effect.flatMap(() => {
+                      const testMessage = makeTransportMessage(
+                        'test-msg-1',
+                        'test-type',
+                        JSON.stringify({ data: 'test-data' })
+                      );
+                      mockWs.simulateMessage(JSON.stringify(testMessage));
+                      return Fiber.join(messagesFiber);
+                    }),
+                    Effect.tap((receivedMessages) => {
+                      expect(receivedMessages).toHaveLength(1);
+                      expect(receivedMessages[0]?.id).toBe(makeMessageId('test-msg-1'));
+                      expect(receivedMessages[0]?.type).toBe('test-type');
+                      expect(receivedMessages[0]?.payload).toBe(
+                        JSON.stringify({ data: 'test-data' })
+                      );
+                      return Effect.void;
+                    })
+                  )
+                )
+              )
             )
           )
-        );
-
-        yield* Effect.sleep(Duration.millis(10));
-
-        // Simulate incoming message
-        const testMessage = makeTransportMessage(
-          'test-msg-1',
-          'test-type',
-          JSON.stringify({ data: 'test-data' })
-        );
-
-        mockWs.simulateMessage(JSON.stringify(testMessage));
-
-        const receivedMessages = yield* Fiber.join(messagesFiber);
-        expect(receivedMessages).toHaveLength(1);
-        expect(receivedMessages[0]?.id).toBe(makeMessageId('test-msg-1'));
-        expect(receivedMessages[0]?.type).toBe('test-type');
-        expect(receivedMessages[0]?.payload).toBe(JSON.stringify({ data: 'test-data' }));
-      })
+        )
+      )
     )
   );
 
   it.effect('should handle malformed incoming messages gracefully', () =>
     Effect.scoped(
-      Effect.gen(function* () {
-        const transportFiber = yield* Effect.fork(
-          WebSocketConnector.connect('ws://test-malformed.com')
-        );
+      pipe(
+        Effect.fork(WebSocketConnector.connect('ws://test-malformed.com')),
+        Effect.flatMap((transportFiber) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              mockWs.simulateOpen();
+              return Fiber.join(transportFiber);
+            }),
+            Effect.flatMap((transport) =>
+              pipe(
+                transport.subscribe(),
+                Effect.flatMap((stream) =>
+                  pipe(
+                    stream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk)),
+                    Effect.timeout(500),
+                    Effect.either,
+                    Effect.fork
+                  )
+                ),
+                Effect.flatMap((messagesFiber) =>
+                  pipe(
+                    Effect.sleep(Duration.millis(10)),
+                    Effect.flatMap(() => {
+                      // Send malformed JSON - should be ignored
+                      mockWs.simulateMessage('invalid-json{');
 
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-        mockWs.simulateOpen();
+                      // Send valid message after malformed one
+                      const validMessage = makeTransportMessage('valid', 'test', 'data');
+                      mockWs.simulateMessage(JSON.stringify(validMessage));
 
-        const transport = yield* Fiber.join(transportFiber);
-
-        // Set up subscription
-        const messagesFiber = yield* pipe(
-          transport.subscribe(),
-          Effect.flatMap((stream) =>
-            pipe(
-              stream,
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.map((chunk) => Array.from(chunk)),
-              Effect.timeout(500), // Short timeout since malformed message won't produce anything
-              Effect.either,
-              Effect.fork
+                      return Fiber.join(messagesFiber);
+                    }),
+                    Effect.tap((result) => {
+                      // Should receive the valid message, malformed one should be ignored
+                      if (result._tag === 'Right') {
+                        expect(result.right).toHaveLength(1);
+                        expect(result.right[0]?.id).toBe(makeMessageId('valid'));
+                        expect(result.right[0]?.type).toBe('test');
+                        expect(result.right[0]?.payload).toBe('data');
+                      } else {
+                        // Timeout is also acceptable - means malformed message was properly ignored
+                        expect(result._tag).toBe('Left');
+                      }
+                      return Effect.void;
+                    })
+                  )
+                )
+              )
             )
           )
-        );
-
-        yield* Effect.sleep(Duration.millis(10));
-
-        // Send malformed JSON - should be ignored
-        mockWs.simulateMessage('invalid-json{');
-
-        // Send valid message after malformed one
-        const validMessage = makeTransportMessage('valid', 'test', 'data');
-        mockWs.simulateMessage(JSON.stringify(validMessage));
-
-        const result = yield* Fiber.join(messagesFiber);
-
-        // Should receive the valid message, malformed one should be ignored
-        if (result._tag === 'Right') {
-          expect(result.right).toHaveLength(1);
-          expect(result.right[0]?.id).toBe(makeMessageId('valid'));
-          expect(result.right[0]?.type).toBe('test');
-          expect(result.right[0]?.payload).toBe('data');
-        } else {
-          // Timeout is also acceptable - means malformed message was properly ignored
-          expect(result._tag).toBe('Left');
-        }
-      })
+        )
+      )
     )
   );
 
   it.effect('should handle WebSocket connection errors', () =>
     // Test what happens when WebSocket fires an error event during connection
     Effect.scoped(
-      Effect.gen(function* () {
-        const connectResult = yield* pipe(
-          WebSocketConnector.connect('ws://test-error.com'),
-          Effect.either,
-          Effect.fork
-        );
+      pipe(
+        pipe(WebSocketConnector.connect('ws://test-error.com'), Effect.either, Effect.fork),
+        Effect.flatMap((connectResult) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              expect(mockWs).toBeDefined();
 
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-        expect(mockWs).toBeDefined();
+              // Simulate connection error
+              mockWs.simulateError();
 
-        // Simulate connection error
-        mockWs.simulateError();
-
-        const result = yield* Fiber.join(connectResult);
-
-        expect(result._tag).toBe('Left');
-        if (result._tag === 'Left') {
-          expect(result.left._tag).toBe('ConnectionError');
-        }
-      })
+              return Fiber.join(connectResult);
+            }),
+            Effect.tap((result) => {
+              expect(result._tag).toBe('Left');
+              if (result._tag === 'Left') {
+                expect(result.left._tag).toBe('ConnectionError');
+              }
+              return Effect.void;
+            })
+          )
+        )
+      )
     )
   );
 
   it.effect('should handle WebSocket close before open', () =>
     // Test what happens when WebSocket closes before opening (connection refused scenario)
     Effect.scoped(
-      Effect.gen(function* () {
-        const connectResult = yield* pipe(
-          WebSocketConnector.connect('ws://test-close.com'),
-          Effect.either,
-          Effect.fork
-        );
+      pipe(
+        pipe(WebSocketConnector.connect('ws://test-close.com'), Effect.either, Effect.fork),
+        Effect.flatMap((connectResult) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              expect(mockWs).toBeDefined();
 
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-        expect(mockWs).toBeDefined();
+              // Simulate immediate close (like connection refused)
+              mockWs.simulateClose(1006, 'Connection refused');
 
-        // Simulate immediate close (like connection refused)
-        mockWs.simulateClose(1006, 'Connection refused');
-
-        const result = yield* Fiber.join(connectResult);
-
-        expect(result._tag).toBe('Left');
-        if (result._tag === 'Left') {
-          expect(result.left._tag).toBe('ConnectionError');
-        }
-      })
+              return Fiber.join(connectResult);
+            }),
+            Effect.tap((result) => {
+              expect(result._tag).toBe('Left');
+              if (result._tag === 'Left') {
+                expect(result.left._tag).toBe('ConnectionError');
+              }
+              return Effect.void;
+            })
+          )
+        )
+      )
     )
   );
 
   it.effect('should reject publish when not connected', () =>
     Effect.scoped(
-      Effect.gen(function* () {
-        // Create transport and let it succeed connection first
-        const transportFiber = yield* Effect.fork(
-          WebSocketConnector.connect('ws://test-not-connected.com')
-        );
-
-        yield* Effect.sleep(Duration.millis(10));
-        mockWs = globalThis.lastCreatedWebSocket!;
-
-        // First simulate connection success so transport creation succeeds
-        mockWs.simulateOpen();
-
-        const transport = yield* Fiber.join(transportFiber);
-
-        // Now simulate disconnection so publish will fail
-        mockWs.simulateClose();
-        yield* Effect.sleep(Duration.millis(10));
-
-        const result = yield* pipe(
-          transport.publish(makeTransportMessage('test', 'test', 'should fail')),
-          Effect.either
-        );
-
-        expect(result._tag).toBe('Left');
-      })
+      pipe(
+        Effect.fork(WebSocketConnector.connect('ws://test-not-connected.com')),
+        Effect.flatMap((transportFiber) =>
+          pipe(
+            Effect.sleep(Duration.millis(10)),
+            Effect.flatMap(() => {
+              mockWs = globalThis.lastCreatedWebSocket!;
+              // First simulate connection success so transport creation succeeds
+              mockWs.simulateOpen();
+              return Fiber.join(transportFiber);
+            }),
+            Effect.flatMap((transport) =>
+              pipe(
+                Effect.sleep(Duration.millis(10)),
+                Effect.flatMap(() => {
+                  // Now simulate disconnection so publish will fail
+                  mockWs.simulateClose();
+                  return Effect.sleep(Duration.millis(10));
+                }),
+                Effect.flatMap(() =>
+                  pipe(
+                    transport.publish(makeTransportMessage('test', 'test', 'should fail')),
+                    Effect.either
+                  )
+                ),
+                Effect.tap((result) => {
+                  expect(result._tag).toBe('Left');
+                  return Effect.void;
+                })
+              )
+            )
+          )
+        )
+      )
     )
   );
 });

@@ -8,14 +8,14 @@
 import type * as Duration from 'effect/Duration';
 import type * as Effect from 'effect/Effect';
 import * as Logger from 'effect/Logger';
-import { test, expect, describe, afterAll, beforeAll } from 'bun:test';
+import { test, expect, describe, afterAll, beforeAll, beforeEach, afterEach } from 'bun:test';
 import * as internal from './internal/internal.js';
 
 /**
  * @since 1.0.0
  */
 export * from 'bun:test';
-export { test, expect, describe, afterAll, beforeAll };
+export { test, expect, describe, afterAll, beforeAll, beforeEach, afterEach };
 
 /**
  * @since 1.0.0

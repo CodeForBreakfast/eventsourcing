@@ -168,7 +168,7 @@ const createWebSocketConnection = (
   url: string,
   stateRef: Ref.Ref<WebSocketInternalState>
 ): Effect.Effect<void, ConnectionError, never> =>
-  Effect.async<void, ConnectionError>((resume) => {
+  Effect.async<void, ConnectionError>((resume, signal) => {
     try {
       const socket = new WebSocket(url);
       let hasResolved = false;
@@ -226,6 +226,28 @@ const createWebSocketConnection = (
       socket.onmessage = (event) => {
         Effect.runSync(handleIncomingMessage(stateRef, event.data));
       };
+
+      // Handle abort signal
+      signal.addEventListener('abort', () => {
+        try {
+          if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+            socket.close();
+          }
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
+
+      // Return cleanup Effect
+      return Effect.sync(() => {
+        try {
+          if (socket.readyState !== WebSocket.CLOSED && socket.readyState !== WebSocket.CLOSING) {
+            socket.close();
+          }
+        } catch {
+          // Ignore cleanup errors
+        }
+      });
     } catch (error) {
       resume(
         Effect.fail(
@@ -236,6 +258,7 @@ const createWebSocketConnection = (
           })
         )
       );
+      return Effect.void; // No cleanup needed if socket creation failed
     }
   });
 
