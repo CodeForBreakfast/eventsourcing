@@ -5,7 +5,7 @@
  * Provides proper Effect-based WebSocket handling with structured lifecycle management.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
   TransportError,
@@ -230,43 +230,76 @@ const cleanupConnection = (
 const connectWebSocket = (
   url: string
 ): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope> =>
-  Effect.gen(function* () {
-    const stateRef = yield* createInitialState();
-    const writerRef = yield* Ref.make<
-      ((data: string) => Effect.Effect<void, Socket.SocketError>) | null
-    >(null);
-
-    yield* updateConnectionState(stateRef, 'connecting');
-
-    const socket = yield* Effect.acquireRelease(
+  pipe(
+    Effect.all({
+      stateRef: createInitialState(),
+      writerRef: Ref.make<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>(null),
+      connectedDeferred: Deferred.make<void, ConnectionError>(),
+    }),
+    Effect.tap(({ stateRef }) => updateConnectionState(stateRef, 'connecting')),
+    Effect.flatMap(({ stateRef, writerRef, connectedDeferred }) =>
       pipe(
-        createWebSocketConnection(url, stateRef),
-        Effect.provide(Socket.layerWebSocketConstructorGlobal)
-      ),
-      () => cleanupConnection(stateRef, writerRef)
-    );
-
-    // Set up the writer
-    const writer = yield* socket.writer;
-    yield* Ref.set(writerRef, (data: string) => writer(data));
-
-    // Start message handler
-    yield* socket
-      .run((data: Uint8Array) => handleIncomingMessage(stateRef, data), {
-        onOpen: updateConnectionState(stateRef, 'connected'),
-      })
-      .pipe(
-        Effect.catchAll((error) => {
-          if (Socket.SocketCloseError.is(error)) {
-            return updateConnectionState(stateRef, 'disconnected');
-          }
-          return updateConnectionState(stateRef, 'error');
-        }),
-        Effect.forkScoped
-      );
-
-    return createConnectedTransport(stateRef, writerRef);
-  });
+        Effect.acquireRelease(
+          pipe(
+            createWebSocketConnection(url, stateRef),
+            Effect.provide(Socket.layerWebSocketConstructorGlobal)
+          ),
+          () => cleanupConnection(stateRef, writerRef)
+        ),
+        Effect.flatMap((socket) =>
+          pipe(
+            socket.writer,
+            Effect.tap((writer) => Ref.set(writerRef, (data: string) => writer(data))),
+            Effect.flatMap(() =>
+              pipe(
+                Effect.all({
+                  fiber: socket
+                    .run((data: Uint8Array) => handleIncomingMessage(stateRef, data), {
+                      onOpen: pipe(
+                        updateConnectionState(stateRef, 'connected'),
+                        Effect.flatMap(() => Deferred.succeed(connectedDeferred, void 0))
+                      ),
+                    })
+                    .pipe(
+                      Effect.catchAll((error) => {
+                        // Fail the deferred if connection fails
+                        const connectionError = new ConnectionError({
+                          message: 'WebSocket connection failed',
+                          url,
+                          cause: error,
+                        });
+                        return pipe(
+                          Deferred.fail(connectedDeferred, connectionError),
+                          Effect.flatMap(() => {
+                            if (Socket.SocketCloseError.is(error)) {
+                              return updateConnectionState(stateRef, 'disconnected');
+                            }
+                            return updateConnectionState(stateRef, 'error');
+                          })
+                        );
+                      }),
+                      Effect.forkScoped
+                    ),
+                  // Wait for connection to be established (or fail) with timeout
+                  _: Deferred.await(connectedDeferred).pipe(
+                    Effect.timeoutFail({
+                      duration: 3000,
+                      onTimeout: () =>
+                        new ConnectionError({
+                          message: 'WebSocket connection timeout',
+                          url,
+                        }),
+                    })
+                  ),
+                }),
+                Effect.map(() => createConnectedTransport(stateRef, writerRef))
+              )
+            )
+          )
+        )
+      )
+    )
+  );
 
 // =============================================================================
 // WebSocket Connector Implementation
