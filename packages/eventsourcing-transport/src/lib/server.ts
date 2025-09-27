@@ -76,8 +76,6 @@ export interface AcceptorInterface {
  * Service tag for Server Transport Acceptor.
  * Accepts client connections and creates server transports.
  */
-export interface Acceptor extends AcceptorInterface {}
-
 export class Acceptor extends Effect.Tag('@transport/Server.Acceptor')<
   Acceptor,
   AcceptorInterface

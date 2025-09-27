@@ -440,7 +440,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(3), // Take initial event + 2 live events
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         receivedEvents.push(event);
                       })
                     ),
@@ -512,7 +511,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(1),
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         subscriber1Events.push(event);
                       })
                     ),
@@ -539,7 +537,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(1),
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         subscriber2Events.push(event);
                       })
                     ),
@@ -596,7 +593,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(0), // Take 0 since stream doesn't exist
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         receivedEvents.push(event);
                       })
                     ),

@@ -53,8 +53,6 @@ export interface ConnectorInterface {
  * Service tag for Client Transport Connector.
  * Creates connections to transport servers.
  */
-export interface Connector extends ConnectorInterface {}
-
 export class Connector extends Effect.Tag('@transport/Client.Connector')<
   Connector,
   ConnectorInterface
@@ -63,8 +61,6 @@ export class Connector extends Effect.Tag('@transport/Client.Connector')<
 /**
  * Connected transport service for testing and dependency injection
  */
-export interface ConnectedTransport extends Transport {}
-
 export class ConnectedTransport extends Effect.Tag('@transport/Client.ConnectedTransport')<
   ConnectedTransport,
   Transport
