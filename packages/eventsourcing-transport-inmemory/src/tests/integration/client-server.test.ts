@@ -8,7 +8,7 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
 import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 import {
@@ -126,8 +126,8 @@ runClientServerContractTests('InMemory', createInMemoryTestContext);
 describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
-  test('in-memory server should accept connections', async () => {
-    const program = pipe(
+  it.effect('in-memory server should accept connections', () =>
+    pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) => server.connector()),
@@ -144,14 +144,13 @@ describe('In-Memory Client-Server Specific Tests', () => {
             return Effect.void;
           })
         )
-      )
-    );
+      ),
+      Effect.scoped
+    )
+  );
 
-    await Effect.runPromise(Effect.scoped(program));
-  });
-
-  test('in-memory connector should always succeed with direct connection', async () => {
-    const program = pipe(
+  it.effect('in-memory connector should always succeed with direct connection', () =>
+    pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) => server.connector()),
@@ -168,14 +167,13 @@ describe('In-Memory Client-Server Specific Tests', () => {
             return Effect.void;
           })
         )
-      )
-    );
+      ),
+      Effect.scoped
+    )
+  );
 
-    await Effect.runPromise(Effect.scoped(program));
-  });
-
-  test('multiple clients should be able to connect to the same in-memory server', async () => {
-    const program = pipe(
+  it.effect('multiple clients should be able to connect to the same in-memory server', () =>
+    pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) =>
@@ -211,16 +209,15 @@ describe('In-Memory Client-Server Specific Tests', () => {
             )
           )
         )
-      )
-    );
+      ),
+      Effect.scoped
+    )
+  );
 
-    await Effect.runPromise(Effect.scoped(program));
-  });
-
-  test('in-memory transport should support instant message delivery', async () => {
+  it.effect('in-memory transport should support instant message delivery', () => {
     const testMessage = defaultCreateTestMessage('test-type', { data: 'test' });
 
-    const program = pipe(
+    return pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) =>
@@ -259,9 +256,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
             )
           )
         )
-      )
+      ),
+      Effect.scoped
     );
-
-    await Effect.runPromise(Effect.scoped(program));
   });
 });
