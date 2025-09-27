@@ -5,7 +5,8 @@
     "outDir": "./dist",
     "composite": true,
     "declaration": true,
-    "emitDeclarationOnly": true
+    "emitDeclarationOnly": true,
+    "downlevelIteration": true
   },
   "include": ["src/**/*"],
   "exclude": ["dist", "build.ts"],

@@ -10,7 +10,11 @@
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
-import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
+import {
+  TransportMessage,
+  ConnectionState,
+  makeTransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport';
 import {
   runClientServerContractTests,
   type ClientServerTestContext,
@@ -19,7 +23,6 @@ import {
   type ServerTransport,
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
-  makeTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the in-memory implementations
@@ -29,7 +32,7 @@ import { InMemoryAcceptor, type InMemoryServer } from '../../lib/inmemory-transp
 // In-Memory Test Context Implementation
 // =============================================================================
 
-const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
+const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
   Effect.succeed({
     makeTransportPair: (): TransportPair => {
       // Direct in-memory connection with no configuration needed
@@ -109,7 +112,10 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
     collectMessages: defaultCollectMessages,
 
-    makeTestMessage: defaultCreateTestMessage,
+    makeTestMessage: (type: string, payload: unknown) => {
+      const id = `test-${Date.now()}-${Math.random()}`;
+      return makeTransportMessage(id, type, JSON.stringify(payload));
+    },
   });
 
 // =============================================================================
@@ -215,7 +221,11 @@ describe('In-Memory Client-Server Specific Tests', () => {
   );
 
   it.effect('in-memory transport should support instant message delivery', () => {
-    const testMessage = defaultCreateTestMessage('test-type', { data: 'test' });
+    const testMessage = makeTransportMessage(
+      'test-123',
+      'test-type',
+      JSON.stringify({ data: 'test' })
+    );
 
     return pipe(
       InMemoryAcceptor.make(),
@@ -245,7 +255,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
                       Effect.timeout(100), // Very short timeout since it should be instant
                       Effect.tap((messages) => {
                         expect(messages).toHaveLength(1);
-                        expect(messages[0]!.id).toBe(testMessage.id);
+                        expect(messages[0]!.id).toEqual(testMessage.id);
                         expect(messages[0]!.type).toBe(testMessage.type);
                         return Effect.void;
                       })

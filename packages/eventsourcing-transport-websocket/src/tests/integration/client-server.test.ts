@@ -10,7 +10,11 @@
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
-import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
+import {
+  TransportMessage,
+  ConnectionState,
+  makeTransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport';
 import {
   runClientServerContractTests,
   type ClientServerTestContext,
@@ -19,7 +23,6 @@ import {
   type ServerTransport,
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
-  makeTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the WebSocket implementations
@@ -30,7 +33,7 @@ import { WebSocketAcceptor } from '../../lib/websocket-server';
 // WebSocket Test Context Implementation
 // =============================================================================
 
-const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
+const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
   Effect.succeed({
     makeTransportPair: (): TransportPair => {
       // Generate a random port for this pair
@@ -99,7 +102,10 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
     collectMessages: defaultCollectMessages,
 
-    makeTestMessage: defaultCreateTestMessage,
+    makeTestMessage: (type: string, payload: unknown) => {
+      const id = `test-${Date.now()}-${Math.random()}`;
+      return makeTransportMessage(id, type, JSON.stringify(payload));
+    },
   });
 
 // =============================================================================

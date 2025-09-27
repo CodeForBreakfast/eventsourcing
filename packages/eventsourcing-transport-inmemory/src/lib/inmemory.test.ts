@@ -6,9 +6,8 @@
  */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Scope, Stream, pipe } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import { InMemoryAcceptor } from '../index';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
 describe('InMemory Transport Basic Tests', () => {
   it.effect('should create acceptor without errors', () =>
@@ -61,7 +60,7 @@ describe('InMemory Transport Basic Tests', () => {
           pipe(
             // Connect client using server's connector
             server.connector(),
-            Effect.flatMap((clientTransport) =>
+            Effect.flatMap((_clientTransport) =>
               pipe(
                 // Get server connection
                 Stream.take(server.connections, 1),
@@ -71,7 +70,9 @@ describe('InMemory Transport Basic Tests', () => {
                   expect(connection).toBeDefined();
 
                   // Just check that we can subscribe (don't wait for messages)
-                  return connection.transport.subscribe();
+                  return (
+                    connection?.transport.subscribe() ?? Effect.fail(new Error('No connection'))
+                  );
                 }),
                 Effect.map(() => {
                   // Success if we get here

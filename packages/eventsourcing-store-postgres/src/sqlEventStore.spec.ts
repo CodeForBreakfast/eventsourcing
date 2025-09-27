@@ -1,5 +1,5 @@
 import { Effect, Fiber, Layer, Schema, Stream, pipe } from 'effect';
-import { BunCommandExecutor, BunFileSystem, BunPath } from '@effect/platform-bun';
+import { BunContext } from '@effect/platform-bun';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { silentLogger } from '@codeforbreakfast/buntest';
 import {
@@ -29,30 +29,24 @@ export const FooEventStoreLive = Layer.effect(
   pipe(sqlEventStore(), Effect.map(encodedEventStore(JsonFooEvent)))
 );
 
-// Run the shared test suite for the PostgreSQL implementation
-runEventStoreTestSuite('PostgreSQL', () =>
-  pipe(
-    FooEventStoreLive,
-    Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)),
-    Layer.provide(PostgresLive),
-    Layer.provide(makePgConfigurationLive('TEST_PG'))
-  )
+// Complete test layer with all dependencies
+const TestLayer = pipe(
+  FooEventStoreLive,
+  Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)),
+  Layer.provide(PostgresLive),
+  Layer.provide(makePgConfigurationLive('TEST_PG')),
+  Layer.provide(BunContext.layer)
 );
+
+// Run the shared test suite for the PostgreSQL implementation
+runEventStoreTestSuite('PostgreSQL', () => TestLayer);
 
 /**
  * Test true horizontal scaling with separate PostgreSQL connections
  * This simulates multiple API instances with independent database connections
  */
 describe('PostgreSQL Horizontal Scaling', () => {
-  it.layer(
-    pipe(
-      FooEventStoreLive,
-      Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)),
-      Layer.provide(PostgresLive),
-      Layer.provide(makePgConfigurationLive('TEST_PG')),
-      Layer.provide(Layer.mergeAll(BunCommandExecutor.layer, BunFileSystem.layer, BunPath.layer))
-    )
-  )('should propagate events between separate application instances', (it) => {
+  it.layer(TestLayer)('should propagate events between separate application instances', (it) => {
     return it.effect('should work with provided dependencies', () => {
       const receivedEvents: FooEvent[] = [];
 

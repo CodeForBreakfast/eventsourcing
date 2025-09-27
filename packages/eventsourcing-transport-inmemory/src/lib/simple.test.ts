@@ -41,8 +41,8 @@ describe('Pure Functional InMemory Transport', () => {
               Effect.map((connections) => {
                 const connection = Array.from(connections)[0];
                 expect(connection).toBeDefined();
-                expect(connection.clientId).toBeDefined();
-                expect(connection.transport).toBeDefined();
+                expect(connection?.clientId).toBeDefined();
+                expect(connection?.transport).toBeDefined();
               })
             )
           )
