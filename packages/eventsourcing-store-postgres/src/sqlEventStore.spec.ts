@@ -1,4 +1,5 @@
 import { Effect, Fiber, Layer, Schema, Stream, pipe } from 'effect';
+import { BunCommandExecutor, BunFileSystem, BunPath } from '@effect/platform-bun';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { silentLogger } from '@codeforbreakfast/buntest';
 import {
@@ -43,9 +44,16 @@ runEventStoreTestSuite('PostgreSQL', () =>
  * This simulates multiple API instances with independent database connections
  */
 describe('PostgreSQL Horizontal Scaling', () => {
-  it.effect(
-    'should propagate events between separate application instances',
-    () => {
+  it.layer(
+    pipe(
+      FooEventStoreLive,
+      Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)),
+      Layer.provide(PostgresLive),
+      Layer.provide(makePgConfigurationLive('TEST_PG')),
+      Layer.provide(Layer.mergeAll(BunCommandExecutor.layer, BunFileSystem.layer, BunPath.layer))
+    )
+  )('should propagate events between separate application instances', (it) => {
+    return it.effect('should work with provided dependencies', () => {
       const receivedEvents: FooEvent[] = [];
 
       // Setup: Create stream ID and beginning position
@@ -127,15 +135,8 @@ describe('PostgreSQL Horizontal Scaling', () => {
               )
             )
           )
-        ),
-        Effect.provide(FooEventStoreLive),
-        Effect.provide(
-          Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)
-        ),
-        Effect.provide(PostgresLive),
-        Effect.provide(makePgConfigurationLive('TEST_PG'))
+        )
       );
-    },
-    10000
-  );
+    });
+  });
 });

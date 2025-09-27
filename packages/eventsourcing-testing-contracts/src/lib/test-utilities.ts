@@ -6,7 +6,7 @@
  */
 
 import { Effect, Stream, pipe, Chunk, Ref, Duration, Scope } from 'effect';
-import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+import { TransportError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import type {
   TransportMessage,
   ConnectedTransportTestInterface,
@@ -250,9 +250,10 @@ export const collectMessages = <T>(
  * Default implementation of makeTestMessage for testing
  * Creates a test message with unique ID
  */
-export const makeTestMessage = (type: string, payload: unknown): TransportMessage => ({
-  id: `test-${Date.now()}-${Math.random()}`,
-  type,
-  payload,
-  metadata: undefined,
-});
+export const makeTestMessage = (type: string, payload: unknown): TransportMessage =>
+  makeTransportMessage(
+    `test-${Date.now()}-${Math.random()}`,
+    type,
+    JSON.stringify(payload),
+    undefined
+  );
