@@ -87,7 +87,7 @@ describe('Command Registry', () => {
     );
   });
 
-  test('should handle unknown commands', async () => {
+  it.effect('should handle unknown commands', () => {
     const registrations = buildCommandRegistrations({
       CreateUser: createCommandRegistration(UserPayload, createUserHandler),
     });
@@ -100,19 +100,24 @@ describe('Command Registry', () => {
       payload: {},
     };
 
-    const result = await Effect.runPromise(registry.dispatch(unknownCommand));
-
-    expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') {
-      expect(result.error._tag).toBe('HandlerNotFound');
-      if (result.error._tag === 'HandlerNotFound') {
-        expect(result.error.commandName).toBe('UnknownCommand');
-        expect(result.error.availableHandlers).toEqual(['CreateUser']);
-      }
-    }
+    return pipe(
+      registry.dispatch(unknownCommand),
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result._tag).toBe('Failure');
+          if (result._tag === 'Failure') {
+            expect(result.error._tag).toBe('HandlerNotFound');
+            if (result.error._tag === 'HandlerNotFound') {
+              expect(result.error.commandName).toBe('UnknownCommand');
+              expect(result.error.availableHandlers).toEqual(['CreateUser']);
+            }
+          }
+        })
+      )
+    );
   });
 
-  test('should handle command execution errors', async () => {
+  it.effect('should handle command execution errors', () => {
     const failingHandler: CommandHandler<DomainCommand<typeof UserPayload.Type>> = {
       handle: () => Effect.die(new Error('Something went wrong')),
     };
@@ -132,15 +137,20 @@ describe('Command Registry', () => {
       },
     };
 
-    const result = await Effect.runPromise(registry.dispatch(wireCommand));
-
-    expect(result._tag).toBe('Failure');
-    if (result._tag === 'Failure') {
-      expect(result.error._tag).toBe('UnknownError');
-    }
+    return pipe(
+      registry.dispatch(wireCommand),
+      Effect.tap((result) =>
+        Effect.sync(() => {
+          expect(result._tag).toBe('Failure');
+          if (result._tag === 'Failure') {
+            expect(result.error._tag).toBe('UnknownError');
+          }
+        })
+      )
+    );
   });
 
-  test('should support multiple command types', async () => {
+  it.effect('should support multiple command types', () => {
     const UpdateEmailPayload = Schema.Struct({
       newEmail: Schema.String.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
     });
@@ -174,11 +184,14 @@ describe('Command Registry', () => {
       payload: { newEmail: 'new@example.com' },
     };
 
-    const results = await Effect.runPromise(
-      Effect.all([registry.dispatch(createCommand), registry.dispatch(updateCommand)])
+    return pipe(
+      Effect.all([registry.dispatch(createCommand), registry.dispatch(updateCommand)]),
+      Effect.tap((results) =>
+        Effect.sync(() => {
+          expect(results[0]._tag).toBe('Success');
+          expect(results[1]._tag).toBe('Success');
+        })
+      )
     );
-
-    expect(results[0]._tag).toBe('Success');
-    expect(results[1]._tag).toBe('Success');
   });
 });
