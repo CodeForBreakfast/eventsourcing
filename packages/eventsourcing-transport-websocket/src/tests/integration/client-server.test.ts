@@ -8,9 +8,13 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, test, expect } from 'bun:test';
+import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
-import { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
+import {
+  TransportMessage,
+  ConnectionState,
+  makeTransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport';
 import {
   runClientServerContractTests,
   type ClientServerTestContext,
@@ -19,7 +23,6 @@ import {
   type ServerTransport,
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
-  makeTestMessage as defaultCreateTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
 // Import the WebSocket implementations
@@ -30,7 +33,7 @@ import { WebSocketAcceptor } from '../../lib/websocket-server';
 // WebSocket Test Context Implementation
 // =============================================================================
 
-const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
+const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
   Effect.succeed({
     makeTransportPair: (): TransportPair => {
       // Generate a random port for this pair
@@ -99,7 +102,10 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext> =>
 
     collectMessages: defaultCollectMessages,
 
-    makeTestMessage: defaultCreateTestMessage,
+    makeTestMessage: (type: string, payload: unknown) => {
+      const id = `test-${Date.now()}-${Math.random()}`;
+      return makeTransportMessage(id, type, JSON.stringify(payload));
+    },
   });
 
 // =============================================================================
@@ -116,11 +122,11 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 describe('WebSocket Client-Server Specific Tests', () => {
   // WebSocket-specific tests that directly test the WebSocket implementation
 
-  test('WebSocket server should accept connections on specified port', async () => {
+  it.scoped('WebSocket server should accept connections on specified port', () => {
     const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
     const host = 'localhost';
 
-    const program = pipe(
+    return pipe(
       WebSocketAcceptor.make({ port, host }),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((_server) =>
@@ -143,15 +149,13 @@ describe('WebSocket Client-Server Specific Tests', () => {
         )
       )
     );
-
-    await Effect.runPromise(Effect.scoped(program));
   });
 
-  test('WebSocket connector should fail for invalid URLs', async () => {
+  it.scoped('WebSocket connector should fail for invalid URLs', () => {
     // Test with non-existent server
     const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
 
-    const program = pipe(
+    return pipe(
       WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`),
       Effect.either,
       Effect.tap((result) => {
@@ -159,7 +163,5 @@ describe('WebSocket Client-Server Specific Tests', () => {
         return Effect.void;
       })
     );
-
-    await Effect.runPromise(Effect.scoped(program));
   });
 });

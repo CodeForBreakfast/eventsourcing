@@ -4,21 +4,27 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 
+// Shared configuration pieces
+const commonLanguageOptions = {
+  parser,
+  parserOptions: {
+    ecmaVersion: 'latest',
+    sourceType: 'module',
+  },
+};
+
+const commonPlugins = {
+  '@typescript-eslint': typescript,
+  'unused-imports': unusedImports,
+  import: importPlugin,
+};
+
 export default [
   {
+    name: 'typescript-base',
     files: ['**/*.ts', '**/*.tsx'],
-    languageOptions: {
-      parser,
-      parserOptions: {
-        ecmaVersion: 'latest',
-        sourceType: 'module',
-      },
-    },
-    plugins: {
-      '@typescript-eslint': typescript,
-      'unused-imports': unusedImports,
-      import: importPlugin,
-    },
+    languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
     rules: {
       ...typescript.configs['recommended'].rules,
       ...prettier.rules,
@@ -36,6 +42,23 @@ export default [
           tsx: 'never',
         },
       ],
+    },
+  },
+  {
+    name: 'effect-coding-standards',
+    files: [
+      '**/*.ts',
+      '**/*.tsx',
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+    ],
+    languageOptions: commonLanguageOptions,
+    plugins: {
+      '@typescript-eslint': typescript,
+    },
+    rules: {
       'no-restricted-syntax': [
         'error',
         {
@@ -50,6 +73,41 @@ export default [
     },
   },
   {
-    ignores: ['**/node_modules/**', '**/dist/**', '**/lib/**', '**/*.js', '**/*.mjs'],
+    name: 'buntest-integration',
+    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: ['bun:test'],
+              message:
+                'Test files should prefer "@codeforbreakfast/buntest" over "bun:test" for better Effect integration. Use buntest unless you specifically need bun:test features.',
+            },
+          ],
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+          message:
+            'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runPromise() in tests.',
+        },
+        {
+          selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+          message:
+            'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
+        },
+      ],
+    },
+  },
+  {
+    name: 'ignore-patterns',
+    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.js', '**/*.mjs'],
   },
 ];

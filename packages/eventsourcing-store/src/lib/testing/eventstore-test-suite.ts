@@ -22,15 +22,30 @@ export class FooEventStore extends Effect.Tag('FooEventStore')<
 >() {}
 
 /**
+ * Options for configuring the EventStore test suite
+ */
+export interface EventStoreTestOptions {
+  /**
+   * Whether the implementation supports horizontal scaling with multiple instances.
+   * Set to false for in-memory implementations that don't have a shared backend.
+   * @default true
+   */
+  supportsHorizontalScaling?: boolean;
+}
+
+/**
  * Reusable test suite for EventStore implementations
  *
  * @param name - Display name for the implementation (e.g., "In-memory", "PostgreSQL")
  * @param makeEventStore - Function that returns a Layer providing the EventStore implementation
+ * @param options - Optional configuration for the test suite
  */
 export function runEventStoreTestSuite<E>(
   name: string,
-  makeEventStore: () => Layer.Layer<FooEventStore, E, unknown>
+  makeEventStore: () => Layer.Layer<FooEventStore, E, unknown>,
+  options: EventStoreTestOptions = {}
 ) {
+  const { supportsHorizontalScaling = true } = options;
   describe(`${name} EventStore`, () => {
     let eventstore: Layer.Layer<FooEventStore, E, unknown>;
 
@@ -440,7 +455,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(3), // Take initial event + 2 live events
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         receivedEvents.push(event);
                       })
                     ),
@@ -512,7 +526,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(1),
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         subscriber1Events.push(event);
                       })
                     ),
@@ -539,7 +552,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(1),
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         subscriber2Events.push(event);
                       })
                     ),
@@ -596,7 +608,6 @@ export function runEventStoreTestSuite<E>(
                     Stream.take(0), // Take 0 since stream doesn't exist
                     Stream.tap((event) =>
                       Effect.sync(() => {
-                        // eslint-disable-next-line functional/immutable-data
                         receivedEvents.push(event);
                       })
                     ),
@@ -614,5 +625,116 @@ export function runEventStoreTestSuite<E>(
         expect(receivedEvents).toHaveLength(0);
       });
     });
+
+    /**
+     * Test horizontal scaling with multiple EventStore instances
+     * This simulates multiple application instances sharing the same data store
+     */
+    if (supportsHorizontalScaling) {
+      describe('horizontal scaling with multiple instances', () => {
+        it('should support cross-instance event propagation', async () => {
+          const receivedEvents: FooEvent[] = [];
+          const streamId = await Effect.runPromise(newEventStreamId());
+
+          // Create TWO separate EventStore instances (simulating different application instances)
+          const writerInstance = makeEventStore();
+          const subscriberInstance = makeEventStore();
+
+          // Helper to run effects with different instances
+          const runWithWriter = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) => {
+            const provided = pipe(effect, Effect.provide(writerInstance));
+            return Effect.runPromise(provided as Effect.Effect<A, E2 | E, never>);
+          };
+
+          const runWithSubscriber = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) => {
+            const provided = pipe(effect, Effect.provide(subscriberInstance));
+            return Effect.runPromise(provided as Effect.Effect<A, E2 | E, never>);
+          };
+
+          // FIRST: Write initial events using the writer instance
+          await runWithWriter(
+            pipe(
+              FooEventStore,
+              Effect.flatMap((store: EventStore<FooEvent>) =>
+                pipe(
+                  beginning(streamId),
+                  Effect.flatMap((pos) =>
+                    pipe(
+                      Stream.make({ bar: 'event-1' }, { bar: 'event-2' }),
+                      Stream.run(store.append(pos))
+                    )
+                  )
+                )
+              )
+            )
+          );
+
+          // SECOND: Subscribe from the beginning with subscriber instance
+          // Should receive both historical events AND any new events
+          const subscriberFiber = runWithSubscriber(
+            pipe(
+              FooEventStore,
+              Effect.flatMap((store: EventStore<FooEvent>) =>
+                pipe(
+                  store.subscribe({ streamId, eventNumber: 0 }),
+                  Effect.flatMap((stream) =>
+                    pipe(
+                      stream,
+                      Stream.take(3), // Expect 2 historical + 1 new event
+                      Stream.tap((event) =>
+                        Effect.sync(() => {
+                          receivedEvents.push(event);
+                        })
+                      ),
+                      Stream.runDrain
+                    )
+                  )
+                )
+              ),
+              Effect.scoped
+            )
+          ).catch(() => {});
+
+          // Give subscription time to receive historical events
+          await new Promise((resolve) => setTimeout(resolve, 100));
+
+          // THIRD: Write a new event with writer instance
+          // This should be received by the active subscription on the subscriber instance
+          await runWithWriter(
+            pipe(
+              FooEventStore,
+              Effect.flatMap((store: EventStore<FooEvent>) =>
+                pipe(
+                  Stream.make({ bar: 'event-3-live' }),
+                  Stream.run(store.append({ streamId, eventNumber: 2 }))
+                )
+              )
+            )
+          );
+
+          // Wait for subscription to complete
+          await Promise.race([
+            subscriberFiber,
+            new Promise((_, reject) =>
+              setTimeout(
+                () =>
+                  reject(
+                    new Error(
+                      `Subscription timed out. Received ${receivedEvents.length} events: ${JSON.stringify(receivedEvents)}`
+                    )
+                  ),
+                5000
+              )
+            ),
+          ]);
+
+          // Verify we received all events (2 historical + 1 live)
+          expect(receivedEvents).toHaveLength(3);
+          expect(receivedEvents[0]).toEqual({ bar: 'event-1' });
+          expect(receivedEvents[1]).toEqual({ bar: 'event-2' });
+          expect(receivedEvents[2]).toEqual({ bar: 'event-3-live' });
+        });
+      });
+    }
   });
 }

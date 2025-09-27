@@ -4,7 +4,6 @@ import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStoreError,
   EventStoreConnectionError,
-  ConcurrencyConflictError,
   ProjectionError,
   SnapshotError,
   WebSocketError,

@@ -1,36 +1,27 @@
-import { describe, test, expect } from 'bun:test';
-import {
-  Effect,
-  Stream,
-  Duration,
-  pipe,
-  TestClock,
-  TestContext,
-  Either,
-  Schema,
-  Fiber,
-} from 'effect';
-import {
-  ProtocolLive,
-  sendCommand,
-  subscribe,
-  Command,
-  CommandTimeoutError,
-  CommandResult,
-  Event,
-} from './protocol';
+import { describe, expect, it } from '@codeforbreakfast/buntest';
+import { Effect, Stream, Duration, pipe, TestClock, TestContext, Either, Schema } from 'effect';
+import { ProtocolLive, sendCommand, subscribe, CommandTimeoutError, Event } from './protocol';
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { ServerProtocolLive, ServerProtocol } from './server-protocol';
-import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
-import { EventStreamId, toStreamId } from '@codeforbreakfast/eventsourcing-store';
+import {
+  InMemoryAcceptor,
+  type InMemoryServer,
+} from '@codeforbreakfast/eventsourcing-transport-inmemory';
+import {
+  makeTransportMessage,
+  type TransportMessage,
+  Server,
+} from '@codeforbreakfast/eventsourcing-transport';
+import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
 // Test Helpers
 // ============================================================================
 
-const createStreamId = (id: string) => pipe(id, Schema.decode(EventStreamId));
-
-const unsafeCreateStreamId = (id: string) => Effect.runSync(createStreamId(id));
+const unsafeCreateStreamId = (id: string) => {
+  const result = Schema.decodeUnknownSync(EventStreamId)(id);
+  return result;
+};
 
 // ============================================================================
 // Test Environment Setup
@@ -60,7 +51,7 @@ const setupTestEnvironment = pipe(
 // ============================================================================
 
 const createTestServerProtocol = (
-  server: any,
+  server: InMemoryServer,
   commandHandler: (cmd: Command) => CommandResult = () => ({
     _tag: 'Success',
     position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
@@ -72,57 +63,79 @@ const createTestServerProtocol = (
     Stream.take(1),
     Stream.runCollect,
     Effect.map((connections) => Array.from(connections)[0]!),
-    Effect.flatMap((serverConnection) =>
+    Effect.flatMap((serverConnection: Server.ClientConnection) =>
       pipe(
         serverConnection.transport.subscribe(),
-        Effect.flatMap((messageStream) =>
+        Effect.flatMap((messageStream: Stream.Stream<TransportMessage>) =>
           Effect.forkScoped(
-            Stream.runForEach(messageStream, (message) =>
+            Stream.runForEach(messageStream, (message: TransportMessage) =>
               pipe(
-                Effect.try(() => JSON.parse(message.payload)),
-                Effect.flatMap((parsedMessage) => {
-                  if (parsedMessage.type === 'command') {
-                    const result = commandHandler(parsedMessage);
-                    const response = makeTransportMessage(
-                      crypto.randomUUID(),
-                      'command_result',
-                      JSON.stringify({
-                        type: 'command_result',
-                        commandId: parsedMessage.id,
-                        success: result._tag === 'Success',
-                        ...(result._tag === 'Success'
-                          ? { position: result.position }
-                          : { error: result.error }),
-                      })
-                    );
-                    return server.broadcast(response);
-                  }
+                Effect.try(() => JSON.parse(message.payload as string)),
+                Effect.flatMap(
+                  (parsedMessage: {
+                    type: string;
+                    id?: string;
+                    streamId?: string;
+                    target?: string;
+                    name?: string;
+                    payload?: unknown;
+                    [key: string]: unknown;
+                  }) => {
+                    if (
+                      parsedMessage.type === 'command' &&
+                      parsedMessage.id &&
+                      parsedMessage.target &&
+                      parsedMessage.name &&
+                      parsedMessage.payload !== undefined
+                    ) {
+                      const command: Command = {
+                        id: parsedMessage.id,
+                        target: parsedMessage.target,
+                        name: parsedMessage.name,
+                        payload: parsedMessage.payload,
+                      };
+                      const result = commandHandler(command);
+                      const response = makeTransportMessage(
+                        crypto.randomUUID(),
+                        'command_result',
+                        JSON.stringify({
+                          type: 'command_result',
+                          commandId: command.id,
+                          success: result._tag === 'Success',
+                          ...(result._tag === 'Success'
+                            ? { position: result.position }
+                            : { error: JSON.stringify(result.error) }),
+                        })
+                      );
+                      return server.broadcast(response);
+                    }
 
-                  if (parsedMessage.type === 'subscribe') {
-                    const events = subscriptionHandler(parsedMessage.streamId);
-                    return Effect.forEach(
-                      events,
-                      (event) =>
-                        server.broadcast(
-                          makeTransportMessage(
-                            crypto.randomUUID(),
-                            'event',
-                            JSON.stringify({
-                              type: 'event',
-                              streamId: parsedMessage.streamId,
-                              position: event.position,
-                              eventType: event.type,
-                              data: event.data,
-                              timestamp: event.timestamp.toISOString(),
-                            })
-                          )
-                        ),
-                      { discard: true }
-                    );
-                  }
+                    if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
+                      const events = subscriptionHandler(parsedMessage.streamId);
+                      return Effect.forEach(
+                        events,
+                        (event) =>
+                          server.broadcast(
+                            makeTransportMessage(
+                              crypto.randomUUID(),
+                              'event',
+                              JSON.stringify({
+                                type: 'event',
+                                streamId: parsedMessage.streamId,
+                                position: event.position,
+                                eventType: event.type,
+                                data: event.data,
+                                timestamp: event.timestamp.toISOString(),
+                              })
+                            )
+                          ),
+                        { discard: true }
+                      );
+                    }
 
-                  return Effect.void;
-                }),
+                    return Effect.void;
+                  }
+                ),
                 Effect.catchAll(() => Effect.void)
               )
             )
@@ -135,12 +148,12 @@ const createTestServerProtocol = (
 
 describe('Protocol Behavior Tests', () => {
   describe('Command Sending and Results', () => {
-    test('should send command and receive success result', async () => {
-      const program = pipe(
+    it.effect('should send command and receive success result', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 42 },
             })),
@@ -163,24 +176,29 @@ describe('Protocol Behavior Tests', () => {
                     }
                   })
                 ),
-                Effect.provide(ProtocolLive(clientTransport))
+                Effect.provide(ProtocolLive(clientTransport)),
+                Effect.asVoid
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should send command and receive failure result', async () => {
-      const program = pipe(
+    it.effect('should send command and receive failure result', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
             createTestServerProtocol(server, (command) => ({
               _tag: 'Failure',
-              error: 'Validation failed: Name is required',
+              error: {
+                _tag: 'ValidationError',
+                commandId: command.id,
+                commandName: command.name,
+                validationErrors: ['Name is required'],
+              },
             })),
             Effect.flatMap(() => {
               const command: Command = {
@@ -198,23 +216,26 @@ describe('Protocol Behavior Tests', () => {
                     if (result._tag === 'Failure') {
                       expect(result.error._tag).toBe('UnknownError');
                       if (result.error._tag === 'UnknownError') {
-                        expect(result.error.message).toBe('Validation failed: Name is required');
+                        // The error message is the stringified error object
+                        const parsedError = JSON.parse(result.error.message);
+                        expect(parsedError._tag).toBe('ValidationError');
+                        expect(parsedError.validationErrors).toEqual(['Name is required']);
                       }
                     }
                   })
                 ),
-                Effect.provide(ProtocolLive(clientTransport))
+                Effect.provide(ProtocolLive(clientTransport)),
+                Effect.asVoid
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle multiple concurrent commands with proper correlation', async () => {
-      const program = pipe(
+    it.effect('should handle multiple concurrent commands with proper correlation', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -230,7 +251,11 @@ describe('Protocol Behavior Tests', () => {
                   }
                 : {
                     _tag: 'Failure',
-                    error: 'Command failed',
+                    error: {
+                      _tag: 'UnknownError',
+                      commandId: command.id,
+                      message: 'Command failed',
+                    },
                   };
             }),
             Effect.flatMap(() => {
@@ -272,16 +297,15 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Command Timeout Behavior', () => {
-    test('should timeout commands after 10 seconds', async () => {
-      const program = pipe(
+    it.effect('should timeout commands after 10 seconds', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ clientTransport }) => {
           const command: Command = {
@@ -317,20 +341,18 @@ describe('Protocol Behavior Tests', () => {
               })
             )
           );
-        })
-      );
+        }),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
 
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
-
-    test('should not timeout when response arrives before deadline', async () => {
-      const program = pipe(
+    it.effect('should not timeout when response arrives before deadline', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 1 },
             })),
@@ -353,16 +375,15 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Event Subscription', () => {
-    test('should successfully create subscriptions without timeout', async () => {
-      const program = pipe(
+    it.effect('should successfully create subscriptions without timeout', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -382,14 +403,13 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should receive events for subscribed streams', async () => {
-      const program = pipe(
+    it.effect('should receive events for subscribed streams', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -454,14 +474,13 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should only receive events for the specific subscribed stream (filtering)', async () => {
-      const program = pipe(
+    it.effect('should only receive events for the specific subscribed stream (filtering)', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -542,83 +561,71 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle basic event publishing and receiving', async () => {
-      const program = pipe(
+    it.effect('should handle basic event publishing and receiving', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            // Setup server protocol first
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) =>
+            createTestServerProtocol(server, undefined, (streamId) => {
+              // Return an event when the client subscribes to 'test-stream'
+              if (streamId === 'test-stream') {
+                return [
+                  {
+                    position: {
+                      streamId: unsafeCreateStreamId('test-stream'),
+                      eventNumber: 1,
+                    },
+                    type: 'TestEvent',
+                    data: { test: 'data', value: 42 },
+                    timestamp: new Date('2024-01-01T12:00:00Z'),
+                  },
+                ];
+              }
+              return [];
+            }),
+            Effect.flatMap(() =>
               pipe(
-                // Subscribe to stream first to establish the subscription
+                // Subscribe to stream and collect events
                 subscribe('test-stream'),
                 Effect.flatMap((eventStream) =>
                   pipe(
-                    // Start collecting events and publishing concurrently
-                    Effect.all(
-                      [
-                        // Collect events from the stream
-                        pipe(eventStream, Stream.take(1), Stream.runCollect),
-                        // Publish an event after a small delay to ensure subscription is ready
-                        pipe(
-                          Effect.sleep(Duration.millis(50)),
-                          Effect.flatMap(() =>
-                            serverProtocol.publishEvent({
-                              streamId: unsafeCreateStreamId('test-stream'),
-                              position: {
-                                streamId: unsafeCreateStreamId('test-stream'),
-                                eventNumber: 1,
-                              },
-                              type: 'TestEvent',
-                              data: { test: 'data', value: 42 },
-                              timestamp: new Date('2024-01-01T12:00:00Z'),
-                            })
-                          ),
-                          Effect.asVoid
-                        ),
-                      ],
-                      { concurrency: 'unbounded' }
-                    ),
-                    Effect.map(([events, _]) => events),
-                    Effect.tap((collectedEvents) =>
-                      Effect.sync(() => {
-                        const events = Array.from(collectedEvents);
-
-                        // Verify we received exactly 1 event
-                        expect(events).toHaveLength(1);
-
-                        // Verify event content
-                        expect(events[0]!.type).toBe('TestEvent');
-                        expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
-                        expect(events[0]!.position.streamId).toEqual(
-                          unsafeCreateStreamId('test-stream')
-                        );
-                        expect(events[0]!.position.eventNumber).toBe(1);
-                        expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
-                      })
-                    )
+                    eventStream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk))
                   )
+                ),
+                Effect.tap((events) =>
+                  Effect.sync(() => {
+                    // Verify we received exactly 1 event
+                    expect(events).toHaveLength(1);
+
+                    // Verify event content
+                    expect(events[0]!.type).toBe('TestEvent');
+                    expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
+                    expect(events[0]!.position.streamId).toEqual(
+                      unsafeCreateStreamId('test-stream')
+                    );
+                    expect(events[0]!.position.eventNumber).toBe(1);
+                    expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
+                  })
                 ),
                 Effect.provide(ProtocolLive(clientTransport))
               )
-            ),
-            Effect.provide(ServerProtocolLive(server))
+            )
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle receiving events while processing commands concurrently', async () => {
-      const program = pipe(
+    it.effect('should handle receiving events while processing commands concurrently', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -700,16 +707,15 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Multiple Subscriptions', () => {
-    test('should handle multiple clients subscribing to the same stream', async () => {
-      const program = pipe(
+    it.effect('should handle multiple clients subscribing to the same stream', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport: client1Transport }) =>
           pipe(
@@ -871,14 +877,13 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle single client subscribing to multiple different streams', async () => {
-      const program = pipe(
+    it.effect('should handle single client subscribing to multiple different streams', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1070,14 +1075,13 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should continue receiving events after re-subscribing to a stream', async () => {
-      const program = pipe(
+    it.effect('should continue receiving events after re-subscribing to a stream', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1222,16 +1226,15 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Error Handling', () => {
-    test('should handle malformed JSON messages gracefully', async () => {
-      const program = pipe(
+    it.effect('should handle malformed JSON messages gracefully', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1265,14 +1268,13 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle responses for unknown command IDs gracefully', async () => {
-      const program = pipe(
+    it.effect('should handle responses for unknown command IDs gracefully', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1315,14 +1317,13 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle malformed command result - success without position', async () => {
-      const program = pipe(
+    it.effect('should handle malformed command result - success without position', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1384,16 +1385,14 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
+        ),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
 
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
-
-    test('should handle malformed command result - failure without error message', async () => {
-      const program = pipe(
+    it.effect('should handle malformed command result - failure without error message', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1455,13 +1454,11 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
-
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
+        ),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
   });
 
   describe('Transport Failure & Recovery', () => {
@@ -1470,10 +1467,10 @@ describe('Protocol Behavior Tests', () => {
     // - Commands timeout when no server responds (simulating connection loss)
     // - Subscriptions clean up properly when their scopes end
     // - New connections can be established after failures
-    test('should clean up pending commands when transport disconnects', async () => {
-      const program = pipe(
+    it.effect('should clean up pending commands when transport disconnects', () =>
+      pipe(
         setupTestEnvironment,
-        Effect.flatMap(({ server, clientTransport }) =>
+        Effect.flatMap(({ server: _server, clientTransport }) =>
           pipe(
             // Don't set up a server protocol - commands will hang indefinitely
             Effect.all(
@@ -1506,16 +1503,14 @@ describe('Protocol Behavior Tests', () => {
               })
             )
           )
-        )
-      );
+        ),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
 
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
-
-    test('should clean up subscriptions when transport fails', async () => {
-      const program = pipe(
+    it.effect('should clean up subscriptions when transport fails', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1585,22 +1580,21 @@ describe('Protocol Behavior Tests', () => {
             ),
             Effect.provide(ProtocolLive(clientTransport))
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle transport reconnection gracefully', async () => {
-      const program = pipe(
+    it.effect('should handle transport reconnection gracefully', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport: firstTransport }) =>
           pipe(
             // Verify first connection works
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: {
-                streamId: unsafeCreateStreamId(command.target),
+                streamId: unsafeCreateStreamId(_command.target),
                 eventNumber: 1,
               },
             })),
@@ -1646,16 +1640,15 @@ describe('Protocol Behavior Tests', () => {
               )
             )
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Server Protocol Integration', () => {
-    test('should emit commands through server protocol onCommand stream', async () => {
-      const program = pipe(
+    it.effect('should emit commands through server protocol onCommand stream', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1716,16 +1709,14 @@ describe('Protocol Behavior Tests', () => {
             }),
             Effect.provide(ServerProtocolLive(server))
           )
-        )
-      );
+        ),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
 
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
-
-    test('should deliver command results via server protocol sendResult', async () => {
-      const program = pipe(
+    it.effect('should deliver command results via server protocol sendResult', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1790,60 +1781,51 @@ describe('Protocol Behavior Tests', () => {
             }),
             Effect.provide(ServerProtocolLive(server))
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should publish events via server protocol publishEvent', async () => {
-      const program = pipe(
+    it.effect('should publish events via server protocol publishEvent', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) => {
-              const testEvent: Event & { streamId: EventStreamId } = {
-                streamId: unsafeCreateStreamId('product-789'),
-                position: {
-                  streamId: unsafeCreateStreamId('product-789'),
-                  eventNumber: 42,
-                },
-                type: 'ProductCreated',
-                data: {
-                  id: 'product-789',
-                  name: 'Super Widget',
-                  price: 99.99,
-                  category: 'electronics',
-                },
-                timestamp: new Date('2024-01-15T14:30:00Z'),
-              };
-
-              return pipe(
-                Effect.all(
-                  [
-                    // Client subscribes to the stream and waits for events
-                    pipe(
-                      subscribe('product-789'),
-                      Effect.flatMap((eventStream) =>
-                        pipe(
-                          eventStream,
-                          Stream.take(1),
-                          Stream.runCollect,
-                          Effect.map((events) => Array.from(events))
-                        )
-                      ),
-                      Effect.provide(ProtocolLive(clientTransport))
-                    ),
-                    // Server publishes event after a small delay to ensure subscription is ready
-                    pipe(
-                      Effect.sleep(Duration.millis(50)),
-                      Effect.flatMap(() => serverProtocol.publishEvent(testEvent))
-                    ),
-                  ],
-                  { concurrency: 'unbounded' }
+            createTestServerProtocol(server, undefined, (streamId) => {
+              // Return event when client subscribes to 'product-789'
+              if (streamId === 'product-789') {
+                return [
+                  {
+                    position: {
+                      streamId: unsafeCreateStreamId('product-789'),
+                      eventNumber: 42,
+                    },
+                    type: 'ProductCreated',
+                    data: {
+                      id: 'product-789',
+                      name: 'Super Widget',
+                      price: 99.99,
+                      category: 'electronics',
+                    },
+                    timestamp: new Date('2024-01-15T14:30:00Z'),
+                  },
+                ];
+              }
+              return [];
+            }),
+            Effect.flatMap(() =>
+              pipe(
+                // Client subscribes to the stream and waits for events
+                subscribe('product-789'),
+                Effect.flatMap((eventStream) =>
+                  pipe(
+                    eventStream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((events) => Array.from(events))
+                  )
                 ),
-                Effect.tap(([receivedEvents, _]) =>
+                Effect.tap((receivedEvents) =>
                   Effect.sync(() => {
                     // Verify the client received the published event
                     expect(receivedEvents).toHaveLength(1);
@@ -1862,21 +1844,20 @@ describe('Protocol Behavior Tests', () => {
                     });
                     expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
                   })
-                )
-              );
-            }),
-            Effect.provide(ServerProtocolLive(server))
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              )
+            )
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Edge Cases', () => {
-    test('should handle duplicate command IDs appropriately', async () => {
-      const program = pipe(
+    it.effect('should handle duplicate command IDs appropriately', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -1930,26 +1911,26 @@ describe('Protocol Behavior Tests', () => {
                   Effect.sync(() => {
                     // Both commands with the same ID should receive the same result
                     // This is the protocol's way of handling duplicate command IDs
-                    expect(Either.isRight(result1)).toBe(true);
-                    expect(Either.isRight(result2)).toBe(true);
+                    expect(Either.isRight(result1!)).toBe(true);
+                    expect(Either.isRight(result2!)).toBe(true);
 
-                    if (Either.isRight(result1) && Either.isRight(result2)) {
-                      expect(result1.right._tag).toBe('Success');
-                      expect(result2.right._tag).toBe('Success');
+                    if (Either.isRight(result1!) && Either.isRight(result2!)) {
+                      expect(result1!.right._tag).toBe('Success');
+                      expect(result2!.right._tag).toBe('Success');
 
-                      if (result1.right._tag === 'Success' && result2.right._tag === 'Success') {
+                      if (result1!.right._tag === 'Success' && result2!.right._tag === 'Success') {
                         // Both should get the same result content
-                        expect(result1.right.position.eventNumber).toBe(42);
-                        expect(result2.right.position.eventNumber).toBe(42);
+                        expect(result1!.right.position.eventNumber).toBe(42);
+                        expect(result2!.right.position.eventNumber).toBe(42);
 
                         // Both should get the same stream ID (from whichever command the server processed)
-                        expect(result1.right.position.streamId).toEqual(
-                          result2.right.position.streamId
+                        expect(result1!.right.position.streamId).toEqual(
+                          result2!.right.position.streamId
                         );
 
                         // The result should be based on the command that was actually processed by the server
                         // (which appears to be the second one based on the streamId being user-456)
-                        expect(result1.right.position.streamId).toEqual(
+                        expect(result1!.right.position.streamId).toEqual(
                           unsafeCreateStreamId('user-456')
                         );
                       }
@@ -1959,16 +1940,14 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped,
+        Effect.provide(TestContext.TestContext)
+      )
+    );
 
-      await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
-      );
-    });
-
-    test('should handle very large payloads in commands and events', async () => {
-      const program = pipe(
+    it.effect('should handle very large payloads in commands and events', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -2070,7 +2049,14 @@ describe('Protocol Behavior Tests', () => {
                               expect(event.position.eventNumber).toBe(1);
 
                               // Verify the large data structure is preserved
-                              const data = event.data as any;
+                              const data = event.data as {
+                                description: string;
+                                metadata: {
+                                  tags: string[];
+                                  attributes: Record<string, string>;
+                                };
+                                content: Array<{ id: number; name: string; data: string }>;
+                              };
                               expect(data.description).toHaveLength(10000);
                               expect(data.description).toBe('A'.repeat(10000));
                               expect(data.metadata.tags).toHaveLength(100);
@@ -2103,14 +2089,13 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle rapid subscription/unsubscription cycles', async () => {
-      const program = pipe(
+    it.effect('should handle rapid subscription/unsubscription cycles', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -2180,7 +2165,7 @@ describe('Protocol Behavior Tests', () => {
 
                     // Verify we got events for all the different streams
                     const uniqueStreamIds = new Set(
-                      results.map((r) => r.firstEvent?.data.streamId)
+                      results.map((r) => (r.firstEvent?.data as { streamId?: string })?.streamId)
                     );
                     expect(uniqueStreamIds.size).toBe(10);
 
@@ -2194,16 +2179,15 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 
   describe('Basic Cleanup', () => {
-    test('should clean up subscriptions when stream scope ends', async () => {
-      const program = pipe(
+    it.effect('should clean up subscriptions when stream scope ends', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ clientTransport }) =>
           pipe(
@@ -2223,14 +2207,13 @@ describe('Protocol Behavior Tests', () => {
             ),
             Effect.provide(ProtocolLive(clientTransport))
           )
-        )
-      );
+        ),
+        Effect.scoped
+      )
+    );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
-
-    test('should handle multiple sequential commands after cleanup', async () => {
-      const program = pipe(
+    it.effect('should handle multiple sequential commands after cleanup', () =>
+      pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
@@ -2251,30 +2234,19 @@ describe('Protocol Behavior Tests', () => {
               }));
 
               // Send commands sequentially (not concurrently) to test cleanup between commands
-              const sendSequentially = (
-                cmds: Command[]
-              ): Effect.Effect<CommandResult[], never, never> =>
-                cmds.reduce(
-                  (acc, cmd) =>
-                    pipe(
-                      acc,
-                      Effect.flatMap((results) =>
-                        pipe(
-                          sendCommand(cmd),
-                          Effect.map((result) => [...results, result])
-                        )
-                      )
-                    ),
-                  Effect.succeed([] as CommandResult[])
-                );
+              const sendSequentially = (cmds: Command[]) =>
+                Effect.forEach(cmds, (cmd) => sendCommand(cmd), {
+                  concurrency: 1,
+                });
 
               return pipe(
                 sendSequentially(commands),
                 Effect.tap((results) =>
                   Effect.sync(() => {
                     // All commands should have succeeded
-                    expect(results).toHaveLength(5);
-                    results.forEach((result, index) => {
+                    const resultsArray = Array.from(results);
+                    expect(resultsArray).toHaveLength(5);
+                    resultsArray.forEach((result, index) => {
                       expect(result._tag).toBe('Success');
                       if (result._tag === 'Success') {
                         expect(result.position.streamId).toEqual(
@@ -2290,10 +2262,9 @@ describe('Protocol Behavior Tests', () => {
               );
             })
           )
-        )
-      );
-
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
-    });
+        ),
+        Effect.scoped
+      )
+    );
   });
 });

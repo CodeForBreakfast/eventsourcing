@@ -251,14 +251,18 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                 Effect.tapError((error) =>
                   Effect.logError('Error writing to event store', { error })
                 ),
-                Effect.mapError(
-                  () =>
-                    new ConcurrencyConflictError({
-                      expectedVersion: end.eventNumber,
-                      actualVersion: -1,
-                      streamId: end.streamId,
-                    })
-                ),
+                Effect.mapError((error) => {
+                  // Don't remap ConcurrencyConflictError - it's already the right type
+                  if (error instanceof ConcurrencyConflictError) {
+                    return error;
+                  }
+                  // Map database/other errors to EventStoreError
+                  return eventStoreError.write(
+                    end.streamId,
+                    `Failed to append event: ${String(error)}`,
+                    error
+                  );
+                }),
                 Effect.flatMap(Schema.decode(EventStreamPosition))
               )
           );

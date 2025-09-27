@@ -252,9 +252,9 @@ describe('Command Processing Service', () => {
         )
       ),
       Effect.map(([userResult, orderResult, updateResult]) => {
-        expect(userResult._tag).toBe('Success');
-        expect(orderResult._tag).toBe('Success');
-        expect(updateResult._tag).toBe('Failure');
+        expect(userResult!._tag).toBe('Success');
+        expect(orderResult!._tag).toBe('Success');
+        expect(updateResult!._tag).toBe('Failure');
       }),
       Effect.provide(testLayer)
     );

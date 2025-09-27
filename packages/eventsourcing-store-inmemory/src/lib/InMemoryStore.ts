@@ -1,4 +1,3 @@
-/* eslint-disable functional/no-expression-statements */
 import { Chunk, Effect, HashMap, Option, PubSub, Stream, SynchronizedRef, pipe } from 'effect';
 import {
   EventStreamId,

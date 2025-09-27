@@ -14,6 +14,8 @@ import {
   Client,
 } from '@codeforbreakfast/eventsourcing-transport';
 
+type ServerWebSocket<T = undefined> = Bun.ServerWebSocket<T>;
+
 // =============================================================================
 // Internal State Types
 // =============================================================================
@@ -25,7 +27,7 @@ interface WebSocketServerConfig {
 
 interface ClientState {
   readonly id: Server.ClientId;
-  readonly socket: any; // Bun WebSocket
+  readonly socket: ServerWebSocket<{ clientId: Server.ClientId }>; // Bun WebSocket
   connectionState: ConnectionState; // Mutable for simplicity
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
   readonly subscribers: Set<Queue.Queue<TransportMessage>>;
@@ -33,7 +35,7 @@ interface ClientState {
 }
 
 interface ServerState {
-  readonly server: any; // Bun Server
+  readonly server: Bun.Server | null; // Bun Server
   readonly clients: Map<Server.ClientId, ClientState>;
   readonly newConnectionsQueue: Queue.Queue<Server.ClientConnection>;
 }
@@ -157,14 +159,14 @@ const handleClientMessage = (
 const createWebSocketServer = (
   config: WebSocketServerConfig,
   serverStateRef: Ref.Ref<ServerState>
-): Effect.Effect<any, Server.ServerStartError, never> =>
-  Effect.async<any, Server.ServerStartError>((resume) => {
+): Effect.Effect<Bun.Server, Server.ServerStartError, never> =>
+  Effect.async<Bun.Server, Server.ServerStartError>((resume) => {
     try {
       const server = Bun.serve({
         port: config.port,
         hostname: config.host,
         websocket: {
-          open: (ws: any) => {
+          open: (ws: ServerWebSocket<{ clientId: Server.ClientId }>) => {
             Effect.runSync(
               pipe(
                 Effect.sync(() => ({
@@ -198,7 +200,7 @@ const createWebSocketServer = (
                       }))
                     ),
                     Effect.flatMap(() => {
-                      ws._clientId = clientState.id;
+                      ws.data = { clientId: clientState.id };
                       // Now transition to "connected"
                       return updateClientConnectionState(clientState, 'connected');
                     }),
@@ -217,12 +219,12 @@ const createWebSocketServer = (
             );
           },
 
-          message: (ws: any, message: string) => {
+          message: (ws: ServerWebSocket<{ clientId: Server.ClientId }>, message: string) => {
             Effect.runSync(
               pipe(
                 Ref.get(serverStateRef),
                 Effect.flatMap((state) => {
-                  const clientId = ws._clientId as Server.ClientId;
+                  const clientId = ws.data.clientId;
                   const clientState = state.clients.get(clientId);
 
                   if (!clientState) {
@@ -235,12 +237,12 @@ const createWebSocketServer = (
             );
           },
 
-          close: (ws: any) => {
+          close: (ws: ServerWebSocket<{ clientId: Server.ClientId }>) => {
             Effect.runSync(
               pipe(
                 Ref.get(serverStateRef),
                 Effect.flatMap((state) => {
-                  const clientId = ws._clientId as Server.ClientId;
+                  const clientId = ws.data.clientId;
                   const clientState = state.clients.get(clientId);
 
                   if (!clientState) {
@@ -367,7 +369,9 @@ const createWebSocketServerTransport = (
       )
     ),
     (transport) => {
-      const serverStateRef = (transport as any).__serverStateRef;
+      const serverStateRef = (
+        transport as Server.Transport & { __serverStateRef: Ref.Ref<ServerState> }
+      ).__serverStateRef;
       return serverStateRef ? cleanupServer(serverStateRef) : Effect.void;
     }
   );

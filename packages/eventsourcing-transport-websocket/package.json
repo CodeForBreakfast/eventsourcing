@@ -63,8 +63,8 @@
     "@effect/platform": "0.91.1"
   },
   "devDependencies": {
-    "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@types/node": "24.5.2",
     "bun-types": "1.2.22",
     "effect": "3.17.14",

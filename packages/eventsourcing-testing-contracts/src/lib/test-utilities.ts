@@ -6,12 +6,12 @@
  */
 
 import { Effect, Stream, pipe, Chunk, Ref, Duration, Scope } from 'effect';
-import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+import { TransportError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import type {
   TransportMessage,
   ConnectedTransportTestInterface,
   ConnectionState,
-} from './test-layer-interfaces.js';
+} from './test-layer-interfaces';
 
 // ============================================================================
 // Test Data Generators
@@ -62,94 +62,105 @@ export const makeMockTransport = (): Effect.Effect<
   never,
   Scope.Scope
 > =>
-  Effect.gen(function* (_) {
-    const stateRef = yield* _(
-      Ref.make<MockTransportState>({
-        messages: [],
-        subscriptions: [],
-        isConnected: true,
-        connectionStateSubscribers: [],
-      })
-    );
+  pipe(
+    Ref.make<MockTransportState>({
+      messages: [],
+      subscriptions: [],
+      isConnected: true,
+      connectionStateSubscribers: [],
+    }),
+    Effect.flatMap((stateRef) => {
+      const connectionStateStream = Stream.async<ConnectionState>((emit) => {
+        const subscriber = (state: ConnectionState) => {
+          emit(Effect.succeed(Chunk.of(state)));
+        };
 
-    const connectionStateStream = Stream.async<ConnectionState>((emit) => {
-      const subscriber = (state: ConnectionState) => {
-        emit(Effect.succeed(Chunk.of(state)));
+        Effect.runSync(
+          Ref.update(stateRef, (state) => ({
+            ...state,
+            connectionStateSubscribers: [...state.connectionStateSubscribers, subscriber],
+          }))
+        );
+
+        // Emit initial connected state
+        emit(Effect.succeed(Chunk.of('connected' as ConnectionState)));
+      });
+
+      const transport: ConnectedTransportTestInterface = {
+        connectionState: connectionStateStream,
+
+        publish: (message: TransportMessage) =>
+          pipe(
+            Ref.get(stateRef),
+            Effect.flatMap((state) => {
+              if (!state.isConnected) {
+                return Effect.fail(
+                  new TransportError({
+                    message: 'Transport is not connected',
+                    cause: undefined,
+                  })
+                );
+              }
+
+              return pipe(
+                Ref.update(stateRef, (s) => ({
+                  ...s,
+                  messages: [...s.messages, message],
+                })),
+                Effect.flatMap(() => Ref.get(stateRef)),
+                Effect.tap((updatedState) =>
+                  Effect.sync(() => {
+                    // Notify all subscribers using the current state
+                    updatedState.subscriptions.forEach((subscriber) => subscriber(message));
+                  })
+                )
+              );
+            })
+          ),
+
+        subscribe: (filter) =>
+          Effect.succeed(
+            Stream.async<TransportMessage>((emit) => {
+              const subscriber = (message: TransportMessage) => {
+                if (!filter || filter(message)) {
+                  emit(Effect.succeed(Chunk.of(message)));
+                }
+              };
+
+              Effect.runSync(
+                Ref.update(stateRef, (state) => ({
+                  ...state,
+                  subscriptions: [...state.subscriptions, subscriber],
+                }))
+              );
+
+              // Return cleanup function
+              return Effect.sync(() => {
+                Effect.runSync(
+                  Ref.update(stateRef, (state) => ({
+                    ...state,
+                    subscriptions: state.subscriptions.filter((sub) => sub !== subscriber),
+                  }))
+                );
+              });
+            })
+          ),
       };
 
-      Effect.runSync(
-        Ref.update(stateRef, (state) => ({
-          ...state,
-          connectionStateSubscribers: [...state.connectionStateSubscribers, subscriber],
-        }))
-      );
-
-      // Emit initial connected state
-      emit(Effect.succeed(Chunk.of('connected' as ConnectionState)));
-    });
-
-    const transport: ConnectedTransportTestInterface = {
-      connectionState: connectionStateStream,
-
-      publish: (message: TransportMessage) =>
-        Effect.gen(function* (_) {
-          const state = yield* _(Ref.get(stateRef));
-          if (!state.isConnected) {
-            return yield* _(
-              Effect.fail(
-                new TransportError({
-                  message: 'Transport is not connected',
-                  cause: undefined,
-                })
-              )
-            );
-          }
-
-          yield* _(
-            Ref.update(stateRef, (s) => ({
-              ...s,
-              messages: [...s.messages, message],
-            }))
-          );
-
-          // Notify all subscribers
-          state.subscriptions.forEach((subscriber) => subscriber(message));
-        }),
-
-      subscribe: (filter) =>
-        Effect.succeed(
-          Stream.async<TransportMessage>((emit) => {
-            const subscriber = (message: TransportMessage) => {
-              if (!filter || filter(message)) {
-                emit(Effect.succeed(Chunk.of(message)));
-              }
-            };
-
-            Effect.runSync(
-              Ref.update(stateRef, (state) => ({
-                ...state,
-                subscriptions: [...state.subscriptions, subscriber],
-              }))
+      return pipe(
+        Effect.addFinalizer(() =>
+          Effect.sync(() => {
+            // Notify disconnection
+            const state = Effect.runSync(Ref.get(stateRef));
+            state.connectionStateSubscribers.forEach((subscriber) =>
+              subscriber('disconnected' as ConnectionState)
             );
           })
         ),
-    };
-
-    // Cleanup on scope close
-    yield* _(
-      Effect.addFinalizer(() =>
-        Effect.sync(() => {
-          // Notify disconnection
-          const state = Effect.runSync(Ref.get(stateRef));
-          state.connectionStateSubscribers.forEach((subscriber) =>
-            subscriber('disconnected' as ConnectionState)
-          );
-        })
-      )
-    );
-
-    return transport;
-  });
+        Effect.map(() => transport)
+      );
+    })
+  );
 
 // ============================================================================
 // Test Helpers
@@ -162,20 +173,26 @@ export const waitForCondition = <E = never>(
   condition: () => Effect.Effect<boolean, E, never>,
   timeoutMs = 5000,
   pollIntervalMs = 100
-): Effect.Effect<void, E | 'timeout', never> =>
-  Effect.gen(function* (_) {
-    const startTime = Date.now();
+): Effect.Effect<void, E | 'timeout', never> => {
+  const checkCondition = (startTime: number): Effect.Effect<void, E | 'timeout', never> =>
+    pipe(
+      condition(),
+      Effect.flatMap((result) => {
+        if (result) {
+          return Effect.void;
+        }
+        if (Date.now() - startTime >= timeoutMs) {
+          return Effect.fail('timeout' as const);
+        }
+        return pipe(
+          Effect.sleep(Duration.millis(pollIntervalMs)),
+          Effect.flatMap(() => checkCondition(startTime))
+        );
+      })
+    );
 
-    while (Date.now() - startTime < timeoutMs) {
-      const result = yield* _(condition());
-      if (result) {
-        return;
-      }
-      yield* _(Effect.sleep(Duration.millis(pollIntervalMs)));
-    }
-
-    yield* _(Effect.fail('timeout' as const));
-  });
+  return checkCondition(Date.now());
+};
 
 /**
  * Expects an effect to fail with a specific error type
@@ -250,9 +267,10 @@ export const collectMessages = <T>(
  * Default implementation of makeTestMessage for testing
  * Creates a test message with unique ID
  */
-export const makeTestMessage = (type: string, payload: unknown): TransportMessage => ({
-  id: `test-${Date.now()}-${Math.random()}`,
-  type,
-  payload,
-  metadata: undefined,
-});
+export const makeTestMessage = (type: string, payload: unknown): TransportMessage =>
+  makeTransportMessage(
+    `test-${Date.now()}-${Math.random()}`,
+    type,
+    typeof payload === 'string' ? payload : JSON.stringify(payload),
+    undefined
+  );

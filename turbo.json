@@ -5,20 +5,26 @@
       "dependsOn": ["ci"]
     },
     "ci": {
-      "dependsOn": ["build", "check", "lint", "test", "//#arch:check", "//#deps:check"]
+      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check"]
     },
     "typecheck": {
       "dependsOn": ["^typecheck"],
-      "outputs": ["tsconfig.tsbuildinfo"],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json"]
-    },
-    "check": {
-      "dependsOn": ["^check", "typecheck"]
+      "outputs": [],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "tsconfig*.json",
+        "package.json"
+      ],
+      "cache": true
     },
     "build": {
       "outputs": ["dist/**", "*.tsbuildinfo"],
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"]
+      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"],
+      "cache": true
     },
     "//#deps:check": {
       "dependsOn": [],
@@ -62,15 +68,19 @@
       "cache": true
     },
     "lint": {
-      "dependsOn": ["check", "^lint"],
+      "dependsOn": ["typecheck", "^lint"],
       "outputs": [],
+      "cache": true,
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.spec.ts",
         "*.config.js",
         "*.config.ts",
         "tsconfig*.json",
         ".eslintrc*",
+        "$TURBO_ROOT$/eslint.config.*",
         "package.json"
       ]
     },
@@ -78,6 +88,7 @@
       "dependsOn": ["^test", "lint", "//#deps:check", "//#arch:check"],
       "outputs": [],
       "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.test.ts", "**/*.spec.ts", "package.json"],
+      "cache": true,
       "env": [
         "TEST_PG_USERNAME",
         "TEST_PG_PASSWORD",

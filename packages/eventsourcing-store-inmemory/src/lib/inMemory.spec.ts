@@ -20,9 +20,13 @@ export const FooEventStoreTest = (store: Readonly<InMemoryStore.InMemoryStore<Fo
   );
 
 // Run the shared test suite for the in-memory implementation
-runEventStoreTestSuite('In-memory', () =>
-  pipe(
-    pipe(InMemoryStore.make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync),
-    Layer.provide(LoggerLive)
-  )
+// Note: In-memory store doesn't support horizontal scaling since each instance has its own memory
+runEventStoreTestSuite(
+  'In-memory',
+  () =>
+    pipe(
+      pipe(InMemoryStore.make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync),
+      Layer.provide(LoggerLive)
+    ),
+  { supportsHorizontalScaling: false }
 );

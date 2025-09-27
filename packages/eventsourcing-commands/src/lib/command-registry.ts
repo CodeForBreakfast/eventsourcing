@@ -13,6 +13,10 @@ export interface CommandRegistration<TPayload, TPayloadInput> {
   readonly handler: CommandHandler<DomainCommand<TPayload>>;
 }
 
+// Need `any` here because Effect Schema types are not covariant - we can't store
+// different CommandRegistration<T1, U1> and CommandRegistration<T2, U2> in the same Record
+// with a common base type. This is type-safe at runtime because we validate the schema.
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CommandRegistrations = Record<string, CommandRegistration<any, any>>;
 
 export type CommandNames<T extends CommandRegistrations> = keyof T;
@@ -49,6 +53,9 @@ export const makeCommandRegistry = <T extends CommandRegistrations>(
 
 const dispatchWithRegistration = (
   wireCommand: WireCommand,
+  // Safe `any` because the registration comes from a typed record and
+  // payload validation ensures runtime type safety
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   registration: CommandRegistration<any, any>
 ): Effect.Effect<CommandResult, never, never> =>
   pipe(
@@ -77,7 +84,10 @@ const handleValidationError = (
 
 const executeHandler = (
   wireCommand: WireCommand,
+  // Safe `any` because the command has been validated by the schema before reaching here
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   domainCommand: DomainCommand<any>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   handler: CommandHandler<DomainCommand<any>>
 ): Effect.Effect<CommandResult, never, never> =>
   pipe(
