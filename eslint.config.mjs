@@ -108,6 +108,6 @@ export default [
   },
   {
     name: 'ignore-patterns',
-    ignores: ['**/node_modules/**', '**/dist/**', '**/lib/**', '**/*.js', '**/*.mjs'],
+    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.js', '**/*.mjs'],
   },
 ];

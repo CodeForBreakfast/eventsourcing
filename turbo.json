@@ -80,6 +80,7 @@
         "*.config.ts",
         "tsconfig*.json",
         ".eslintrc*",
+        "../../eslint.config.*",
         "package.json"
       ]
     },
