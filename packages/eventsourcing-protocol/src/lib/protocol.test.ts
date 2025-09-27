@@ -104,7 +104,7 @@ const createTestServerProtocol = (
                           success: result._tag === 'Success',
                           ...(result._tag === 'Success'
                             ? { position: result.position }
-                            : { error: result.error }),
+                            : { error: JSON.stringify(result.error) }),
                         })
                       );
                       return server.broadcast(response);
@@ -216,7 +216,10 @@ describe('Protocol Behavior Tests', () => {
                     if (result._tag === 'Failure') {
                       expect(result.error._tag).toBe('UnknownError');
                       if (result.error._tag === 'UnknownError') {
-                        expect(result.error.message).toBe('Validation failed: Name is required');
+                        // The error message is the stringified error object
+                        const parsedError = JSON.parse(result.error.message);
+                        expect(parsedError._tag).toBe('ValidationError');
+                        expect(parsedError.validationErrors).toEqual(['Name is required']);
                       }
                     }
                   })
@@ -568,63 +571,53 @@ describe('Protocol Behavior Tests', () => {
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            // Setup server protocol first
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) =>
+            createTestServerProtocol(server, undefined, (streamId) => {
+              // Return an event when the client subscribes to 'test-stream'
+              if (streamId === 'test-stream') {
+                return [
+                  {
+                    position: {
+                      streamId: unsafeCreateStreamId('test-stream'),
+                      eventNumber: 1,
+                    },
+                    type: 'TestEvent',
+                    data: { test: 'data', value: 42 },
+                    timestamp: new Date('2024-01-01T12:00:00Z'),
+                  },
+                ];
+              }
+              return [];
+            }),
+            Effect.flatMap(() =>
               pipe(
-                // Subscribe to stream first to establish the subscription
+                // Subscribe to stream and collect events
                 subscribe('test-stream'),
                 Effect.flatMap((eventStream) =>
                   pipe(
-                    // Start collecting events and publishing concurrently
-                    Effect.all(
-                      [
-                        // Collect events from the stream
-                        pipe(eventStream, Stream.take(1), Stream.runCollect),
-                        // Publish an event after a small delay to ensure subscription is ready
-                        pipe(
-                          Effect.sleep(Duration.millis(50)),
-                          Effect.flatMap(() =>
-                            serverProtocol.publishEvent({
-                              streamId: unsafeCreateStreamId('test-stream'),
-                              position: {
-                                streamId: unsafeCreateStreamId('test-stream'),
-                                eventNumber: 1,
-                              },
-                              type: 'TestEvent',
-                              data: { test: 'data', value: 42 },
-                              timestamp: new Date('2024-01-01T12:00:00Z'),
-                            })
-                          ),
-                          Effect.asVoid
-                        ),
-                      ],
-                      { concurrency: 'unbounded' }
-                    ),
-                    Effect.map(([events, _]) => events),
-                    Effect.tap((collectedEvents) =>
-                      Effect.sync(() => {
-                        const events = Array.from(collectedEvents);
-
-                        // Verify we received exactly 1 event
-                        expect(events).toHaveLength(1);
-
-                        // Verify event content
-                        expect(events[0]!.type).toBe('TestEvent');
-                        expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
-                        expect(events[0]!.position.streamId).toEqual(
-                          unsafeCreateStreamId('test-stream')
-                        );
-                        expect(events[0]!.position.eventNumber).toBe(1);
-                        expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
-                      })
-                    )
+                    eventStream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((chunk) => Array.from(chunk))
                   )
+                ),
+                Effect.tap((events) =>
+                  Effect.sync(() => {
+                    // Verify we received exactly 1 event
+                    expect(events).toHaveLength(1);
+
+                    // Verify event content
+                    expect(events[0]!.type).toBe('TestEvent');
+                    expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
+                    expect(events[0]!.position.streamId).toEqual(
+                      unsafeCreateStreamId('test-stream')
+                    );
+                    expect(events[0]!.position.eventNumber).toBe(1);
+                    expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
+                  })
                 ),
                 Effect.provide(ProtocolLive(clientTransport))
               )
-            ),
-            Effect.provide(ServerProtocolLive(server))
+            )
           )
         ),
         Effect.scoped
@@ -1798,49 +1791,41 @@ describe('Protocol Behavior Tests', () => {
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) => {
-              const testEvent: Event & { streamId: EventStreamId } = {
-                streamId: unsafeCreateStreamId('product-789'),
-                position: {
-                  streamId: unsafeCreateStreamId('product-789'),
-                  eventNumber: 42,
-                },
-                type: 'ProductCreated',
-                data: {
-                  id: 'product-789',
-                  name: 'Super Widget',
-                  price: 99.99,
-                  category: 'electronics',
-                },
-                timestamp: new Date('2024-01-15T14:30:00Z'),
-              };
-
-              return pipe(
-                Effect.all(
-                  [
-                    // Client subscribes to the stream and waits for events
-                    pipe(
-                      subscribe('product-789'),
-                      Effect.flatMap((eventStream) =>
-                        pipe(
-                          eventStream,
-                          Stream.take(1),
-                          Stream.runCollect,
-                          Effect.map((events) => Array.from(events))
-                        )
-                      ),
-                      Effect.provide(ProtocolLive(clientTransport))
-                    ),
-                    // Server publishes event after a small delay to ensure subscription is ready
-                    pipe(
-                      Effect.sleep(Duration.millis(50)),
-                      Effect.flatMap(() => serverProtocol.publishEvent(testEvent))
-                    ),
-                  ],
-                  { concurrency: 'unbounded' }
+            createTestServerProtocol(server, undefined, (streamId) => {
+              // Return event when client subscribes to 'product-789'
+              if (streamId === 'product-789') {
+                return [
+                  {
+                    position: {
+                      streamId: unsafeCreateStreamId('product-789'),
+                      eventNumber: 42,
+                    },
+                    type: 'ProductCreated',
+                    data: {
+                      id: 'product-789',
+                      name: 'Super Widget',
+                      price: 99.99,
+                      category: 'electronics',
+                    },
+                    timestamp: new Date('2024-01-15T14:30:00Z'),
+                  },
+                ];
+              }
+              return [];
+            }),
+            Effect.flatMap(() =>
+              pipe(
+                // Client subscribes to the stream and waits for events
+                subscribe('product-789'),
+                Effect.flatMap((eventStream) =>
+                  pipe(
+                    eventStream,
+                    Stream.take(1),
+                    Stream.runCollect,
+                    Effect.map((events) => Array.from(events))
+                  )
                 ),
-                Effect.tap(([receivedEvents, _]) =>
+                Effect.tap((receivedEvents) =>
                   Effect.sync(() => {
                     // Verify the client received the published event
                     expect(receivedEvents).toHaveLength(1);
@@ -1859,10 +1844,10 @@ describe('Protocol Behavior Tests', () => {
                     });
                     expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
                   })
-                )
-              );
-            }),
-            Effect.provide(ServerProtocolLive(server))
+                ),
+                Effect.provide(ProtocolLive(clientTransport))
+              )
+            )
           )
         ),
         Effect.scoped
