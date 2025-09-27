@@ -107,10 +107,11 @@ export const makeMockTransport = (): Effect.Effect<
                   ...s,
                   messages: [...s.messages, message],
                 })),
-                Effect.tap(() =>
+                Effect.flatMap(() => Ref.get(stateRef)),
+                Effect.tap((updatedState) =>
                   Effect.sync(() => {
-                    // Notify all subscribers
-                    state.subscriptions.forEach((subscriber) => subscriber(message));
+                    // Notify all subscribers using the current state
+                    updatedState.subscriptions.forEach((subscriber) => subscriber(message));
                   })
                 )
               );
@@ -132,6 +133,16 @@ export const makeMockTransport = (): Effect.Effect<
                   subscriptions: [...state.subscriptions, subscriber],
                 }))
               );
+
+              // Return cleanup function
+              return Effect.sync(() => {
+                Effect.runSync(
+                  Ref.update(stateRef, (state) => ({
+                    ...state,
+                    subscriptions: state.subscriptions.filter((sub) => sub !== subscriber),
+                  }))
+                );
+              });
             })
           ),
       };
