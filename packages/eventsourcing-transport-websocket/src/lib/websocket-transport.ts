@@ -216,6 +216,7 @@ const cleanupConnection = (
 ): Effect.Effect<void, never, never> =>
   pipe(
     Ref.set(writerRef, null),
+    Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
     Effect.flatMap(() =>
       Ref.update(stateRef, (s) => ({
         socket: null,
@@ -261,24 +262,39 @@ const connectWebSocket = (
                       ),
                     })
                     .pipe(
-                      Effect.catchAll((error) => {
-                        // Fail the deferred if connection fails
-                        const connectionError = new ConnectionError({
-                          message: 'WebSocket connection failed',
-                          url,
-                          cause: error,
-                        });
-                        return pipe(
-                          Deferred.fail(connectedDeferred, connectionError),
-                          Effect.flatMap(() => {
+                      Effect.catchAll((error) =>
+                        pipe(
+                          Deferred.isDone(connectedDeferred),
+                          Effect.flatMap((wasConnected) => {
+                            if (!wasConnected) {
+                              // Connection failed during initial setup
+                              const connectionError = new ConnectionError({
+                                message: 'WebSocket connection failed',
+                                url,
+                                cause: error,
+                              });
+                              return pipe(
+                                Deferred.fail(connectedDeferred, connectionError),
+                                Effect.flatMap(() => updateConnectionState(stateRef, 'error'))
+                              );
+                            }
+                            // Connection was established but then closed/errored
                             if (Socket.SocketCloseError.is(error)) {
                               return updateConnectionState(stateRef, 'disconnected');
                             }
                             return updateConnectionState(stateRef, 'error');
                           })
-                        );
-                      }),
-                      Effect.forkScoped
+                        )
+                      ),
+                      Effect.forkScoped,
+                      Effect.tap((fiber) =>
+                        // Monitor the fiber - when it completes, the socket has closed
+                        pipe(
+                          fiber.await,
+                          Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
+                          Effect.forkScoped
+                        )
+                      )
                     ),
                   // Wait for connection to be established (or fail) with timeout
                   _: Deferred.await(connectedDeferred).pipe(

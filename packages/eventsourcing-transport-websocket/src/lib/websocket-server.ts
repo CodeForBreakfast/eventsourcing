@@ -317,25 +317,37 @@ const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void
     Ref.get(serverStateRef),
     Effect.flatMap((state) =>
       pipe(
-        Effect.sync(() => {
-          try {
-            // Close all client connections
-            for (const clientState of state.clients.values()) {
-              try {
-                clientState.socket.close();
-              } catch {
-                // Ignore errors during cleanup
+        // First, notify all clients they're being disconnected
+        Effect.forEach(
+          Array.from(state.clients.values()),
+          (clientState) =>
+            pipe(
+              updateClientConnectionState(clientState, 'disconnected'),
+              Effect.catchAll(() => Effect.void) // Ignore errors during cleanup
+            ),
+          { discard: true }
+        ),
+        Effect.flatMap(() =>
+          Effect.sync(() => {
+            try {
+              // Close all client connections
+              for (const clientState of state.clients.values()) {
+                try {
+                  clientState.socket.close(1001, 'Server shutting down');
+                } catch {
+                  // Ignore errors during cleanup
+                }
               }
-            }
 
-            // Stop the server
-            if (state.server && state.server.stop) {
-              state.server.stop();
+              // Stop the server
+              if (state.server && state.server.stop) {
+                state.server.stop();
+              }
+            } catch {
+              // Ignore cleanup errors
             }
-          } catch {
-            // Ignore cleanup errors
-          }
-        }),
+          })
+        ),
         Effect.asVoid
       )
     )
