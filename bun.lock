@@ -224,6 +224,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
+        "@effect/platform-bun": "^0.80.0",
         "@types/node": "24.5.2",
         "bun-types": "1.2.22",
         "effect": "3.17.14",
