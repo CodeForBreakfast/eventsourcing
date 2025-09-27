@@ -80,7 +80,7 @@
         "*.config.ts",
         "tsconfig*.json",
         ".eslintrc*",
-        "../../eslint.config.*",
+        "$TURBO_ROOT$/eslint.config.*",
         "package.json"
       ]
     },
