@@ -8,6 +8,6 @@
     "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
-  "exclude": ["**/*.test.ts", "**/*.spec.ts", "dist", "build.ts"],
+  "exclude": ["dist", "build.ts"],
   "references": [{ "path": "../eventsourcing-store" }]
 }

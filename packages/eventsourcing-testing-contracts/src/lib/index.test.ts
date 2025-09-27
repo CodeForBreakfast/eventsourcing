@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect } from 'bun:test';
-import { Effect, Stream, pipe, Scope, Fiber, Duration, Chunk } from 'effect';
+import { Effect, Stream, pipe, Fiber, Duration, Chunk } from 'effect';
 import { generateMessageId, makeTestTransportMessage, makeMockTransport } from '../index.js';
 
 describe('Transport Testing Contracts Package', () => {

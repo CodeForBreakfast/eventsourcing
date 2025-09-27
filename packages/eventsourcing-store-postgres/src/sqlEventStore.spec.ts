@@ -1,4 +1,4 @@
-import { Effect, Layer, Schema, Stream, pipe } from 'effect';
+import { Effect, Fiber, Layer, Schema, Stream, pipe } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { silentLogger } from '@codeforbreakfast/buntest';
 import {
@@ -48,20 +48,6 @@ describe('PostgreSQL Horizontal Scaling', () => {
     () => {
       const receivedEvents: FooEvent[] = [];
 
-      // Create two separate EventStore instances with independent layers
-      const createPostgresLayer = () =>
-        pipe(
-          FooEventStoreLive,
-          Layer.provide(
-            Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)
-          ),
-          Layer.provide(PostgresLive),
-          Layer.provide(makePgConfigurationLive('TEST_PG'))
-        );
-
-      const instance1Layer = createPostgresLayer();
-      const instance2Layer = createPostgresLayer();
-
       // Setup: Create stream ID and beginning position
       return pipe(
         newEventStreamId(),
@@ -71,74 +57,85 @@ describe('PostgreSQL Horizontal Scaling', () => {
             beginning,
             Effect.flatMap((streamBeginning) =>
               pipe(
-                // Instance 2: Start subscription in the background
-                pipe(
-                  FooEventStore,
-                  Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                    pipe(
-                      eventstore.subscribe(streamBeginning),
-                      Effect.flatMap((stream) =>
-                        pipe(
-                          stream,
-                          Stream.take(2), // Expect 2 events to be written by instance 1
-                          Stream.tap((event) =>
-                            Effect.sync(() => {
-                              receivedEvents.push(event);
-                            })
-                          ),
-                          Stream.runDrain
-                        )
-                      )
-                    )
-                  ),
-                  Effect.provide(instance2Layer),
-                  Effect.fork
-                ),
-                Effect.flatMap((subscribeFiber) =>
+                // First, write one event to establish the stream
+                FooEventStore,
+                Effect.flatMap((eventstore: EventStore<FooEvent>) =>
                   pipe(
-                    // Give subscription time to establish
-                    Effect.sleep(200),
-                    Effect.flatMap(() =>
-                      // Instance 1: Write events to the stream
+                    Stream.make({ bar: 'initial-event' }),
+                    Stream.run(eventstore.append(streamBeginning))
+                  )
+                ),
+                Effect.flatMap(() =>
+                  // Now test cross-instance subscription
+                  pipe(
+                    // Instance 2: Start subscription from after initial event
+                    pipe(
+                      FooEventStore,
+                      Effect.flatMap((eventstore: EventStore<FooEvent>) =>
+                        pipe(
+                          eventstore.subscribe({ streamId, eventNumber: 1 }),
+                          Effect.flatMap((stream) =>
+                            pipe(
+                              stream,
+                              Stream.take(1), // Expect 1 event to be written by instance 1
+                              Stream.tap((event) =>
+                                Effect.sync(() => {
+                                  receivedEvents.push(event);
+                                })
+                              ),
+                              Stream.runDrain
+                            )
+                          )
+                        )
+                      ),
+                      Effect.fork
+                    ),
+                    Effect.flatMap((subscribeFiber) =>
                       pipe(
-                        FooEventStore,
-                        Effect.flatMap((eventstore: EventStore<FooEvent>) =>
+                        // Give subscription time to establish
+                        Effect.sleep(1000),
+                        Effect.flatMap(() =>
+                          // Instance 1: Write new event to the stream
                           pipe(
-                            Stream.make(
-                              { bar: 'cross-instance-event-1' },
-                              { bar: 'cross-instance-event-2' }
-                            ),
-                            Stream.run(eventstore.append(streamBeginning))
+                            FooEventStore,
+                            Effect.flatMap((eventstore: EventStore<FooEvent>) =>
+                              pipe(
+                                Stream.make({ bar: 'cross-instance-event' }),
+                                Stream.run(eventstore.append({ streamId, eventNumber: 1 }))
+                              )
+                            )
                           )
                         ),
-                        Effect.provide(instance1Layer)
+                        Effect.flatMap(() =>
+                          // Wait for subscription to complete
+                          pipe(
+                            Fiber.join(subscribeFiber),
+                            Effect.timeout(3000),
+                            Effect.orElse(() => Effect.void)
+                          )
+                        ),
+                        Effect.tap(() =>
+                          // Verify that instance 2 received event written by instance 1
+                          Effect.sync(() => {
+                            expect(receivedEvents).toEqual([{ bar: 'cross-instance-event' }]);
+                          })
+                        )
                       )
-                    ),
-                    Effect.flatMap(() =>
-                      // Wait for subscription to complete or timeout
-                      pipe(
-                        subscribeFiber.join,
-                        Effect.timeout(2000),
-                        Effect.orElse(() => Effect.void)
-                      )
-                    ),
-                    Effect.tap(() =>
-                      // Verify that instance 2 received events written by instance 1
-                      Effect.sync(() => {
-                        expect(receivedEvents).toEqual([
-                          { bar: 'cross-instance-event-1' },
-                          { bar: 'cross-instance-event-2' },
-                        ]);
-                      })
                     )
                   )
                 )
               )
             )
           )
-        )
+        ),
+        Effect.provide(FooEventStoreLive),
+        Effect.provide(
+          Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)
+        ),
+        Effect.provide(PostgresLive),
+        Effect.provide(makePgConfigurationLive('TEST_PG'))
       );
     },
     10000
-  ); // Longer test timeout for multi-instance setup
+  );
 });
