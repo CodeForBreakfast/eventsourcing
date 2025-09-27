@@ -533,7 +533,7 @@ export const runServerTransportContractTests: ServerTestRunner = (
                                 Effect.sync(() => {
                                   expect(receivedMessages).toHaveLength(1);
                                   expect(receivedMessages[0]?.type).toBe('client.request');
-                                  expect(JSON.stringify(receivedMessages[0]?.payload)).toBe(
+                                  expect(receivedMessages[0]?.payload).toBe(
                                     JSON.stringify({ action: 'ping' })
                                   );
                                 })

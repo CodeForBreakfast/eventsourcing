@@ -224,7 +224,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                                     Effect.sync(() => {
                                       expect(receivedMessages).toHaveLength(1);
                                       expect(receivedMessages[0]?.type).toBe('test.message');
-                                      expect(JSON.stringify(receivedMessages[0]?.payload)).toBe(
+                                      expect(receivedMessages[0]?.payload).toBe(
                                         JSON.stringify({ data: 'hello server' })
                                       );
                                     })
@@ -280,13 +280,13 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                               // Both clients should receive the broadcast
                               expect(client1Received).toHaveLength(1);
                               expect(client1Received[0]?.type).toBe('server.broadcast');
-                              expect(JSON.stringify(client1Received[0]?.payload)).toBe(
+                              expect(client1Received[0]?.payload).toBe(
                                 JSON.stringify({ announcement: 'hello all clients' })
                               );
 
                               expect(client2Received).toHaveLength(1);
                               expect(client2Received[0]?.type).toBe('server.broadcast');
-                              expect(JSON.stringify(client2Received[0]?.payload)).toBe(
+                              expect(client2Received[0]?.payload).toBe(
                                 JSON.stringify({ announcement: 'hello all clients' })
                               );
                             })
@@ -341,9 +341,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                                   Effect.flatMap(() => context.collectMessages(serverMessages, 1)),
                                   Effect.tap((serverReceivedMessages) =>
                                     Effect.sync(() => {
-                                      expect(
-                                        JSON.stringify(serverReceivedMessages[0]?.payload)
-                                      ).toBe(JSON.stringify({ query: 'ping' }));
+                                      expect(serverReceivedMessages[0]?.payload).toBe(
+                                        JSON.stringify({ query: 'ping' })
+                                      );
                                     })
                                   ),
                                   Effect.flatMap(() => {
@@ -356,9 +356,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                                   Effect.flatMap(() => context.collectMessages(clientMessages, 1)),
                                   Effect.tap((clientReceivedMessages) =>
                                     Effect.sync(() => {
-                                      expect(
-                                        JSON.stringify(clientReceivedMessages[0]?.payload)
-                                      ).toBe(JSON.stringify({ result: 'pong' }));
+                                      expect(clientReceivedMessages[0]?.payload).toBe(
+                                        JSON.stringify({ result: 'pong' })
+                                      );
                                     })
                                   )
                                 );
@@ -415,11 +415,11 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                                 Effect.sync(() => {
                                   expect(receivedMessages).toHaveLength(2);
                                   expect(receivedMessages[0]?.type).toBe('important.alert');
-                                  expect(JSON.stringify(receivedMessages[0]?.payload)).toBe(
+                                  expect(receivedMessages[0]?.payload).toBe(
                                     JSON.stringify({ data: 2 })
                                   );
                                   expect(receivedMessages[1]?.type).toBe('important.notification');
-                                  expect(JSON.stringify(receivedMessages[1]?.payload)).toBe(
+                                  expect(receivedMessages[1]?.payload).toBe(
                                     JSON.stringify({ data: 4 })
                                   );
                                 })

@@ -271,6 +271,6 @@ export const makeTestMessage = (type: string, payload: unknown): TransportMessag
   makeTransportMessage(
     `test-${Date.now()}-${Math.random()}`,
     type,
-    JSON.stringify(payload),
+    typeof payload === 'string' ? payload : JSON.stringify(payload),
     undefined
   );

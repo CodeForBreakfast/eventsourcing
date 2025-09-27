@@ -61,6 +61,7 @@
     "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
+    "@codeforbreakfast/buntest": "workspace:*",
     "@types/node": "24.5.2",
     "effect": "3.17.14",
     "typescript": "5.9.2",
