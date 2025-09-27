@@ -1,28 +1,11 @@
 import { describe, test, expect } from 'bun:test';
-import {
-  Effect,
-  Stream,
-  Duration,
-  pipe,
-  TestClock,
-  TestContext,
-  Either,
-  Schema,
-  Fiber,
-} from 'effect';
-import {
-  ProtocolLive,
-  sendCommand,
-  subscribe,
-  Command,
-  CommandTimeoutError,
-  CommandResult,
-  Event,
-} from './protocol';
+import { Effect, Stream, Duration, pipe, TestClock, TestContext, Either, Schema } from 'effect';
+import { ProtocolLive, sendCommand, subscribe, CommandTimeoutError, Event } from './protocol';
+import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { ServerProtocolLive, ServerProtocol } from './server-protocol';
 import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
-import { EventStreamId, toStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { makeTransportMessage, Server } from '@codeforbreakfast/eventsourcing-transport';
+import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 // ============================================================================
 // Test Helpers
@@ -71,16 +54,16 @@ const createTestServerProtocol = (
     server.connections,
     Stream.take(1),
     Stream.runCollect,
-    Effect.map((connections) => Array.from(connections)[0]!),
-    Effect.flatMap((serverConnection) =>
+    Effect.map((connections) => Array.from(connections)[0]! as Server.ClientConnection),
+    Effect.flatMap((serverConnection: Server.ClientConnection) =>
       pipe(
         serverConnection.transport.subscribe(),
         Effect.flatMap((messageStream) =>
           Effect.forkScoped(
             Stream.runForEach(messageStream, (message) =>
               pipe(
-                Effect.try(() => JSON.parse(message.payload)),
-                Effect.flatMap((parsedMessage) => {
+                Effect.try(() => JSON.parse(message.payload as string)),
+                Effect.flatMap((parsedMessage: any) => {
                   if (parsedMessage.type === 'command') {
                     const result = commandHandler(parsedMessage);
                     const response = makeTransportMessage(
@@ -140,7 +123,7 @@ describe('Protocol Behavior Tests', () => {
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 42 },
             })),
@@ -170,7 +153,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should send command and receive failure result', async () => {
@@ -180,7 +163,12 @@ describe('Protocol Behavior Tests', () => {
           pipe(
             createTestServerProtocol(server, (command) => ({
               _tag: 'Failure',
-              error: 'Validation failed: Name is required',
+              error: {
+                _tag: 'ValidationError',
+                commandId: command.id,
+                commandName: command.name,
+                validationErrors: ['Name is required'],
+              },
             })),
             Effect.flatMap(() => {
               const command: Command = {
@@ -210,7 +198,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle multiple concurrent commands with proper correlation', async () => {
@@ -230,7 +218,11 @@ describe('Protocol Behavior Tests', () => {
                   }
                 : {
                     _tag: 'Failure',
-                    error: 'Command failed',
+                    error: {
+                      _tag: 'UnknownError',
+                      commandId: command.id,
+                      message: 'Command failed',
+                    },
                   };
             }),
             Effect.flatMap(() => {
@@ -275,7 +267,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -321,7 +313,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
 
@@ -330,7 +322,7 @@ describe('Protocol Behavior Tests', () => {
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 1 },
             })),
@@ -356,7 +348,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -385,7 +377,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should receive events for subscribed streams', async () => {
@@ -457,7 +449,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should only receive events for the specific subscribed stream (filtering)', async () => {
@@ -545,7 +537,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle basic event publishing and receiving', async () => {
@@ -614,7 +606,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle receiving events while processing commands concurrently', async () => {
@@ -703,7 +695,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -874,7 +866,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle single client subscribing to multiple different streams', async () => {
@@ -1073,7 +1065,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should continue receiving events after re-subscribing to a stream', async () => {
@@ -1225,7 +1217,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -1268,7 +1260,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle responses for unknown command IDs gracefully', async () => {
@@ -1318,7 +1310,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle malformed command result - success without position', async () => {
@@ -1388,7 +1380,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
 
@@ -1459,7 +1451,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
   });
@@ -1473,7 +1465,7 @@ describe('Protocol Behavior Tests', () => {
     test('should clean up pending commands when transport disconnects', async () => {
       const program = pipe(
         setupTestEnvironment,
-        Effect.flatMap(({ server, clientTransport }) =>
+        Effect.flatMap(({ server: _server, clientTransport }) =>
           pipe(
             // Don't set up a server protocol - commands will hang indefinitely
             Effect.all(
@@ -1510,7 +1502,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
 
@@ -1588,7 +1580,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle transport reconnection gracefully', async () => {
@@ -1597,10 +1589,10 @@ describe('Protocol Behavior Tests', () => {
         Effect.flatMap(({ server, clientTransport: firstTransport }) =>
           pipe(
             // Verify first connection works
-            createTestServerProtocol(server, (command) => ({
+            createTestServerProtocol(server, (_command) => ({
               _tag: 'Success',
               position: {
-                streamId: unsafeCreateStreamId(command.target),
+                streamId: unsafeCreateStreamId(_command.target),
                 eventNumber: 1,
               },
             })),
@@ -1649,7 +1641,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -1720,7 +1712,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
 
@@ -1793,7 +1785,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should publish events via server protocol publishEvent', async () => {
@@ -1870,7 +1862,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -1930,26 +1922,26 @@ describe('Protocol Behavior Tests', () => {
                   Effect.sync(() => {
                     // Both commands with the same ID should receive the same result
                     // This is the protocol's way of handling duplicate command IDs
-                    expect(Either.isRight(result1)).toBe(true);
-                    expect(Either.isRight(result2)).toBe(true);
+                    expect(Either.isRight(result1!)).toBe(true);
+                    expect(Either.isRight(result2!)).toBe(true);
 
-                    if (Either.isRight(result1) && Either.isRight(result2)) {
-                      expect(result1.right._tag).toBe('Success');
-                      expect(result2.right._tag).toBe('Success');
+                    if (Either.isRight(result1!) && Either.isRight(result2!)) {
+                      expect(result1!.right._tag).toBe('Success');
+                      expect(result2!.right._tag).toBe('Success');
 
-                      if (result1.right._tag === 'Success' && result2.right._tag === 'Success') {
+                      if (result1!.right._tag === 'Success' && result2!.right._tag === 'Success') {
                         // Both should get the same result content
-                        expect(result1.right.position.eventNumber).toBe(42);
-                        expect(result2.right.position.eventNumber).toBe(42);
+                        expect(result1!.right.position.eventNumber).toBe(42);
+                        expect(result2!.right.position.eventNumber).toBe(42);
 
                         // Both should get the same stream ID (from whichever command the server processed)
-                        expect(result1.right.position.streamId).toEqual(
-                          result2.right.position.streamId
+                        expect(result1!.right.position.streamId).toEqual(
+                          result2!.right.position.streamId
                         );
 
                         // The result should be based on the command that was actually processed by the server
                         // (which appears to be the second one based on the streamId being user-456)
-                        expect(result1.right.position.streamId).toEqual(
+                        expect(result1!.right.position.streamId).toEqual(
                           unsafeCreateStreamId('user-456')
                         );
                       }
@@ -1963,7 +1955,7 @@ describe('Protocol Behavior Tests', () => {
       );
 
       await Effect.runPromise(
-        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext))
+        pipe(program, Effect.scoped, Effect.provide(TestContext.TestContext)) as any
       );
     });
 
@@ -2106,7 +2098,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle rapid subscription/unsubscription cycles', async () => {
@@ -2180,7 +2172,7 @@ describe('Protocol Behavior Tests', () => {
 
                     // Verify we got events for all the different streams
                     const uniqueStreamIds = new Set(
-                      results.map((r) => r.firstEvent?.data.streamId)
+                      results.map((r) => (r.firstEvent?.data as any)?.streamId)
                     );
                     expect(uniqueStreamIds.size).toBe(10);
 
@@ -2197,7 +2189,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 
@@ -2226,7 +2218,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
 
     test('should handle multiple sequential commands after cleanup', async () => {
@@ -2251,30 +2243,19 @@ describe('Protocol Behavior Tests', () => {
               }));
 
               // Send commands sequentially (not concurrently) to test cleanup between commands
-              const sendSequentially = (
-                cmds: Command[]
-              ): Effect.Effect<CommandResult[], never, never> =>
-                cmds.reduce(
-                  (acc, cmd) =>
-                    pipe(
-                      acc,
-                      Effect.flatMap((results) =>
-                        pipe(
-                          sendCommand(cmd),
-                          Effect.map((result) => [...results, result])
-                        )
-                      )
-                    ),
-                  Effect.succeed([] as CommandResult[])
-                );
+              const sendSequentially = (cmds: Command[]) =>
+                Effect.forEach(cmds, (cmd) => sendCommand(cmd), {
+                  concurrency: 1,
+                });
 
               return pipe(
                 sendSequentially(commands),
                 Effect.tap((results) =>
                   Effect.sync(() => {
                     // All commands should have succeeded
-                    expect(results).toHaveLength(5);
-                    results.forEach((result, index) => {
+                    const resultsArray = Array.from(results);
+                    expect(resultsArray).toHaveLength(5);
+                    resultsArray.forEach((result, index) => {
                       expect(result._tag).toBe('Success');
                       if (result._tag === 'Success') {
                         expect(result.position.streamId).toEqual(
@@ -2293,7 +2274,7 @@ describe('Protocol Behavior Tests', () => {
         )
       );
 
-      await Effect.runPromise(Effect.scoped(program) as Effect.Effect<void, never, never>);
+      await Effect.runPromise(Effect.scoped(Effect.asVoid(program)) as any);
     });
   });
 });
