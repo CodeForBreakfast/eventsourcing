@@ -25,7 +25,9 @@ export const TransportMessageSchema = Schema.Struct({
   metadata: Schema.optional(Schema.Record({ key: Schema.String, value: Schema.Unknown })),
 });
 
-export interface TransportMessage extends Schema.Schema.Type<typeof TransportMessageSchema> {}
+export interface TransportMessage extends Schema.Schema.Type<typeof TransportMessageSchema> {
+  readonly id: string;
+}
 
 /**
  * Connection state from transport contracts

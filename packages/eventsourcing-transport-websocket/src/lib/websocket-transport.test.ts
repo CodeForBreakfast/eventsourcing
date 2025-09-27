@@ -14,7 +14,7 @@
  */
 
 import { Effect, Stream, pipe, Duration, Fiber } from 'effect';
-import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
+import { makeTransportMessage, makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
 import { WebSocketConnector } from './websocket-transport';
 import { describe, it, expect, beforeAll, afterAll } from '@codeforbreakfast/buntest';
 
@@ -140,7 +140,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
 
   beforeAll(() => {
     // Install mock WebSocket for controlled testing
-    globalThis.WebSocket = MockWebSocket as any;
+    globalThis.WebSocket = MockWebSocket as unknown as typeof WebSocket;
     globalThis.lastCreatedWebSocket = undefined;
   });
 
@@ -149,7 +149,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
     if (originalWebSocket) {
       globalThis.WebSocket = originalWebSocket;
     } else {
-      delete (globalThis as any).WebSocket;
+      delete (globalThis as { WebSocket?: typeof WebSocket }).WebSocket;
     }
   });
 
@@ -240,7 +240,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
 
         const receivedMessages = yield* Fiber.join(messagesFiber);
         expect(receivedMessages).toHaveLength(1);
-        expect(receivedMessages[0]?.id).toBe('test-msg-1' as any);
+        expect(receivedMessages[0]?.id).toBe(makeMessageId('test-msg-1'));
         expect(receivedMessages[0]?.type).toBe('test-type');
         expect(receivedMessages[0]?.payload).toBe(JSON.stringify({ data: 'test-data' }));
       })
@@ -290,7 +290,7 @@ describe('WebSocket Transport - Edge Case Tests (with Mocks)', () => {
         // Should receive the valid message, malformed one should be ignored
         if (result._tag === 'Right') {
           expect(result.right).toHaveLength(1);
-          expect(result.right[0]?.id).toBe('valid' as any);
+          expect(result.right[0]?.id).toBe(makeMessageId('valid'));
           expect(result.right[0]?.type).toBe('test');
           expect(result.right[0]?.payload).toBe('data');
         } else {
