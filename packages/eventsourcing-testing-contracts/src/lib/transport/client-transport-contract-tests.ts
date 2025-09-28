@@ -19,7 +19,59 @@ import { TransportMessageSchema } from '../test-layer-interfaces';
 
 /**
  * Core client transport contract tests.
- * Every client transport implementation must pass these tests.
+ *
+ * This is the primary export for testing client-side transport implementations.
+ * Every client transport must pass these tests to ensure compatibility with
+ * the event sourcing framework.
+ *
+ * ## What This Tests
+ *
+ * - **Connection Lifecycle**: Establishing connections using Effect's Scope pattern,
+ *   monitoring connection state changes, and automatic cleanup when scopes close
+ * - **Message Publishing**: Sending messages with various payload types (strings, numbers,
+ *   objects, arrays, null), handling metadata, and graceful error handling
+ * - **Message Subscription**: Receiving published messages, filtering with custom predicates,
+ *   supporting multiple concurrent subscriptions, and subscription error handling
+ * - **Connection State Monitoring**: Tracking state transitions (connecting → connected),
+ *   providing current state to late subscribers, and handling disconnection scenarios
+ * - **Resource Management**: Scope-based cleanup, handling concurrent operations during
+ *   cleanup, and preventing resource leaks
+ *
+ * ## Real Usage Examples
+ *
+ * **WebSocket Implementation:**
+ * See `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 36-116)
+ * - Shows how to create test context with `WebSocketConnector.connect()`
+ * - Demonstrates random port allocation for test isolation
+ * - Includes proper error mapping and connection state management
+ *
+ * **InMemory Implementation:**
+ * See `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 35-126)
+ * - Shows how to handle shared server instances
+ * - Demonstrates direct connection without network protocols
+ *
+ * ## Required Interface
+ *
+ * Your transport setup function must return a `TransportTestContext` that provides:
+ * - `makeConnectedTransport`: Factory function that creates connected transports within Effect scopes
+ * - `simulateDisconnect`: (Optional) Simulate connection failures for testing reconnection behavior
+ *
+ * ## Test Categories
+ *
+ * 1. **Connection Lifecycle (Scope-based)**: Tests Effect Scope integration and automatic cleanup
+ * 2. **Message Publishing**: Tests message sending with various data types and error handling
+ * 3. **Message Subscription**: Tests message receiving, filtering, and concurrent subscriptions
+ * 4. **Connection State Monitoring**: Tests connection state stream behavior and transitions
+ * 5. **Resource Management**: Tests proper cleanup and resource management during scope closure
+ *
+ * @param name - Descriptive name for your transport implementation (e.g., "WebSocket", "HTTP")
+ * @param setup - Function that returns Effect yielding TransportTestContext for your transport
+ *
+ * @example
+ * For complete working examples, see:
+ * - WebSocket: `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts`
+ * - InMemory: `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts`
+ * Both demonstrate real transport implementations passing all contract tests.
  */
 export const runClientTransportContractTests: TransportTestRunner = (
   name: string,

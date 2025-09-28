@@ -89,7 +89,89 @@ export type ClientServerTestRunner = (
 
 /**
  * Core client-server contract tests.
- * Every client-server transport implementation must pass these tests.
+ *
+ * This is the primary export for testing bidirectional communication between client and server
+ * transport instances. These tests verify the interaction patterns, connection management,
+ * and message flow between paired transport endpoints.
+ *
+ * ## What This Tests
+ *
+ * - **Connection Management**: Establishing client-server connections, handling multiple clients
+ *   connecting to the same server, and proper connection lifecycle management
+ * - **Message Communication**: Client-to-server message publishing, server-to-client broadcasting,
+ *   bidirectional request-response patterns, and message filtering on the client side
+ * - **Connection Lifecycle**: Graceful client disconnection, server shutdown handling,
+ *   resource cleanup when scopes close, and connection state synchronization
+ * - **Error Handling**: Managing malformed messages, connection errors, and ensuring
+ *   graceful degradation during communication failures
+ *
+ * ## Real Usage Examples
+ *
+ * **WebSocket Integration:**
+ * See `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 38-95)
+ * - Shows `TransportPair` implementation with random port allocation
+ * - Demonstrates real WebSocket server/client coordination
+ * - Includes proper error mapping and connection state management
+ * - Line 116: `runClientServerContractTests('WebSocket', createWebSocketTestContext)`
+ *
+ * **InMemory Integration:**
+ * See `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 37-104)
+ * - Shows shared server instance pattern for synchronized testing
+ * - Demonstrates direct connection without network protocols
+ * - Line 126: `runClientServerContractTests('InMemory', createInMemoryTestContext)`
+ *
+ * Both implementations include transport-specific tests alongside the standard contracts.
+ *
+ * ## Required Interface
+ *
+ * Your setup function must return a `ClientServerTestContext` that provides:
+ * - `makeTransportPair`: Factory that creates paired client/server transports that can communicate
+ * - `waitForConnectionState`: Utility to wait for specific connection states
+ * - `collectMessages`: Utility to collect messages from streams with timeout
+ * - `makeTestMessage`: Factory for creating standardized test messages
+ *
+ * ## Test Categories
+ *
+ * 1. **Connection Management**: Tests client-server connection establishment and multi-client scenarios
+ * 2. **Message Communication**: Tests all forms of client-server communication patterns
+ * 3. **Connection Lifecycle**: Tests graceful shutdown and cleanup scenarios
+ * 4. **Error Handling**: Tests resilience to malformed messages and connection errors
+ *
+ * ## Transport Pair Requirements
+ *
+ * Your `makeTransportPair` function must return an object with:
+ * - `makeServer`: Creates a server transport within a scope
+ * - `makeClient`: Creates a client transport that connects to the server within a scope
+ *
+ * Both server and client must be automatically cleaned up when their respective scopes close.
+ *
+ * ## Server Interface Requirements
+ *
+ * Your server implementation must provide:
+ * - `connections`: Stream that emits server-side connection objects when clients connect
+ * - `broadcast`: Function to send messages to all connected clients
+ *
+ * ## Client Interface Requirements
+ *
+ * Your client implementation must provide:
+ * - `connectionState`: Stream that emits connection state changes
+ * - `publish`: Function to send messages to the server
+ * - `subscribe`: Function to subscribe to messages from the server (with optional filtering)
+ *
+ * ## Connection Object Requirements
+ *
+ * Server connection objects must provide:
+ * - `id`: Unique identifier for the connection
+ * - `transport`: Client transport interface for server-side communication
+ *
+ * @param name - Descriptive name for your transport integration (e.g., "WebSocket Integration")
+ * @param setup - Function that returns Effect yielding ClientServerTestContext for your paired transports
+ *
+ * @example
+ * For complete working examples, see:
+ * - WebSocket: `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts`
+ * - InMemory: `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts`
+ * Both demonstrate real client-server transport implementations passing all contract tests.
  */
 export const runClientServerContractTests: ClientServerTestRunner = (
   name: string,

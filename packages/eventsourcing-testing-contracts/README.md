@@ -48,56 +48,83 @@ runDomainContractTests('My Implementation', () => {
 
 ### 2. Transport Contract Tests
 
-Test low-level message transport behaviors without event sourcing concepts:
+Test low-level message transport behaviors using comprehensive contract tests. The transport testing system includes separate contracts for client-side, server-side, and integrated client-server scenarios.
 
-```typescript
-import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
+#### Client Transport Contracts
 
-runTransportContractTests(
-  'WebSocket',
-  () => {
-    const transport = new MyTransport();
-    return Effect.succeed({
-      connect: () => transport.connect(),
-      disconnect: () => transport.disconnect(),
-      isConnected: () => transport.isConnected(),
-      subscribe: (filter) => transport.subscribe(filter),
-      publish: (msg) => transport.publish(msg),
-      request: (req, timeout) => transport.request(req, timeout),
-      getConnectionState: () => transport.getConnectionState(),
-      getBufferedMessageCount: () => transport.getBufferedMessageCount(),
-      // Optional features
-      simulateDisconnect: () => transport.simulateDisconnect(),
-      simulateReconnect: () => transport.simulateReconnect(),
-    });
-  },
-  {
-    // Declare which optional features your transport supports
-    supportsReconnection: true,
-    supportsOfflineBuffering: false,
-    supportsBackpressure: true,
-    guaranteesOrdering: true,
-    supportsMultiplexing: true,
-  }
-);
-```
+Test client-side transport implementations. For complete working examples, see:
 
-**Required Behaviors:**
+**WebSocket Implementation:**
 
-- Connection establishment and teardown
-- Message delivery to correct subscribers
-- Multiple subscribers per message type
-- Request/response with timeout
-- Resource cleanup on disconnect
-- Error handling for malformed messages
+- `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 36-116)
+- Shows how to create test context with `WebSocketConnector.connect()`
+- Demonstrates proper scope-based resource management
+- Includes real error handling and random port allocation
 
-**Optional Behaviors (declare via feature flags):**
+**InMemory Implementation:**
 
-- Reconnection after network failure
-- Offline message buffering
-- Backpressure handling
-- Message ordering guarantees
-- Multiplexing support
+- `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 35-126)
+- Shows how to handle server instance sharing for in-memory transports
+- Demonstrates direct connection patterns without network protocols
+
+#### Server Transport Contracts
+
+Test server-side transport implementations that handle multiple clients. See the server transport implementations in:
+
+**WebSocket Server Implementation:**
+
+- `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 45-74)
+- Uses `WebSocketAcceptor.make({ port, host })` with random port allocation
+- Shows proper server startup with scope-based cleanup
+- Demonstrates connection stream mapping to client transport interface
+
+**InMemory Server Implementation:**
+
+- `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 44-78)
+- Uses `InMemoryAcceptor.make()` for direct in-memory connections
+- Shows shared server instance pattern for coordinated client-server testing
+- Demonstrates server lifecycle management without network concerns
+
+Note: These examples focus on client-server integration tests. Dedicated server-only contract tests would require separate server test implementations.
+
+#### Client-Server Integration Contracts
+
+Test bidirectional communication between paired client and server transports. For complete integration examples, see:
+
+**WebSocket Integration:**
+
+- `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 38-95)
+- Shows `TransportPair` implementation with random port allocation
+- Demonstrates real WebSocket server/client coordination
+- Includes proper error mapping and connection state management
+- Line 116: `runClientServerContractTests('WebSocket', createWebSocketTestContext)`
+
+**InMemory Integration:**
+
+- `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 37-104)
+- Shows shared server instance pattern for synchronized testing
+- Demonstrates direct connection without network protocols
+- Line 126: `runClientServerContractTests('InMemory', createInMemoryTestContext)`
+
+Both implementations also include transport-specific tests (lines 122+ in WebSocket, lines 132+ in InMemory) that test implementation details beyond the standard contracts.
+
+**Required Client Behaviors:**
+
+- Scope-based connection lifecycle management
+- Message publishing with various payload types
+- Message subscription with optional filtering
+- Connection state monitoring via streams
+- Automatic resource cleanup when scopes close
+
+**Required Server Behaviors:**
+
+- Multiple client connection tracking
+- Message broadcasting to all connected clients
+- Individual client communication
+- Connection counting and lifecycle management
+- Resource cleanup during server shutdown
+
+**For detailed documentation on transport contracts, see:** [`packages/eventsourcing-testing-contracts/src/lib/transport/README.md`](./src/lib/transport/README.md)
 
 ### 3. Event Sourcing Transport Tests
 
@@ -134,10 +161,6 @@ runIntegrationTestSuite(
   () => EventTransportLive('ws://localhost:8080'),
   setupMockServer, // Optional mock server for testing
   {
-    supportsReconnection: true,
-    supportsOfflineBuffering: false,
-    supportsBackpressure: false,
-    maintainsOrderingDuringReconnect: false,
     supportsStreamFiltering: true,
     supportsCommandPipelining: true,
   }
@@ -268,10 +291,7 @@ describe('My WebSocket Transport', () => {
   runDomainContractTests('WebSocket', () => createMockDomainContext());
 
   // Test transport contracts
-  runTransportContractTests('WebSocket', () => createMockTransport(), {
-    supportsReconnection: true,
-    guaranteesOrdering: true,
-  });
+  runTransportContractTests('WebSocket', () => createMockTransport());
 
   // Test event sourcing specific transport features
   runEventSourcingTransportTests('WebSocket', () => setupEventSourcingContext(), {
@@ -281,7 +301,6 @@ describe('My WebSocket Transport', () => {
 
   // Test integration
   runIntegrationTestSuite('WebSocket', () => makeTransportLayer(), setupMockServer, {
-    supportsReconnection: true,
     supportsStreamFiltering: true,
   });
 
@@ -349,13 +368,8 @@ expect(duration).toBeLessThan(1000); // Should process 100 commands in <1s
 | Connection Management | ✅       | ✅        | ✅   | ✅  |
 | Event Subscription    | ✅       | ✅        | ❌   | ✅  |
 | Command Processing    | ✅       | ✅        | ✅   | ❌  |
-| Reconnection          | ⚪       | ✅        | ❌   | ✅  |
-| Offline Buffering     | ⚪       | ✅        | ❌   | ❌  |
-| Message Ordering      | ⚪       | ✅        | ❌   | ✅  |
-| Backpressure          | ⚪       | ✅        | ✅   | ❌  |
-| Multiplexing          | ⚪       | ✅        | ✅   | ✅  |
 
-Legend: ✅ Supported | ❌ Not Supported | ⚪ Optional
+Legend: ✅ Supported | ❌ Not Supported
 
 ## License
 

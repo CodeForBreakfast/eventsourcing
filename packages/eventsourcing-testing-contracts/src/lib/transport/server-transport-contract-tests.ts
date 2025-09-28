@@ -94,7 +94,77 @@ export type ServerTestRunner = (
 
 /**
  * Core server transport contract tests.
- * Every server transport implementation must pass these tests.
+ *
+ * This is the primary export for testing server-side transport implementations that support
+ * multiple client connections, broadcasting, and server-side resource management.
+ * Every server transport must pass these tests to ensure proper multi-client behavior.
+ *
+ * ## What This Tests
+ *
+ * - **Connection Management**: Tracking multiple client connections, unique connection IDs,
+ *   connection counting, and automatic cleanup when clients disconnect
+ * - **Message Broadcasting**: Sending messages to all connected clients simultaneously,
+ *   ensuring disconnected clients don't receive messages, and handling broadcast errors gracefully
+ * - **Individual Connection Communication**: Direct communication with specific client connections,
+ *   receiving messages from individual clients, and per-connection message filtering
+ * - **Resource Management**: Proper cleanup when server shuts down, handling concurrent
+ *   operations during shutdown, and connection lifecycle tracking
+ *
+ * ## Real Usage Examples
+ *
+ * **WebSocket Server Implementation:**
+ * See `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 45-74)
+ * - Uses `WebSocketAcceptor.make({ port, host })` with random port allocation
+ * - Shows proper server startup with scope-based cleanup
+ * - Demonstrates connection stream mapping to client transport interface
+ *
+ * **InMemory Server Implementation:**
+ * See `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 44-78)
+ * - Uses `InMemoryAcceptor.make()` for direct in-memory connections
+ * - Shows shared server instance pattern for coordinated client-server testing
+ * - Demonstrates server lifecycle management without network concerns
+ *
+ * Note: These implementations focus on client-server integration tests.
+ * Server-only contract tests would need dedicated server test implementations.
+ *
+ * ## Required Interface
+ *
+ * Your server setup function must return a `ServerTestContext` that provides:
+ * - `makeServerFactory`: Factory that creates server and mock client instances
+ * - `waitForConnectionCount`: Utility to wait for expected number of connections
+ * - `collectConnections`: Utility to collect connections from the server's connection stream
+ * - `makeTestMessage`: Factory for creating test messages
+ *
+ * ## Test Categories
+ *
+ * 1. **Connection Management**: Tests tracking multiple clients, connection counting, and cleanup
+ * 2. **Message Broadcasting**: Tests server-to-all-clients communication and error handling
+ * 3. **Individual Connection Communication**: Tests per-client communication and message filtering
+ * 4. **Resource Management**: Tests proper cleanup during server shutdown and client disconnection
+ *
+ * ## Server Interface Requirements
+ *
+ * Your server implementation must provide:
+ * - `connections`: Stream of connected clients (emits when clients connect)
+ * - `broadcast`: Function to send messages to all connected clients
+ * - `connectionCount`: Function to get current number of connected clients
+ *
+ * ## Mock Client Requirements
+ *
+ * Your mock client factory must create clients that:
+ * - Connect to the server automatically when created within a scope
+ * - Expose connection state as a stream
+ * - Support publishing and subscribing to messages
+ * - Disconnect cleanly when their scope closes
+ *
+ * @param name - Descriptive name for your server transport implementation (e.g., "WebSocket Server")
+ * @param setup - Function that returns Effect yielding ServerTestContext for your server transport
+ *
+ * @example
+ * For complete working examples, see:
+ * - WebSocket: `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts`
+ * - InMemory: `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts`
+ * Both demonstrate real server implementations and client-server coordination.
  */
 export const runServerTransportContractTests: ServerTestRunner = (
   name: string,
