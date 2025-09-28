@@ -38,8 +38,8 @@
   "devDependencies": {
     "@changesets/changelog-github": "0.5.1",
     "@changesets/cli": "2.29.7",
-    "@commitlint/cli": "19.8.1",
-    "@commitlint/config-conventional": "19.8.1",
+    "@commitlint/cli": "20.0.0",
+    "@commitlint/config-conventional": "20.0.0",
     "@effect/language-service": "0.41.0",
     "@effect/platform": "0.91.1",
     "@types/bun": "latest",
