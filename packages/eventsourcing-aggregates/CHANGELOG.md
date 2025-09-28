@@ -1,5 +1,12 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.6.4
+
+### Patch Changes
+
+- Updated dependencies [[`f64ebb8`](https://github.com/CodeForBreakfast/eventsourcing/commit/f64ebb8a4e1f111e3e0f6bfed1be10c4e988436a)]:
+  - @codeforbreakfast/eventsourcing-commands@0.3.0
+
 ## 0.6.3
 
 ### Patch Changes
