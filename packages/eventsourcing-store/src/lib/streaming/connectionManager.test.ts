@@ -1,4 +1,4 @@
-import { Effect } from 'effect';
+import { Effect, pipe } from 'effect';
 import { describe, expect, it, silentLogger } from '@codeforbreakfast/buntest';
 // Mock implementation for testing
 const LoggerLive = silentLogger;
@@ -11,16 +11,21 @@ import {
 describe('ConnectionManager', () => {
   // Single minimal test to ensure the module loads
   it.effect('should create a connection manager', () =>
-    Effect.gen(function* () {
-      // Create manager directly for testing
-      const managerEffect = makeConnectionManager(DefaultConnectionConfig);
-      const manager: ConnectionManagerService = yield* Effect.provide(managerEffect, LoggerLive);
-      expect(manager).toBeDefined();
-
-      // Test the API port functionality
-      const apiPortEffect = manager.getApiPort();
-      const apiPort = yield* Effect.provide(apiPortEffect, LoggerLive);
-      expect(typeof apiPort).toBe('number');
-    })
+    pipe(
+      makeConnectionManager(DefaultConnectionConfig),
+      Effect.provide(LoggerLive),
+      Effect.flatMap((manager: ConnectionManagerService) =>
+        pipe(
+          Effect.sync(() => expect(manager).toBeDefined()),
+          Effect.flatMap(() =>
+            pipe(
+              manager.getApiPort(),
+              Effect.provide(LoggerLive),
+              Effect.tap((apiPort) => Effect.sync(() => expect(typeof apiPort).toBe('number')))
+            )
+          )
+        )
+      )
+    )
   );
 });
