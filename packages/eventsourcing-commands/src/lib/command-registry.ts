@@ -31,16 +31,15 @@ export const dispatchCommand = (
 // ============================================================================
 
 export interface CommandRegistration<TName extends string, TPayload> {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  readonly command: CommandDefinition<TName, TPayload, any>;
+  readonly command: CommandDefinition<TName, TPayload>;
   readonly handler: CommandHandler<DomainCommand<TPayload>>;
 }
 
 /**
  * Creates a command registration
  */
-export const createRegistration = <TName extends string, TPayload, TPayloadInput>(
-  command: CommandDefinition<TName, TPayload, TPayloadInput>,
+export const createRegistration = <TName extends string, TPayload>(
+  command: CommandDefinition<TName, TPayload>,
   handler: CommandHandler<DomainCommand<TPayload>>
 ): CommandRegistration<TName, TPayload> => ({
   command,
@@ -53,7 +52,7 @@ export const createRegistration = <TName extends string, TPayload, TPayloadInput
  */
 export const makeCommandRegistry = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends ReadonlyArray<CommandRegistration<any, any>>,
+  T extends readonly CommandRegistration<string, any>[],
 >(
   registrations: T
 ): CommandRegistry => {
@@ -137,7 +136,7 @@ export const makeCommandRegistry = <
  */
 export const makeCommandRegistryLayer = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends ReadonlyArray<CommandRegistration<any, any>>,
+  T extends readonly CommandRegistration<string, any>[],
 >(
   registrations: T
 ): Layer.Layer<CommandRegistryService, never, never> =>

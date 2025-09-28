@@ -134,9 +134,10 @@ export type CommandResult = typeof CommandResult.Type;
 /**
  * Command definition that pairs a name with its payload schema
  */
-export interface CommandDefinition<TName extends string, TPayload, TPayloadInput> {
+export interface CommandDefinition<TName extends string, TPayload> {
   readonly name: TName;
-  readonly payloadSchema: Schema.Schema<TPayload, TPayloadInput>;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly payloadSchema: Schema.Schema<TPayload, any>;
 }
 
 /**
@@ -145,7 +146,7 @@ export interface CommandDefinition<TName extends string, TPayload, TPayloadInput
 export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
   name: TName,
   payloadSchema: Schema.Schema<TPayload, TPayloadInput>
-): CommandDefinition<TName, TPayload, TPayloadInput> => ({
+): CommandDefinition<TName, TPayload> => ({
   name,
   payloadSchema,
 });
@@ -155,15 +156,9 @@ export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
  * This creates an exhaustive schema that can parse any registered command
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const buildCommandSchema = <T extends ReadonlyArray<CommandDefinition<any, any, any>>>(
+export const buildCommandSchema = <T extends readonly CommandDefinition<string, any>[]>(
   commands: T
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-): Schema.Schema<{
-  readonly id: string;
-  readonly target: string;
-  readonly name: any;
-  readonly payload: any;
-}> => {
+) => {
   if (commands.length === 0) {
     throw new Error('At least one command definition is required');
   }
