@@ -132,18 +132,74 @@ export type CommandResult = typeof CommandResult.Type;
 // ============================================================================
 
 /**
- * Creates a command schema with validation
+ * Command definition that pairs a name with its payload schema
  */
-export const createCommandSchema = <TName extends string, TPayload, TPayloadInput>(
+export interface CommandDefinition<TName extends string, TPayload> {
+  readonly name: TName;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly payloadSchema: Schema.Schema<TPayload, any>;
+}
+
+/**
+ * Creates a command definition
+ */
+export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
   name: TName,
   payloadSchema: Schema.Schema<TPayload, TPayloadInput>
-) =>
-  Schema.Struct({
-    id: Schema.String,
-    target: Schema.String,
-    name: Schema.Literal(name),
-    payload: payloadSchema,
-  });
+): CommandDefinition<TName, TPayload> => ({
+  name,
+  payloadSchema,
+});
+
+/**
+ * Helper type to extract command union from command definitions
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CommandFromDefinitions<T extends readonly CommandDefinition<string, any>[]> = {
+  [K in keyof T]: T[K] extends CommandDefinition<infer Name, infer Payload>
+    ? { id: string; target: string; name: Name; payload: Payload }
+    : never;
+}[number];
+
+/**
+ * Builds a discriminated union schema from command definitions
+ * This creates an exhaustive schema that can parse any registered command
+ */
+export const buildCommandSchema = <
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const T extends readonly CommandDefinition<string, any>[],
+>(
+  commands: T
+): Schema.Schema<
+  CommandFromDefinitions<T>,
+  { id: string; target: string; name: string; payload: unknown }
+> => {
+  if (commands.length === 0) {
+    throw new Error('At least one command definition is required');
+  }
+
+  const schemas = commands.map((cmd) =>
+    Schema.Struct({
+      id: Schema.String,
+      target: Schema.String,
+      name: Schema.Literal(cmd.name),
+      payload: cmd.payloadSchema,
+    })
+  );
+
+  if (schemas.length === 1) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return schemas[0]! as any;
+  }
+
+  // Need at least 2 schemas for Union
+  const [first, second, ...rest] = schemas;
+  if (!first || !second) {
+    throw new Error('Unexpected state: should have at least 2 schemas');
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Schema.Union(first, second, ...rest) as any;
+};
 
 /**
  * Validates and transforms a wire command into a domain command
@@ -172,16 +228,13 @@ export const validateCommand =
     );
 
 // ============================================================================
-// Command Handler Types
+// Command Matcher Types
 // ============================================================================
 
 /**
- * Command handler function type
+ * Command matcher function type
+ * Uses Effect's pattern matching for exhaustive command handling
  */
-export interface CommandHandler<
-  TCommand extends DomainCommand,
-  TError = never,
-  TResult = CommandResult,
-> {
-  readonly handle: (command: TCommand) => Effect.Effect<TResult, TError, never>;
-}
+export type CommandMatcher<TCommands extends DomainCommand> = (
+  command: TCommands
+) => Effect.Effect<CommandResult, never, never>;
