@@ -1,12 +1,12 @@
-import { Schema, Effect, pipe, Layer } from 'effect';
+import { Schema, Effect, pipe, Layer, Match } from 'effect';
 import {
   WireCommand,
   DomainCommand,
-  CommandHandler,
   CommandResult,
   CommandDefinition,
   buildCommandSchema,
   CommandFromDefinitions,
+  CommandMatcher,
 } from './commands';
 
 export interface CommandRegistry {
@@ -28,50 +28,31 @@ export const dispatchCommand = (
   );
 
 // ============================================================================
-// Typed Command Registry - New strongly typed approach
+// Command Registry with Effect Matchers
 // ============================================================================
 
-export interface CommandRegistration<TName extends string, TPayload> {
-  readonly command: CommandDefinition<TName, TPayload>;
-  readonly handler: CommandHandler<DomainCommand<TPayload>>;
-}
-
 /**
- * Creates a command registration
+ * Helper to create a command matcher using Effect's pattern matching
+ * Since our commands use 'name' instead of '_tag', this provides a convenient API
  */
-export const createRegistration = <TName extends string, TPayload>(
-  command: CommandDefinition<TName, TPayload>,
-  handler: CommandHandler<DomainCommand<TPayload>>
-): CommandRegistration<TName, TPayload> => ({
-  command,
-  handler,
-});
+export const createCommandMatcher = <TCommands extends DomainCommand>() => Match.type<TCommands>();
 
 /**
- * Builds a typed command registry from command registrations
- * This ensures each command name maps to exactly one payload schema
+ * Builds a command registry using Effect's pattern matching
+ * This ensures exhaustive command handling with compile-time safety
  */
 export const makeCommandRegistry = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const T extends readonly CommandRegistration<string, any>[],
+  const T extends readonly CommandDefinition<string, any>[],
 >(
-  registrations: T
+  commands: T,
+  matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): CommandRegistry => {
   // Build the exhaustive command schema
-  const commandDefinitions = registrations.map((r) => r.command);
-  const commandSchema = buildCommandSchema(commandDefinitions);
+  const commandSchema = buildCommandSchema(commands);
 
-  // Build handler map with exact types
-  type Commands = CommandFromDefinitions<{ [K in keyof T]: T[K]['command'] }>;
-  const handlers = new Map<string, CommandHandler<Commands>>();
-
-  for (const reg of registrations) {
-    if (handlers.has(reg.command.name)) {
-      throw new Error(`Duplicate command registration for: ${reg.command.name}`);
-    }
-    // Handler is compatible because registration pairs command with its handler
-    handlers.set(reg.command.name, reg.handler as CommandHandler<Commands>);
-  }
+  // Extract command names for the registry interface
+  const commandNames = commands.map((cmd) => cmd.name);
 
   const dispatch = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> =>
     pipe(
@@ -92,36 +73,21 @@ export const makeCommandRegistry = <
           });
         }
 
-        // Get the handler (should always exist since schema validated the name)
-        const handler = handlers.get(parseResult.right.name);
-        if (!handler) {
-          // This shouldn't happen if schema is built correctly
-          return Effect.succeed({
-            _tag: 'Failure' as const,
-            error: {
-              _tag: 'HandlerNotFound' as const,
-              commandId: wireCommand.id,
-              commandName: wireCommand.name,
-              availableHandlers: Array.from(handlers.keys()),
-            },
-          });
-        }
-
-        // Execute the handler with exact command type
+        // Execute the matcher with exact command type - it handles all the dispatch logic
         return pipe(
-          handler.handle(parseResult.right as Commands),
+          matcher(parseResult.right),
           Effect.exit,
-          Effect.map((handlerResult) =>
-            handlerResult._tag === 'Failure'
+          Effect.map((matcherResult) =>
+            matcherResult._tag === 'Failure'
               ? {
                   _tag: 'Failure' as const,
                   error: {
                     _tag: 'UnknownError' as const,
                     commandId: wireCommand.id,
-                    message: String(handlerResult.cause),
+                    message: String(matcherResult.cause),
                   },
                 }
-              : handlerResult.value
+              : matcherResult.value
           )
         );
       })
@@ -129,17 +95,18 @@ export const makeCommandRegistry = <
 
   return {
     dispatch,
-    listCommandNames: () => Array.from(handlers.keys()),
+    listCommandNames: () => commandNames,
   };
 };
 
 /**
- * Creates a Layer with the typed command registry
+ * Creates a Layer with the command registry
  */
 export const makeCommandRegistryLayer = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends readonly CommandRegistration<string, any>[],
+  const T extends readonly CommandDefinition<string, any>[],
 >(
-  registrations: T
+  commands: T,
+  matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): Layer.Layer<CommandRegistryService, never, never> =>
-  Layer.succeed(CommandRegistryService, makeCommandRegistry(registrations));
+  Layer.succeed(CommandRegistryService, makeCommandRegistry(commands, matcher));

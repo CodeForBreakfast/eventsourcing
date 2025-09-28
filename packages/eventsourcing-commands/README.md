@@ -6,7 +6,7 @@ CQRS command types and schemas for event sourcing. This package provides core co
 
 This package contains the fundamental CQRS (Command Query Responsibility Segregation) types that bridge the gap between user intentions and domain events. Commands represent requests to change system state, while command results indicate the outcome of processing those commands.
 
-The package features a **typed command registry** that ensures each command name is tied to exactly one payload schema, providing compile-time safety and exhaustive validation.
+The package features a **typed command registry** that ensures each command name is tied to exactly one payload schema, providing compile-time safety and exhaustive validation using Effect's pattern matching for comprehensive command handling.
 
 ## Installation
 
@@ -19,6 +19,7 @@ npm install @codeforbreakfast/eventsourcing-commands
 - **Commands**: Represent user intent to change aggregate state
 - **Command Results**: Indicate success/failure of command processing
 - **Type Safety**: Full TypeScript support with Effect schemas
+- **Pattern Matching**: Effect's exhaustive pattern matching for command handling
 - **Typed Registry**: Compile-time validation and exhaustive command schemas
 - **Payload Validation**: Automatic schema-based validation for all commands
 
@@ -45,49 +46,53 @@ const createUserCommand = defineCommand('CreateUser', CreateUserPayload);
 const updateEmailCommand = defineCommand('UpdateEmail', UpdateEmailPayload);
 ```
 
-### 2. Create Command Handlers
+### 2. Create Command Matcher
 
 ```typescript
-import { Effect } from 'effect';
-import { CommandHandler, DomainCommand } from '@codeforbreakfast/eventsourcing-commands';
+import { Effect, Match } from 'effect';
+import {
+  CommandFromDefinitions,
+  makeCommandRegistry,
+} from '@codeforbreakfast/eventsourcing-commands';
 
-const createUserHandler: CommandHandler<DomainCommand<typeof CreateUserPayload.Type>> = {
-  handle: (command) =>
-    Effect.succeed({
-      _tag: 'Success' as const,
-      position: { streamId: command.target, eventNumber: 1 },
-    }),
-};
+// Define your command array
+const commands = [createUserCommand, updateEmailCommand] as const;
 
-const updateEmailHandler: CommandHandler<DomainCommand<typeof UpdateEmailPayload.Type>> = {
-  handle: (command) =>
-    Effect.succeed({
-      _tag: 'Success' as const,
-      position: { streamId: command.target, eventNumber: 2 },
-    }),
-};
+// Extract the command union type
+type Commands = CommandFromDefinitions<typeof commands>;
+
+// Create a matcher using Effect's pattern matching
+const commandMatcher = (command: Commands) =>
+  Match.value(command).pipe(
+    Match.when({ name: 'CreateUser' }, (cmd) =>
+      Effect.succeed({
+        _tag: 'Success' as const,
+        position: { streamId: cmd.target, eventNumber: 1 },
+      })
+    ),
+    Match.when({ name: 'UpdateEmail' }, (cmd) =>
+      Effect.succeed({
+        _tag: 'Success' as const,
+        position: { streamId: cmd.target, eventNumber: 2 },
+      })
+    ),
+    Match.exhaustive // TypeScript ensures all commands are handled!
+  );
 ```
 
 ### 3. Build the Typed Registry
 
 ```typescript
 import {
-  createRegistration,
   makeCommandRegistry,
   makeCommandRegistryLayer,
 } from '@codeforbreakfast/eventsourcing-commands';
 
-// Create registrations
-const registrations = [
-  createRegistration(createUserCommand, createUserHandler),
-  createRegistration(updateEmailCommand, updateEmailHandler),
-];
-
-// Create the registry
-const registry = makeCommandRegistry(registrations);
+// Create the registry with commands and matcher
+const registry = makeCommandRegistry(commands, commandMatcher);
 
 // Or create as an Effect Layer
-const registryLayer = makeCommandRegistryLayer(registrations);
+const registryLayer = makeCommandRegistryLayer(commands, commandMatcher);
 ```
 
 ### 4. Dispatch Commands
@@ -187,34 +192,33 @@ const exhaustiveSchema = buildCommandSchema(commands);
 
 ### Registry API
 
-#### `createRegistration(command, handler)`
+#### `makeCommandRegistry(commands, matcher)`
 
-Creates a registration that pairs a command definition with its handler:
+Creates a command registry using Effect's pattern matching. Features:
 
-```typescript
-import { createRegistration } from '@codeforbreakfast/eventsourcing-commands';
-
-const registration = createRegistration(createUserCommand, createUserHandler);
-```
-
-#### `makeCommandRegistry(registrations)`
-
-Creates a command registry that validates and dispatches commands. Features:
-
-- **Exhaustive validation**: All registered commands are validated upfront
-- **Duplicate detection**: Compile-time detection of duplicate command names
-- **Type safety**: Full TypeScript inference throughout the dispatch pipeline
+- **Exhaustive validation**: All commands are validated against discriminated union schema
+- **Compile-time safety**: TypeScript ensures all command types are handled in matcher
+- **Pattern matching**: Uses Effect's `Match.exhaustive` for comprehensive command handling
+- **Type inference**: Full TypeScript support throughout the dispatch pipeline
 
 ```typescript
-import { makeCommandRegistry } from '@codeforbreakfast/eventsourcing-commands';
+import { Match } from 'effect';
+import { makeCommandRegistry, CommandFromDefinitions } from '@codeforbreakfast/eventsourcing-commands';
 
-const registry = makeCommandRegistry([
-  createRegistration(createUserCommand, createUserHandler),
-  createRegistration(updateEmailCommand, updateEmailHandler),
-]);
+const commands = [createUserCommand, updateEmailCommand] as const;
+type Commands = CommandFromDefinitions<typeof commands>;
+
+const commandMatcher = (command: Commands) =>
+  Match.value(command).pipe(
+    Match.when({ name: 'CreateUser' }, (cmd) => /* handle CreateUser */),
+    Match.when({ name: 'UpdateEmail' }, (cmd) => /* handle UpdateEmail */),
+    Match.exhaustive // Compile-time exhaustiveness checking
+  );
+
+const registry = makeCommandRegistry(commands, commandMatcher);
 ```
 
-#### `makeCommandRegistryLayer(registrations)`
+#### `makeCommandRegistryLayer(commands, matcher)`
 
 Creates an Effect Layer containing the command registry:
 
@@ -224,7 +228,7 @@ import {
   CommandRegistryService,
 } from '@codeforbreakfast/eventsourcing-commands';
 
-const layer = makeCommandRegistryLayer(registrations);
+const layer = makeCommandRegistryLayer(commands, commandMatcher);
 
 // Use in your Effect program
 const program = Effect.gen(function* () {
@@ -237,17 +241,19 @@ const program = Effect.gen(function* () {
 
 ### Compile-Time Safety
 
-The typed registry system provides several compile-time guarantees:
+The matcher-based registry system provides several compile-time guarantees:
 
-- **No duplicate commands**: Each command name can only be registered once
+- **Exhaustive command handling**: `Match.exhaustive` ensures all command types are handled
 - **Schema consistency**: Each command name maps to exactly one payload schema
-- **Type inference**: Full TypeScript support throughout the dispatch pipeline
+- **Type inference**: Full TypeScript support with exact command types in each match arm
+- **No runtime lookups**: Pattern matching eliminates the need for handler maps
 
 ### Runtime Validation
 
 - **Exhaustive validation**: Commands are validated against a discriminated union of all registered schemas
 - **Early failure**: Invalid commands fail fast with detailed error messages
-- **No runtime lookups**: All validation happens upfront
+- **Pattern matching**: Effect's matchers provide functional command dispatch
+- **Type-safe handling**: Each match arm receives the exact command type
 
 ### Example Error Handling
 

@@ -228,16 +228,13 @@ export const validateCommand =
     );
 
 // ============================================================================
-// Command Handler Types
+// Command Matcher Types
 // ============================================================================
 
 /**
- * Command handler function type
+ * Command matcher function type
+ * Uses Effect's pattern matching for exhaustive command handling
  */
-export interface CommandHandler<
-  TCommand extends DomainCommand,
-  TError = never,
-  TResult = CommandResult,
-> {
-  readonly handle: (command: TCommand) => Effect.Effect<TResult, TError, never>;
-}
+export type CommandMatcher<TCommands extends DomainCommand> = (
+  command: TCommands
+) => Effect.Effect<CommandResult, never, never>;
