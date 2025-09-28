@@ -55,8 +55,9 @@ jobs:
         with:
           path: |
             .turbo/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ github.sha }}
+          key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ hashFiles('**/package.json', 'bun.lockb', 'turbo.json') }}-${{ github.sha }}
           restore-keys: |
+            ${{ runner.os }}-${{ runner.arch }}-turbo-${{ hashFiles('**/package.json', 'bun.lockb', 'turbo.json') }}-
             ${{ runner.os }}-${{ runner.arch }}-turbo-
 
       - name: Validate release readiness

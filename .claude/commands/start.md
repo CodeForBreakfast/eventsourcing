@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(cd:*), Bash(bun install:*), Bash(pwd:*), Bash(mise trust), Bash(mise install)
+allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(cd:*), Bash(bun install:*), Bash(pwd:*), Bash(mise trust), Bash(mise install), Bash(git pull:*), Bash(git checkout:*), Bash(git worktree add:*)
 description: Start a new piece of work using git worktree
 ---
 
