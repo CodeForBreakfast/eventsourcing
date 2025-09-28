@@ -92,11 +92,14 @@ function getChangesets(): ChangesetInfo[] {
     let match;
 
     while ((match = packageRegex.exec(frontmatterContent)) !== null) {
-      packages.push(match[1]);
-      // Use the highest change type found
-      const type = match[2] as 'major' | 'minor' | 'patch';
-      if (type === 'major') changeType = 'major';
-      else if (type === 'minor' && changeType !== 'major') changeType = 'minor';
+      const packageName = match[1];
+      if (packageName) {
+        packages.push(packageName);
+        // Use the highest change type found
+        const type = match[2] as 'major' | 'minor' | 'patch';
+        if (type === 'major') changeType = 'major';
+        else if (type === 'minor' && changeType !== 'major') changeType = 'minor';
+      }
     }
 
     if (packages.length > 0) {
@@ -158,14 +161,6 @@ function hasCodeChanges(changedFiles: string[]): boolean {
     /^\.github\/workflows/, // Workflow changes (except this validation)
   ];
 
-  const docsOnlyPatterns = [
-    /^README\.md$/,
-    /^USAGE\.md$/,
-    /^CLAUDE\.md$/,
-    /^docs\//,
-    /^\.changeset\/README\.md$/,
-  ];
-
   for (const file of changedFiles) {
     // Check if it's a code change
     if (codePatterns.some((pattern) => pattern.test(file))) {
@@ -217,6 +212,39 @@ function validateChangesets(): void {
   const packages = getAllPackages();
   const changesets = getChangesets();
   const changedFiles = getChangedFiles();
+
+  // Check for changesets referencing non-existent or private packages
+  const validPackageNames = new Set(packages.map((p) => p.name));
+  const rootPackageJson = JSON.parse(readFileSync(join(rootDir, 'package.json'), 'utf-8'));
+  const errors: string[] = [];
+
+  for (const changeset of changesets) {
+    for (const pkgName of changeset.packages) {
+      if (!validPackageNames.has(pkgName)) {
+        if (pkgName === rootPackageJson.name) {
+          errors.push(`❌ Changeset references the private monorepo root package: ${pkgName}`);
+          errors.push('   The monorepo root is private and cannot be published to npm.');
+        } else {
+          errors.push(`❌ Changeset references non-existent package: ${pkgName}`);
+          errors.push('   This package does not exist in the workspace.');
+        }
+      }
+    }
+  }
+
+  if (errors.length > 0) {
+    console.log('❌ Invalid changesets detected!\n');
+    errors.forEach((err) => console.log(err));
+    console.log('\nThis would cause the release workflow to fail with:');
+    console.log('"Found changeset for package which is not in the workspace"\n');
+    console.log('To fix this issue:');
+    console.log('1. Remove or update the invalid changeset file(s)');
+    console.log('2. Only reference packages that exist in packages/ directory');
+    console.log('3. Never reference the monorepo root package');
+    console.log('\nValid packages are:');
+    packages.forEach((p) => console.log(`   - ${p.name}`));
+    process.exit(1);
+  }
 
   // First check: if there are code changes, we need changesets
   if (changedFiles.length > 0 && hasCodeChanges(changedFiles)) {
