@@ -22,32 +22,10 @@ jobs:
           # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
           fetch-depth: 0
 
-      - name: Setup Bun
-        uses: oven-sh/setup-bun@735343b667d3e6f658f44d0eca948eb6282f2b76 # v2
+      - name: Setup
+        uses: ./.github/actions/setup
         with:
-          bun-version: latest
-
-      - name: Cache node modules
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        id: node-cache
-        with:
-          path: |
-            node_modules
-            ~/.bun
-          key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lockb') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
-
-      - name: Install dependencies
-        run: bun install
-
-      - name: Cache turbo
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
-        with:
-          path: |
-            .turbo/cache
-          key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-${{ runner.arch }}-turbo-
+          turbo-cache-key: 'release'
 
       # Generate a GitHub App token for verified commits
       - name: Generate GitHub App Token

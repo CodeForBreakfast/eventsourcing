@@ -1,0 +1,48 @@
+name: Setup
+description: Set up the environment for the project
+
+inputs:
+  restore-turbo-cache-key:
+    description: 'Additional cache key part to find the turbo cache from an earlier job'
+    default: 'default'
+  turbo-cache-key:
+    description: 'Additional cache key part to use for sharing the updated turbo cache with subsequent jobs'
+    default: 'default'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Cache bun
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+      with:
+        path: |
+          ~/.bun
+        key: ${{ runner.os }}-${{ runner.arch }}-bun-${{ hashFiles('**/package.json') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-bun-
+
+    - name: Install tools
+      uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+
+    - name: Cache node modules
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+      id: node-cache
+      with:
+        path: |
+          node_modules
+        key: ${{ runner.os }}-${{ runner.arch }}-node-${{ hashFiles('**/package.json', 'bun.lock') }}
+        restore-keys: ${{ runner.os }}-${{ runner.arch }}-node-
+
+    - name: Cache turbo
+      uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
+      with:
+        path: |
+          .turbo/cache
+        key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.turbo-cache-key }}-${{ github.sha }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.restore-turbo-cache-key }}-${{ github.sha }}
+          ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.turbo-cache-key }}-
+          ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.restore-turbo-cache-key }}-
+          ${{ runner.os }}-${{ runner.arch }}-turbo-
+
+    - run: bun install
+      shell: bash
