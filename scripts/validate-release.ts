@@ -1,130 +1,51 @@
 #!/usr/bin/env bun
 
 /**
- * Validates that the release process will succeed using changesets' built-in tools.
+ * Orchestrates release validation using changeset-driven package discovery and Turbo filtering.
  * This ensures:
- * 1. Changesets exist when needed (via changeset status)
- * 2. Packages can be built successfully
- * 3. Publishing will work (via changeset publish --dry-run)
+ * 1. Changesets exist when needed (delegated to validate-changesets.ts)
+ * 2. Only packages that will be released are validated (changeset-driven)
+ * 3. Package validation is done via Turbo tasks (cacheable, parallel)
  */
 
 import { execSync } from 'child_process';
-import { resolve, dirname, join } from 'path';
+import { resolve, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
 
-interface ValidationResult {
-  success: boolean;
-  errors: string[];
+interface ChangesetStatus {
+  releases: Array<{ name: string; type: string }>;
+  changesets: Array<unknown>;
 }
 
-async function validateRelease(): Promise<ValidationResult> {
-  console.log('🔍 Validating release readiness...\n');
-  const errors: string[] = [];
+function getPackagesToValidate(): string[] {
+  console.log('🔍 Discovering packages that need validation...\n');
 
-  // Check if this is a changeset release branch - skip changeset validation
+  // Check if this is a changeset release branch - skip validation
   const isChangesetBranch = process.env.GITHUB_HEAD_REF?.startsWith('changeset-release/') ?? false;
 
   if (isChangesetBranch) {
-    console.log('📦 Skipping changeset validation (version PR)');
-    console.log('');
-  } else {
-    // Step 1: Check changeset status
-    console.log('📦 Checking changesets status...');
-    try {
-      // In CI, we need to ensure the base branch exists for changesets to work
-      if (process.env.GITHUB_BASE_REF) {
-        try {
-          execSync(
-            `git fetch origin ${process.env.GITHUB_BASE_REF}:${process.env.GITHUB_BASE_REF}`,
-            {
-              cwd: rootDir,
-              stdio: 'pipe',
-            }
-          );
-        } catch {
-          // Branch might already exist, that's fine
-        }
-      }
+    console.log('📦 Skipping validation (version PR)');
+    return [];
+  }
 
-      const output = execSync('bunx changeset status --output=status.json', {
-        cwd: rootDir,
-        encoding: 'utf-8',
-        stdio: 'pipe',
-      });
-
-      // Read the status output
-      const statusJson = execSync('cat status.json', {
-        cwd: rootDir,
-        encoding: 'utf-8',
-        stdio: 'pipe',
-      });
-
-      // Clean up the status file
-      execSync('rm -f status.json', { cwd: rootDir });
-
-      const status = JSON.parse(statusJson);
-
-      if (status.changesets.length === 0 && status.releases.length > 0) {
-        // There are package changes but no changesets
-        errors.push(
-          `Package changes detected but no changesets found.\n` +
-            `Packages that would be released:\n` +
-            status.releases.map((r: any) => `  - ${r.name}: ${r.type}`).join('\n') +
-            `\n\nRun 'bun changeset' to create a changeset.`
-        );
-        console.log('❌ Missing changesets for package changes\n');
-      } else if (status.changesets.length > 0) {
-        console.log(`✅ Found ${status.changesets.length} changeset(s)\n`);
-      } else {
-        console.log('✅ No changes requiring changesets\n');
-      }
-    } catch (error: any) {
-      // changeset status exits with code 1 if there are problems
-      const message = error.stdout || error.stderr || error.message;
-      if (message.includes('No changesets present')) {
-        console.log('✅ No changesets needed (no changes)\n');
-      } else if (message.includes('There are changed packages with no changesets')) {
-        errors.push(
-          `Changed packages found without changesets.\n` +
-            `Run 'bun changeset' to create a changeset for your changes.`
-        );
-        console.log('❌ Changed packages without changesets\n');
-      } else {
-        errors.push(`Changeset status check failed: ${message}`);
-        console.log('❌ Changeset status check failed\n');
+  try {
+    // In CI, ensure the base branch exists for changesets to work
+    if (process.env.GITHUB_BASE_REF) {
+      try {
+        execSync(`git fetch origin ${process.env.GITHUB_BASE_REF}:${process.env.GITHUB_BASE_REF}`, {
+          cwd: rootDir,
+          stdio: 'pipe',
+        });
+      } catch {
+        // Branch might already exist, that's fine
       }
     }
-  }
 
-  // Step 2: Build all packages
-  console.log('🏗️  Building packages...');
-  try {
-    execSync('bun run build', {
-      cwd: rootDir,
-      stdio: 'pipe',
-      encoding: 'utf-8',
-    });
-    console.log('✅ All packages built successfully\n');
-  } catch (error: any) {
-    const output = error.stdout || error.stderr || error.message;
-    errors.push(`Build failed:\n${output.substring(0, 500)}`);
-    console.log('❌ Build failed\n');
-    // If build fails, we can't continue
-    return { success: false, errors };
-  }
-
-  // Step 3: Validate package configurations
-  console.log('📦 Validating package configurations...');
-
-  try {
-    // Validate that packages can be packed correctly using bun pm pack --dry-run
-    console.log('   Checking package configurations...');
-
-    // Get list of packages that would be published
-    const statusOutput = execSync('bunx changeset status --output=status.json', {
+    // Get changeset status to find packages that will be released
+    execSync('bunx changeset status --output=status.json', {
       cwd: rootDir,
       encoding: 'utf-8',
       stdio: 'pipe',
@@ -136,61 +57,68 @@ async function validateRelease(): Promise<ValidationResult> {
       stdio: 'pipe',
     });
 
-    // Clean up
+    // Clean up the status file
     execSync('rm -f status.json', { cwd: rootDir });
 
-    const status = JSON.parse(statusJson);
+    const status: ChangesetStatus = JSON.parse(statusJson);
 
     if (status.releases && status.releases.length > 0) {
-      console.log(`   ℹ️  Found ${status.releases.length} package(s) to be released`);
+      const packageNames = status.releases.map((release) => release.name);
 
-      // Validate each package can be packed
-      for (const release of status.releases) {
-        try {
-          const packageDir = release.name.replace('@codeforbreakfast/', '');
-          execSync(`bun pm pack --dry-run`, {
-            cwd: join(rootDir, 'packages', packageDir),
-            stdio: 'pipe',
-          });
-        } catch (packError: any) {
-          errors.push(`Package ${release.name} failed pack validation: ${packError.message}`);
-        }
-      }
+      console.log(`📦 Found ${packageNames.length} package(s) to validate:`);
+      packageNames.forEach((pkg) => console.log(`   - ${pkg}`));
+      console.log('');
 
-      if (errors.length === 0) {
-        console.log('   ✅ All packages validate successfully');
-      }
+      return packageNames;
     } else {
-      console.log('   ℹ️  No packages to release');
+      console.log('✅ No packages to release, no validation needed\n');
+      return [];
     }
-    console.log('');
-  } catch (error: any) {
-    // If we can't get changeset status, that's already handled in step 1
-    console.log('   ℹ️  Package validation skipped (no releases planned)\n');
+  } catch {
+    console.log('⚠️  Could not determine packages to validate, skipping pack validation\n');
+    return [];
   }
-
-  return {
-    success: errors.length === 0,
-    errors,
-  };
 }
 
-// Main execution
 async function main() {
-  const result = await validateRelease();
+  console.log('🔍 Starting release validation...\n');
 
-  if (result.errors.length > 0) {
-    console.log('❌ Release validation failed!\n');
-    console.log('The following issues must be fixed before merging:\n');
-    result.errors.forEach((error, index) => {
-      console.log(`${index + 1}. ${error}\n`);
+  // Step 1: Validate changesets (delegated to separate script)
+  console.log('📦 Validating changesets...');
+  try {
+    execSync('bun scripts/validate-changesets.ts', {
+      cwd: rootDir,
+      stdio: 'inherit',
     });
-    console.log('Fix these issues to ensure the release pipeline will succeed.');
+  } catch {
+    console.log('❌ Changeset validation failed');
     process.exit(1);
   }
 
-  console.log('✅ Release validation passed!');
-  console.log('   This PR should successfully release when merged.');
+  // Step 2: Discover packages that need validation
+  const packagesToValidate = getPackagesToValidate();
+
+  if (packagesToValidate.length === 0) {
+    console.log('✅ Release validation complete - no packages to validate');
+    return;
+  }
+
+  // Step 3: Run targeted package validation using Turbo filtering
+  const filterArgs = packagesToValidate.map((pkg) => `--filter=${pkg}`).join(' ');
+  console.log(`🏗️  Running validation for ${packagesToValidate.length} packages using Turbo...`);
+
+  try {
+    execSync(`bunx turbo run validate:pack ${filterArgs}`, {
+      cwd: rootDir,
+      stdio: 'inherit',
+    });
+    console.log('\n✅ All package validations passed!');
+    console.log('   This PR should successfully release when merged.');
+  } catch {
+    console.log('\n❌ Package validation failed!');
+    console.log('   Fix the validation errors above before merging.');
+    process.exit(1);
+  }
 }
 
 main().catch((error) => {
