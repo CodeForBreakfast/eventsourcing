@@ -1,5 +1,5 @@
 ---
-'@codeforbreakfast/eventsourcing-websocket': major
+'@codeforbreakfast/eventsourcing-websocket': minor
 '@codeforbreakfast/eventsourcing-transport-websocket': patch
 ---
 
