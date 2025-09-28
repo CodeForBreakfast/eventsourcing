@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git status:*), Bash(git branch:*), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git pull:*) Bash(gh pr:*)
+allowed-tools: Bash(git status:*), Bash(git branch:*), Bash(git checkout:*), Bash(git add:*), Bash(git commit:*), Bash(git push:*), Bash(git pull:*), Bash(gh pr:*), Bash(git worktree:*), Bash(cd:*), Bash(pwd:*)
 description: Commit changes, create/update PR, enable automerge, and wait for merge
 ---
 
@@ -30,9 +30,10 @@ This command automates the entire process of getting changes merged into main:
    - Alert when merged successfully or if merge fails
 9. **Clean up** after successful merge:
 
-- Switch back to main branch
-- Pull latest changes
-- Delete the local feature branch
+- Navigate back to main worktree: `cd ../main` (or equivalent)
+- Pull latest changes to main: `git pull origin main`
+- Remove the feature worktree: `git worktree remove ../feat-{branch-name}`
+- Delete the local feature branch: `git branch -d feat/{branch-name}`
 
 ## Important notes
 
