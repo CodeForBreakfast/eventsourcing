@@ -1,5 +1,29 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
+## 0.4.0
+
+### Minor Changes
+
+- [#143](https://github.com/CodeForBreakfast/eventsourcing/pull/143) [`176f1c2`](https://github.com/CodeForBreakfast/eventsourcing/commit/176f1c2cfe2878585600a3ca80ae245be6faefd7) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactored WebSocket transport to use @effect/platform/Socket abstraction
+
+  **Breaking Changes:**
+  - The WebSocket transport now uses the @effect/platform/Socket module instead of raw WebSocket API
+  - Connection error handling has been improved with better Effect-based lifecycle management
+  - The transport now properly manages resources using Effect's Scope
+
+  **Benefits:**
+  - Better integration with Effect ecosystem
+  - Improved error handling and resource cleanup
+  - Proper structured concurrency for WebSocket connections
+  - More robust connection state management
+
+  **Migration:**
+  No changes required for consumers - the public API remains the same. The transport continues to implement the standard Client.Transport interface.
+
+### Patch Changes
+
+- [#143](https://github.com/CodeForBreakfast/eventsourcing/pull/143) [`176f1c2`](https://github.com/CodeForBreakfast/eventsourcing/commit/176f1c2cfe2878585600a3ca80ae245be6faefd7) Thanks [@GraemeF](https://github.com/GraemeF)! - Moved misplaced changeset from package directory to proper .changeset location and enhanced validation to catch invalid package references
+
 ## 0.3.3
 
 ### Patch Changes

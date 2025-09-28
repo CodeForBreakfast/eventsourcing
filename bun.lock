@@ -217,7 +217,7 @@
     },
     "packages/eventsourcing-transport-websocket": {
       "name": "@codeforbreakfast/eventsourcing-transport-websocket",
-      "version": "0.3.3",
+      "version": "0.4.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
         "@effect/platform": "0.91.1",
@@ -237,7 +237,7 @@
     },
     "packages/eventsourcing-websocket": {
       "name": "@codeforbreakfast/eventsourcing-websocket",
-      "version": "0.3.3",
+      "version": "0.3.4",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-protocol": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
