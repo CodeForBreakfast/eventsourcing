@@ -19,7 +19,10 @@
     "prepare": "husky",
     "arch:check": "dependency-cruiser packages --validate",
     "deps:check": "knip --include dependencies,unlisted,binaries,unresolved,duplicates",
-    "code:check": "knip"
+    "code:check": "knip",
+    "release:validate:changesets": "bun scripts/validate-changesets.ts",
+    "release:validate:publish": "bun scripts/validate-publish.ts",
+    "release:validate": "bun scripts/validate-release.ts"
   },
   "workspaces": [
     "packages/*"

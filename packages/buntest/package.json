@@ -11,7 +11,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "lint": "echo 'Using root lint config'",
-    "test": "bun test"
+    "test": "bun test",
+    "validate:pack": "bun pm pack --dry-run"
   },
   "dependencies": {
     "effect": "3.17.14"

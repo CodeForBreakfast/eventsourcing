@@ -26,7 +26,8 @@
     "typecheck": "tsc --noEmit",
     "typecheck:test": "tsc --noEmit --project tsconfig.test.json",
     "clean": "rm -rf dist",
-    "publish:package": "npm publish --access public"
+    "publish:package": "npm publish --access public",
+    "validate:pack": "bun pm pack --dry-run"
   },
   "keywords": [
     "websocket",

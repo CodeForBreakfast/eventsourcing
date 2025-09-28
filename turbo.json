@@ -101,8 +101,21 @@
       "dependsOn": ["build"],
       "cache": false
     },
+    "validate:pack": {
+      "dependsOn": ["build"],
+      "outputs": [],
+      "inputs": ["dist/**/*", "package.json"],
+      "cache": true
+    },
     "clean": {
       "cache": false
+    },
+    "//#release:validate": {
+      "dependsOn": [],
+      "outputs": [],
+      "inputs": [".changeset/**/*.md", ".changeset/config.json", "packages/**/package.json"],
+      "cache": true,
+      "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
     }
   }
 }

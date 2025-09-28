@@ -25,7 +25,8 @@
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
-    "publish:package": "npm publish --access public"
+    "publish:package": "npm publish --access public",
+    "validate:pack": "bun pm pack --dry-run"
   },
   "keywords": [
     "testing",
