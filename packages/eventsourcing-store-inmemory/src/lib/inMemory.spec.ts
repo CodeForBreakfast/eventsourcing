@@ -6,14 +6,14 @@ import {
   encodedEventStore,
 } from '@codeforbreakfast/eventsourcing-store';
 import { makeInMemoryEventStore } from './index';
-import * as InMemoryStore from './InMemoryStore';
+import { type InMemoryStore, make } from './InMemoryStore';
 
 const LoggerLive = silentLogger;
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
 
-export const FooEventStoreTest = (store: Readonly<InMemoryStore.InMemoryStore<FooEvent>>) =>
+export const FooEventStoreTest = (store: Readonly<InMemoryStore<FooEvent>>) =>
   Layer.effect(
     FooEventStore,
     pipe(store, makeInMemoryEventStore, Effect.map(encodedEventStore(FooEvent)))
@@ -25,7 +25,7 @@ runEventStoreTestSuite(
   'In-memory',
   () =>
     pipe(
-      pipe(InMemoryStore.make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync),
+      pipe(make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync),
       Layer.provide(LoggerLive)
     ),
   { supportsHorizontalScaling: false }
