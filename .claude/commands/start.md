@@ -1,21 +1,43 @@
 ---
-allowed-tools: Bash(git checkout *), Bash(git add:*), Bash(git status:*), Bash(git push:*), Bash(git fetch:*), Bash(git pull:*)
-description: Start a new piece of work on main
+allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(cd:*), Bash(bun install:*), Bash(pwd:*), Bash(mise trust), Bash(mise install)
+description: Start a new piece of work using git worktree
 ---
 
 ## Your task
 
 IMPORTANT: Do not discard any local changes. It is possible that the command is being run in order to prepare to commit them.
 
-1. Run `git fetch` to ensure you have the latest from origin
-2. Change to main branch if not already on it: `git checkout main`
-3. Pull latest changes: `git pull origin main`
-4. Run `git status` to confirm you are on main and up to date
-5. Run `bun install` to ensure dependencies are up to date
+IMPORTANT: Always use worktrees for feature development to maintain clean separation from main.
 
-You will then be ready to start a new piece of work. Once you are ready to commit changes:
+1. **Ensure we're in the main worktree and up to date:**
+   - Run `pwd` to confirm current location
+   - Run `git fetch origin main` to get latest from remote
+   - If not in main worktree, navigate back to it first
+   - Run `git pull origin main` to update main branch
 
-1. Create a new feature branch: `git checkout -b feat/your-feature-name`
-2. If the changes will affect the published packages, create a changeset file describing the changes from a consumer's point of view. What does someone using this package need to know about the changes?
-3. ONLY THEN commit changes with an appropriate message including prefix "type($1):", where "type" is one of feat, improve, perf, docs, test, refactor, ci, fix, chore, build, or maintain (as appropriate).
-4. Push the branch to origin
+2. **Create new worktree for feature branch:**
+   - Generate appropriate feature name based on the work described by user
+   - Use descriptive kebab-case naming: feat/add-user-auth, feat/fix-payment-bug, etc.
+   - Run `git worktree add ../feat-{feature-name} -b feat/{feature-name}`
+   - This creates both the branch and isolated working directory
+
+3. **Set up the new worktree:**
+   - Change to the new worktree: `cd ../feat-{feature-name}`
+   - Run `mise trust` to trust the .mise.toml configuration in the new worktree
+   - Run `bun install` to set up dependencies in the new worktree
+   - Run `git status` to confirm branch and clean state
+   - Run `pwd` to show current worktree location
+
+**Worktree Benefits:**
+
+- Complete isolation from main branch
+- Can work on multiple features simultaneously
+- No risk of contaminating main with uncommitted changes
+- Each worktree has its own node_modules and build artifacts
+
+**Next Steps After Setup:**
+
+1. Make your changes in the isolated worktree
+2. Create changeset if affecting published packages
+3. Commit with conventional format: "type(scope): description"
+4. Use `/automerge` command to handle PR creation and merging
