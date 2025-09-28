@@ -21,7 +21,7 @@ runs:
         restore-keys: ${{ runner.os }}-${{ runner.arch }}-bun-
 
     - name: Install tools
-      uses: jdx/mise-action@c37c93293d6b742fc901e1406b8f764f6fb19dac # v2
+      uses: jdx/mise-action@5ac50f778e26fac95da98d50503682459e86d566 # v3
 
     - name: Cache node modules
       uses: actions/cache@0400d5f644dc74513175e3cd8d07132dd4860809 # v4
