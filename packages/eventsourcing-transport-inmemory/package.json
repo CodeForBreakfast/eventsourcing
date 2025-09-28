@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-transport-inmemory",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "In-memory transport implementation for event sourcing - High-performance message transport using in-memory queues and channels",
   "type": "module",
   "main": "./dist/index.js",

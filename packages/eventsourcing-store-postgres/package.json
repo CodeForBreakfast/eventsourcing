@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store-postgres",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Production-ready PostgreSQL event store with Effect integration - Scalable, ACID-compliant event persistence with type-safe database operations and streaming",
   "type": "module",
   "main": "./dist/index.js",
