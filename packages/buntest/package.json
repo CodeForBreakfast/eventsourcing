@@ -12,7 +12,8 @@
     "typecheck": "tsc --noEmit",
     "lint": "echo 'Using root lint config'",
     "test": "bun test",
-    "validate:pack": "bun pm pack --dry-run"
+    "validate:pack": "bun pm pack --dry-run",
+    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
   },
   "dependencies": {
     "effect": "3.17.14"

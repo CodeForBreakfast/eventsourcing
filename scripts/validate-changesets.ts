@@ -19,7 +19,6 @@ interface Package {
   name: string;
   version: string;
   path: string;
-  dependencies: Record<string, string>;
 }
 
 interface ChangesetInfo {
@@ -41,11 +40,6 @@ function getAllPackages(): Package[] {
         name: pkg.name,
         version: pkg.version,
         path: packagePath,
-        dependencies: {
-          ...pkg.dependencies,
-          ...pkg.devDependencies,
-          ...pkg.peerDependencies,
-        },
       });
     }
   }
@@ -116,22 +110,18 @@ function getChangesets(): ChangesetInfo[] {
   return changesets;
 }
 
-function getDependentPackages(packageName: string, allPackages: Package[]): Package[] {
-  const dependents: Package[] = [];
-
-  for (const pkg of allPackages) {
-    for (const [depName, depVersion] of Object.entries(pkg.dependencies || {})) {
-      if (
-        depName === packageName &&
-        (depVersion === 'workspace:*' || depVersion.startsWith('workspace:'))
-      ) {
-        dependents.push(pkg);
-        break;
-      }
-    }
+function getPackageDependencyMap(): Record<string, string[]> {
+  try {
+    const output = execSync('bun scripts/check-package-dependencies.ts', {
+      cwd: rootDir,
+      encoding: 'utf-8',
+      stdio: 'pipe',
+    });
+    return JSON.parse(output);
+  } catch {
+    console.error('❌ Failed to get package dependency information');
+    process.exit(1);
   }
-
-  return dependents;
 }
 
 function getChangedFiles(): string[] {
@@ -190,24 +180,35 @@ function hasCodeChanges(changedFiles: string[]): boolean {
   return false;
 }
 
-function checkForUnpublishedPackages(packages: Package[]): string[] {
+function checkForUnpublishedPackages(): string[] {
   const unpublishable: string[] = [];
 
-  for (const pkg of packages) {
-    try {
-      // Check if the current version exists on npm
-      execSync(`npm view ${pkg.name}@${pkg.version} version`, {
-        encoding: 'utf-8',
-        stdio: 'pipe',
-      });
-      // If we get here, the version exists - this would fail on publish
-      unpublishable.push(`${pkg.name}@${pkg.version}`);
-    } catch {
-      // Version doesn't exist on npm, which is good - it can be published
-    }
-  }
+  try {
+    // Use Turbo to check all packages in parallel
+    execSync('bunx turbo run check:publishable', {
+      cwd: rootDir,
+      stdio: 'pipe',
+    });
+    // If all tasks pass, all packages are publishable
+    return [];
+  } catch (error: any) {
+    // Parse the error output to find which packages failed (are unpublishable)
+    const output = error.stdout || error.stderr || '';
 
-  return unpublishable;
+    // Look for package names in the error output
+    // Turbo will show which packages failed the check:publishable task
+    const lines = output.split('\n');
+    for (const line of lines) {
+      if (line.includes('check:publishable') && line.includes('FAILED')) {
+        const match = line.match(/@[\w-]+\/[\w-]+/);
+        if (match) {
+          unpublishable.push(match[0]);
+        }
+      }
+    }
+
+    return unpublishable;
+  }
 }
 
 function validateChangesets(): void {
@@ -248,8 +249,8 @@ function validateChangesets(): void {
       process.exit(1);
     }
 
-    // Check if any packages would fail to publish
-    const unpublishable = checkForUnpublishedPackages(packages);
+    // Check if any packages would fail to publish using Turbo tasks
+    const unpublishable = checkForUnpublishedPackages();
     if (unpublishable.length > 0 && changesets.length === 0) {
       console.log('❌ Validation Failed!\n');
       console.log('The following package versions already exist on npm:');
@@ -285,17 +286,18 @@ function validateChangesets(): void {
     changedPackages.forEach((pkg) => console.log(`   - ${pkg}`));
     console.log('');
 
-    // Check for missing dependent packages
+    // Check for missing dependent packages using discovery script
+    const packageDependencyMap = getPackageDependencyMap();
     const errors: Array<{ changed: string; missing: string[] }> = [];
 
     for (const changedPackage of changedPackages) {
-      const dependents = getDependentPackages(changedPackage, packages);
-      const missingDependents = dependents.filter((dep) => !changedPackages.has(dep.name));
+      const dependentNames = packageDependencyMap[changedPackage] || [];
+      const missingDependents = dependentNames.filter((dep) => !changedPackages.has(dep));
 
       if (missingDependents.length > 0) {
         errors.push({
           changed: changedPackage,
-          missing: missingDependents.map((dep) => dep.name),
+          missing: missingDependents,
         });
       }
     }

@@ -107,6 +107,12 @@
       "inputs": ["dist/**/*", "package.json"],
       "cache": true
     },
+    "check:publishable": {
+      "dependsOn": [],
+      "outputs": [],
+      "inputs": ["package.json"],
+      "cache": true
+    },
     "clean": {
       "cache": false
     },
