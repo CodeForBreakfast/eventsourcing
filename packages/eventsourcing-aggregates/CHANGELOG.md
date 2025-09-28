@@ -1,5 +1,174 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.6.0
+
+### Minor Changes
+
+- [#92](https://github.com/CodeForBreakfast/eventsourcing/pull/92) [`a4f4377`](https://github.com/CodeForBreakfast/eventsourcing/commit/a4f4377d6641723ee40a1ca2a62b828c094f753f) Thanks [@GraemeF](https://github.com/GraemeF)! - Add Command Processing Service to bridge ServerProtocol and EventStore operations
+
+  This release introduces the Command Processing Service, which provides the missing orchestration layer between server protocol commands and event store operations. This service enables automatic command handling, event storage, and proper error handling in event sourcing applications.
+
+  **New exports:**
+  - `CommandProcessingService` - Effect service tag for command processing
+  - `CommandProcessingServiceInterface` - Service interface for command processing operations
+  - `createCommandProcessingService` - Factory function to create service implementations
+  - `CommandHandler` - Interface for individual command handlers
+  - `CommandRouter` - Interface for routing commands to appropriate handlers
+  - `CommandProcessingError` - Error type for general processing failures
+  - `CommandRoutingError` - Error type for command routing failures
+
+  **Key features:**
+  - **Complete command flow**: Automatically processes commands from ServerProtocol through to EventStore storage
+  - **Type-safe error handling**: Proper tagged errors with Effect error handling patterns
+  - **Flexible routing**: Simple Map-based command routing to handlers
+  - **Effect integration**: Seamless integration with EventStore and Effect ecosystem
+  - **Testing support**: Comprehensive test coverage with real EventStore integration
+
+  **Usage:**
+
+  ```typescript
+  import {
+    CommandProcessingService,
+    createCommandProcessingService,
+    CommandRouter
+  } from '@codeforbreakfast/eventsourcing-aggregates';
+
+  // Create command router
+  const router: CommandRouter = {
+    route: (command) => // route to appropriate handler
+  };
+
+  // Create service layer
+  const CommandProcessingServiceLive = Layer.effect(
+    CommandProcessingService,
+    createCommandProcessingService(router)
+  );
+
+  // Use in application
+  const result = pipe(
+    CommandProcessingService,
+    Effect.flatMap(service => service.processCommand(command)),
+    Effect.provide(CommandProcessingServiceLive)
+  );
+  ```
+
+  This service completes the event sourcing architecture by connecting command handling to event storage with proper orchestration.
+
+- [#85](https://github.com/CodeForBreakfast/eventsourcing/pull/85) [`fe2cf43`](https://github.com/CodeForBreakfast/eventsourcing/commit/fe2cf43ea701843ef79df0f2de936fb0c2b3f91a) Thanks [@GraemeF](https://github.com/GraemeF)! - Standardize API naming to follow Effect conventions
+
+  Eliminate duplicate APIs and ensure consistent Effect terminology throughout the codebase. All factory functions now use the Effect `make*` convention, and redundant aliases have been removed for a cleaner API surface.
+  - Replace `create*` factory functions with `make*` (Effect convention)
+  - Update WebSocket layer terminology (`createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`)
+  - Remove backward compatibility aliases and redundant exports
+  - Standardize all test interface methods to use Effect naming patterns
+
+  This cleanup eliminates API confusion and ensures developers have single, canonical names for each piece of functionality following proper Effect patterns.
+
+### Patch Changes
+
+- [#112](https://github.com/CodeForBreakfast/eventsourcing/pull/112) [`e0c59ca`](https://github.com/CodeForBreakfast/eventsourcing/commit/e0c59ca1ac5e235502d4efce137fda05ffe7418d) Thanks [@GraemeF](https://github.com/GraemeF)! - Implement immutable command registry with compile-time exhaustive command name validation. The new system provides complete type safety for command dispatch while maintaining clean API design.
+
+  **Breaking Changes:**
+  - Command registry is now immutable - all commands must be registered at construction time
+  - Removed mutable `register()` methods in favor of declarative configuration
+  - Updated error handling to use structured error types instead of strings
+
+  **New Features:**
+  - Exhaustive command name matching prevents dispatching unknown commands at compile time
+  - Immutable command registry with zero runtime mutations
+  - Type-safe command validation with Effect Schema integration
+  - Comprehensive command result types with detailed error information
+
+  **Developer Experience:**
+  - Clean, minimal API focused on behavior over type demonstrations
+  - Compile-time guarantees for command name validity
+  - Automatic type inference for command payloads and handlers
+  - Simplified test suite focused on actual functionality
+
+- [#103](https://github.com/CodeForBreakfast/eventsourcing/pull/103) [`0c99b22`](https://github.com/CodeForBreakfast/eventsourcing/commit/0c99b22849ba2a0b9211790b0f3334c3a7a0471e) Thanks [@GraemeF](https://github.com/GraemeF)! - Separate CQRS command types into dedicated package for better architecture
+
+  **New Package: `@codeforbreakfast/eventsourcing-commands`**
+  - Introduces a dedicated package for CQRS command types and schemas
+  - Contains `Command` and `CommandResult` schemas that were previously in the store package
+  - Establishes proper separation between domain concepts (commands) and event storage
+  - Includes comprehensive test coverage and documentation
+
+  **Breaking changes for `@codeforbreakfast/eventsourcing-store`:**
+  - Removed `Command` and `CommandResult` types - these are now in the commands package
+  - Store package now focuses purely on event streaming and storage concepts
+  - Updated description to reflect pure event streaming focus
+
+  **Updated packages:**
+  - `@codeforbreakfast/eventsourcing-aggregates`: Updated to import command types from commands package
+  - `@codeforbreakfast/eventsourcing-protocol-default`: Updated to import command types from commands package
+
+  This change establishes cleaner architectural boundaries:
+  - **Store**: Pure event streaming and storage
+  - **Commands**: CQRS command types and schemas
+  - **Aggregates**: Domain modeling (uses both events and commands)
+  - **Protocol**: Transport implementation (uses both events and commands)
+
+- [#102](https://github.com/CodeForBreakfast/eventsourcing/pull/102) [`ebf5c45`](https://github.com/CodeForBreakfast/eventsourcing/commit/ebf5c45bb8037da2a43997ac749b9c60e4097e4b) Thanks [@GraemeF](https://github.com/GraemeF)! - Improve package architecture and domain type organization
+
+  **Breaking changes for `@codeforbreakfast/eventsourcing-store`:**
+  - Added new domain types `Command`, `Event`, and `CommandResult` schemas that were previously only available in the protocol package
+  - These core domain types are now available directly from the store package for better separation of concerns
+
+  **Improvements for `@codeforbreakfast/eventsourcing-aggregates`:**
+  - Fixed architectural violation by removing dependency on protocol implementation
+  - Aggregate roots now only depend on store abstractions, creating cleaner layer separation
+  - Import domain types directly from store package instead of protocol package
+
+  **Improvements for `@codeforbreakfast/eventsourcing-protocol`:**
+  - Domain types (`Command`, `Event`, `CommandResult`) are now imported from store package and re-exported for convenience
+  - Maintains backward compatibility while improving architectural boundaries
+
+  This change establishes cleaner separation between domain concepts (in store) and transport protocols, making the packages more modular and easier to understand.
+
+- [#101](https://github.com/CodeForBreakfast/eventsourcing/pull/101) [`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce consistent Effect syntax by forbidding Effect.gen usage
+
+  Adds ESLint rule to prevent use of Effect.gen in favor of pipe-based Effect composition. This ensures consistent code style and encourages the use of the more explicit pipe syntax throughout the codebase. All existing Effect.gen usage has been refactored to use Effect.pipe patterns.
+
+- [#120](https://github.com/CodeForBreakfast/eventsourcing/pull/120) [`1ab2f4e`](https://github.com/CodeForBreakfast/eventsourcing/commit/1ab2f4e3f6f3ff19eb6a52ed6a1095dd94209247) Thanks [@GraemeF](https://github.com/GraemeF)! - Export InMemoryStore as namespace following Effect patterns
+
+  **BREAKING CHANGE**: InMemoryStore is now exported as a namespace module instead of individual exports.
+
+  Before:
+
+  ```typescript
+  import { make } from '@codeforbreakfast/eventsourcing-store-inmemory';
+  const store = await make();
+  ```
+
+  After:
+
+  ```typescript
+  import { InMemoryStore } from '@codeforbreakfast/eventsourcing-store-inmemory';
+  const store = await InMemoryStore.make();
+  ```
+
+  This change aligns with Effect library conventions where modules like Queue, Ref, etc. are exported as namespaces containing their functions.
+
+- [#95](https://github.com/CodeForBreakfast/eventsourcing/pull/95) [`ac05ab4`](https://github.com/CodeForBreakfast/eventsourcing/commit/ac05ab403201412f768752a8a139dc152d0a9902) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactor existing tests to use @codeforbreakfast/buntest package
+
+  This change improves the testing experience by:
+  - Converting manual Effect.runPromise calls to Effect-aware test runners (it.effect, it.live, it.scoped)
+  - Adding proper scoped resource management for transport lifecycle tests
+  - Using Effect-specific assertions and custom equality matchers for Effect types
+  - Leveraging automatic TestServices provision (TestClock, etc.) in effect tests
+  - Implementing cleaner layer sharing patterns where appropriate
+  - Reducing test boilerplate and improving readability
+
+  All existing tests continue to pass while providing a better developer experience for Effect-based testing.
+
+- [#99](https://github.com/CodeForBreakfast/eventsourcing/pull/99) [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove all vitest dependencies and references in favor of bun:test
+
+  All packages now use bun:test instead of vitest for testing. This change removes vitest as a dependency across all packages while maintaining the same testing functionality. Test imports have been updated from 'vitest' to 'bun:test' and configuration files have been cleaned up to remove vitest references.
+
+- Updated dependencies [[`e0c59ca`](https://github.com/CodeForBreakfast/eventsourcing/commit/e0c59ca1ac5e235502d4efce137fda05ffe7418d), [`a7f5b72`](https://github.com/CodeForBreakfast/eventsourcing/commit/a7f5b72bc6379c7a864ba8b5d1fcc578970c3fd6), [`0c99b22`](https://github.com/CodeForBreakfast/eventsourcing/commit/0c99b22849ba2a0b9211790b0f3334c3a7a0471e), [`fe2cf43`](https://github.com/CodeForBreakfast/eventsourcing/commit/fe2cf43ea701843ef79df0f2de936fb0c2b3f91a), [`93158e5`](https://github.com/CodeForBreakfast/eventsourcing/commit/93158e5a220dd84f479f42b968a984d28a10fb7b), [`5a503fa`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a503fa89418682ae5bc1a4202918869743fdcc6), [`ebf5c45`](https://github.com/CodeForBreakfast/eventsourcing/commit/ebf5c45bb8037da2a43997ac749b9c60e4097e4b), [`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db), [`f5c1710`](https://github.com/CodeForBreakfast/eventsourcing/commit/f5c1710a3140cd380409e1e2c89919ce068826e1), [`ac05ab4`](https://github.com/CodeForBreakfast/eventsourcing/commit/ac05ab403201412f768752a8a139dc152d0a9902), [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc), [`136d160`](https://github.com/CodeForBreakfast/eventsourcing/commit/136d1609ddb84a2e5b67fd3d0ba918386ae183ce)]:
+  - @codeforbreakfast/eventsourcing-commands@0.2.0
+  - @codeforbreakfast/eventsourcing-store@0.7.0
+
 ## 0.5.7
 
 ### Patch Changes
