@@ -6,6 +6,7 @@ import {
   CommandResult,
   CommandDefinition,
   buildCommandSchema,
+  CommandFromDefinitions,
 } from './commands';
 
 export interface CommandRegistry {
@@ -52,7 +53,7 @@ export const createRegistration = <TName extends string, TPayload>(
  */
 export const makeCommandRegistry = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  T extends readonly CommandRegistration<string, any>[],
+  const T extends readonly CommandRegistration<string, any>[],
 >(
   registrations: T
 ): CommandRegistry => {
@@ -60,14 +61,16 @@ export const makeCommandRegistry = <
   const commandDefinitions = registrations.map((r) => r.command);
   const commandSchema = buildCommandSchema(commandDefinitions);
 
-  // Build handler map
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const handlers = new Map<string, CommandHandler<DomainCommand<any>>>();
+  // Build handler map with exact types
+  type Commands = CommandFromDefinitions<{ [K in keyof T]: T[K]['command'] }>;
+  const handlers = new Map<string, CommandHandler<Commands>>();
+
   for (const reg of registrations) {
     if (handlers.has(reg.command.name)) {
       throw new Error(`Duplicate command registration for: ${reg.command.name}`);
     }
-    handlers.set(reg.command.name, reg.handler);
+    // Handler is compatible because registration pairs command with its handler
+    handlers.set(reg.command.name, reg.handler as CommandHandler<Commands>);
   }
 
   const dispatch = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> =>
@@ -104,10 +107,9 @@ export const makeCommandRegistry = <
           });
         }
 
-        // Execute the handler
+        // Execute the handler with exact command type
         return pipe(
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          handler.handle(parseResult.right as DomainCommand<any>),
+          handler.handle(parseResult.right as Commands),
           Effect.exit,
           Effect.map((handlerResult) =>
             handlerResult._tag === 'Failure'

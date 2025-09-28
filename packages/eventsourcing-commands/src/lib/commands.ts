@@ -152,13 +152,28 @@ export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
 });
 
 /**
+ * Helper type to extract command union from command definitions
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CommandFromDefinitions<T extends readonly CommandDefinition<string, any>[]> = {
+  [K in keyof T]: T[K] extends CommandDefinition<infer Name, infer Payload>
+    ? { id: string; target: string; name: Name; payload: Payload }
+    : never;
+}[number];
+
+/**
  * Builds a discriminated union schema from command definitions
  * This creates an exhaustive schema that can parse any registered command
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export const buildCommandSchema = <T extends readonly CommandDefinition<string, any>[]>(
+export const buildCommandSchema = <
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const T extends readonly CommandDefinition<string, any>[],
+>(
   commands: T
-) => {
+): Schema.Schema<
+  CommandFromDefinitions<T>,
+  { id: string; target: string; name: string; payload: unknown }
+> => {
   if (commands.length === 0) {
     throw new Error('At least one command definition is required');
   }
@@ -173,7 +188,8 @@ export const buildCommandSchema = <T extends readonly CommandDefinition<string, 
   );
 
   if (schemas.length === 1) {
-    return schemas[0]!;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    return schemas[0]! as any;
   }
 
   // Need at least 2 schemas for Union
@@ -181,7 +197,8 @@ export const buildCommandSchema = <T extends readonly CommandDefinition<string, 
   if (!first || !second) {
     throw new Error('Unexpected state: should have at least 2 schemas');
   }
-  return Schema.Union(first, second, ...rest);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return Schema.Union(first, second, ...rest) as any;
 };
 
 /**
