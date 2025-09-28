@@ -1,16 +1,216 @@
 /**
- * Optional Transport Behavior Contract Tests
+ * Future Transport Behavior Test Placeholders
  *
- * These are skipped tests for future transport behaviors that are not yet
- * required but may be implemented by some transports. These tests can be
- * enabled as needed for specific transport implementations.
+ * IMPORTANT: This module contains placeholder test suites for potential future transport behaviors
+ * that are NOT currently implemented or supported in any existing transport. These are purely
+ * conceptual tests for features that might be added in the future.
+ *
+ * ## What This Contains
+ *
+ * All tests in this module are **permanently skipped** and represent future possibilities that:
+ * - Are NOT implemented in any current transport
+ * - Are NOT required for basic transport functionality
+ * - Are speculative features for potential future development
+ * - Serve as documentation for what might be possible someday
+ *
+ * ## THESE TESTS ARE NOT FOR CURRENT USE
+ *
+ * DO NOT enable or implement these tests. They are placeholders for future consideration only.
+ * If you need additional transport features beyond the core contracts, implement them as
+ * transport-specific tests in your own test files.
+ *
+ * ### Reconnection Behavior
+ * Enable if your transport automatically reconnects after connection failures:
+ * - Implements exponential backoff retry strategy
+ * - Maintains subscriptions through reconnection
+ * - Handles network partitions gracefully
+ *
+ * ### Message Buffering
+ * Enable if your transport queues messages when disconnected:
+ * - Buffers outgoing messages during disconnection
+ * - Sends buffered messages when reconnected
+ * - Respects configurable buffer size limits
+ *
+ * ### Message Ordering
+ * Enable if your transport guarantees message delivery order:
+ * - Maintains FIFO order for messages within streams
+ * - Preserves ordering across reconnections
+ * - Provides per-subscription ordering guarantees
+ *
+ * ### Backpressure Handling
+ * Enable if your transport manages flow control:
+ * - Handles high-volume message streams without memory issues
+ * - Provides backpressure signals to publishers
+ * - Manages backpressure independently per connection
+ *
+ * ### Maximum Message Size
+ * Enable if your transport enforces message size limits:
+ * - Rejects messages exceeding configured size limits
+ * - Provides clear error messages for oversized content
+ * - Handles size validation consistently
+ *
+ * ### Connection Pooling
+ * Enable if your transport implements connection reuse:
+ * - Reuses connections efficiently across requests
+ * - Manages connection pool size limits
+ * - Cleans up idle connections automatically
+ *
+ * ### Quality of Service
+ * Enable if your transport supports message priorities and delivery guarantees:
+ * - Supports message priority levels
+ * - Provides at-least-once or exactly-once delivery guarantees
+ * - Implements message acknowledgment mechanisms
+ *
+ * ## How to Enable Optional Tests
+ *
+ * To enable specific optional behaviors for your transport:
+ *
+ * 1. **Copy the relevant test suite** from this file to your transport test file
+ * 2. **Remove the `.skip`** from the `describe.skip` calls
+ * 3. **Implement the test logic** specific to your transport
+ * 4. **Add necessary test utilities** to your transport context
+ *
+ * ### Example: Enabling Reconnection Tests
+ *
+ * ```typescript
+ * // In your transport test file
+ * describe('Reconnection Behavior', () => {
+ *   it('should automatically reconnect after connection loss', async () => {
+ *     await Effect.runPromise(
+ *       Effect.scoped(
+ *         pipe(
+ *           context.makeConnectedTransport('test://localhost'),
+ *           Effect.flatMap((transport) =>
+ *             pipe(
+ *               // Test reconnection logic here
+ *               context.simulateNetworkFailure(),
+ *               Effect.flatMap(() => context.waitForReconnection()),
+ *               Effect.tap(() => Effect.sync(() => {
+ *                 expect(transport.isConnected()).toBe(true);
+ *               }))
+ *             )
+ *           )
+ *         )
+ *       )
+ *     );
+ *   });
+ * });
+ * ```
+ *
+ * ## Implementation Guidelines
+ *
+ * When implementing optional behaviors:
+ *
+ * 1. **Start with core requirements**: Ensure all required transport contract tests pass first
+ * 2. **Implement incrementally**: Add one optional behavior at a time
+ * 3. **Document capabilities**: Clearly document which optional features your transport supports
+ * 4. **Provide configuration**: Make optional behaviors configurable when possible
+ * 5. **Test thoroughly**: Optional behaviors often involve complex edge cases
+ *
+ * ## Feature Support Declaration
+ *
+ * Consider adding a capabilities object to your transport to declare supported features:
+ *
+ * ```typescript
+ * interface TransportCapabilities {
+ *   readonly supportsReconnection: boolean;
+ *   readonly supportsBuffering: boolean;
+ *   readonly guaranteesOrdering: boolean;
+ *   readonly supportsBackpressure: boolean;
+ *   readonly maxMessageSize?: number;
+ *   readonly supportsConnectionPooling: boolean;
+ *   readonly supportsQoS: boolean;
+ * }
+ * ```
+ *
+ * @example
+ * ```typescript
+ * // Enable reconnection tests for a WebSocket transport
+ * describe('WebSocket Reconnection', () => {
+ *   it('should reconnect with exponential backoff', async () => {
+ *     const transport = await Effect.runPromise(createWebSocketTransport());
+ *
+ *     // Simulate network failure
+ *     await Effect.runPromise(transport.simulateNetworkFailure());
+ *
+ *     // Verify reconnection occurs
+ *     await Effect.runPromise(
+ *       pipe(
+ *         transport.connectionState,
+ *         Stream.filter(state => state === 'connected'),
+ *         Stream.take(1),
+ *         Stream.runHead,
+ *         Effect.timeout(Duration.seconds(10))
+ *       )
+ *     );
+ *   });
+ * });
+ * ```
  */
 
 import { describe, it } from '@codeforbreakfast/buntest';
 
 /**
- * Optional transport behavior tests that can be enabled when implementing
- * advanced transport features. These are all skipped by default.
+ * Future transport behavior test placeholders.
+ *
+ * This function returns a test suite containing conceptual test ideas for potential future transport
+ * features. These tests are NOT intended for current implementation and remain permanently skipped.
+ *
+ * ## Usage
+ *
+ * 1. **Documentation only**: Shows what kinds of features might be possible in the future
+ * 2. **Do not implement**: These tests are not meant to be copied or enabled
+ * 3. **Use core contracts**: Focus on the actual transport contract tests instead
+ *
+ * All tests in this suite are **permanently skipped** and serve only as future documentation.
+ *
+ * ## Example Usage
+ *
+ * ```typescript
+ * import { optionalTransportBehaviorTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
+ *
+ * describe('My Transport Optional Features', () => {
+ *   // Include all optional tests as reference (all skipped)
+ *   optionalTransportBehaviorTests();
+ *
+ *   // Or copy specific tests and enable them:
+ *   describe('Reconnection Behavior', () => {
+ *     it('should automatically reconnect after connection loss', async () => {
+ *       // Your implementation here
+ *     });
+ *   });
+ * });
+ * ```
+ *
+ * ## Test Categories Included
+ *
+ * - **Reconnection Behavior**: Automatic reconnection, exponential backoff, subscription persistence
+ * - **Message Buffering**: Offline message queuing, buffer limits, message ordering in buffers
+ * - **Message Ordering**: FIFO guarantees, ordering during reconnection, per-subscription ordering
+ * - **Backpressure Handling**: Flow control, backpressure signals, per-connection management
+ * - **Maximum Message Size**: Size limits, validation, error handling for oversized messages
+ * - **Connection Pooling**: Connection reuse, pool limits, idle connection cleanup
+ * - **Quality of Service**: Message priorities, delivery guarantees, acknowledgments
+ *
+ * @returns Test suite with all optional transport behavior tests (all skipped)
+ *
+ * @example
+ * ```typescript
+ * // Include as reference in your test file
+ * describe('Advanced WebSocket Transport', () => {
+ *   runClientTransportContractTests('WebSocket', setupWebSocket);
+ *
+ *   // Show what optional features could be implemented
+ *   optionalTransportBehaviorTests();
+ *
+ *   // Implement specific optional features
+ *   describe('WebSocket Reconnection', () => {
+ *     it('should reconnect automatically', () => {
+ *       // Your reconnection test implementation
+ *     });
+ *   });
+ * });
+ * ```
  */
 export const optionalTransportBehaviorTests = () => {
   describe('Optional Transport Behaviors', () => {
