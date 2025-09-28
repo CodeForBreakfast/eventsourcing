@@ -29,87 +29,27 @@ interface TestSocketConfig {
   readonly shouldFailOnWrite?: boolean;
 }
 
-// Mock WebSocket that behaves like a real WebSocket for Socket.makeWebSocket
-class MockWebSocket {
-  readonly url: string;
-  readonly protocol: string = '';
-  readonly readyState: number = 0; // CONNECTING
-  readonly bufferedAmount: number = 0;
-  readonly extensions: string = '';
+// WebSocket state constants
+const WebSocketState = {
+  CONNECTING: 0,
+  OPEN: 1,
+  CLOSING: 2,
+  CLOSED: 3,
+} as const;
 
-  // WebSocket constants
-  static readonly CONNECTING = 0;
-  static readonly OPEN = 1;
-  static readonly CLOSING = 2;
-  static readonly CLOSED = 3;
+// Mock WebSocket factory that behaves like a real WebSocket for Socket.makeWebSocket
+const createMockWebSocket = (
+  url: string,
+  _protocols?: string | string[],
+  config: TestSocketConfig = {}
+): globalThis.WebSocket => {
+  // Mutable state for the mock (contained within closure)
+  let readyState: number = WebSocketState.CONNECTING;
+  let openTimeout: NodeJS.Timeout | undefined;
+  const eventListeners = new Map<string, ((event: unknown) => void)[]>();
 
-  readonly CONNECTING = 0;
-  readonly OPEN = 1;
-  readonly CLOSING = 2;
-  readonly CLOSED = 3;
-
-  private config: TestSocketConfig;
-  private eventListeners: Map<string, ((event: unknown) => void)[]> = new Map();
-  private openTimeout?: NodeJS.Timeout;
-
-  constructor(url: string, _protocols?: string | string[], config: TestSocketConfig = {}) {
-    this.url = url;
-    this.config = config;
-
-    // Simulate connection behavior with a delay to allow 'connecting' state to be observed
-    setTimeout(() => this.simulateConnection(), 50);
-  }
-
-  private simulateConnection() {
-    if (this.config.shouldFailConnection || this.config.shouldFailBeforeOpen) {
-      // Dispatch error event immediately
-      this.dispatchEvent({ type: 'error', error: new Error('Connection failed') });
-      (this as unknown as { readyState: number }).readyState = this.CLOSED;
-      return;
-    }
-
-    if (this.config.shouldCloseBeforeOpen) {
-      // Dispatch close event immediately
-      this.dispatchEvent({ type: 'close', code: 1006, reason: 'Connection refused' });
-      (this as unknown as { readyState: number }).readyState = this.CLOSED;
-      return;
-    }
-
-    const openDelay = this.config.openDelay ?? 0;
-    this.openTimeout = setTimeout(() => {
-      (this as unknown as { readyState: number }).readyState = this.OPEN;
-      this.dispatchEvent({ type: 'open' });
-
-      // Send preloaded messages if configured
-      if (this.config.preloadedMessages) {
-        setTimeout(() => {
-          for (const message of this.config.preloadedMessages!) {
-            this.dispatchEvent({ type: 'message', data: message });
-          }
-        }, 100);
-      }
-    }, openDelay);
-  }
-
-  addEventListener(type: string, listener: (event: unknown) => void) {
-    if (!this.eventListeners.has(type)) {
-      this.eventListeners.set(type, []);
-    }
-    this.eventListeners.get(type)!.push(listener);
-  }
-
-  removeEventListener(type: string, listener: (event: unknown) => void) {
-    const listeners = this.eventListeners.get(type);
-    if (listeners) {
-      const index = listeners.indexOf(listener);
-      if (index > -1) {
-        listeners.splice(index, 1);
-      }
-    }
-  }
-
-  dispatchEvent(event: unknown): boolean {
-    const listeners = this.eventListeners.get((event as { type: string }).type);
+  const dispatchEvent = (event: unknown): boolean => {
+    const listeners = eventListeners.get((event as { type: string }).type);
     if (listeners) {
       listeners.forEach((listener) => {
         try {
@@ -120,37 +60,106 @@ class MockWebSocket {
       });
     }
     return true;
-  }
+  };
 
-  send(_data: string | ArrayBuffer | Blob | ArrayBufferView) {
-    if (this.readyState !== this.OPEN) {
-      throw new Error('WebSocket is not open');
+  const simulateConnection = () => {
+    if (config.shouldFailConnection || config.shouldFailBeforeOpen) {
+      dispatchEvent({ type: 'error', error: new Error('Connection failed') });
+      readyState = WebSocketState.CLOSED;
+      return;
     }
-    if (this.config.shouldFailOnWrite) {
-      throw new Error('Send failed');
-    }
-    // In a real implementation, this would send data to the server
-  }
 
-  close(code?: number, reason?: string) {
-    if (this.openTimeout) {
-      clearTimeout(this.openTimeout);
+    if (config.shouldCloseBeforeOpen) {
+      dispatchEvent({ type: 'close', code: 1006, reason: 'Connection refused' });
+      readyState = WebSocketState.CLOSED;
+      return;
     }
-    (this as unknown as { readyState: number }).readyState = this.CLOSED;
-    this.dispatchEvent({ type: 'close', code: code ?? 1000, reason: reason ?? '' });
-  }
 
-  // Legacy event handler properties (for compatibility)
-  onopen: ((event: unknown) => void) | null = null;
-  onclose: ((event: unknown) => void) | null = null;
-  onmessage: ((event: unknown) => void) | null = null;
-  onerror: ((event: unknown) => void) | null = null;
-}
+    const openDelay = config.openDelay ?? 0;
+    openTimeout = setTimeout(() => {
+      readyState = WebSocketState.OPEN;
+      dispatchEvent({ type: 'open' });
+
+      // Send preloaded messages if configured
+      if (config.preloadedMessages) {
+        setTimeout(() => {
+          for (const message of config.preloadedMessages!) {
+            dispatchEvent({ type: 'message', data: message });
+          }
+        }, 100);
+      }
+    }, openDelay);
+  };
+
+  // Start connection simulation with delay to allow 'connecting' state to be observed
+  setTimeout(() => simulateConnection(), 50);
+
+  // Return WebSocket-compatible object
+  return {
+    url,
+    protocol: '',
+    get readyState() {
+      return readyState;
+    },
+    bufferedAmount: 0,
+    extensions: '',
+    binaryType: 'blob' as 'blob' | 'arraybuffer',
+
+    // WebSocket constants
+    CONNECTING: WebSocketState.CONNECTING,
+    OPEN: WebSocketState.OPEN,
+    CLOSING: WebSocketState.CLOSING,
+    CLOSED: WebSocketState.CLOSED,
+
+    addEventListener(type: string, listener: (event: unknown) => void) {
+      if (!eventListeners.has(type)) {
+        eventListeners.set(type, []);
+      }
+      eventListeners.get(type)!.push(listener);
+    },
+
+    removeEventListener(type: string, listener: (event: unknown) => void) {
+      const listeners = eventListeners.get(type);
+      if (listeners) {
+        const index = listeners.indexOf(listener);
+        if (index > -1) {
+          listeners.splice(index, 1);
+        }
+      }
+    },
+
+    dispatchEvent,
+
+    send(_data: string | ArrayBuffer | Blob | ArrayBufferView) {
+      if (readyState !== WebSocketState.OPEN) {
+        throw new Error('WebSocket is not open');
+      }
+      if (config.shouldFailOnWrite) {
+        throw new Error('Send failed');
+      }
+      // In a real implementation, this would send data to the server
+    },
+
+    close(code?: number, reason?: string) {
+      if (openTimeout) {
+        clearTimeout(openTimeout);
+      }
+      readyState = WebSocketState.CLOSED;
+      dispatchEvent({ type: 'close', code: code ?? 1000, reason: reason ?? '' });
+    },
+
+    // Legacy event handler properties (for compatibility)
+    onopen: null,
+    onclose: null,
+    onmessage: null,
+    onerror: null,
+  } as globalThis.WebSocket;
+};
 
 // Test WebSocketConstructor that creates MockWebSockets
 const createTestWebSocketConstructor =
   (config: TestSocketConfig) => (url: string, protocols?: string | string[]) => {
-    return new MockWebSocket(url, protocols, config) as unknown as globalThis.WebSocket;
+    return createMockWebSocket(url, protocols, config);
   };
 
 const createTestSocketLayer = (config: TestSocketConfig = {}) =>

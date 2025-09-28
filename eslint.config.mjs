@@ -19,6 +19,37 @@ const commonPlugins = {
   import: importPlugin,
 };
 
+// Common Effect-related syntax restrictions
+const effectSyntaxRestrictions = [
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="gen"]',
+    message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
+  },
+  {
+    selector: 'MemberExpression[object.name="Effect"][property.name="gen"]',
+    message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
+  },
+  {
+    selector:
+      'ClassDeclaration:not(:has(CallExpression[callee.object.name="Data"][callee.property.name="TaggedError"])):not(:has(CallExpression[callee.object.name="Effect"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="GenericTag"])):not(:has(CallExpression[callee.object.name="Schema"][callee.property.name="Class"]))',
+    message:
+      'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
+  },
+];
+
+// Test-specific syntax restrictions
+const testSyntaxRestrictions = [
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+    message:
+      'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runPromise() in tests.',
+  },
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+    message: 'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
+  },
+];
+
 export default [
   {
     name: 'typescript-base',
@@ -59,23 +90,7 @@ export default [
       '@typescript-eslint': typescript,
     },
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="gen"]',
-          message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
-        },
-        {
-          selector: 'MemberExpression[object.name="Effect"][property.name="gen"]',
-          message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
-        },
-        {
-          selector:
-            'ClassDeclaration:not(:has(CallExpression[callee.object.name="Data"][callee.property.name="TaggedError"])):not(:has(CallExpression[callee.object.name="Effect"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="GenericTag"])):not(:has(CallExpression[callee.object.name="Schema"][callee.property.name="Class"]))',
-          message:
-            'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...effectSyntaxRestrictions],
     },
   },
   {
@@ -96,20 +111,7 @@ export default [
           ],
         },
       ],
-      'no-restricted-syntax': [
-        'error',
-        {
-          selector:
-            'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
-          message:
-            'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runPromise() in tests.',
-        },
-        {
-          selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
-          message:
-            'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
-        },
-      ],
+      'no-restricted-syntax': ['error', ...effectSyntaxRestrictions, ...testSyntaxRestrictions],
     },
   },
   {
