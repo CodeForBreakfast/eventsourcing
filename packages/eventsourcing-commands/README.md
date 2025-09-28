@@ -280,20 +280,6 @@ switch (result._tag) {
 }
 ```
 
-## Migration from Legacy API
-
-If you're migrating from the deprecated API, here's the mapping:
-
-| Legacy API                  | New Typed API                  |
-| --------------------------- | ------------------------------ |
-| `createCommandSchema`       | `defineCommand`                |
-| `createCommandRegistration` | `createRegistration`           |
-| `buildCommandRegistrations` | `makeCommandRegistry`          |
-| `makeCommandRegistry`       | `makeCommandRegistry`          |
-| `makeCommandRegistryLayer`  | `makeCommandRegistryLayer`     |
-| `CommandRegistration`       | `CommandRegistration`          |
-| `CommandRegistrations`      | Array of `CommandRegistration` |
-
 ## Architecture
 
 This package sits between the domain layer (aggregates) and infrastructure layers (protocols, transports):
