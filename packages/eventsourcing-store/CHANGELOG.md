@@ -1,5 +1,115 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.7.0
+
+### Minor Changes
+
+- [#103](https://github.com/CodeForBreakfast/eventsourcing/pull/103) [`0c99b22`](https://github.com/CodeForBreakfast/eventsourcing/commit/0c99b22849ba2a0b9211790b0f3334c3a7a0471e) Thanks [@GraemeF](https://github.com/GraemeF)! - Separate CQRS command types into dedicated package for better architecture
+
+  **New Package: `@codeforbreakfast/eventsourcing-commands`**
+  - Introduces a dedicated package for CQRS command types and schemas
+  - Contains `Command` and `CommandResult` schemas that were previously in the store package
+  - Establishes proper separation between domain concepts (commands) and event storage
+  - Includes comprehensive test coverage and documentation
+
+  **Breaking changes for `@codeforbreakfast/eventsourcing-store`:**
+  - Removed `Command` and `CommandResult` types - these are now in the commands package
+  - Store package now focuses purely on event streaming and storage concepts
+  - Updated description to reflect pure event streaming focus
+
+  **Updated packages:**
+  - `@codeforbreakfast/eventsourcing-aggregates`: Updated to import command types from commands package
+  - `@codeforbreakfast/eventsourcing-protocol-default`: Updated to import command types from commands package
+
+  This change establishes cleaner architectural boundaries:
+  - **Store**: Pure event streaming and storage
+  - **Commands**: CQRS command types and schemas
+  - **Aggregates**: Domain modeling (uses both events and commands)
+  - **Protocol**: Transport implementation (uses both events and commands)
+
+- [#85](https://github.com/CodeForBreakfast/eventsourcing/pull/85) [`fe2cf43`](https://github.com/CodeForBreakfast/eventsourcing/commit/fe2cf43ea701843ef79df0f2de936fb0c2b3f91a) Thanks [@GraemeF](https://github.com/GraemeF)! - Standardize API naming to follow Effect conventions
+
+  Eliminate duplicate APIs and ensure consistent Effect terminology throughout the codebase. All factory functions now use the Effect `make*` convention, and redundant aliases have been removed for a cleaner API surface.
+  - Replace `create*` factory functions with `make*` (Effect convention)
+  - Update WebSocket layer terminology (`createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`)
+  - Remove backward compatibility aliases and redundant exports
+  - Standardize all test interface methods to use Effect naming patterns
+
+  This cleanup eliminates API confusion and ensures developers have single, canonical names for each piece of functionality following proper Effect patterns.
+
+- [#102](https://github.com/CodeForBreakfast/eventsourcing/pull/102) [`ebf5c45`](https://github.com/CodeForBreakfast/eventsourcing/commit/ebf5c45bb8037da2a43997ac749b9c60e4097e4b) Thanks [@GraemeF](https://github.com/GraemeF)! - Improve package architecture and domain type organization
+
+  **Breaking changes for `@codeforbreakfast/eventsourcing-store`:**
+  - Added new domain types `Command`, `Event`, and `CommandResult` schemas that were previously only available in the protocol package
+  - These core domain types are now available directly from the store package for better separation of concerns
+
+  **Improvements for `@codeforbreakfast/eventsourcing-aggregates`:**
+  - Fixed architectural violation by removing dependency on protocol implementation
+  - Aggregate roots now only depend on store abstractions, creating cleaner layer separation
+  - Import domain types directly from store package instead of protocol package
+
+  **Improvements for `@codeforbreakfast/eventsourcing-protocol`:**
+  - Domain types (`Command`, `Event`, `CommandResult`) are now imported from store package and re-exported for convenience
+  - Maintains backward compatibility while improving architectural boundaries
+
+  This change establishes cleaner separation between domain concepts (in store) and transport protocols, making the packages more modular and easier to understand.
+
+- [#105](https://github.com/CodeForBreakfast/eventsourcing/pull/105) [`f5c1710`](https://github.com/CodeForBreakfast/eventsourcing/commit/f5c1710a3140cd380409e1e2c89919ce068826e1) Thanks [@GraemeF](https://github.com/GraemeF)! - Extract in-memory EventStore implementation into separate package
+
+  The in-memory EventStore implementation has been moved from `@codeforbreakfast/eventsourcing-store` to its own dedicated `@codeforbreakfast/eventsourcing-store-inmemory` package for better architectural separation.
+
+  **Benefits:**
+  - **Cleaner Architecture**: Core package contains only abstractions and interfaces
+  - **Better Modularity**: In-memory implementation is self-contained with its own documentation
+  - **Improved Separation**: Clear boundaries between core types and specific implementations
+  - **Enhanced Maintainability**: Each package has focused responsibilities
+
+### Patch Changes
+
+- [#121](https://github.com/CodeForBreakfast/eventsourcing/pull/121) [`93158e5`](https://github.com/CodeForBreakfast/eventsourcing/commit/93158e5a220dd84f479f42b968a984d28a10fb7b) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce functional programming patterns with stricter ESLint rules
+
+  ## Changes
+  - **Classes are now forbidden** except for Effect library patterns (Data.TaggedError, Effect.Tag, Context.Tag, Context.GenericTag, Schema.Class)
+  - **Effect.gen is now forbidden** - all code must use pipe-based composition with Effect.all and Effect.forEach
+  - Fixed test code to comply with functional programming patterns by replacing classes with factory functions
+  - Refactored Effect.gen usage to pipe-based functional composition
+
+  These changes enforce a more consistent functional programming style across the codebase, improving maintainability and reducing cognitive overhead when working with Effect.
+
+- [#125](https://github.com/CodeForBreakfast/eventsourcing/pull/125) [`5a503fa`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a503fa89418682ae5bc1a4202918869743fdcc6) Thanks [@GraemeF](https://github.com/GraemeF)! - Ensure pre-1.0 packages use minor version bumps instead of major
+
+  Updated changeset configurations to use minor version bumps as the maximum for all pre-1.0 packages, following semantic versioning best practices for pre-release versions. This ensures breaking changes are communicated through minor version increments rather than major version bumps while packages are still in initial development.
+
+- [#101](https://github.com/CodeForBreakfast/eventsourcing/pull/101) [`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce consistent Effect syntax by forbidding Effect.gen usage
+
+  Adds ESLint rule to prevent use of Effect.gen in favor of pipe-based Effect composition. This ensures consistent code style and encourages the use of the more explicit pipe syntax throughout the codebase. All existing Effect.gen usage has been refactored to use Effect.pipe patterns.
+
+- [#95](https://github.com/CodeForBreakfast/eventsourcing/pull/95) [`ac05ab4`](https://github.com/CodeForBreakfast/eventsourcing/commit/ac05ab403201412f768752a8a139dc152d0a9902) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactor existing tests to use @codeforbreakfast/buntest package
+
+  This change improves the testing experience by:
+  - Converting manual Effect.runPromise calls to Effect-aware test runners (it.effect, it.live, it.scoped)
+  - Adding proper scoped resource management for transport lifecycle tests
+  - Using Effect-specific assertions and custom equality matchers for Effect types
+  - Leveraging automatic TestServices provision (TestClock, etc.) in effect tests
+  - Implementing cleaner layer sharing patterns where appropriate
+  - Reducing test boilerplate and improving readability
+
+  All existing tests continue to pass while providing a better developer experience for Effect-based testing.
+
+- [#99](https://github.com/CodeForBreakfast/eventsourcing/pull/99) [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove all vitest dependencies and references in favor of bun:test
+
+  All packages now use bun:test instead of vitest for testing. This change removes vitest as a dependency across all packages while maintaining the same testing functionality. Test imports have been updated from 'vitest' to 'bun:test' and configuration files have been cleaned up to remove vitest references.
+
+- [#96](https://github.com/CodeForBreakfast/eventsourcing/pull/96) [`136d160`](https://github.com/CodeForBreakfast/eventsourcing/commit/136d1609ddb84a2e5b67fd3d0ba918386ae183ce) Thanks [@GraemeF](https://github.com/GraemeF)! - Configure logger to be silent during tests to reduce output noise
+
+  Reduces test output verbosity by configuring the Effect logger to be silent during test runs. This change:
+  - Adds a `silentLogger` export to `@codeforbreakfast/buntest` for consistent test logger configuration
+  - Replaces verbose logger configurations in test files with the shared silent logger
+  - Eliminates noisy INFO and ERROR logs during test execution while preserving actual test results
+  - Improves developer experience by making test output cleaner and more readable
+
+  Users will see significantly less log output when running tests, making it easier to focus on test results and failures.
+
 ## 0.6.7
 
 ### Patch Changes

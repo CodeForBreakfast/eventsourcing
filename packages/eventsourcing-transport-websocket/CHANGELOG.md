@@ -1,5 +1,92 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
+## 0.3.0
+
+### Minor Changes
+
+- [#85](https://github.com/CodeForBreakfast/eventsourcing/pull/85) [`fe2cf43`](https://github.com/CodeForBreakfast/eventsourcing/commit/fe2cf43ea701843ef79df0f2de936fb0c2b3f91a) Thanks [@GraemeF](https://github.com/GraemeF)! - Standardize API naming to follow Effect conventions
+
+  Eliminate duplicate APIs and ensure consistent Effect terminology throughout the codebase. All factory functions now use the Effect `make*` convention, and redundant aliases have been removed for a cleaner API surface.
+  - Replace `create*` factory functions with `make*` (Effect convention)
+  - Update WebSocket layer terminology (`createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`)
+  - Remove backward compatibility aliases and redundant exports
+  - Standardize all test interface methods to use Effect naming patterns
+
+  This cleanup eliminates API confusion and ensures developers have single, canonical names for each piece of functionality following proper Effect patterns.
+
+- [#106](https://github.com/CodeForBreakfast/eventsourcing/pull/106) [`5a8c349`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a8c349aedf08d7f9eecc23ff801acd1f9e0e511) Thanks [@GraemeF](https://github.com/GraemeF)! - **BREAKING CHANGE**: Rename package from `@codeforbreakfast/eventsourcing-transport-contracts` to `@codeforbreakfast/eventsourcing-transport`
+
+  The transport contracts package has been renamed to better reflect its role as the core transport abstraction layer. No API changes - only the package name has changed.
+
+### Patch Changes
+
+- [#121](https://github.com/CodeForBreakfast/eventsourcing/pull/121) [`93158e5`](https://github.com/CodeForBreakfast/eventsourcing/commit/93158e5a220dd84f479f42b968a984d28a10fb7b) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce functional programming patterns with stricter ESLint rules
+
+  ## Changes
+  - **Classes are now forbidden** except for Effect library patterns (Data.TaggedError, Effect.Tag, Context.Tag, Context.GenericTag, Schema.Class)
+  - **Effect.gen is now forbidden** - all code must use pipe-based composition with Effect.all and Effect.forEach
+  - Fixed test code to comply with functional programming patterns by replacing classes with factory functions
+  - Refactored Effect.gen usage to pipe-based functional composition
+
+  These changes enforce a more consistent functional programming style across the codebase, improving maintainability and reducing cognitive overhead when working with Effect.
+
+- [#117](https://github.com/CodeForBreakfast/eventsourcing/pull/117) [`1d595d3`](https://github.com/CodeForBreakfast/eventsourcing/commit/1d595d35b03f20e4a26fa712d30c22b66354519b) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix WebSocket disconnection detection when server closes
+
+  Improved handling of server-initiated disconnections in WebSocket transport. Clients now properly receive 'disconnected' state notifications when the server shuts down. This ensures applications can detect and respond to connection loss appropriately.
+
+- [#101](https://github.com/CodeForBreakfast/eventsourcing/pull/101) [`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce consistent Effect syntax by forbidding Effect.gen usage
+
+  Adds ESLint rule to prevent use of Effect.gen in favor of pipe-based Effect composition. This ensures consistent code style and encourages the use of the more explicit pipe syntax throughout the codebase. All existing Effect.gen usage has been refactored to use Effect.pipe patterns.
+
+- [#95](https://github.com/CodeForBreakfast/eventsourcing/pull/95) [`ac05ab4`](https://github.com/CodeForBreakfast/eventsourcing/commit/ac05ab403201412f768752a8a139dc152d0a9902) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactor existing tests to use @codeforbreakfast/buntest package
+
+  This change improves the testing experience by:
+  - Converting manual Effect.runPromise calls to Effect-aware test runners (it.effect, it.live, it.scoped)
+  - Adding proper scoped resource management for transport lifecycle tests
+  - Using Effect-specific assertions and custom equality matchers for Effect types
+  - Leveraging automatic TestServices provision (TestClock, etc.) in effect tests
+  - Implementing cleaner layer sharing patterns where appropriate
+  - Reducing test boilerplate and improving readability
+
+  All existing tests continue to pass while providing a better developer experience for Effect-based testing.
+
+- [#87](https://github.com/CodeForBreakfast/eventsourcing/pull/87) [`51ee12c`](https://github.com/CodeForBreakfast/eventsourcing/commit/51ee12c86ab9ccf3b127408ee6298332be38554a) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove unimplemented WebSocket configuration options and update documentation
+
+  **Breaking Changes for @codeforbreakfast/eventsourcing-websocket:**
+  - Removed unused `DefaultWebSocketConfig` export
+  - Removed unused `WebSocketConnectOptions` interface
+  - Removed unused `WebSocketEventSourcingInfo` export
+  - Simplified `connect()` function to only accept URL parameter
+
+  **Improvements:**
+  - Updated README to reflect actual implementation status rather than aspirational roadmap
+  - Removed misleading "TDD placeholder" comment from WebSocket server implementation
+  - Cleaned up test files to remove references to deleted configuration options
+
+  These configuration options were never actually used by the implementation and provided no functionality. The WebSocket packages are fully implemented and ready for use.
+
+- [#99](https://github.com/CodeForBreakfast/eventsourcing/pull/99) [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove all vitest dependencies and references in favor of bun:test
+
+  All packages now use bun:test instead of vitest for testing. This change removes vitest as a dependency across all packages while maintaining the same testing functionality. Test imports have been updated from 'vitest' to 'bun:test' and configuration files have been cleaned up to remove vitest references.
+
+- [#122](https://github.com/CodeForBreakfast/eventsourcing/pull/122) [`9c2d879`](https://github.com/CodeForBreakfast/eventsourcing/commit/9c2d8795116855ac38b0f294c1ed1416dd03b7c4) Thanks [@GraemeF](https://github.com/GraemeF)! - Reorganized transport tests to eliminate duplication and improve maintainability. Tests are now properly organized across separate directories for better clarity and reuse of common patterns.
+
+- [#114](https://github.com/CodeForBreakfast/eventsourcing/pull/114) [`809c63f`](https://github.com/CodeForBreakfast/eventsourcing/commit/809c63ff3ba63abb3f52e49c965bb9a517bdde14) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved WebSocket transport testing approach
+  - Removed problematic global state mocking that violated test isolation
+  - Documented testing options including @effect/platform/Socket for future improvements
+  - Simplified test suite to focus on testable scenarios without mocking
+  - Integration tests continue to provide coverage for main functionality
+
+- [#118](https://github.com/CodeForBreakfast/eventsourcing/pull/118) [`3b1a210`](https://github.com/CodeForBreakfast/eventsourcing/commit/3b1a210ab0c8a730cc0b950ea5a1893e7a55dfa1) Thanks [@GraemeF](https://github.com/GraemeF)! - Add comprehensive test coverage for WebSocket transport
+  - Added unit tests for connection lifecycle including state transitions and delayed connections
+  - Added tests for error scenarios including connection failures, timeouts, and connection refused
+  - Added tests for message handling including delivery, malformed JSON filtering, and subscription filters
+  - Added tests for publishing constraints when connected or disconnected
+  - Implemented mock WebSocket for deterministic testing without real network connections
+
+- Updated dependencies [[`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db), [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc), [`5a8c349`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a8c349aedf08d7f9eecc23ff801acd1f9e0e511)]:
+  - @codeforbreakfast/eventsourcing-transport@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes

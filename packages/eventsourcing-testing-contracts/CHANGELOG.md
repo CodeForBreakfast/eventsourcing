@@ -1,5 +1,63 @@
 # @codeforbreakfast/eventsourcing-testing-contracts
 
+## 0.3.0
+
+### Minor Changes
+
+- [#85](https://github.com/CodeForBreakfast/eventsourcing/pull/85) [`fe2cf43`](https://github.com/CodeForBreakfast/eventsourcing/commit/fe2cf43ea701843ef79df0f2de936fb0c2b3f91a) Thanks [@GraemeF](https://github.com/GraemeF)! - Standardize API naming to follow Effect conventions
+
+  Eliminate duplicate APIs and ensure consistent Effect terminology throughout the codebase. All factory functions now use the Effect `make*` convention, and redundant aliases have been removed for a cleaner API surface.
+  - Replace `create*` factory functions with `make*` (Effect convention)
+  - Update WebSocket layer terminology (`createWebSocketProtocolStack` → `makeWebSocketProtocolLayer`)
+  - Remove backward compatibility aliases and redundant exports
+  - Standardize all test interface methods to use Effect naming patterns
+
+  This cleanup eliminates API confusion and ensures developers have single, canonical names for each piece of functionality following proper Effect patterns.
+
+- [#100](https://github.com/CodeForBreakfast/eventsourcing/pull/100) [`a7d6249`](https://github.com/CodeForBreakfast/eventsourcing/commit/a7d6249f4cb6692153e05d6e30fff268fa4453cd) Thanks [@GraemeF](https://github.com/GraemeF)! - Add minimal failing e2e test framework for complete system integration
+
+  This adds a comprehensive end-to-end test that demonstrates the complete event sourcing flow from frontend command sending through to event persistence and subscription. The test includes:
+  - High-level EventSourcingClient service for clean frontend integration
+  - Server-side protocol handling stubs for bridging transport to command processing
+  - Event publishing stubs for streaming events back to clients
+  - Complete stack rebuild pattern to verify true event persistence
+  - Proper Effect functional programming patterns with tagged errors and Layer composition
+
+  The test is currently skipped as it contains only minimal stubs that fail with "not implemented" errors. This serves as a specification for the remaining integration work needed to complete the event sourcing system.
+
+  Key components added:
+  - EventSourcingClient service with subscribeToStream/sendCommand methods
+  - ServerProtocolHandler service for processing commands
+  - EventPublisher service for streaming events to subscribers
+  - Full system test demonstrating command → processing → events → persistence flow
+
+- [#106](https://github.com/CodeForBreakfast/eventsourcing/pull/106) [`5a8c349`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a8c349aedf08d7f9eecc23ff801acd1f9e0e511) Thanks [@GraemeF](https://github.com/GraemeF)! - **BREAKING CHANGE**: Rename package from `@codeforbreakfast/eventsourcing-transport-contracts` to `@codeforbreakfast/eventsourcing-transport`
+
+  The transport contracts package has been renamed to better reflect its role as the core transport abstraction layer. No API changes - only the package name has changed.
+
+### Patch Changes
+
+- [#101](https://github.com/CodeForBreakfast/eventsourcing/pull/101) [`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce consistent Effect syntax by forbidding Effect.gen usage
+
+  Adds ESLint rule to prevent use of Effect.gen in favor of pipe-based Effect composition. This ensures consistent code style and encourages the use of the more explicit pipe syntax throughout the codebase. All existing Effect.gen usage has been refactored to use Effect.pipe patterns.
+
+- [#99](https://github.com/CodeForBreakfast/eventsourcing/pull/99) [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove all vitest dependencies and references in favor of bun:test
+
+  All packages now use bun:test instead of vitest for testing. This change removes vitest as a dependency across all packages while maintaining the same testing functionality. Test imports have been updated from 'vitest' to 'bun:test' and configuration files have been cleaned up to remove vitest references.
+
+- [#124](https://github.com/CodeForBreakfast/eventsourcing/pull/124) [`4b275ed`](https://github.com/CodeForBreakfast/eventsourcing/commit/4b275ed99a18b2f27cda711f7d9692cb42cd1f66) Thanks [@GraemeF](https://github.com/GraemeF)! - Improve transport testing contract documentation
+
+  Enhanced documentation for the transport testing contracts package with comprehensive README and updated contract test files. Key improvements include:
+  - Added comprehensive README.md for transport tests explaining contract structure and usage
+  - Updated contract test files to reference real implementations instead of placeholder examples
+  - Removed references to unimplemented optional transport behaviors
+  - Clarified testing patterns and best practices for transport implementations
+
+  These changes make it easier for developers to understand and use the testing contracts when implementing new transport mechanisms.
+
+- Updated dependencies [[`d4063a3`](https://github.com/CodeForBreakfast/eventsourcing/commit/d4063a351d83d2830e27dfc88972559de74096db), [`b8fa706`](https://github.com/CodeForBreakfast/eventsourcing/commit/b8fa706fa4a99772979dca89079205dbd257e3dc), [`5a8c349`](https://github.com/CodeForBreakfast/eventsourcing/commit/5a8c349aedf08d7f9eecc23ff801acd1f9e0e511)]:
+  - @codeforbreakfast/eventsourcing-transport@0.3.0
+
 ## 0.2.2
 
 ### Patch Changes
