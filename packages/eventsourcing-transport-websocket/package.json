@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-transport-websocket",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "WebSocket transport implementation for event sourcing - Protocol-agnostic message transport over WebSocket connections",
   "type": "module",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
     "directory": "packages/eventsourcing-transport-websocket"
   },
   "bugs": {

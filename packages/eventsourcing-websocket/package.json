@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-websocket",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Batteries-included WebSocket event sourcing package - Complete WebSocket transport with default protocol for rapid event sourcing development",
   "type": "module",
   "main": "./dist/index.js",
@@ -54,7 +54,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
     "directory": "packages/eventsourcing-websocket"
   },
   "bugs": {

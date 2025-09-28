@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-testing-contracts",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Comprehensive testing utilities for event sourcing implementations - Test contracts for transport and protocol implementations with mock utilities and test data generators",
   "type": "module",
   "main": "./dist/index.js",
@@ -54,7 +54,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
     "directory": "packages/eventsourcing-testing-contracts"
   },
   "bugs": {

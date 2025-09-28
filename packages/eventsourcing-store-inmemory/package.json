@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store-inmemory",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "In-memory event store implementation for development and testing - Fast in-memory storage with complete EventStore interface implementation",
   "type": "module",
   "main": "./dist/index.js",
@@ -50,7 +50,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
     "directory": "packages/eventsourcing-store-inmemory"
   },
   "bugs": {

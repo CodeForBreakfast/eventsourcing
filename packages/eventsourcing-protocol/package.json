@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-protocol",
-  "version": "0.3.2",
+  "version": "0.3.3",
   "description": "Event sourcing protocol implementation over any transport - Protocol implementation with message serialization, command correlation, and subscription management",
   "type": "module",
   "main": "./dist/index.js",
@@ -56,7 +56,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/codeforbreakfast/eventsourcing.git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
     "directory": "packages/eventsourcing-protocol"
   },
   "bugs": {
