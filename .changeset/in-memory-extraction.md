@@ -1,6 +1,6 @@
 ---
-'@codeforbreakfast/eventsourcing-store': major
-'@codeforbreakfast/eventsourcing-store-inmemory': major
+'@codeforbreakfast/eventsourcing-store': minor
+'@codeforbreakfast/eventsourcing-store-inmemory': minor
 ---
 
 Extract in-memory EventStore implementation into separate package
