@@ -1,5 +1,19 @@
 # @codeforbreakfast/eventsourcing-commands
 
+## 0.3.0
+
+### Minor Changes
+
+- [#147](https://github.com/CodeForBreakfast/eventsourcing/pull/147) [`f64ebb8`](https://github.com/CodeForBreakfast/eventsourcing/commit/f64ebb8a4e1f111e3e0f6bfed1be10c4e988436a) Thanks [@GraemeF](https://github.com/GraemeF)! - Replace command handler registrations with Effect pattern matching for better type safety and exhaustive command handling. The new API uses Effect's `Match.exhaustive` to ensure all command types are handled at compile time, eliminating runtime handler lookups and providing stronger TypeScript inference within each match arm.
+
+  **Breaking Changes:**
+  - `createRegistration()` and registration-based API removed
+  - `makeCommandRegistry()` now takes `(commands, matcher)` instead of `registrations`
+  - `CommandHandler` interface replaced with functional pattern matching
+
+  **Migration:**
+  Replace handler registrations with a single matcher function using `Match.value()` and `Match.exhaustive` for compile-time command handling safety.
+
 ## 0.2.3
 
 ### Patch Changes
