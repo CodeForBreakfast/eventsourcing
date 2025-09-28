@@ -1,19 +1,14 @@
 /**
- * WebSocket Transport Comprehensive Unit Tests
+ * WebSocket Transport Implementation Tests
  *
- * Tests all connection lifecycle, error scenarios, message handling, and edge cases
- * using a mock Socket implementation that provides controllable behavior without
- * relying on global state or real network connections.
+ * Tests WebSocket-specific implementation details, error scenarios, and mock factory behavior.
+ * Generic transport behaviors are covered by contract tests.
  */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, pipe, Stream, Layer, Option } from 'effect';
 import * as Socket from '@effect/platform/Socket';
-import {
-  TransportError,
-  ConnectionError,
-  makeTransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport';
+import { ConnectionError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import { WebSocketConnector } from './websocket-transport';
 
 // =============================================================================
@@ -166,11 +161,11 @@ const createTestSocketLayer = (config: TestSocketConfig = {}) =>
   Layer.succeed(Socket.WebSocketConstructor, createTestWebSocketConstructor(config));
 
 // =============================================================================
-// Connection Lifecycle Tests
+// Mock WebSocket Factory Tests
 // =============================================================================
 
-describe('WebSocket Transport - Connection Lifecycle', () => {
-  it.scoped('should eventually reach connected state', () =>
+describe('WebSocket Transport - Mock Factory', () => {
+  it.scoped('should create mock WebSocket with proper state transitions', () =>
     pipe(
       WebSocketConnector.connect('ws://test.example.com'),
       Effect.provide(createTestSocketLayer({ openDelay: 100 })),
@@ -181,47 +176,7 @@ describe('WebSocket Transport - Connection Lifecycle', () => {
           Stream.take(1),
           Stream.runDrain,
           Effect.map(() => {
-            // If we get here, the connection reached 'connected' state
-            expect(true).toBe(true);
-          })
-        )
-      )
-    )
-  );
-
-  it.scoped('should provide connection state stream updates', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer()),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.connectionState,
-          Stream.take(1),
-          Stream.runHead,
-          Effect.map((firstState) => {
-            expect(Option.isSome(firstState)).toBe(true);
-            if (Option.isSome(firstState)) {
-              // The first state could be either 'connecting' or 'connected' depending on timing
-              expect(['connecting', 'connected']).toContain(firstState.value);
-            }
-          })
-        )
-      )
-    )
-  );
-
-  it.scoped('should handle delayed connection', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer({ openDelay: 100 })),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.connectionState,
-          Stream.filter((state) => state === 'connected'),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.map(() => {
-            // Connection completed successfully even with delay
+            // Mock factory properly simulates WebSocket state transitions
             expect(true).toBe(true);
           })
         )
@@ -292,52 +247,17 @@ describe('WebSocket Transport - Error Scenarios', () => {
 });
 
 // =============================================================================
-// Message Handling Tests
+// WebSocket-Specific Message Handling Tests
 // =============================================================================
 
-describe('WebSocket Transport - Message Handling', () => {
-  it.scoped('should deliver incoming messages to subscribers', () =>
+describe('WebSocket Transport - WebSocket-Specific Behavior', () => {
+  it.scoped('should handle malformed JSON messages (WebSocket binary data)', () =>
     pipe(
       WebSocketConnector.connect('ws://test.example.com'),
       Effect.provide(
         createTestSocketLayer({
           preloadedMessages: [
-            new TextEncoder().encode(
-              JSON.stringify(makeTransportMessage('test-id', 'test-type', '{"data":"test"}'))
-            ),
-          ],
-        })
-      ),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.subscribe(),
-          Effect.flatMap((subscription) =>
-            pipe(
-              subscription,
-              Stream.take(1),
-              Stream.runHead,
-              Effect.map((message) => {
-                expect(Option.isSome(message)).toBe(true);
-                if (Option.isSome(message)) {
-                  expect(message.value.id as string).toBe('test-id');
-                  expect(message.value.type).toBe('test-type');
-                  expect(message.value.payload).toBe('{"data":"test"}');
-                }
-              })
-            )
-          )
-        )
-      )
-    )
-  );
-
-  it.scoped('should silently drop malformed JSON messages', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(
-        createTestSocketLayer({
-          preloadedMessages: [
-            new TextEncoder().encode('invalid json'), // This should be dropped
+            new TextEncoder().encode('invalid json'), // WebSocket-specific: binary data that's not valid JSON
             new TextEncoder().encode(
               JSON.stringify(makeTransportMessage('valid-id', 'test-type', '{"data":"test"}'))
             ),
@@ -355,125 +275,12 @@ describe('WebSocket Transport - Message Handling', () => {
               Effect.map((message) => {
                 expect(Option.isSome(message)).toBe(true);
                 if (Option.isSome(message)) {
+                  // Should receive the valid message after dropping invalid JSON
                   expect(message.value.id as string).toBe('valid-id');
                 }
               })
             )
           )
-        )
-      )
-    )
-  );
-
-  it.scoped('should handle subscription with filter', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(
-        createTestSocketLayer({
-          preloadedMessages: [
-            new TextEncoder().encode(
-              JSON.stringify(makeTransportMessage('rejected-id', 'other-type', '{}'))
-            ),
-            new TextEncoder().encode(
-              JSON.stringify(makeTransportMessage('accepted-id', 'filtered-type', '{}'))
-            ),
-          ],
-        })
-      ),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.subscribe((msg) => msg.type === 'filtered-type'),
-          Effect.flatMap((subscription) =>
-            pipe(
-              subscription,
-              Stream.take(1),
-              Stream.runHead,
-              Effect.map((message) => {
-                expect(Option.isSome(message)).toBe(true);
-                if (Option.isSome(message)) {
-                  expect(message.value.id as string).toBe('accepted-id');
-                  expect(message.value.type).toBe('filtered-type');
-                }
-              })
-            )
-          )
-        )
-      )
-    )
-  );
-});
-
-// =============================================================================
-// Publishing Constraint Tests
-// =============================================================================
-
-describe('WebSocket Transport - Publishing Constraints', () => {
-  it.scoped('should fail to publish when not connected', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer({ openDelay: 200 })), // Moderate delay
-      Effect.flatMap((transport) =>
-        pipe(
-          // Try to publish immediately - should fail if we're still connecting
-          transport.publish(makeTransportMessage('test-id', 'test-type', '{}')),
-          Effect.either,
-          Effect.map((result) => {
-            if (result._tag === 'Left') {
-              // If it failed, it should be because not connected
-              expect(result.left).toBeInstanceOf(TransportError);
-              expect(result.left.message).toContain('not connected');
-            } else {
-              // If it succeeded, that's also valid - connection was fast
-              expect(true).toBe(true);
-            }
-          })
-        )
-      )
-    )
-  );
-
-  it.scoped('should successfully publish when connected', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer()),
-      Effect.flatMap((transport) =>
-        pipe(
-          // Wait for connection to be established
-          transport.connectionState,
-          Stream.filter((state) => state === 'connected'),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.flatMap(() =>
-            transport.publish(makeTransportMessage('test-id', 'test-type', '{"data":"test"}'))
-          ),
-          Effect.map(() => {
-            // If we get here without error, publishing succeeded
-            expect(true).toBe(true);
-          })
-        )
-      )
-    )
-  );
-
-  it.scoped('should handle connection state before publishing', () =>
-    pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer()),
-      Effect.flatMap((transport) =>
-        pipe(
-          // Try to publish before waiting for connection
-          transport.publish(makeTransportMessage('test-id', 'test-type', '{}')),
-          Effect.either,
-          Effect.map((result) => {
-            // Should either succeed (if connection was fast) or fail with transport error
-            if (result._tag === 'Left') {
-              expect(result.left).toBeInstanceOf(TransportError);
-              expect(result.left.message).toContain('not connected');
-            } else {
-              // Connection was fast enough, that's also valid
-              expect(true).toBe(true);
-            }
-          })
         )
       )
     )
