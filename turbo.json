@@ -8,7 +8,7 @@
       "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check"]
     },
     "typecheck": {
-      "dependsOn": ["^typecheck"],
+      "dependsOn": ["^build", "^typecheck"],
       "outputs": [],
       "inputs": [
         "src/**/*.ts",
