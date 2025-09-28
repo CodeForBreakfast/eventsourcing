@@ -1,12 +1,8 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Schema, Effect, pipe } from 'effect';
 import type { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
-import { WireCommand, DomainCommand, CommandHandler } from './commands';
-import {
-  makeCommandRegistry,
-  createCommandRegistration,
-  buildCommandRegistrations,
-} from './command-registry';
+import { WireCommand, DomainCommand, CommandHandler, defineCommand } from './commands';
+import { makeCommandRegistry, createRegistration } from './command-registry';
 
 describe('Command Registry', () => {
   const UserPayload = Schema.Struct({
@@ -23,9 +19,8 @@ describe('Command Registry', () => {
   };
 
   it.effect('should register and dispatch commands successfully', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const registrations = [createRegistration(createUserCommand, createUserHandler)];
     const registry = makeCommandRegistry(registrations);
 
     // Create a valid wire command
@@ -54,9 +49,8 @@ describe('Command Registry', () => {
   });
 
   it.effect('should handle validation errors', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const registrations = [createRegistration(createUserCommand, createUserHandler)];
     const registry = makeCommandRegistry(registrations);
 
     const invalidCommand: WireCommand = {
@@ -88,9 +82,8 @@ describe('Command Registry', () => {
   });
 
   it.effect('should handle unknown commands', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const registrations = [createRegistration(createUserCommand, createUserHandler)];
     const registry = makeCommandRegistry(registrations);
 
     const unknownCommand: WireCommand = {
@@ -122,9 +115,8 @@ describe('Command Registry', () => {
       handle: () => Effect.die(new Error('Something went wrong')),
     };
 
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, failingHandler),
-    });
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const registrations = [createRegistration(createUserCommand, failingHandler)];
     const registry = makeCommandRegistry(registrations);
 
     const wireCommand: WireCommand = {
@@ -163,10 +155,12 @@ describe('Command Registry', () => {
         }),
     };
 
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-      UpdateEmail: createCommandRegistration(UpdateEmailPayload, updateEmailHandler),
-    });
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const updateEmailCommand = defineCommand('UpdateEmail', UpdateEmailPayload);
+    const registrations = [
+      createRegistration(createUserCommand, createUserHandler),
+      createRegistration(updateEmailCommand, updateEmailHandler),
+    ];
     const registry = makeCommandRegistry(registrations);
 
     // Test both commands work

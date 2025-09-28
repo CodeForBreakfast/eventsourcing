@@ -132,18 +132,62 @@ export type CommandResult = typeof CommandResult.Type;
 // ============================================================================
 
 /**
- * Creates a command schema with validation
+ * Command definition that pairs a name with its payload schema
  */
-export const createCommandSchema = <TName extends string, TPayload, TPayloadInput>(
+export interface CommandDefinition<TName extends string, TPayload, TPayloadInput> {
+  readonly name: TName;
+  readonly payloadSchema: Schema.Schema<TPayload, TPayloadInput>;
+}
+
+/**
+ * Creates a command definition
+ */
+export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
   name: TName,
   payloadSchema: Schema.Schema<TPayload, TPayloadInput>
-) =>
-  Schema.Struct({
-    id: Schema.String,
-    target: Schema.String,
-    name: Schema.Literal(name),
-    payload: payloadSchema,
-  });
+): CommandDefinition<TName, TPayload, TPayloadInput> => ({
+  name,
+  payloadSchema,
+});
+
+/**
+ * Builds a discriminated union schema from command definitions
+ * This creates an exhaustive schema that can parse any registered command
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const buildCommandSchema = <T extends ReadonlyArray<CommandDefinition<any, any, any>>>(
+  commands: T
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+): Schema.Schema<{
+  readonly id: string;
+  readonly target: string;
+  readonly name: any;
+  readonly payload: any;
+}> => {
+  if (commands.length === 0) {
+    throw new Error('At least one command definition is required');
+  }
+
+  const schemas = commands.map((cmd) =>
+    Schema.Struct({
+      id: Schema.String,
+      target: Schema.String,
+      name: Schema.Literal(cmd.name),
+      payload: cmd.payloadSchema,
+    })
+  );
+
+  if (schemas.length === 1) {
+    return schemas[0]!;
+  }
+
+  // Need at least 2 schemas for Union
+  const [first, second, ...rest] = schemas;
+  if (!first || !second) {
+    throw new Error('Unexpected state: should have at least 2 schemas');
+  }
+  return Schema.Union(first, second, ...rest);
+};
 
 /**
  * Validates and transforms a wire command into a domain command

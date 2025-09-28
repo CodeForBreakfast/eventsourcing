@@ -4,129 +4,19 @@ import {
   DomainCommand,
   CommandHandler,
   CommandResult,
-  CommandValidationError,
-  validateCommand,
+  CommandDefinition,
+  buildCommandSchema,
 } from './commands';
-
-export interface CommandRegistration<TPayload, TPayloadInput> {
-  readonly payloadSchema: Schema.Schema<TPayload, TPayloadInput>;
-  readonly handler: CommandHandler<DomainCommand<TPayload>>;
-}
-
-// Need `any` here because Effect Schema types are not covariant - we can't store
-// different CommandRegistration<T1, U1> and CommandRegistration<T2, U2> in the same Record
-// with a common base type. This is type-safe at runtime because we validate the schema.
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type CommandRegistrations = Record<string, CommandRegistration<any, any>>;
-
-export type CommandNames<T extends CommandRegistrations> = keyof T;
 
 export interface CommandRegistry {
   readonly dispatch: (wireCommand: WireCommand) => Effect.Effect<CommandResult, never, never>;
   readonly listCommandNames: () => ReadonlyArray<string>;
 }
 
-export const makeCommandRegistry = <T extends CommandRegistrations>(
-  registrations: T
-): CommandRegistry => {
-  const dispatchWire = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> => {
-    const registration = registrations[wireCommand.name];
-    if (!registration) {
-      return Effect.succeed({
-        _tag: 'Failure' as const,
-        error: {
-          _tag: 'HandlerNotFound' as const,
-          commandId: wireCommand.id,
-          commandName: wireCommand.name,
-          availableHandlers: Object.keys(registrations),
-        },
-      });
-    }
-    return dispatchWithRegistration(wireCommand, registration);
-  };
-
-  return {
-    dispatch: dispatchWire,
-    listCommandNames: () => Object.keys(registrations),
-  };
-};
-
-const dispatchWithRegistration = (
-  wireCommand: WireCommand,
-  // Safe `any` because the registration comes from a typed record and
-  // payload validation ensures runtime type safety
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  registration: CommandRegistration<any, any>
-): Effect.Effect<CommandResult, never, never> =>
-  pipe(
-    validateCommand(registration.payloadSchema)(wireCommand),
-    Effect.either,
-    Effect.flatMap((validationResult) =>
-      validationResult._tag === 'Left'
-        ? handleValidationError(wireCommand, validationResult.left)
-        : executeHandler(wireCommand, validationResult.right, registration.handler)
-    )
-  );
-
-const handleValidationError = (
-  _wireCommand: WireCommand,
-  error: CommandValidationError
-): Effect.Effect<CommandResult, never, never> =>
-  Effect.succeed({
-    _tag: 'Failure' as const,
-    error: {
-      _tag: 'ValidationError' as const,
-      commandId: error.commandId,
-      commandName: error.commandName,
-      validationErrors: error.validationErrors,
-    },
-  });
-
-const executeHandler = (
-  wireCommand: WireCommand,
-  // Safe `any` because the command has been validated by the schema before reaching here
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  domainCommand: DomainCommand<any>,
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: CommandHandler<DomainCommand<any>>
-): Effect.Effect<CommandResult, never, never> =>
-  pipe(
-    handler.handle(domainCommand),
-    Effect.exit,
-    Effect.map((handlerResult) =>
-      handlerResult._tag === 'Failure'
-        ? {
-            _tag: 'Failure' as const,
-            error: {
-              _tag: 'UnknownError' as const,
-              commandId: wireCommand.id,
-              message: String(handlerResult.cause),
-            },
-          }
-        : handlerResult.value
-    )
-  );
-
 export class CommandRegistryService extends Effect.Tag('CommandRegistryService')<
   CommandRegistryService,
   CommandRegistry
 >() {}
-
-export const makeCommandRegistryLayer = <T extends CommandRegistrations>(
-  registrations: T
-): Layer.Layer<CommandRegistryService, never, never> =>
-  Layer.succeed(CommandRegistryService, makeCommandRegistry(registrations));
-
-export const createCommandRegistration = <TPayload, TPayloadInput>(
-  payloadSchema: Schema.Schema<TPayload, TPayloadInput>,
-  handler: CommandHandler<DomainCommand<TPayload>>
-): CommandRegistration<TPayload, TPayloadInput> => ({
-  payloadSchema,
-  handler,
-});
-
-export const buildCommandRegistrations = <T extends CommandRegistrations>(registrations: T): T =>
-  registrations;
 
 export const dispatchCommand = (
   wireCommand: WireCommand
@@ -135,3 +25,120 @@ export const dispatchCommand = (
     CommandRegistryService,
     Effect.flatMap((registry) => registry.dispatch(wireCommand))
   );
+
+// ============================================================================
+// Typed Command Registry - New strongly typed approach
+// ============================================================================
+
+export interface CommandRegistration<TName extends string, TPayload> {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  readonly command: CommandDefinition<TName, TPayload, any>;
+  readonly handler: CommandHandler<DomainCommand<TPayload>>;
+}
+
+/**
+ * Creates a command registration
+ */
+export const createRegistration = <TName extends string, TPayload, TPayloadInput>(
+  command: CommandDefinition<TName, TPayload, TPayloadInput>,
+  handler: CommandHandler<DomainCommand<TPayload>>
+): CommandRegistration<TName, TPayload> => ({
+  command,
+  handler,
+});
+
+/**
+ * Builds a typed command registry from command registrations
+ * This ensures each command name maps to exactly one payload schema
+ */
+export const makeCommandRegistry = <
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ReadonlyArray<CommandRegistration<any, any>>,
+>(
+  registrations: T
+): CommandRegistry => {
+  // Build the exhaustive command schema
+  const commandDefinitions = registrations.map((r) => r.command);
+  const commandSchema = buildCommandSchema(commandDefinitions);
+
+  // Build handler map
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const handlers = new Map<string, CommandHandler<DomainCommand<any>>>();
+  for (const reg of registrations) {
+    if (handlers.has(reg.command.name)) {
+      throw new Error(`Duplicate command registration for: ${reg.command.name}`);
+    }
+    handlers.set(reg.command.name, reg.handler);
+  }
+
+  const dispatch = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> =>
+    pipe(
+      // Parse the entire command with the exhaustive schema
+      Schema.decodeUnknown(commandSchema)(wireCommand),
+      Effect.either,
+      Effect.flatMap((parseResult) => {
+        if (parseResult._tag === 'Left') {
+          // Validation failed
+          return Effect.succeed({
+            _tag: 'Failure' as const,
+            error: {
+              _tag: 'ValidationError' as const,
+              commandId: wireCommand.id,
+              commandName: wireCommand.name,
+              validationErrors: [parseResult.left.message || 'Command validation failed'],
+            },
+          });
+        }
+
+        // Get the handler (should always exist since schema validated the name)
+        const handler = handlers.get(parseResult.right.name);
+        if (!handler) {
+          // This shouldn't happen if schema is built correctly
+          return Effect.succeed({
+            _tag: 'Failure' as const,
+            error: {
+              _tag: 'HandlerNotFound' as const,
+              commandId: wireCommand.id,
+              commandName: wireCommand.name,
+              availableHandlers: Array.from(handlers.keys()),
+            },
+          });
+        }
+
+        // Execute the handler
+        return pipe(
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          handler.handle(parseResult.right as DomainCommand<any>),
+          Effect.exit,
+          Effect.map((handlerResult) =>
+            handlerResult._tag === 'Failure'
+              ? {
+                  _tag: 'Failure' as const,
+                  error: {
+                    _tag: 'UnknownError' as const,
+                    commandId: wireCommand.id,
+                    message: String(handlerResult.cause),
+                  },
+                }
+              : handlerResult.value
+          )
+        );
+      })
+    );
+
+  return {
+    dispatch,
+    listCommandNames: () => Array.from(handlers.keys()),
+  };
+};
+
+/**
+ * Creates a Layer with the typed command registry
+ */
+export const makeCommandRegistryLayer = <
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  T extends ReadonlyArray<CommandRegistration<any, any>>,
+>(
+  registrations: T
+): Layer.Layer<CommandRegistryService, never, never> =>
+  Layer.succeed(CommandRegistryService, makeCommandRegistry(registrations));
