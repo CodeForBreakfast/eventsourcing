@@ -107,7 +107,7 @@ interface Value<V> {
   readonly allEventsStream: EventStream<{ streamId: EventStreamId; event: V }>;
 }
 
-export class InMemoryStore<V = never> {
+export interface InMemoryStore<V = never> {
   readonly append: (
     to: EventStreamPosition
   ) => (
@@ -124,80 +124,6 @@ export class InMemoryStore<V = never> {
     never,
     never
   >;
-
-  private readonly value: SynchronizedRef.SynchronizedRef<Value<V>>;
-
-  constructor(value: SynchronizedRef.SynchronizedRef<Value<V>>) {
-    this.value = value;
-    this.append = (streamEnd) => (newEvents) =>
-      pipe(
-        this.value,
-        SynchronizedRef.updateEffect(appendToEventStream(streamEnd, newEvents)),
-        Effect.map(() => ({
-          ...streamEnd,
-          eventNumber: streamEnd.eventNumber + newEvents.length,
-        }))
-      );
-
-    this.get = (streamId: EventStreamId) =>
-      pipe(
-        this.value,
-        SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
-        Effect.flatMap(({ eventStreamsById }) =>
-          pipe(
-            eventStreamsById,
-            HashMap.get(streamId),
-            Option.match({
-              onNone: () =>
-                Effect.dieMessage(
-                  'Event stream not found - this should not happen because we ensure it exists'
-                ),
-              onSome: (eventStream: Readonly<EventStream<V>>) =>
-                Effect.succeed(
-                  pipe(
-                    eventStream.events,
-                    Stream.fromChunk,
-                    Stream.concat(Stream.fromPubSub(eventStream.pubsub))
-                  )
-                ),
-            })
-          )
-        )
-      );
-
-    this.getHistorical = (streamId: EventStreamId) =>
-      pipe(
-        this.value,
-        SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
-        Effect.flatMap(({ eventStreamsById }) =>
-          pipe(
-            eventStreamsById,
-            HashMap.get(streamId),
-            Option.match({
-              onNone: () =>
-                Effect.dieMessage(
-                  'Event stream not found - this should not happen because we ensure it exists'
-                ),
-              onSome: (eventStream: Readonly<EventStream<V>>) =>
-                Effect.succeed(pipe(eventStream.events, Stream.fromChunk)),
-            })
-          )
-        )
-      );
-
-    this.getAll = () =>
-      pipe(
-        this.value,
-        SynchronizedRef.get,
-        Effect.map(({ allEventsStream }) =>
-          pipe(
-            allEventsStream.events,
-            Stream.fromChunk,
-            Stream.concat(Stream.fromPubSub(allEventsStream.pubsub))
-          )
-        )
-      );
-  }
 }
 
 export const make = <V>() =>
@@ -210,5 +136,76 @@ export const make = <V>() =>
           allEventsStream,
         })
     ),
-    Effect.map((value: SynchronizedRef.SynchronizedRef<Value<V>>) => new InMemoryStore<V>(value))
+    Effect.map(
+      (value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({
+        append: (streamEnd) => (newEvents) =>
+          pipe(
+            value,
+            SynchronizedRef.updateEffect(appendToEventStream(streamEnd, newEvents)),
+            Effect.map(() => ({
+              ...streamEnd,
+              eventNumber: streamEnd.eventNumber + newEvents.length,
+            }))
+          ),
+
+        get: (streamId: EventStreamId) =>
+          pipe(
+            value,
+            SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
+            Effect.flatMap(({ eventStreamsById }) =>
+              pipe(
+                eventStreamsById,
+                HashMap.get(streamId),
+                Option.match({
+                  onNone: () =>
+                    Effect.dieMessage(
+                      'Event stream not found - this should not happen because we ensure it exists'
+                    ),
+                  onSome: (eventStream: Readonly<EventStream<V>>) =>
+                    Effect.succeed(
+                      pipe(
+                        eventStream.events,
+                        Stream.fromChunk,
+                        Stream.concat(Stream.fromPubSub(eventStream.pubsub))
+                      )
+                    ),
+                })
+              )
+            )
+          ),
+
+        getHistorical: (streamId: EventStreamId) =>
+          pipe(
+            value,
+            SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
+            Effect.flatMap(({ eventStreamsById }) =>
+              pipe(
+                eventStreamsById,
+                HashMap.get(streamId),
+                Option.match({
+                  onNone: () =>
+                    Effect.dieMessage(
+                      'Event stream not found - this should not happen because we ensure it exists'
+                    ),
+                  onSome: (eventStream: Readonly<EventStream<V>>) =>
+                    Effect.succeed(pipe(eventStream.events, Stream.fromChunk)),
+                })
+              )
+            )
+          ),
+
+        getAll: () =>
+          pipe(
+            value,
+            SynchronizedRef.get,
+            Effect.map(({ allEventsStream }) =>
+              pipe(
+                allEventsStream.events,
+                Stream.fromChunk,
+                Stream.concat(Stream.fromPubSub(allEventsStream.pubsub))
+              )
+            )
+          ),
+      })
+    )
   );

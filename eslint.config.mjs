@@ -69,6 +69,12 @@ export default [
           selector: 'MemberExpression[object.name="Effect"][property.name="gen"]',
           message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
         },
+        {
+          selector:
+            'ClassDeclaration:not(:has(CallExpression[callee.object.name="Data"][callee.property.name="TaggedError"])):not(:has(CallExpression[callee.object.name="Effect"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="GenericTag"])):not(:has(CallExpression[callee.object.name="Schema"][callee.property.name="Class"]))',
+          message:
+            'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
+        },
       ],
     },
   },
