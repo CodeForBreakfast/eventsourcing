@@ -7,7 +7,10 @@ import {
   toStreamId,
   Event,
 } from '@codeforbreakfast/eventsourcing-store';
-import { makeInMemoryEventStore, make } from '@codeforbreakfast/eventsourcing-store-inmemory';
+import {
+  makeInMemoryEventStore,
+  InMemoryStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
 import { Command } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';
@@ -75,7 +78,7 @@ const failingHandler: CommandHandler = {
 
 const testLayer = Layer.effect(
   EventStoreService,
-  pipe(make<unknown>(), Effect.flatMap(makeInMemoryEventStore))
+  pipe(InMemoryStore.make<unknown>(), Effect.flatMap(makeInMemoryEventStore))
 );
 
 // ============================================================================
