@@ -13,6 +13,7 @@ import {
   Server,
 } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { type ReadonlyDeep } from 'type-fest';
 
 // ============================================================================
 // Test Helpers
@@ -51,97 +52,112 @@ const setupTestEnvironment = pipe(
 // ============================================================================
 
 const createTestServerProtocol = (
-  server: InMemoryServer,
-  commandHandler: (cmd: Command) => CommandResult = () => ({
+  // eslint-disable-next-line functional/prefer-immutable-types
+  server: ReadonlyDeep<InMemoryServer>,
+  // eslint-disable-next-line functional/prefer-immutable-types
+  commandHandler: (cmd: ReadonlyDeep<Command>) => CommandResult = () => ({
     _tag: 'Success',
     position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
   }),
-  subscriptionHandler: (streamId: string) => Event[] = () => []
+  subscriptionHandler: (streamId: string) => readonly Event[] = () => []
 ) =>
   pipe(
     server.connections,
     Stream.take(1),
     Stream.runCollect,
     Effect.map((connections) => Array.from(connections)[0]!),
-    Effect.flatMap((serverConnection: Server.ClientConnection) =>
-      pipe(
-        serverConnection.transport.subscribe(),
-        Effect.flatMap((messageStream: Stream.Stream<TransportMessage>) =>
-          Effect.forkScoped(
-            Stream.runForEach(messageStream, (message: TransportMessage) =>
-              pipe(
-                Effect.try(() => JSON.parse(message.payload as string)),
-                Effect.flatMap(
-                  (parsedMessage: {
-                    type: string;
-                    id?: string;
-                    streamId?: string;
-                    target?: string;
-                    name?: string;
-                    payload?: unknown;
-                    [key: string]: unknown;
-                  }) => {
-                    if (
-                      parsedMessage.type === 'command' &&
-                      parsedMessage.id &&
-                      parsedMessage.target &&
-                      parsedMessage.name &&
-                      parsedMessage.payload !== undefined
-                    ) {
-                      const command: Command = {
-                        id: parsedMessage.id,
-                        target: parsedMessage.target,
-                        name: parsedMessage.name,
-                        payload: parsedMessage.payload,
-                      };
-                      const result = commandHandler(command);
-                      const response = makeTransportMessage(
-                        crypto.randomUUID(),
-                        'command_result',
-                        JSON.stringify({
-                          type: 'command_result',
-                          commandId: command.id,
-                          success: result._tag === 'Success',
-                          ...(result._tag === 'Success'
-                            ? { position: result.position }
-                            : { error: JSON.stringify(result.error) }),
-                        })
-                      );
-                      return server.broadcast(response);
-                    }
-
-                    if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
-                      const events = subscriptionHandler(parsedMessage.streamId);
-                      return Effect.forEach(
-                        events,
-                        (event) =>
-                          server.broadcast(
-                            makeTransportMessage(
+    Effect.flatMap(
+      (
+        // eslint-disable-next-line functional/prefer-immutable-types
+        serverConnection: ReadonlyDeep<Server.ClientConnection>
+      ) =>
+        pipe(
+          serverConnection.transport.subscribe(),
+          Effect.flatMap(
+            (
+              // eslint-disable-next-line functional/prefer-immutable-types
+              messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>
+            ) =>
+              Effect.forkScoped(
+                Stream.runForEach(
+                  messageStream,
+                  (
+                    // eslint-disable-next-line functional/prefer-immutable-types
+                    message: ReadonlyDeep<TransportMessage>
+                  ) =>
+                    pipe(
+                      Effect.try(() => JSON.parse(message.payload as string)),
+                      Effect.flatMap(
+                        (parsedMessage: {
+                          readonly type: string;
+                          readonly id?: string;
+                          readonly streamId?: string;
+                          readonly target?: string;
+                          readonly name?: string;
+                          readonly payload?: unknown;
+                          readonly [key: string]: unknown;
+                        }) => {
+                          if (
+                            parsedMessage.type === 'command' &&
+                            parsedMessage.id &&
+                            parsedMessage.target &&
+                            parsedMessage.name &&
+                            parsedMessage.payload !== undefined
+                          ) {
+                            const command: Command = {
+                              id: parsedMessage.id,
+                              target: parsedMessage.target,
+                              name: parsedMessage.name,
+                              payload: parsedMessage.payload,
+                            };
+                            const result = commandHandler(command);
+                            const response = makeTransportMessage(
                               crypto.randomUUID(),
-                              'event',
+                              'command_result',
                               JSON.stringify({
-                                type: 'event',
-                                streamId: parsedMessage.streamId,
-                                position: event.position,
-                                eventType: event.type,
-                                data: event.data,
-                                timestamp: event.timestamp.toISOString(),
+                                type: 'command_result',
+                                commandId: command.id,
+                                success: result._tag === 'Success',
+                                ...(result._tag === 'Success'
+                                  ? { position: result.position }
+                                  : { error: JSON.stringify(result.error) }),
                               })
-                            )
-                          ),
-                        { discard: true }
-                      );
-                    }
+                            );
+                            return server.broadcast(response);
+                          }
 
-                    return Effect.void;
-                  }
-                ),
-                Effect.catchAll(() => Effect.void)
+                          if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
+                            const events = subscriptionHandler(parsedMessage.streamId);
+                            return Effect.forEach(
+                              events,
+                              (event) =>
+                                server.broadcast(
+                                  makeTransportMessage(
+                                    crypto.randomUUID(),
+                                    'event',
+                                    JSON.stringify({
+                                      type: 'event',
+                                      streamId: parsedMessage.streamId,
+                                      position: event.position,
+                                      eventType: event.type,
+                                      data: event.data,
+                                      timestamp: event.timestamp.toISOString(),
+                                    })
+                                  )
+                                ),
+                              { discard: true }
+                            );
+                          }
+
+                          return Effect.void;
+                        }
+                      ),
+                      Effect.catchAll(() => Effect.void)
+                    )
+                )
               )
-            )
           )
         )
-      )
     ),
     Effect.asVoid
   );
@@ -259,7 +275,7 @@ describe('Protocol Behavior Tests', () => {
                   };
             }),
             Effect.flatMap(() => {
-              const commands: Command[] = [
+              const commands: readonly Command[] = [
                 {
                   id: crypto.randomUUID(),
                   target: 'user-1',
@@ -654,7 +670,7 @@ describe('Protocol Behavior Tests', () => {
               ]
             ),
             Effect.flatMap(() => {
-              const commands: Command[] = [
+              const commands: readonly Command[] = [
                 {
                   id: crypto.randomUUID(),
                   target: 'user-1',
@@ -848,7 +864,7 @@ describe('Protocol Behavior Tests', () => {
                         });
 
                         // Verify event ordering and positions are consistent across clients
-                        for (let i = 0; i < 3; i++) {
+                        [0, 1, 2].forEach((i) => {
                           expect(client1Results.events[i]!.position.eventNumber).toBe(
                             client2Results.events[i]!.position.eventNumber
                           );
@@ -858,7 +874,7 @@ describe('Protocol Behavior Tests', () => {
                           expect(client1Results.events[i]!.type).toBe(
                             client2Results.events[i]!.type
                           );
-                        }
+                        });
 
                         // Verify timestamps are preserved correctly
                         expect(client1Results.events[0]!.timestamp).toEqual(
@@ -2050,12 +2066,16 @@ describe('Protocol Behavior Tests', () => {
 
                               // Verify the large data structure is preserved
                               const data = event.data as {
-                                description: string;
-                                metadata: {
-                                  tags: string[];
-                                  attributes: Record<string, string>;
+                                readonly description: string;
+                                readonly metadata: {
+                                  readonly tags: readonly string[];
+                                  readonly attributes: Readonly<Record<string, string>>;
                                 };
-                                content: Array<{ id: number; name: string; data: string }>;
+                                readonly content: ReadonlyArray<{
+                                  readonly id: number;
+                                  readonly name: string;
+                                  readonly data: string;
+                                }>;
                               };
                               expect(data.description).toHaveLength(10000);
                               expect(data.description).toBe('A'.repeat(10000));
@@ -2165,14 +2185,16 @@ describe('Protocol Behavior Tests', () => {
 
                     // Verify we got events for all the different streams
                     const uniqueStreamIds = new Set(
-                      results.map((r) => (r.firstEvent?.data as { streamId?: string })?.streamId)
+                      results.map(
+                        (r) => (r.firstEvent?.data as { readonly streamId?: string })?.streamId
+                      )
                     );
                     expect(uniqueStreamIds.size).toBe(10);
 
                     // Verify stream names are correct
-                    for (let i = 0; i < 10; i++) {
+                    Array.from({ length: 10 }, (_, i) => i).forEach((i) => {
                       expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
-                    }
+                    });
                   })
                 ),
                 Effect.provide(ProtocolLive(clientTransport))
@@ -2226,7 +2248,7 @@ describe('Protocol Behavior Tests', () => {
             })),
             Effect.flatMap(() => {
               // Create multiple commands to send sequentially
-              const commands: Command[] = Array.from({ length: 5 }, (_, i) => ({
+              const commands: readonly Command[] = Array.from({ length: 5 }, (_, i) => ({
                 id: crypto.randomUUID(),
                 target: `user-${i + 1}`,
                 name: 'SequentialCommand',
@@ -2234,7 +2256,10 @@ describe('Protocol Behavior Tests', () => {
               }));
 
               // Send commands sequentially (not concurrently) to test cleanup between commands
-              const sendSequentially = (cmds: Command[]) =>
+              const sendSequentially = (
+                // eslint-disable-next-line functional/prefer-immutable-types
+                cmds: ReadonlyDeep<readonly Command[]>
+              ) =>
                 Effect.forEach(cmds, (cmd) => sendCommand(cmd), {
                   concurrency: 1,
                 });

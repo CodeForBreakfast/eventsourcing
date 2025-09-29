@@ -1,4 +1,5 @@
 import { Effect, Layer, pipe } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import {
   CommandProcessingService,
   CommandHandler,
@@ -15,7 +16,7 @@ import { Command } from '@codeforbreakfast/eventsourcing-commands';
 
 // Example: Create a simple command handler
 const userCommandHandler: CommandHandler = {
-  execute: (command: Command) =>
+  execute: (command: ReadonlyDeep<Command>) =>
     Effect.succeed([
       {
         position: { streamId: command.target, eventNumber: 1 },
@@ -28,7 +29,7 @@ const userCommandHandler: CommandHandler = {
 
 // Example: Create a command router
 const createRouter = (): CommandRouter => ({
-  route: (command: Command) => {
+  route: (command: ReadonlyDeep<Command>) => {
     if (command.target === 'user' && command.name === 'CreateUser') {
       return Effect.succeed(userCommandHandler);
     }
@@ -48,7 +49,7 @@ export const CommandProcessingServiceLive = Layer.effect(
 );
 
 // Example: Usage in application code
-export const processUserCommand = (command: Command) =>
+export const processUserCommand = (command: ReadonlyDeep<Command>) =>
   pipe(
     CommandProcessingService,
     Effect.flatMap((service) => service.processCommand(command)),

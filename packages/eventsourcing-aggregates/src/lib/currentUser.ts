@@ -5,12 +5,12 @@ type PersonId = typeof PersonId.Type;
 import { Data, Effect, Option } from 'effect';
 
 export class CurrentUserError extends Data.TaggedError('CurrentUserError')<{
-  message: string;
-  reason: Error;
+  readonly message: string;
+  readonly reason: Error;
 }> {}
 
 export interface CurrentUserServiceInterface {
-  readonly getCurrentUser: () => Option.Option<PersonId>;
+  readonly getCurrentUser: () => Readonly<Option.Option<PersonId>>;
 }
 
 export class CurrentUser extends Effect.Tag('CurrentUser')<

@@ -62,7 +62,9 @@
     "effect": "^3.17.0",
     "@effect/platform": "^0.90.0 || ^0.91.0"
   },
-  "dependencies": {},
+  "dependencies": {
+    "type-fest": "^5.0.1"
+  },
   "devDependencies": {
     "@types/node": "24.5.2",
     "@codeforbreakfast/buntest": "workspace:*",

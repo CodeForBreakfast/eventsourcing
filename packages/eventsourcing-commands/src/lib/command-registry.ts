@@ -1,4 +1,5 @@
 import { Schema, Effect, pipe, Layer, Match } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,
   DomainCommand,
@@ -10,7 +11,9 @@ import {
 } from './commands';
 
 export interface CommandRegistry {
-  readonly dispatch: (wireCommand: WireCommand) => Effect.Effect<CommandResult, never, never>;
+  readonly dispatch: (
+    wireCommand: ReadonlyDeep<WireCommand>
+  ) => Effect.Effect<CommandResult, never, never>;
   readonly listCommandNames: () => ReadonlyArray<string>;
 }
 
@@ -20,7 +23,7 @@ export class CommandRegistryService extends Effect.Tag('CommandRegistryService')
 >() {}
 
 export const dispatchCommand = (
-  wireCommand: WireCommand
+  wireCommand: ReadonlyDeep<WireCommand>
 ): Effect.Effect<CommandResult, never, CommandRegistryService> =>
   pipe(
     CommandRegistryService,
@@ -45,7 +48,7 @@ export const makeCommandRegistry = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T extends readonly CommandDefinition<string, any>[],
 >(
-  commands: T,
+  commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): CommandRegistry => {
   // Build the exhaustive command schema
@@ -54,7 +57,9 @@ export const makeCommandRegistry = <
   // Extract command names for the registry interface
   const commandNames = commands.map((cmd) => cmd.name);
 
-  const dispatch = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> =>
+  const dispatch = (
+    wireCommand: ReadonlyDeep<WireCommand>
+  ): Effect.Effect<CommandResult, never, never> =>
     pipe(
       // Parse the entire command with the exhaustive schema
       Schema.decodeUnknown(commandSchema)(wireCommand),
@@ -75,7 +80,7 @@ export const makeCommandRegistry = <
 
         // Execute the matcher with exact command type - it handles all the dispatch logic
         return pipe(
-          matcher(parseResult.right),
+          matcher(parseResult.right as ReadonlyDeep<CommandFromDefinitions<T>>),
           Effect.exit,
           Effect.map((matcherResult) =>
             matcherResult._tag === 'Failure'
@@ -106,7 +111,7 @@ export const makeCommandRegistryLayer = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T extends readonly CommandDefinition<string, any>[],
 >(
-  commands: T,
+  commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): Layer.Layer<CommandRegistryService, never, never> =>
   Layer.succeed(CommandRegistryService, makeCommandRegistry(commands, matcher));

@@ -46,6 +46,7 @@
       "dependencies": {
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -64,6 +65,7 @@
       "version": "0.3.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -81,6 +83,7 @@
       "version": "0.5.3",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@types/node": "24.5.2",
@@ -99,6 +102,7 @@
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -115,6 +119,9 @@
     "packages/eventsourcing-store": {
       "name": "@codeforbreakfast/eventsourcing-store",
       "version": "0.7.3",
+      "dependencies": {
+        "type-fest": "^5.0.1",
+      },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@types/node": "24.5.2",
@@ -153,6 +160,7 @@
         "@effect/experimental": "0.55.0",
         "@effect/sql": "0.45.0",
         "@effect/sql-pg": "0.46.0",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -187,6 +195,9 @@
     "packages/eventsourcing-transport": {
       "name": "@codeforbreakfast/eventsourcing-transport",
       "version": "0.3.3",
+      "dependencies": {
+        "type-fest": "^5.0.1",
+      },
       "devDependencies": {
         "@types/node": "24.5.2",
         "effect": "3.17.14",
@@ -202,6 +213,7 @@
       "version": "0.3.3",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -1239,6 +1251,8 @@
 
     "supports-preserve-symlinks-flag": ["supports-preserve-symlinks-flag@1.0.0", "", {}, "sha512-ot0WnXS9fgdkgIcePe6RHNk1WA8+muPa6cSjeR3V8K27q9BB1rTE3R1p7Hv0z1ZyAc8s6Vvv8DIyWf681MAt0w=="],
 
+    "tagged-tag": ["tagged-tag@1.0.0", "", {}, "sha512-yEFYrVhod+hdNyx7g5Bnkkb0G6si8HJurOoOEgC8B/O0uXLHlaey/65KRv6cuWBNhBgHKAROVpc7QyYqE5gFng=="],
+
     "tapable": ["tapable@2.2.3", "", {}, "sha512-ZL6DDuAlRlLGghwcfmSn9sK3Hr6ArtyudlSAiCqQ6IfE+b+HHbydbYDIG15IfS5do+7XQQBdBiubF/cV2dnDzg=="],
 
     "term-size": ["term-size@2.2.1", "", {}, "sha512-wK0Ri4fOGjv/XPy8SBHZChl8CM7uMc5VML7SqiQ0zG7+J5Vr+RMQDoHa2CNT6KHUnTGIXH34UDMkPzAUyapBZg=="],
@@ -1280,6 +1294,8 @@
     "turbo-windows-arm64": ["turbo-windows-arm64@2.5.8", "", { "os": "win32", "cpu": "arm64" }, "sha512-eFC5XzLmgXJfnAK3UMTmVECCwuBcORrWdewoiXBnUm934DY6QN8YowC/srhNnROMpaKaqNeRpoB5FxCww3eteQ=="],
 
     "type-check": ["type-check@0.4.0", "", { "dependencies": { "prelude-ls": "^1.2.1" } }, "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew=="],
+
+    "type-fest": ["type-fest@5.0.1", "", { "dependencies": { "tagged-tag": "^1.0.0" } }, "sha512-9MpwAI52m8H6ssA542UxSLnSiSD2dsC3/L85g6hVubLSXd82wdI80eZwTWhdOfN67NlA+D+oipAs1MlcTcu3KA=="],
 
     "typed-array-buffer": ["typed-array-buffer@1.0.3", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-typed-array": "^1.1.14" } }, "sha512-nAYYwfY3qnzX30IkA6AQZjVbtK6duGontcQm1WSG1MD94YLqK0515GNApXkoxKOWMusVssAHWLh9SeaoefYFGw=="],
 

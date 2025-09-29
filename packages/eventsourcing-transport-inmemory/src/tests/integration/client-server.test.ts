@@ -24,6 +24,7 @@ import {
   waitForConnectionState as defaultWaitForConnectionState,
   collectMessages as defaultCollectMessages,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import type { ReadonlyDeep } from 'type-fest';
 
 // Import the in-memory implementations
 import { InMemoryAcceptor, type InMemoryServer } from '../../lib/inmemory-transport';
@@ -105,9 +106,9 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
     },
 
     waitForConnectionState: (
-      transport: ClientTransport,
-      expectedState: ConnectionState,
-      timeoutMs?: number
+      transport: ReadonlyDeep<ClientTransport>,
+      expectedState: ReadonlyDeep<ConnectionState>,
+      timeoutMs?: ReadonlyDeep<number>
     ) => defaultWaitForConnectionState(transport.connectionState, expectedState, timeoutMs),
 
     collectMessages: defaultCollectMessages,

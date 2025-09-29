@@ -3,6 +3,7 @@ import { Effect } from 'effect';
 
 export default Effect.flatMap(
   SqlClient.SqlClient,
+  // eslint-disable-next-line functional/prefer-immutable-types -- SQL client cannot be deeply readonly as it contains methods and connection state
   (sql: SqlClient.SqlClient) => sql`
     -- Create the notification trigger function
     CREATE OR REPLACE FUNCTION notify_event() RETURNS TRIGGER AS $$

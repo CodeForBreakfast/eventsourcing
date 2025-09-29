@@ -10,6 +10,7 @@ import {
   SynchronizedRef,
   pipe,
 } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import {
   EventStreamId,
   EventStoreError,
@@ -20,7 +21,7 @@ import {
  * Container for subscription data for a specific stream
  */
 interface SubscriptionData<T> {
-  pubsub: PubSub.PubSub<T>;
+  readonly pubsub: PubSub.PubSub<T>;
 }
 
 /**
@@ -59,7 +60,9 @@ export class SubscriptionManager extends Effect.Tag('SubscriptionManager')<
  * Get or create a PubSub for a stream ID
  */
 const getOrCreatePubSub = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
+  ref: ReadonlyDeep<
+    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
+  >,
   streamId: EventStreamId
 ): Effect.Effect<SubscriptionData<T>, never, never> =>
   pipe(
@@ -93,7 +96,7 @@ const getOrCreatePubSub = <T>(
         HashMap.get(streamId)(subscriptions),
         Option.match({
           onNone: () => Effect.die("Subscription should exist but doesn't"),
-          onSome: (data: Readonly<SubscriptionData<T>>) => Effect.succeed(data),
+          onSome: (data: ReadonlyDeep<SubscriptionData<T>>) => Effect.succeed(data),
         })
       )
     )
@@ -103,7 +106,9 @@ const getOrCreatePubSub = <T>(
  * Remove a subscription for a stream ID
  */
 const removeSubscription = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
+  ref: ReadonlyDeep<
+    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
+  >,
   streamId: EventStreamId
 ): Effect.Effect<void, never, never> =>
   pipe(
@@ -117,7 +122,9 @@ const removeSubscription = <T>(
  * Publish an event to subscribers of a stream
  */
 const publishToStream = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
+  ref: ReadonlyDeep<
+    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
+  >,
   streamId: EventStreamId,
   event: T
 ): Effect.Effect<void, never, never> =>
@@ -128,7 +135,7 @@ const publishToStream = <T>(
         HashMap.get(streamId)(subscriptions),
         Option.match({
           onNone: () => Effect.succeed(undefined),
-          onSome: (subData: Readonly<SubscriptionData<T>>) =>
+          onSome: (subData: ReadonlyDeep<SubscriptionData<T>>) =>
             pipe(
               PubSub.publish(event)(subData.pubsub),
               Effect.tapError((error) =>
@@ -156,7 +163,7 @@ export const SubscriptionManagerLive = Layer.effect(
       ): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
         pipe(
           getOrCreatePubSub(ref, streamId),
-          Effect.map((pubsub: Readonly<SubscriptionData<string>>) =>
+          Effect.map((pubsub: ReadonlyDeep<SubscriptionData<string>>) =>
             pipe(
               Stream.fromPubSub(pubsub.pubsub),
               Stream.retry(

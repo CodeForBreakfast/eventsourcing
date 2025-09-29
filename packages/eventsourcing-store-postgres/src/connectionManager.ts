@@ -1,11 +1,12 @@
 import { PgClient } from '@effect/sql-pg';
 import { Duration, Effect, Layer, Schedule, pipe } from 'effect';
 import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
+import type { ReadonlyDeep } from 'type-fest';
 
 // Extended PgClient type with direct query access
 interface PgClientWithQuery extends PgClient.PgClient {
-  query: (sql: string) => Promise<unknown>;
-  end: () => Promise<void>;
+  readonly query: (sql: string) => Promise<unknown>;
+  readonly end: () => Promise<void>;
 }
 
 /**
@@ -15,17 +16,17 @@ interface ConnectionManagerService {
   /**
    * Get dedicated connection for LISTEN operations
    */
-  getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
+  readonly getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
 
   /**
    * Execute health check on listening connection
    */
-  healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
+  readonly healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
 
   /**
    * Gracefully close the listen connection
    */
-  shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
+  readonly shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
 }
 
 export class ConnectionManager extends Effect.Tag('ConnectionManager')<
@@ -103,7 +104,7 @@ export const ConnectionManagerLive = Layer.effect(
  */
 // Skip health check as it's causing issues
 export const withConnectionHealth = <A, E, R>(
-  effect: Effect.Effect<A, E, R>
+  effect: ReadonlyDeep<Effect.Effect<A, E, R>>
 ): Effect.Effect<A, E, R> =>
   pipe(
     effect,

@@ -62,7 +62,8 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-transport": "workspace:*"
+    "@codeforbreakfast/eventsourcing-transport": "workspace:*",
+    "type-fest": "^5.0.1"
   },
   "devDependencies": {
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",

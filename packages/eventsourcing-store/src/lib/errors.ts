@@ -3,11 +3,11 @@ import { Data } from 'effect';
 // Base error for all event sourcing operations
 export class EventSourcingError extends Data.TaggedError('EventSourcingError')<
   Readonly<{
-    message: string;
-    module: 'eventstore' | 'projections' | 'aggregates' | 'websocket';
-    code: string;
-    context?: unknown;
-    recoveryHint?: string;
+    readonly message: string;
+    readonly module: 'eventstore' | 'projections' | 'aggregates' | 'websocket';
+    readonly code: string;
+    readonly context?: unknown;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is EventSourcingError =>
@@ -23,11 +23,11 @@ export class EventSourcingError extends Data.TaggedError('EventSourcingError')<
 // EventStore specific errors
 export class EventStoreError extends Data.TaggedError('EventStoreError')<
   Readonly<{
-    operation: 'read' | 'write' | 'subscribe';
-    streamId?: string;
-    details: string;
-    cause?: unknown;
-    recoveryHint?: string;
+    readonly operation: 'read' | 'write' | 'subscribe';
+    readonly streamId?: string;
+    readonly details: string;
+    readonly cause?: unknown;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreError =>
@@ -36,11 +36,11 @@ export class EventStoreError extends Data.TaggedError('EventStoreError')<
 
 export class EventStoreConnectionError extends Data.TaggedError('EventStoreConnectionError')<
   Readonly<{
-    operation: string;
-    connectionString?: string;
-    cause: unknown;
-    retryable: boolean;
-    recoveryHint?: string;
+    readonly operation: string;
+    readonly connectionString?: string;
+    readonly cause: unknown;
+    readonly retryable: boolean;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreConnectionError =>
@@ -49,10 +49,10 @@ export class EventStoreConnectionError extends Data.TaggedError('EventStoreConne
 
 export class EventStoreResourceError extends Data.TaggedError('EventStoreResourceError')<
   Readonly<{
-    resource: string;
-    operation: string;
-    cause: unknown;
-    recoveryHint?: string;
+    readonly resource: string;
+    readonly operation: string;
+    readonly cause: unknown;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is EventStoreResourceError =>
@@ -61,9 +61,9 @@ export class EventStoreResourceError extends Data.TaggedError('EventStoreResourc
 
 export class ConcurrencyConflictError extends Data.TaggedError('ConcurrencyConflictError')<
   Readonly<{
-    streamId: string;
-    expectedVersion: number;
-    actualVersion: number;
+    readonly streamId: string;
+    readonly expectedVersion: number;
+    readonly actualVersion: number;
   }>
 > {
   static readonly is = (u: unknown): u is ConcurrencyConflictError =>
@@ -73,12 +73,12 @@ export class ConcurrencyConflictError extends Data.TaggedError('ConcurrencyConfl
 // Projection specific errors
 export class ProjectionError extends Data.TaggedError('ProjectionError')<
   Readonly<{
-    projectionName: string;
-    operation: 'build' | 'rebuild' | 'update' | 'query';
-    details: string;
-    eventPosition?: number;
-    cause?: unknown;
-    recoveryHint?: string;
+    readonly projectionName: string;
+    readonly operation: 'build' | 'rebuild' | 'update' | 'query';
+    readonly details: string;
+    readonly eventPosition?: number;
+    readonly cause?: unknown;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is ProjectionError =>
@@ -87,10 +87,10 @@ export class ProjectionError extends Data.TaggedError('ProjectionError')<
 
 export class ProjectionStateError extends Data.TaggedError('ProjectionStateError')<
   Readonly<{
-    projectionName: string;
-    expectedState: string;
-    actualState: string;
-    recoveryHint?: string;
+    readonly projectionName: string;
+    readonly expectedState: string;
+    readonly actualState: string;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is ProjectionStateError =>
@@ -100,12 +100,12 @@ export class ProjectionStateError extends Data.TaggedError('ProjectionStateError
 // Snapshot specific errors
 export class SnapshotError extends Data.TaggedError('SnapshotError')<
   Readonly<{
-    aggregateId: string;
-    operation: 'save' | 'load' | 'delete';
-    details: string;
-    version?: number;
-    cause?: unknown;
-    recoveryHint?: string;
+    readonly aggregateId: string;
+    readonly operation: 'save' | 'load' | 'delete';
+    readonly details: string;
+    readonly version?: number;
+    readonly cause?: unknown;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is SnapshotError =>
@@ -114,10 +114,10 @@ export class SnapshotError extends Data.TaggedError('SnapshotError')<
 
 export class SnapshotVersionError extends Data.TaggedError('SnapshotVersionError')<
   Readonly<{
-    aggregateId: string;
-    expectedVersion: number;
-    actualVersion: number;
-    recoveryHint?: string;
+    readonly aggregateId: string;
+    readonly expectedVersion: number;
+    readonly actualVersion: number;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is SnapshotVersionError =>
@@ -127,13 +127,13 @@ export class SnapshotVersionError extends Data.TaggedError('SnapshotVersionError
 // WebSocket transport errors
 export class WebSocketError extends Data.TaggedError('WebSocketError')<
   Readonly<{
-    operation: 'connect' | 'disconnect' | 'send' | 'receive';
-    url?: string;
-    details: string;
-    code?: number;
-    cause?: unknown;
-    retryable: boolean;
-    recoveryHint?: string;
+    readonly operation: 'connect' | 'disconnect' | 'send' | 'receive';
+    readonly url?: string;
+    readonly details: string;
+    readonly code?: number;
+    readonly cause?: unknown;
+    readonly retryable: boolean;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is WebSocketError =>
@@ -142,10 +142,10 @@ export class WebSocketError extends Data.TaggedError('WebSocketError')<
 
 export class WebSocketProtocolError extends Data.TaggedError('WebSocketProtocolError')<
   Readonly<{
-    expectedProtocol: string;
-    actualProtocol?: string;
-    details: string;
-    recoveryHint?: string;
+    readonly expectedProtocol: string;
+    readonly actualProtocol?: string;
+    readonly details: string;
+    readonly recoveryHint?: string;
   }>
 > {
   static readonly is = (u: unknown): u is WebSocketProtocolError =>

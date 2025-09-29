@@ -24,13 +24,14 @@ import {
 
 // Define the EventRowService interface
 interface EventRowServiceInterface {
-  readonly insert: (row: Readonly<EventRow>) => Effect.Effect<EventRow, unknown, never>;
+  // eslint-disable-next-line functional/prefer-immutable-types
+  readonly insert: (row: EventRow) => Effect.Effect<EventRow, unknown, never>;
   readonly selectAllEventsInStream: (
     streamId: EventStreamId
-  ) => Effect.Effect<EventRow[], unknown, never>;
+  ) => Effect.Effect<readonly EventRow[], unknown, never>;
   readonly selectAllEvents: (
     nullValue: Schema.Schema.Type<typeof Schema.Null>
-  ) => Effect.Effect<EventRow[], unknown, never>;
+  ) => Effect.Effect<readonly EventRow[], unknown, never>;
 }
 
 export class EventRowService extends Effect.Tag('EventRowService')<
@@ -50,6 +51,7 @@ export const makeEventRowService: Effect.Effect<
   SqlClient.SqlClient
 > = pipe(
   SqlClient.SqlClient,
+  // eslint-disable-next-line functional/prefer-immutable-types -- SQL client cannot be deeply readonly as it contains methods and connection state
   Effect.flatMap((sql: SqlClient.SqlClient) =>
     pipe(
       Effect.all({
@@ -141,16 +143,17 @@ export const EventSubscriptionServicesLive = Layer.mergeAll(
  */
 export const makeSqlEventStoreWithSubscriptionManager = (
   subscriptionManager: SubscriptionManagerService,
+  // eslint-disable-next-line functional/prefer-immutable-types
   notificationListener: Readonly<{
-    listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
-    unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
-    notifications: Stream.Stream<
-      { streamId: EventStreamId; payload: NotificationPayload },
+    readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly notifications: Stream.Stream<
+      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
       EventStoreError,
       never
     >;
-    start: Effect.Effect<void, EventStoreError, never>;
-    stop: Effect.Effect<void, EventStoreError, never>;
+    readonly start: Effect.Effect<void, EventStoreError, never>;
+    readonly stop: Effect.Effect<void, EventStoreError, never>;
   }>
 ): Effect.Effect<EventStore<string>, EventStoreError, EventRowService> => {
   return pipe(
@@ -207,6 +210,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               pipe(
                 // Get all events in stream to check position
                 eventRows.selectAllEventsInStream(end.streamId),
+                // eslint-disable-next-line functional/prefer-immutable-types
                 Effect.map((events: readonly EventRow[]) => {
                   // Find the last event in the stream
                   if (events.length === 0) {
@@ -237,7 +241,8 @@ export const makeSqlEventStoreWithSubscriptionManager = (
                     event_payload: payload,
                   })
                 ),
-                Effect.map((row: Readonly<EventRow>) => ({
+                // eslint-disable-next-line functional/prefer-immutable-types
+                Effect.map((row: EventRow) => ({
                   streamId: row.stream_id,
                   eventNumber: row.event_number + 1,
                 })),
@@ -284,10 +289,13 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           // Read returns only historical events - no live updates
           return pipe(
             eventRows.selectAllEventsInStream(from.streamId),
+            // eslint-disable-next-line functional/prefer-immutable-types
             Effect.map((events: readonly EventRow[]) => {
               const filteredEvents = events
-                .filter((event: Readonly<EventRow>) => event.event_number >= from.eventNumber)
-                .map((event: Readonly<EventRow>) => event.event_payload);
+                // eslint-disable-next-line functional/prefer-immutable-types
+                .filter((event: EventRow) => event.event_number >= from.eventNumber)
+                // eslint-disable-next-line functional/prefer-immutable-types
+                .map((event: EventRow) => event.event_payload);
               return Stream.fromIterable(filteredEvents);
             }),
             Effect.map((stream) =>
@@ -327,10 +335,13 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               pipe(
                 // Then get historical events
                 eventRows.selectAllEventsInStream(from.streamId),
+                // eslint-disable-next-line functional/prefer-immutable-types
                 Effect.map((events: readonly EventRow[]) => {
                   const filteredEvents = events
-                    .filter((event: Readonly<EventRow>) => event.event_number >= from.eventNumber)
-                    .map((event: Readonly<EventRow>) => event.event_payload);
+                    // eslint-disable-next-line functional/prefer-immutable-types
+                    .filter((event: EventRow) => event.event_number >= from.eventNumber)
+                    // eslint-disable-next-line functional/prefer-immutable-types
+                    .map((event: EventRow) => event.event_payload);
                   return Stream.fromIterable(filteredEvents);
                 }),
                 Effect.map((historicalStream) =>

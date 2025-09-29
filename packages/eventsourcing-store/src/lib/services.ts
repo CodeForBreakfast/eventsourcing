@@ -84,7 +84,10 @@ export interface SnapshotStore<TSnapshot> {
   readonly load: (
     aggregateId: string,
     version?: number
-  ) => Effect.Effect<{ version: number; snapshot: TSnapshot } | null, SnapshotError>;
+  ) => Effect.Effect<
+    { readonly version: number; readonly snapshot: TSnapshot } | null,
+    SnapshotError
+  >;
   readonly delete: (aggregateId: string) => Effect.Effect<void, SnapshotError>;
   readonly list: (aggregateId: string) => Effect.Effect<readonly number[], SnapshotError>;
 }

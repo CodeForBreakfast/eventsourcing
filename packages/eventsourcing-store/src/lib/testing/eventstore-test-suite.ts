@@ -1,3 +1,4 @@
+/* eslint-disable functional/prefer-immutable-types, functional/prefer-readonly-type, no-restricted-imports, no-restricted-syntax */
 import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
@@ -30,7 +31,7 @@ export interface EventStoreTestOptions {
    * Set to false for in-memory implementations that don't have a shared backend.
    * @default true
    */
-  supportsHorizontalScaling?: boolean;
+  readonly supportsHorizontalScaling?: boolean;
 }
 
 /**

@@ -174,7 +174,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
           id,
           toStreamId,
           Effect.flatMap(beginning),
-          Effect.flatMap((position: EventStreamPosition) => eventStore.read(position)),
+          Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position)),
           Effect.flatMap((stream) =>
             pipe(
               stream,
@@ -200,8 +200,8 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
               nextEventNumber,
               data,
             }: Readonly<{
-              nextEventNumber: number;
-              data: Option.Option<TState>;
+              readonly nextEventNumber: number;
+              readonly data: Option.Option<TState>;
             }>) =>
               pipe(
                 nextEventNumber,
@@ -242,17 +242,19 @@ export type EventMetadata = typeof EventMetadata.Type;
  */
 export const eventMetadata = () =>
   pipe(
-    Effect.all({
-      currentTime: Clock.currentTimeMillis,
-      commandContext: CommandContext,
-    }),
-    Effect.flatMap(({ currentTime, commandContext }) =>
+    Clock.currentTimeMillis,
+    Effect.flatMap((currentTime) =>
       pipe(
-        commandContext.getInitiatorId,
-        Effect.map((initiatorId) => ({
-          occurredAt: new Date(currentTime),
-          originator: initiatorId,
-        }))
+        CommandContext,
+        Effect.flatMap((commandContext) =>
+          pipe(
+            commandContext.getInitiatorId,
+            Effect.map((initiatorId) => ({
+              occurredAt: new Date(currentTime),
+              originator: initiatorId,
+            }))
+          )
+        )
       )
     )
   );

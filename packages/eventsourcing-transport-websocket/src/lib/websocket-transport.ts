@@ -5,6 +5,8 @@
  * Provides proper Effect-based WebSocket handling with structured lifecycle management.
  */
 
+/* eslint-disable functional/prefer-immutable-types, functional/type-declaration-immutability */
+
 import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
@@ -22,12 +24,12 @@ import {
 interface WebSocketInternalState {
   readonly socket: Socket.Socket | null;
   readonly connectionState: ConnectionState;
-  readonly connectionStatePubSub: PubSub.PubSub<ConnectionState>;
-  readonly subscribers: Set<Queue.Queue<TransportMessage>>;
+  readonly connectionStatePubSub: Readonly<PubSub.PubSub<ConnectionState>>;
+  readonly subscribers: ReadonlySet<Readonly<Queue.Queue<TransportMessage>>>;
 }
 
 interface InternalTransport extends Client.Transport {
-  readonly __stateRef: Ref.Ref<WebSocketInternalState>;
+  readonly __stateRef: Readonly<Ref.Ref<Readonly<WebSocketInternalState>>>;
 }
 
 // =============================================================================
@@ -35,8 +37,8 @@ interface InternalTransport extends Client.Transport {
 // =============================================================================
 
 const createConnectionStateStream = (
-  stateRef: Ref.Ref<WebSocketInternalState>
-): Stream.Stream<ConnectionState, never, never> =>
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
+): Readonly<Stream.Stream<ConnectionState, never, never>> =>
   Stream.unwrapScoped(
     pipe(
       Ref.get(stateRef),
@@ -56,10 +58,10 @@ const createConnectionStateStream = (
 
 const publishMessage =
   (
-    stateRef: Ref.Ref<WebSocketInternalState>,
-    writerRef: Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>
+    stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+    writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
   ) =>
-  (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
+  (message: Readonly<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
       Effect.all([Ref.get(stateRef), Ref.get(writerRef)]),
       Effect.flatMap(([state, writer]) => {
@@ -89,16 +91,18 @@ const publishMessage =
     );
 
 const subscribeToMessages =
-  (stateRef: Ref.Ref<WebSocketInternalState>) =>
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
   (
-    filter?: (message: TransportMessage) => boolean
+    filter?: (message: Readonly<TransportMessage>) => boolean
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap((queue) =>
         Ref.update(stateRef, (state) => ({
           ...state,
-          subscribers: new Set([...state.subscribers, queue]),
+          subscribers: new Set([...state.subscribers, queue]) as ReadonlySet<
+            Queue.Queue<TransportMessage>
+          >,
         }))
       ),
       Effect.map((queue) => {
@@ -117,8 +121,8 @@ const subscribeToMessages =
     );
 
 const createConnectedTransport = (
-  stateRef: Ref.Ref<WebSocketInternalState>,
-  writerRef: Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
 ): InternalTransport => ({
   connectionState: createConnectionStateStream(stateRef),
   publish: publishMessage(stateRef, writerRef),
@@ -131,8 +135,8 @@ const createConnectedTransport = (
 // =============================================================================
 
 const updateConnectionState = (
-  stateRef: Ref.Ref<WebSocketInternalState>,
-  newState: ConnectionState
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  newState: Readonly<ConnectionState>
 ): Effect.Effect<void, never, never> =>
   pipe(
     Ref.update(stateRef, (state) => ({
@@ -144,8 +148,8 @@ const updateConnectionState = (
   );
 
 const handleIncomingMessage = (
-  stateRef: Ref.Ref<WebSocketInternalState>,
-  data: Uint8Array
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  data: Readonly<Uint8Array>
 ): Effect.Effect<void, never, never> =>
   pipe(
     Effect.sync(() => {
@@ -172,8 +176,8 @@ const handleIncomingMessage = (
   );
 
 const createWebSocketConnection = (
-  url: string,
-  stateRef: Ref.Ref<WebSocketInternalState>
+  url: Readonly<string>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
 ): Effect.Effect<Socket.Socket, ConnectionError, Socket.WebSocketConstructor> =>
   pipe(
     Socket.makeWebSocket(url, {
@@ -204,15 +208,15 @@ const createInitialState = (): Effect.Effect<Ref.Ref<WebSocketInternalState>, ne
         socket: null,
         connectionState: 'connecting',
         connectionStatePubSub,
-        subscribers: new Set(),
+        subscribers: new Set() as ReadonlySet<Queue.Queue<TransportMessage>>,
       };
       return Ref.make(initialState);
     })
   );
 
 const cleanupConnection = (
-  stateRef: Ref.Ref<WebSocketInternalState>,
-  writerRef: Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
 ): Effect.Effect<void, never, never> =>
   pipe(
     Ref.set(writerRef, null),
@@ -222,14 +226,16 @@ const cleanupConnection = (
         socket: null,
         connectionState: 'disconnected' as ConnectionState,
         connectionStatePubSub: s.connectionStatePubSub,
-        subscribers: new Set<Queue.Queue<TransportMessage>>(),
+        subscribers: new Set<Queue.Queue<TransportMessage>>() as ReadonlySet<
+          Queue.Queue<TransportMessage>
+        >,
       }))
     ),
     Effect.asVoid
   );
 
 const connectWebSocket = (
-  url: string
+  url: Readonly<string>
 ): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope> =>
   pipe(
     Effect.all({
@@ -255,7 +261,7 @@ const connectWebSocket = (
               pipe(
                 Effect.all({
                   fiber: socket
-                    .run((data: Uint8Array) => handleIncomingMessage(stateRef, data), {
+                    .run((data: Readonly<Uint8Array>) => handleIncomingMessage(stateRef, data), {
                       onOpen: pipe(
                         updateConnectionState(stateRef, 'connected'),
                         Effect.flatMap(() => Deferred.succeed(connectedDeferred, void 0))
