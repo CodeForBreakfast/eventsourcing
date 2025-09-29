@@ -157,8 +157,13 @@ export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type CommandFromDefinitions<T extends readonly CommandDefinition<string, any>[]> = {
-  [K in keyof T]: T[K] extends CommandDefinition<infer Name, infer Payload>
-    ? { id: string; target: string; name: Name; payload: Payload }
+  readonly [K in keyof T]: T[K] extends CommandDefinition<infer Name, infer Payload>
+    ? {
+        readonly id: string;
+        readonly target: string;
+        readonly name: Name;
+        readonly payload: Payload;
+      }
     : never;
 }[number];
 
@@ -170,10 +175,10 @@ export const buildCommandSchema = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T extends readonly CommandDefinition<string, any>[],
 >(
-  commands: T
+  commands: ReadonlyDeep<T>
 ): Schema.Schema<
   CommandFromDefinitions<T>,
-  { id: string; target: string; name: string; payload: unknown }
+  { readonly id: string; readonly target: string; readonly name: string; readonly payload: unknown }
 > => {
   if (commands.length === 0) {
     throw new Error('At least one command definition is required');
@@ -237,5 +242,5 @@ export const validateCommand =
  * Uses Effect's pattern matching for exhaustive command handling
  */
 export type CommandMatcher<TCommands extends DomainCommand> = (
-  command: TCommands
+  command: ReadonlyDeep<TCommands>
 ) => Effect.Effect<CommandResult, never, never>;

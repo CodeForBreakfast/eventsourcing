@@ -48,7 +48,7 @@ export const makeCommandRegistry = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T extends readonly CommandDefinition<string, any>[],
 >(
-  commands: T,
+  commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): CommandRegistry => {
   // Build the exhaustive command schema
@@ -80,7 +80,7 @@ export const makeCommandRegistry = <
 
         // Execute the matcher with exact command type - it handles all the dispatch logic
         return pipe(
-          matcher(parseResult.right),
+          matcher(parseResult.right as ReadonlyDeep<CommandFromDefinitions<T>>),
           Effect.exit,
           Effect.map((matcherResult) =>
             matcherResult._tag === 'Failure'
@@ -111,7 +111,7 @@ export const makeCommandRegistryLayer = <
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const T extends readonly CommandDefinition<string, any>[],
 >(
-  commands: T,
+  commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
 ): Layer.Layer<CommandRegistryService, never, never> =>
   Layer.succeed(CommandRegistryService, makeCommandRegistry(commands, matcher));

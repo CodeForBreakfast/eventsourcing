@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Schema, Effect, pipe, Match } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import type { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 import { WireCommand, defineCommand, CommandFromDefinitions } from './commands';
 import { makeCommandRegistry } from './command-registry';
@@ -16,7 +17,7 @@ describe('Command Registry', () => {
 
     type Commands = CommandFromDefinitions<typeof commands>;
 
-    const commandMatcher = (command: Commands) =>
+    const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       Match.value(command).pipe(
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
@@ -60,7 +61,7 @@ describe('Command Registry', () => {
 
     type Commands = CommandFromDefinitions<typeof commands>;
 
-    const commandMatcher = (command: Commands) =>
+    const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       Match.value(command).pipe(
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
@@ -107,7 +108,7 @@ describe('Command Registry', () => {
 
     type Commands = CommandFromDefinitions<typeof commands>;
 
-    const commandMatcher = (command: Commands) =>
+    const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       Match.value(command).pipe(
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
@@ -150,7 +151,7 @@ describe('Command Registry', () => {
 
     type Commands = CommandFromDefinitions<typeof commands>;
 
-    const commandMatcher = (command: Commands) =>
+    const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       Match.value(command).pipe(
         Match.when({ name: 'CreateUser' }, () => Effect.die(new Error('Something went wrong'))),
         Match.exhaustive
@@ -192,7 +193,7 @@ describe('Command Registry', () => {
 
     type Commands = CommandFromDefinitions<typeof commands>;
 
-    const commandMatcher = (command: Commands) =>
+    const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       Match.value(command).pipe(
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
