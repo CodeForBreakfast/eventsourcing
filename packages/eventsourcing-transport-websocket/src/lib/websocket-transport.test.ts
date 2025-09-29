@@ -145,7 +145,7 @@ const createMockWebSocket = (
       dispatchEvent({ type: 'close', code: code ?? 1000, reason: reason ?? '' });
     },
 
-    // Legacy event handler properties (for compatibility)
+    // Event handler properties
     onopen: null,
     onclose: null,
     onmessage: null,
@@ -290,10 +290,10 @@ describe('WebSocket Transport - WebSocket-Specific Behavior', () => {
 });
 
 // =============================================================================
-// Edge Case Tests (Legacy scenarios for compatibility)
+// Edge Case Tests
 // =============================================================================
 
-describe('WebSocket Transport - Legacy Edge Cases', () => {
+describe('WebSocket Transport - Edge Cases', () => {
   it.scoped('should handle connection to non-existent server', () =>
     pipe(
       // Try to connect to a port that's very unlikely to be in use

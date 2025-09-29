@@ -467,43 +467,6 @@ const program = pipe(
 4. **Batch writes** when possible to reduce database round-trips
 5. **Consider event archiving** for old events that are rarely accessed
 
-## Migration from Other Event Sourcing Libraries
-
-### From EventStore DB
-
-```typescript
-// Before (EventStore DB)
-const events = await eventStore.readStreamEvents('user-123');
-
-// After (codeforbreakfast) - for historical events only
-const events = await Effect.runPromise(EventStore.read({ streamId: 'user-123' }));
-
-// After (codeforbreakfast) - for historical + live events
-const events = await Effect.runPromise(EventStore.subscribe({ streamId: 'user-123' }));
-```
-
-### From Axon Framework
-
-```typescript
-// Before (Axon)
-@CommandHandler
-public void handle(RegisterUserCommand cmd) {
-  apply(new UserRegisteredEvent(cmd.userId, cmd.email));
-}
-
-// After (codeforbreakfast)
-register: (email) => (state) =>
-  pipe(
-    UserRegistered.make({
-      type: "UserRegistered",
-      email,
-      registeredAt: new Date(),
-    }),
-    Chunk.of,
-    Effect.succeed
-  )
-```
-
 ## License
 
 MIT

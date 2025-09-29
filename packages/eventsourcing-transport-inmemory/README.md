@@ -140,22 +140,6 @@ const connector: InMemoryConnector = (url: string) =>
   Effect<Client.Transport<TransportMessage>, ConnectionError, Scope>;
 ```
 
-## Migration from Legacy API
-
-The old global `InMemoryConnector` has been removed due to TypeScript naming conflicts. Update your code:
-
-```typescript
-// Old (broken)
-import { InMemoryConnector } from '@codeforbreakfast/eventsourcing-transport-inmemory';
-const client = await InMemoryConnector.connect('inmemory://');
-
-// New (pure functional)
-import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
-const acceptor = await InMemoryAcceptor.make();
-const server = await acceptor.start();
-const client = await server.connector('inmemory://');
-```
-
 ## Testing
 
 Perfect for contract testing with complete isolation:

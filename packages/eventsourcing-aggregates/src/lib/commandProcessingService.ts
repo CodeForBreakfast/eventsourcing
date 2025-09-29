@@ -1,11 +1,11 @@
 import { Effect } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
-import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError } from './commandProcessingErrors';
 
 export interface CommandProcessingServiceInterface {
   readonly processCommand: (
-    command: ReadonlyDeep<Command>
+    command: ReadonlyDeep<WireCommand>
   ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
 }
 
