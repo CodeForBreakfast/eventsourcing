@@ -5,8 +5,6 @@
  * Provides proper Effect-based WebSocket handling with structured lifecycle management.
  */
 
-/* eslint-disable functional/prefer-immutable-types, functional/type-declaration-immutability */
-
 import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {

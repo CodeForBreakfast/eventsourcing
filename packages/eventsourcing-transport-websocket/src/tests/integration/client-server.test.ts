@@ -8,8 +8,6 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-/* eslint-disable functional/prefer-immutable-types */
-
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
 import {
