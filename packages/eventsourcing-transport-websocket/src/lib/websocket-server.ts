@@ -5,11 +5,6 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
-/* eslint-disable functional/prefer-immutable-types */
-// Effect types (Ref, Queue, Stream, HashMap, HashSet) contain internal mutable state by design.
-// This is safe because Effect manages mutations through controlled APIs (Ref.set, HashMap.set, etc.)
-// rather than allowing direct mutation. We use immutable operations throughout.
-
 import { Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
 import {
   TransportMessage,

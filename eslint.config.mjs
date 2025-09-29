@@ -72,6 +72,18 @@ export default [
         {
           enforcement: 'ReadonlyShallow',
           ignoreInferredTypes: true,
+          ignoreTypePattern: [
+            // Effect types are immutable-by-contract but contain internal mutable state
+            '^Ref\\.Ref<.*>$',
+            '^Queue\\.Queue<.*>$',
+            '^HashMap\\.HashMap<.*>$',
+            '^HashSet\\.HashSet<.*>$',
+            '^Stream\\.Stream<.*>$',
+            '^PubSub\\.PubSub<.*>$',
+            // ReadonlyDeep wrapper containing Effect types
+            '^ReadonlyDeep<.*>$',
+            '^Readonly<.*>$',
+          ],
           parameters: {
             enforcement: 'ReadonlyDeep',
           },
@@ -86,6 +98,11 @@ export default [
               immutability: 'ReadonlyDeep',
               comparator: 'AtLeast',
             },
+          ],
+          ignoreIdentifierPattern: [
+            // Interfaces containing Effect types which are immutable-by-contract
+            '.*Internal.*',
+            '.*State',
           ],
         },
       ],
