@@ -1,12 +1,8 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Schema, Effect, pipe } from 'effect';
+import { Schema, Effect, pipe, Match } from 'effect';
 import type { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
-import { WireCommand, DomainCommand, CommandHandler } from './commands';
-import {
-  makeCommandRegistry,
-  createCommandRegistration,
-  buildCommandRegistrations,
-} from './command-registry';
+import { WireCommand, defineCommand, CommandFromDefinitions } from './commands';
+import { makeCommandRegistry } from './command-registry';
 
 describe('Command Registry', () => {
   const UserPayload = Schema.Struct({
@@ -14,19 +10,24 @@ describe('Command Registry', () => {
     name: Schema.String.pipe(Schema.minLength(1)),
   });
 
-  const createUserHandler: CommandHandler<DomainCommand<typeof UserPayload.Type>> = {
-    handle: (_command) =>
-      Effect.succeed({
-        _tag: 'Success' as const,
-        position: { streamId: 'user-123', eventNumber: 1 } as EventStreamPosition,
-      }),
-  };
-
   it.effect('should register and dispatch commands successfully', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
-    const registry = makeCommandRegistry(registrations);
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const commands = [createUserCommand] as const;
+
+    type Commands = CommandFromDefinitions<typeof commands>;
+
+    const commandMatcher = (command: Commands) =>
+      Match.value(command).pipe(
+        Match.when({ name: 'CreateUser' }, () =>
+          Effect.succeed({
+            _tag: 'Success' as const,
+            position: { streamId: 'user-123', eventNumber: 1 } as EventStreamPosition,
+          })
+        ),
+        Match.exhaustive
+      );
+
+    const registry = makeCommandRegistry(commands, commandMatcher);
 
     // Create a valid wire command
     const wireCommand: WireCommand = {
@@ -54,10 +55,23 @@ describe('Command Registry', () => {
   });
 
   it.effect('should handle validation errors', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
-    const registry = makeCommandRegistry(registrations);
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const commands = [createUserCommand] as const;
+
+    type Commands = CommandFromDefinitions<typeof commands>;
+
+    const commandMatcher = (command: Commands) =>
+      Match.value(command).pipe(
+        Match.when({ name: 'CreateUser' }, () =>
+          Effect.succeed({
+            _tag: 'Success' as const,
+            position: { streamId: 'user-123', eventNumber: 1 } as EventStreamPosition,
+          })
+        ),
+        Match.exhaustive
+      );
+
+    const registry = makeCommandRegistry(commands, commandMatcher);
 
     const invalidCommand: WireCommand = {
       id: 'cmd-123',
@@ -88,10 +102,23 @@ describe('Command Registry', () => {
   });
 
   it.effect('should handle unknown commands', () => {
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-    });
-    const registry = makeCommandRegistry(registrations);
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const commands = [createUserCommand] as const;
+
+    type Commands = CommandFromDefinitions<typeof commands>;
+
+    const commandMatcher = (command: Commands) =>
+      Match.value(command).pipe(
+        Match.when({ name: 'CreateUser' }, () =>
+          Effect.succeed({
+            _tag: 'Success' as const,
+            position: { streamId: 'user-123', eventNumber: 1 } as EventStreamPosition,
+          })
+        ),
+        Match.exhaustive
+      );
+
+    const registry = makeCommandRegistry(commands, commandMatcher);
 
     const unknownCommand: WireCommand = {
       id: 'cmd-123',
@@ -106,10 +133,10 @@ describe('Command Registry', () => {
         Effect.sync(() => {
           expect(result._tag).toBe('Failure');
           if (result._tag === 'Failure') {
-            expect(result.error._tag).toBe('HandlerNotFound');
-            if (result.error._tag === 'HandlerNotFound') {
+            expect(result.error._tag).toBe('ValidationError');
+            if (result.error._tag === 'ValidationError') {
               expect(result.error.commandName).toBe('UnknownCommand');
-              expect(result.error.availableHandlers).toEqual(['CreateUser']);
+              expect(result.error.validationErrors.length).toBeGreaterThan(0);
             }
           }
         })
@@ -118,14 +145,18 @@ describe('Command Registry', () => {
   });
 
   it.effect('should handle command execution errors', () => {
-    const failingHandler: CommandHandler<DomainCommand<typeof UserPayload.Type>> = {
-      handle: () => Effect.die(new Error('Something went wrong')),
-    };
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const commands = [createUserCommand] as const;
 
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, failingHandler),
-    });
-    const registry = makeCommandRegistry(registrations);
+    type Commands = CommandFromDefinitions<typeof commands>;
+
+    const commandMatcher = (command: Commands) =>
+      Match.value(command).pipe(
+        Match.when({ name: 'CreateUser' }, () => Effect.die(new Error('Something went wrong'))),
+        Match.exhaustive
+      );
+
+    const registry = makeCommandRegistry(commands, commandMatcher);
 
     const wireCommand: WireCommand = {
       id: 'cmd-123',
@@ -155,19 +186,30 @@ describe('Command Registry', () => {
       newEmail: Schema.String.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
     });
 
-    const updateEmailHandler: CommandHandler<DomainCommand<typeof UpdateEmailPayload.Type>> = {
-      handle: () =>
-        Effect.succeed({
-          _tag: 'Success' as const,
-          position: { streamId: 'user-123', eventNumber: 2 } as EventStreamPosition,
-        }),
-    };
+    const createUserCommand = defineCommand('CreateUser', UserPayload);
+    const updateEmailCommand = defineCommand('UpdateEmail', UpdateEmailPayload);
+    const commands = [createUserCommand, updateEmailCommand] as const;
 
-    const registrations = buildCommandRegistrations({
-      CreateUser: createCommandRegistration(UserPayload, createUserHandler),
-      UpdateEmail: createCommandRegistration(UpdateEmailPayload, updateEmailHandler),
-    });
-    const registry = makeCommandRegistry(registrations);
+    type Commands = CommandFromDefinitions<typeof commands>;
+
+    const commandMatcher = (command: Commands) =>
+      Match.value(command).pipe(
+        Match.when({ name: 'CreateUser' }, () =>
+          Effect.succeed({
+            _tag: 'Success' as const,
+            position: { streamId: 'user-123', eventNumber: 1 } as EventStreamPosition,
+          })
+        ),
+        Match.when({ name: 'UpdateEmail' }, () =>
+          Effect.succeed({
+            _tag: 'Success' as const,
+            position: { streamId: 'user-123', eventNumber: 2 } as EventStreamPosition,
+          })
+        ),
+        Match.exhaustive
+      );
+
+    const registry = makeCommandRegistry(commands, commandMatcher);
 
     // Test both commands work
     const createCommand: WireCommand = {
