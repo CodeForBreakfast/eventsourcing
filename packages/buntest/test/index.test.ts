@@ -55,14 +55,22 @@ it.effect('can use TestServices', () =>
 );
 
 // Layer sharing examples
-class Foo extends Context.Tag('Foo')<Foo, 'foo'>() {
-  static Live = Layer.succeed(Foo, 'foo' as const);
+interface FooService {
+  readonly value: 'foo';
 }
 
-class Bar extends Context.Tag('Bar')<Bar, 'bar'>() {
+class Foo extends Context.Tag('Foo')<Foo, FooService>() {
+  static Live = Layer.succeed(Foo, { value: 'foo' as const });
+}
+
+interface BarService {
+  readonly value: 'bar';
+}
+
+class Bar extends Context.Tag('Bar')<Bar, BarService>() {
   static Live = Layer.effect(
     Bar,
-    Effect.map(Foo, () => 'bar' as const)
+    Effect.map(Foo, () => ({ value: 'bar' as const }))
   );
 }
 
@@ -71,7 +79,7 @@ describe('layer', () => {
     it.effect('adds context', () =>
       Effect.gen(function* () {
         const foo = yield* Foo;
-        expect(foo).toEqual('foo');
+        expect(foo.value).toEqual('foo');
       })
     );
 
@@ -80,8 +88,8 @@ describe('layer', () => {
         Effect.gen(function* () {
           const foo = yield* Foo;
           const bar = yield* Bar;
-          expect(foo).toEqual('foo');
-          expect(bar).toEqual('bar');
+          expect(foo.value).toEqual('foo');
+          expect(bar.value).toEqual('bar');
         })
       );
     });
@@ -91,17 +99,21 @@ describe('layer', () => {
         Effect.gen(function* () {
           const foo = yield* Foo;
           const bar = yield* Bar;
-          expect(foo).toEqual('foo');
-          expect(bar).toEqual('bar');
+          expect(foo.value).toEqual('foo');
+          expect(bar.value).toEqual('bar');
         })
       );
     });
 
     describe('scoped resources', () => {
-      class Scoped extends Context.Tag('Scoped')<Scoped, 'scoped'>() {
+      interface ScopedService {
+        readonly value: 'scoped';
+      }
+
+      class Scoped extends Context.Tag('Scoped')<Scoped, ScopedService>() {
         static Live = Layer.scoped(
           Scoped,
-          Effect.acquireRelease(Effect.succeed('scoped' as const), () =>
+          Effect.acquireRelease(Effect.succeed({ value: 'scoped' as const }), () =>
             Effect.logInfo('Resource released')
           )
         );
@@ -112,8 +124,8 @@ describe('layer', () => {
           Effect.gen(function* () {
             const foo = yield* Foo;
             const scoped = yield* Scoped;
-            expect(foo).toEqual('foo');
-            expect(scoped).toEqual('scoped');
+            expect(foo.value).toEqual('foo');
+            expect(scoped.value).toEqual('scoped');
           })
         );
       });

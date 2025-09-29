@@ -10,9 +10,6 @@ export class EventSourcingError extends Data.TaggedError('EventSourcingError')<
     readonly recoveryHint?: string;
   }>
 > {
-  static readonly is = (u: unknown): u is EventSourcingError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventSourcingError';
-
   get errorMessage() {
     return `[${this.module}] ${this.code}: ${this.message}${
       this.recoveryHint ? ` (Hint: ${this.recoveryHint})` : ''
@@ -29,10 +26,7 @@ export class EventStoreError extends Data.TaggedError('EventStoreError')<
     readonly cause?: unknown;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is EventStoreError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreError';
-}
+> {}
 
 export class EventStoreConnectionError extends Data.TaggedError('EventStoreConnectionError')<
   Readonly<{
@@ -42,10 +36,7 @@ export class EventStoreConnectionError extends Data.TaggedError('EventStoreConne
     readonly retryable: boolean;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is EventStoreConnectionError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreConnectionError';
-}
+> {}
 
 export class EventStoreResourceError extends Data.TaggedError('EventStoreResourceError')<
   Readonly<{
@@ -54,10 +45,7 @@ export class EventStoreResourceError extends Data.TaggedError('EventStoreResourc
     readonly cause: unknown;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is EventStoreResourceError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'EventStoreResourceError';
-}
+> {}
 
 export class ConcurrencyConflictError extends Data.TaggedError('ConcurrencyConflictError')<
   Readonly<{
@@ -65,10 +53,7 @@ export class ConcurrencyConflictError extends Data.TaggedError('ConcurrencyConfl
     readonly expectedVersion: number;
     readonly actualVersion: number;
   }>
-> {
-  static readonly is = (u: unknown): u is ConcurrencyConflictError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ConcurrencyConflictError';
-}
+> {}
 
 // Projection specific errors
 export class ProjectionError extends Data.TaggedError('ProjectionError')<
@@ -80,10 +65,7 @@ export class ProjectionError extends Data.TaggedError('ProjectionError')<
     readonly cause?: unknown;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is ProjectionError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ProjectionError';
-}
+> {}
 
 export class ProjectionStateError extends Data.TaggedError('ProjectionStateError')<
   Readonly<{
@@ -92,10 +74,7 @@ export class ProjectionStateError extends Data.TaggedError('ProjectionStateError
     readonly actualState: string;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is ProjectionStateError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'ProjectionStateError';
-}
+> {}
 
 // Snapshot specific errors
 export class SnapshotError extends Data.TaggedError('SnapshotError')<
@@ -107,10 +86,7 @@ export class SnapshotError extends Data.TaggedError('SnapshotError')<
     readonly cause?: unknown;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is SnapshotError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'SnapshotError';
-}
+> {}
 
 export class SnapshotVersionError extends Data.TaggedError('SnapshotVersionError')<
   Readonly<{
@@ -119,10 +95,7 @@ export class SnapshotVersionError extends Data.TaggedError('SnapshotVersionError
     readonly actualVersion: number;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is SnapshotVersionError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'SnapshotVersionError';
-}
+> {}
 
 // WebSocket transport errors
 export class WebSocketError extends Data.TaggedError('WebSocketError')<
@@ -135,10 +108,7 @@ export class WebSocketError extends Data.TaggedError('WebSocketError')<
     readonly retryable: boolean;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is WebSocketError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'WebSocketError';
-}
+> {}
 
 export class WebSocketProtocolError extends Data.TaggedError('WebSocketProtocolError')<
   Readonly<{
@@ -147,24 +117,39 @@ export class WebSocketProtocolError extends Data.TaggedError('WebSocketProtocolE
     readonly details: string;
     readonly recoveryHint?: string;
   }>
-> {
-  static readonly is = (u: unknown): u is WebSocketProtocolError =>
-    typeof u === 'object' && u !== null && '_tag' in u && u._tag === 'WebSocketProtocolError';
-}
+> {}
 
-// Type guard helpers
-export const isEventSourcingError = (u: unknown): u is EventSourcingError =>
-  EventSourcingError.is(u) ||
-  EventStoreError.is(u) ||
-  EventStoreConnectionError.is(u) ||
-  EventStoreResourceError.is(u) ||
-  ConcurrencyConflictError.is(u) ||
-  ProjectionError.is(u) ||
-  ProjectionStateError.is(u) ||
-  SnapshotError.is(u) ||
-  SnapshotVersionError.is(u) ||
-  WebSocketError.is(u) ||
-  WebSocketProtocolError.is(u);
+// Type guard helper using tag-based discrimination
+export const isEventSourcingError = (
+  u: unknown
+): u is
+  | EventSourcingError
+  | EventStoreError
+  | EventStoreConnectionError
+  | EventStoreResourceError
+  | ConcurrencyConflictError
+  | ProjectionError
+  | ProjectionStateError
+  | SnapshotError
+  | SnapshotVersionError
+  | WebSocketError
+  | WebSocketProtocolError => {
+  if (typeof u !== 'object' || u === null || !('_tag' in u)) return false;
+  const tag = (u as { readonly _tag: unknown })._tag;
+  return [
+    'EventSourcingError',
+    'EventStoreError',
+    'EventStoreConnectionError',
+    'EventStoreResourceError',
+    'ConcurrencyConflictError',
+    'ProjectionError',
+    'ProjectionStateError',
+    'SnapshotError',
+    'SnapshotVersionError',
+    'WebSocketError',
+    'WebSocketProtocolError',
+  ].includes(tag as string);
+};
 
 // Legacy compatibility helpers
 export const resourceError = (resource: string, cause: unknown) =>
