@@ -100,9 +100,10 @@ export default [
             },
           ],
           ignoreIdentifierPattern: [
-            // Interfaces containing Effect types which are immutable-by-contract
+            // Interfaces/types containing Effect/Schema types which are immutable-by-contract
             '.*Internal.*',
             '.*State',
+            'Incoming.*',
           ],
         },
       ],
