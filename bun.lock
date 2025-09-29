@@ -46,7 +46,7 @@
       "dependencies": {
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -65,7 +65,7 @@
       "version": "0.3.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -83,7 +83,7 @@
       "version": "0.5.3",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@types/node": "24.5.2",
@@ -102,7 +102,7 @@
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -120,7 +120,7 @@
       "name": "@codeforbreakfast/eventsourcing-store",
       "version": "0.7.3",
       "dependencies": {
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -160,7 +160,7 @@
         "@effect/experimental": "0.55.0",
         "@effect/sql": "0.45.0",
         "@effect/sql-pg": "0.46.0",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -196,7 +196,7 @@
       "name": "@codeforbreakfast/eventsourcing-transport",
       "version": "0.3.3",
       "dependencies": {
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@types/node": "24.5.2",
@@ -213,7 +213,7 @@
       "version": "0.3.3",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-        "type-fest": "^5.0.1",
+        "type-fest": "5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
