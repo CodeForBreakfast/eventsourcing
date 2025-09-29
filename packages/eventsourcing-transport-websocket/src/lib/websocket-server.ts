@@ -9,7 +9,7 @@
 // Effect types (Ref, Queue, Stream) contain internal mutable state by design.
 // We manage mutations properly through Effect's APIs (Ref.update, etc.) rather than direct mutation.
 
-import { Effect, Stream, Scope, Ref, Queue, pipe } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, HashSet, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -35,7 +35,7 @@ interface ClientState {
   readonly socket: ServerWebSocket<{ readonly clientId: Server.ClientId }>; // Bun WebSocket
   readonly connectionStateRef: Ref.Ref<ConnectionState>;
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
-  readonly subscribersRef: Ref.Ref<ReadonlySet<Queue.Queue<TransportMessage>>>;
+  readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
   readonly connectedAt: Date;
 }
 
@@ -100,13 +100,7 @@ const subscribeToClientMessages =
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
-      Effect.tap((queue) =>
-        Ref.update(
-          clientState.subscribersRef,
-          (subscribers) =>
-            new Set([...subscribers, queue]) as ReadonlySet<Queue.Queue<TransportMessage>>
-        )
-      ),
+      Effect.tap((queue) => Ref.update(clientState.subscribersRef, HashSet.add(queue))),
       Effect.map((queue) => {
         const baseStream = Stream.fromQueue(queue);
 
@@ -194,9 +188,7 @@ const createWebSocketServer = (
                     Effect.all({
                       connectionStateQueue: Queue.unbounded<ConnectionState>(),
                       connectionStateRef: Ref.make<ConnectionState>('connecting'),
-                      subscribersRef: Ref.make<ReadonlySet<Queue.Queue<TransportMessage>>>(
-                        new Set() as ReadonlySet<Queue.Queue<TransportMessage>>
-                      ),
+                      subscribersRef: Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
                     }),
                     Effect.map(
                       ({ connectionStateQueue, connectionStateRef, subscribersRef }) =>
