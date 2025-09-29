@@ -6,6 +6,7 @@
  */
 
 import { Effect, Stream, Scope, Data, Brand } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import type { TransportMessage, TransportError } from './shared';
 import type { Transport as ClientTransport } from './client';
 
@@ -51,7 +52,9 @@ export interface Transport {
   readonly connections: Stream.Stream<ClientConnection, never, never>;
 
   // Broadcasting to all connected clients
-  readonly broadcast: (message: TransportMessage) => Effect.Effect<void, TransportError, never>;
+  readonly broadcast: (
+    message: ReadonlyDeep<TransportMessage>
+  ) => Effect.Effect<void, TransportError, never>;
 }
 
 /**

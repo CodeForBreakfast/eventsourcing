@@ -6,6 +6,7 @@
  */
 
 import { Effect, Stream, Scope } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import type { TransportMessage, ConnectionState, TransportError, ConnectionError } from './shared';
 
 // ============================================================================
@@ -25,9 +26,11 @@ export interface Transport {
   readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 
   // Message operations
-  readonly publish: (message: TransportMessage) => Effect.Effect<void, TransportError, never>;
+  readonly publish: (
+    message: ReadonlyDeep<TransportMessage>
+  ) => Effect.Effect<void, TransportError, never>;
   readonly subscribe: (
-    filter?: (message: TransportMessage) => boolean
+    filter?: (message: ReadonlyDeep<TransportMessage>) => boolean
   ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never>;
 }
 

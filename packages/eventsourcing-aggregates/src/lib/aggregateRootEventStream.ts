@@ -242,17 +242,19 @@ export type EventMetadata = typeof EventMetadata.Type;
  */
 export const eventMetadata = () =>
   pipe(
-    Effect.all({
-      currentTime: Clock.currentTimeMillis,
-      commandContext: CommandContext,
-    }),
-    Effect.flatMap(({ currentTime, commandContext }) =>
+    Clock.currentTimeMillis,
+    Effect.flatMap((currentTime) =>
       pipe(
-        commandContext.getInitiatorId,
-        Effect.map((initiatorId) => ({
-          occurredAt: new Date(currentTime),
-          originator: initiatorId,
-        }))
+        CommandContext,
+        Effect.flatMap((commandContext) =>
+          pipe(
+            commandContext.getInitiatorId,
+            Effect.map((initiatorId) => ({
+              occurredAt: new Date(currentTime),
+              originator: initiatorId,
+            }))
+          )
+        )
       )
     )
   );

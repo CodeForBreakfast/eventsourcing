@@ -243,7 +243,7 @@ describe('Command Processing Service', () => {
       name: 'NonExistentCommand',
     };
 
-    const testCommands = [testCommand, orderCommand, updateCommand];
+    const testCommands = [testCommand, orderCommand, updateCommand] as const;
 
     return pipe(
       createCommandProcessingService(router),

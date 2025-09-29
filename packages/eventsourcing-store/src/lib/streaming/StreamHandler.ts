@@ -1,4 +1,5 @@
 import { Data, Effect, Layer, PubSub, Queue, Stream, Scope, pipe, Ref, Context } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 
 // For ESLint prefer-immutable-types compliance with Effect types
 // We use a minimal readonly wrapper that doesn't break Effect's type system
@@ -155,12 +156,10 @@ export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =
         getStreamMetrics: () =>
           pipe(
             Effect.all([Ref.get(channelsRef), Ref.get(eventsCounter)]),
-            // eslint-disable-next-line functional/prefer-immutable-types
             Effect.map(
-              ([channels, count]: readonly [
-                ReadonlyMap<string, PubSub.PubSub<TEvent>>,
-                number,
-              ]) => ({
+              ([channels, count]: ReadonlyDeep<
+                readonly [ReadonlyMap<string, PubSub.PubSub<TEvent>>, number]
+              >) => ({
                 activeStreams: channels.size,
                 totalEventsProcessed: count,
               })

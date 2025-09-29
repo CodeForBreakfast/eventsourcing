@@ -8,13 +8,14 @@ import { CurrentUserError } from './currentUser';
 export const CommandInitiatorId = Schema.Union(PersonId);
 export type CommandInitiatorId = typeof CommandInitiatorId.Type;
 
-export type CommandContextInterface = ReadonlyDeep<{
-  getInitiatorId: Effect.Effect<ReadonlyDeep<Option.Option<CommandInitiatorId>>, CurrentUserError>;
-}>;
+// eslint-disable-next-line functional/type-declaration-immutability
+export interface ICommandContext {
+  readonly getInitiatorId: Effect.Effect<Option.Option<CommandInitiatorId>, CurrentUserError>;
+}
 
 export class CommandContext extends Effect.Tag('CommandContext')<
   CommandContext,
-  CommandContextInterface
+  ICommandContext
 >() {}
 
 export const CommandContextTest = (initiatorId: Readonly<Option.Option<CommandInitiatorId>>) =>

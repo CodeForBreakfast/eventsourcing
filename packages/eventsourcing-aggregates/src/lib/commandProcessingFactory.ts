@@ -1,11 +1,12 @@
 import { Effect, pipe, Stream } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import { EventStoreService, beginning, toStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingServiceInterface } from './commandProcessingService';
 import { CommandRouter } from './commandHandling';
 
 export const createCommandProcessingService = (
-  router: Readonly<CommandRouter>
+  router: ReadonlyDeep<CommandRouter>
 ): Effect.Effect<CommandProcessingServiceInterface, never, EventStoreService> =>
   pipe(
     EventStoreService,
