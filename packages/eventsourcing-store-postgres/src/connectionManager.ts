@@ -1,6 +1,7 @@
 import { PgClient } from '@effect/sql-pg';
 import { Duration, Effect, Layer, Schedule, pipe } from 'effect';
 import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
+import type { ReadonlyDeep } from 'type-fest';
 
 // Extended PgClient type with direct query access
 interface PgClientWithQuery extends PgClient.PgClient {
@@ -103,7 +104,7 @@ export const ConnectionManagerLive = Layer.effect(
  */
 // Skip health check as it's causing issues
 export const withConnectionHealth = <A, E, R>(
-  effect: Effect.Effect<A, E, R>
+  effect: ReadonlyDeep<Effect.Effect<A, E, R>>
 ): Effect.Effect<A, E, R> =>
   pipe(
     effect,

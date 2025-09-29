@@ -23,6 +23,7 @@ import {
 } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamPosition, Event } from '@codeforbreakfast/eventsourcing-store';
 import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { ReadonlyDeep } from 'type-fest';
 
 // Minimum protocol needs:
 // 1. Send command -> get result
@@ -102,7 +103,7 @@ export type EventMessage = typeof EventMessage.Type;
 
 // Union of all possible incoming messages
 export const IncomingMessage = Schema.Union(CommandResultMessage, EventMessage);
-export type IncomingMessage = typeof IncomingMessage.Type;
+export type IncomingMessage = ReadonlyDeep<typeof IncomingMessage.Type>;
 
 interface ProtocolState {
   readonly pendingCommands: HashMap.HashMap<string, Deferred.Deferred<CommandResult>>;
@@ -111,7 +112,8 @@ interface ProtocolState {
 
 export interface ProtocolService {
   readonly sendCommand: (
-    command: Command
+    // eslint-disable-next-line functional/prefer-immutable-types
+    command: ReadonlyDeep<Command>
   ) => Effect.Effect<
     CommandResult,
     TransportError | CommandTimeoutError | ProtocolValidationError,
@@ -128,7 +130,10 @@ export interface ProtocolService {
 
 export class Protocol extends Effect.Tag('Protocol')<Protocol, ProtocolService>() {}
 
-const parseTransportPayload = (message: TransportMessage) =>
+const parseTransportPayload = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  message: ReadonlyDeep<TransportMessage>
+) =>
   pipe(
     Effect.try({
       try: () => JSON.parse(message.payload),
@@ -155,7 +160,8 @@ const validateIncomingMessage = (rawPayload: unknown) =>
   );
 
 const createCommandResult = (
-  message: CommandResultMessage
+  // eslint-disable-next-line functional/prefer-immutable-types
+  message: ReadonlyDeep<CommandResultMessage>
 ): Effect.Effect<CommandResult, ProtocolStateError> =>
   pipe(
     Match.value(message),
@@ -200,71 +206,80 @@ const createCommandResult = (
     Match.exhaustive
   );
 
-const handleCommandResult = (stateRef: Ref.Ref<ProtocolState>) => (message: CommandResultMessage) =>
-  pipe(
-    Ref.get(stateRef),
-    Effect.flatMap((state) =>
-      pipe(
-        HashMap.get(state.pendingCommands, message.commandId),
-        Option.match({
-          onNone: () => Effect.void, // Command not found, ignore
-          onSome: (deferred) =>
-            pipe(
-              createCommandResult(message),
-              Effect.flatMap((result) =>
-                pipe(
-                  Ref.update(stateRef, (state) => ({
-                    ...state,
-                    pendingCommands: HashMap.remove(state.pendingCommands, message.commandId),
-                  })),
-                  Effect.flatMap(() => Deferred.succeed(deferred, result))
-                )
+const handleCommandResult =
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<CommandResultMessage>) =>
+    pipe(
+      Ref.get(stateRef),
+      Effect.flatMap((state) =>
+        pipe(
+          HashMap.get(state.pendingCommands, message.commandId),
+          Option.match({
+            onNone: () => Effect.void, // Command not found, ignore
+            onSome: (deferred) =>
+              pipe(
+                createCommandResult(message),
+                Effect.flatMap((result) =>
+                  pipe(
+                    Ref.update(stateRef, (state) => ({
+                      ...state,
+                      pendingCommands: HashMap.remove(state.pendingCommands, message.commandId),
+                    })),
+                    Effect.flatMap(() => Deferred.succeed(deferred, result))
+                  )
+                ),
+                Effect.catchAll(() => Effect.void) // Ignore malformed command results
               ),
-              Effect.catchAll(() => Effect.void) // Ignore malformed command results
-            ),
-        })
+          })
+        )
       )
-    )
-  );
+    );
 
-const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: EventMessage) =>
-  pipe(
-    Ref.get(stateRef),
-    Effect.flatMap((state) =>
-      pipe(
-        HashMap.get(state.subscriptions, message.streamId),
-        Option.match({
-          onNone: () => Effect.succeed(true), // Subscription not found, ignore
-          onSome: (queue) =>
-            Queue.offer(queue, {
-              position: message.position,
-              type: message.eventType,
-              data: message.data,
-              timestamp: message.timestamp,
-            }),
-        })
+const handleEvent =
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<EventMessage>) =>
+    pipe(
+      Ref.get(stateRef),
+      Effect.flatMap((state) =>
+        pipe(
+          HashMap.get(state.subscriptions, message.streamId),
+          Option.match({
+            onNone: () => Effect.succeed(true), // Subscription not found, ignore
+            onSome: (queue) =>
+              Queue.offer(queue, {
+                position: message.position,
+                type: message.eventType,
+                data: message.data,
+                timestamp: message.timestamp,
+              }),
+          })
+        )
       )
-    )
-  );
+    );
 
-const handleMessage = (stateRef: Ref.Ref<ProtocolState>) => (message: TransportMessage) =>
-  pipe(
-    parseTransportPayload(message),
-    Effect.flatMap(validateIncomingMessage),
-    Effect.flatMap((wireMessage) => {
-      switch (wireMessage.type) {
-        case 'command_result':
-          return handleCommandResult(stateRef)(wireMessage);
-        case 'event':
-          return handleEvent(stateRef)(wireMessage);
-        default:
-          return Effect.void;
-      }
-    }),
-    Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
-  );
+const handleMessage =
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<TransportMessage>) =>
+    pipe(
+      parseTransportPayload(message),
+      Effect.flatMap(validateIncomingMessage),
+      Effect.flatMap((wireMessage) => {
+        switch (wireMessage.type) {
+          case 'command_result':
+            return handleCommandResult(stateRef)(wireMessage);
+          case 'event':
+            return handleEvent(stateRef)(wireMessage);
+          default:
+            return Effect.void;
+        }
+      }),
+      Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
+    );
 
-const encodeCommandMessage = (command: Command): CommandMessage => ({
+const encodeCommandMessage = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  command: ReadonlyDeep<Command>
+): CommandMessage => ({
   type: 'command',
   id: command.id,
   target: command.target,
@@ -272,6 +287,7 @@ const encodeCommandMessage = (command: Command): CommandMessage => ({
   payload: command.payload,
 });
 
+// eslint-disable-next-line functional/prefer-immutable-types
 const cleanupPendingCommand = (stateRef: Ref.Ref<ProtocolState>, commandId: string) =>
   Ref.update(stateRef, (state) => ({
     ...state,
@@ -279,58 +295,61 @@ const cleanupPendingCommand = (stateRef: Ref.Ref<ProtocolState>, commandId: stri
   }));
 
 const createCommandSender =
-  (stateRef: Ref.Ref<ProtocolState>, transport: Client.Transport) => (command: Command) =>
-    pipe(
-      Deferred.make<CommandResult>(),
-      Effect.flatMap((deferred) =>
-        pipe(
-          Effect.acquireRelease(
-            pipe(
-              Ref.update(stateRef, (state) => ({
-                ...state,
-                pendingCommands: HashMap.set(state.pendingCommands, command.id, deferred),
-              })),
-              Effect.as(deferred)
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
+    (command: ReadonlyDeep<Command>) =>
+      pipe(
+        Deferred.make<CommandResult>(),
+        Effect.flatMap((deferred) =>
+          pipe(
+            Effect.acquireRelease(
+              pipe(
+                Ref.update(stateRef, (state) => ({
+                  ...state,
+                  pendingCommands: HashMap.set(state.pendingCommands, command.id, deferred),
+                })),
+                Effect.as(deferred)
+              ),
+              () => cleanupPendingCommand(stateRef, command.id)
             ),
-            () => cleanupPendingCommand(stateRef, command.id)
-          ),
-          Effect.flatMap(() =>
-            pipe(
-              currentTimestamp(),
-              Effect.map((timestamp) => {
-                const wireMessage = encodeCommandMessage(command);
-                return transport.publish(
-                  makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
-                    timestamp: timestamp.toISOString(),
-                  })
-                );
-              }),
-              Effect.flatten
-            )
-          ),
-          Effect.flatMap(() =>
-            pipe(
-              Deferred.await(deferred),
-              Effect.timeout(Duration.seconds(10)),
-              Effect.catchTag('TimeoutException', () =>
-                Effect.fail(
-                  new CommandTimeoutError({
-                    commandId: command.id,
-                    timeoutMs: 10000,
-                  })
+            Effect.flatMap(() =>
+              pipe(
+                currentTimestamp(),
+                Effect.map((timestamp) => {
+                  const wireMessage = encodeCommandMessage(command);
+                  return transport.publish(
+                    makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
+                      timestamp: timestamp.toISOString(),
+                    })
+                  );
+                }),
+                Effect.flatten
+              )
+            ),
+            Effect.flatMap(() =>
+              pipe(
+                Deferred.await(deferred),
+                Effect.timeout(Duration.seconds(10)),
+                Effect.catchTag('TimeoutException', () =>
+                  Effect.fail(
+                    new CommandTimeoutError({
+                      commandId: command.id,
+                      timeoutMs: 10000,
+                    })
+                  )
                 )
               )
             )
           )
         )
-      )
-    );
+      );
 
 const encodeSubscribeMessage = (streamId: string): SubscribeMessage => ({
   type: 'subscribe',
   streamId,
 });
 
+// eslint-disable-next-line functional/prefer-immutable-types
 const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string) =>
   Ref.update(stateRef, (state) => ({
     ...state,
@@ -338,47 +357,50 @@ const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string)
   }));
 
 const createSubscriber =
-  (stateRef: Ref.Ref<ProtocolState>, transport: Client.Transport) => (streamId: string) =>
-    pipe(
-      Queue.unbounded<Event>(),
-      Effect.flatMap((queue) =>
-        pipe(
-          // First, add the subscription to state
-          Ref.update(stateRef, (state) => ({
-            ...state,
-            subscriptions: HashMap.set(state.subscriptions, streamId, queue),
-          })),
-          Effect.flatMap(() =>
-            pipe(
-              currentTimestamp(),
-              Effect.map((timestamp) => {
-                const wireMessage = encodeSubscribeMessage(streamId);
-                return transport.publish(
-                  makeTransportMessage(
-                    crypto.randomUUID(),
-                    'subscribe',
-                    JSON.stringify(wireMessage),
-                    {
-                      timestamp: timestamp.toISOString(),
-                    }
-                  )
-                );
-              }),
-              Effect.flatten
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
+    (streamId: string) =>
+      pipe(
+        Queue.unbounded<Event>(),
+        Effect.flatMap((queue) =>
+          pipe(
+            // First, add the subscription to state
+            Ref.update(stateRef, (state) => ({
+              ...state,
+              subscriptions: HashMap.set(state.subscriptions, streamId, queue),
+            })),
+            Effect.flatMap(() =>
+              pipe(
+                currentTimestamp(),
+                Effect.map((timestamp) => {
+                  const wireMessage = encodeSubscribeMessage(streamId);
+                  return transport.publish(
+                    makeTransportMessage(
+                      crypto.randomUUID(),
+                      'subscribe',
+                      JSON.stringify(wireMessage),
+                      {
+                        timestamp: timestamp.toISOString(),
+                      }
+                    )
+                  );
+                }),
+                Effect.flatten
+              )
+            ),
+            Effect.as(
+              // Return a scoped stream that cleans up the subscription when the stream is closed
+              Stream.acquireRelease(Effect.succeed(queue), () =>
+                cleanupSubscription(stateRef, streamId)
+              ).pipe(Stream.flatMap(Stream.fromQueue))
             )
-          ),
-          Effect.as(
-            // Return a scoped stream that cleans up the subscription when the stream is closed
-            Stream.acquireRelease(Effect.succeed(queue), () =>
-              cleanupSubscription(stateRef, streamId)
-            ).pipe(Stream.flatMap(Stream.fromQueue))
           )
         )
-      )
-    );
+      );
 
 const createProtocolService = (
-  transport: Client.Transport
+  // eslint-disable-next-line functional/prefer-immutable-types
+  transport: ReadonlyDeep<Client.Transport>
 ): Effect.Effect<ProtocolService, TransportError, Scope.Scope> =>
   pipe(
     Ref.make<ProtocolState>({
@@ -392,8 +414,10 @@ const createProtocolService = (
           pipe(
             Effect.forkScoped(Stream.runForEach(stream, handleMessage(stateRef))),
             Effect.as({
-              sendCommand: (command: Command) =>
-                pipe(createCommandSender(stateRef, transport)(command), Effect.scoped),
+              sendCommand: (
+                // eslint-disable-next-line functional/prefer-immutable-types
+                command: ReadonlyDeep<Command>
+              ) => pipe(createCommandSender(stateRef, transport)(command), Effect.scoped),
               subscribe: (streamId: string) => createSubscriber(stateRef, transport)(streamId),
             })
           )
@@ -402,11 +426,16 @@ const createProtocolService = (
     )
   );
 
-export const ProtocolLive = (transport: Client.Transport) =>
-  Layer.scoped(Protocol, createProtocolService(transport));
+export const ProtocolLive = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  transport: ReadonlyDeep<Client.Transport>
+) => Layer.scoped(Protocol, createProtocolService(transport));
 
 // Convenience functions for using the service
-export const sendCommand = (command: Command) =>
+export const sendCommand = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  command: ReadonlyDeep<Command>
+) =>
   pipe(
     Protocol,
     Effect.flatMap((protocol) => protocol.sendCommand(command))

@@ -12,6 +12,7 @@ import {
   Scope,
   Clock,
 } from 'effect';
+import { type ReadonlyDeep } from 'type-fest';
 import {
   makeTransportMessage,
   type TransportError,
@@ -46,10 +47,12 @@ export interface ServerProtocolService {
   readonly onCommand: Stream.Stream<Command, never, never>;
   readonly sendResult: (
     commandId: string,
-    result: CommandResult
+    // eslint-disable-next-line functional/prefer-immutable-types
+    result: ReadonlyDeep<CommandResult>
   ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
   readonly publishEvent: (
-    event: Event & { streamId: EventStreamId }
+    // eslint-disable-next-line functional/prefer-immutable-types
+    event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
   ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
 }
 
@@ -67,10 +70,13 @@ export class ServerProtocol extends Effect.Tag('ServerProtocol')<
 // ============================================================================
 
 interface ServerState {
-  readonly subscriptions: HashMap.HashMap<string, Set<string>>;
+  readonly subscriptions: HashMap.HashMap<string, readonly string[]>;
 }
 
-const parseTransportPayload = (message: TransportMessage) =>
+const parseTransportPayload = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  message: ReadonlyDeep<TransportMessage>
+) =>
   pipe(
     Effect.try({
       try: () => JSON.parse(message.payload),
@@ -90,7 +96,8 @@ const currentTimestamp = () =>
   );
 
 const handleCommandMessage =
-  (commandQueue: Queue.Queue<Command>) => (wireMessage: CommandMessage) =>
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (commandQueue: Queue.Queue<Command>) => (wireMessage: ReadonlyDeep<CommandMessage>) =>
     Queue.offer(commandQueue, {
       id: wireMessage.id,
       target: wireMessage.target,
@@ -99,112 +106,120 @@ const handleCommandMessage =
     });
 
 const handleSubscribeMessage =
-  (stateRef: Ref.Ref<ServerState>, connectionId: string) => (wireMessage: SubscribeMessage) =>
-    pipe(
-      Ref.update(stateRef, (state) => ({
-        ...state,
-        subscriptions: pipe(
-          HashMap.get(state.subscriptions, wireMessage.streamId),
-          Option.match({
-            onNone: () =>
-              HashMap.set(state.subscriptions, wireMessage.streamId, new Set([connectionId])),
-            onSome: (existing) =>
-              HashMap.set(
-                state.subscriptions,
-                wireMessage.streamId,
-                new Set([...existing, connectionId])
-              ),
-          })
-        ),
-      }))
-    );
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (stateRef: Ref.Ref<ServerState>, connectionId: string) =>
+    (wireMessage: ReadonlyDeep<SubscribeMessage>) =>
+      pipe(
+        Ref.update(stateRef, (state) => ({
+          ...state,
+          subscriptions: pipe(
+            HashMap.get(state.subscriptions, wireMessage.streamId),
+            Option.match({
+              onNone: () => HashMap.set(state.subscriptions, wireMessage.streamId, [connectionId]),
+              onSome: (existing) =>
+                HashMap.set(state.subscriptions, wireMessage.streamId, [...existing, connectionId]),
+            })
+          ),
+        }))
+      );
 
 const processIncomingMessage =
+  // eslint-disable-next-line functional/prefer-immutable-types
   (commandQueue: Queue.Queue<Command>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
-  (message: TransportMessage) =>
-    pipe(
-      parseTransportPayload(message),
-      Effect.flatMap((parsedMessage) => {
-        if (parsedMessage.type === 'command') {
-          return handleCommandMessage(commandQueue)(parsedMessage);
-        }
-        if (parsedMessage.type === 'subscribe') {
-          return handleSubscribeMessage(stateRef, connectionId)(parsedMessage);
-        }
-        return Effect.void;
-      }),
-      Effect.catchAll(() => Effect.void)
-    );
+    // eslint-disable-next-line functional/prefer-immutable-types
+    (message: ReadonlyDeep<TransportMessage>) =>
+      pipe(
+        parseTransportPayload(message),
+        Effect.flatMap((parsedMessage) => {
+          if (parsedMessage.type === 'command') {
+            return handleCommandMessage(commandQueue)(parsedMessage);
+          }
+          if (parsedMessage.type === 'subscribe') {
+            return handleSubscribeMessage(stateRef, connectionId)(parsedMessage);
+          }
+          return Effect.void;
+        }),
+        Effect.catchAll(() => Effect.void)
+      );
 
 const createResultSender =
-  (server: Server.Transport) => (commandId: string, result: CommandResult) =>
-    pipe(
-      currentTimestamp(),
-      Effect.flatMap((timestamp) => {
-        const resultMessage: CommandResultMessage = Match.value(result).pipe(
-          Match.when({ _tag: 'Success' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: true,
-            position: res.position,
-          })),
-          Match.when({ _tag: 'Failure' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: false,
-            error: JSON.stringify(res.error),
-          })),
-          Match.exhaustive
-        );
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (server: ReadonlyDeep<Server.Transport>) =>
+    (
+      commandId: string,
+      // eslint-disable-next-line functional/prefer-immutable-types
+      result: ReadonlyDeep<CommandResult>
+    ) =>
+      pipe(
+        currentTimestamp(),
+        Effect.flatMap((timestamp) => {
+          const resultMessage: CommandResultMessage = Match.value(result).pipe(
+            Match.when({ _tag: 'Success' }, (res) => ({
+              type: 'command_result' as const,
+              commandId,
+              success: true,
+              position: res.position,
+            })),
+            Match.when({ _tag: 'Failure' }, (res) => ({
+              type: 'command_result' as const,
+              commandId,
+              success: false,
+              error: JSON.stringify(res.error),
+            })),
+            Match.exhaustive
+          );
 
-        return server.broadcast(
-          makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
-            timestamp: timestamp.toISOString(),
-          })
-        );
-      })
-    );
+          return server.broadcast(
+            makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
+              timestamp: timestamp.toISOString(),
+            })
+          );
+        })
+      );
 
 const createEventPublisher =
-  (server: Server.Transport, stateRef: Ref.Ref<ServerState>) =>
-  (event: Event & { streamId: EventStreamId }) =>
-    pipe(
-      Ref.get(stateRef),
-      Effect.flatMap((state) =>
-        pipe(
-          HashMap.get(state.subscriptions, String(event.streamId)),
-          Option.match({
-            onNone: () => Effect.void,
-            onSome: (_connectionIds) =>
-              pipe(
-                currentTimestamp(),
-                Effect.flatMap((timestamp) => {
-                  const eventMessage: EventMessage = {
-                    type: 'event',
-                    streamId: String(event.streamId),
-                    position: event.position,
-                    eventType: event.type,
-                    data: event.data,
-                    timestamp: event.timestamp,
-                  };
+  // eslint-disable-next-line functional/prefer-immutable-types
+  (server: ReadonlyDeep<Server.Transport>, stateRef: Ref.Ref<ServerState>) =>
+    // eslint-disable-next-line functional/prefer-immutable-types
+    (event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>) =>
+      pipe(
+        Ref.get(stateRef),
+        Effect.flatMap((state) =>
+          pipe(
+            HashMap.get(state.subscriptions, String(event.streamId)),
+            Option.match({
+              onNone: () => Effect.void,
+              onSome: (_connectionIds) =>
+                pipe(
+                  currentTimestamp(),
+                  Effect.flatMap((timestamp) => {
+                    const eventMessage: EventMessage = {
+                      type: 'event',
+                      streamId: String(event.streamId),
+                      position: event.position,
+                      eventType: event.type,
+                      data: event.data,
+                      timestamp: event.timestamp,
+                    };
 
-                  return server.broadcast(
-                    makeTransportMessage(
-                      crypto.randomUUID(),
-                      'event',
-                      JSON.stringify(eventMessage),
-                      { timestamp: timestamp.toISOString() }
-                    )
-                  );
-                })
-              ),
-          })
+                    return server.broadcast(
+                      makeTransportMessage(
+                        crypto.randomUUID(),
+                        'event',
+                        JSON.stringify(eventMessage),
+                        { timestamp: timestamp.toISOString() }
+                      )
+                    );
+                  })
+                ),
+            })
+          )
         )
-      )
-    );
+      );
 
 const createServerProtocolService = (
-  server: Server.Transport
+  // eslint-disable-next-line functional/prefer-immutable-types
+  server: ReadonlyDeep<Server.Transport>
 ): Effect.Effect<ServerProtocolService, TransportError, Scope.Scope> =>
   pipe(
     Effect.all([
@@ -231,11 +246,9 @@ const createServerProtocolService = (
               Effect.addFinalizer(() =>
                 Ref.update(stateRef, (state) => ({
                   ...state,
-                  subscriptions: HashMap.map(state.subscriptions, (connectionIds) => {
-                    const newSet = new Set(connectionIds);
-                    newSet.delete(connection.clientId);
-                    return newSet;
-                  }),
+                  subscriptions: HashMap.map(state.subscriptions, (connectionIds) =>
+                    connectionIds.filter((id) => id !== connection.clientId)
+                  ),
                 }))
               )
             )
@@ -255,5 +268,7 @@ const createServerProtocolService = (
 // Live Implementation
 // ============================================================================
 
-export const ServerProtocolLive = (server: Server.Transport) =>
-  Layer.scoped(ServerProtocol, createServerProtocolService(server));
+export const ServerProtocolLive = (
+  // eslint-disable-next-line functional/prefer-immutable-types
+  server: ReadonlyDeep<Server.Transport>
+) => Layer.scoped(ServerProtocol, createServerProtocolService(server));

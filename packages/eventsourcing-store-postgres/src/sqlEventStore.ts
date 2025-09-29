@@ -51,6 +51,7 @@ export const makeEventRowService: Effect.Effect<
   SqlClient.SqlClient
 > = pipe(
   SqlClient.SqlClient,
+  // eslint-disable-next-line functional/prefer-immutable-types -- SQL client cannot be deeply readonly as it contains methods and connection state
   Effect.flatMap((sql: SqlClient.SqlClient) =>
     pipe(
       Effect.all({

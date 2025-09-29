@@ -1,5 +1,6 @@
 import { Effect, HashMap, Layer, Option, SynchronizedRef, pipe } from 'effect';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import type { ReadonlyDeep } from 'type-fest';
 
 /**
  * EventStreamTracker service for tracking event ordering and deduplication
@@ -31,7 +32,9 @@ export const EventStreamTrackerLive = () =>
       ),
       Effect.map(
         (
-          lastEventNumbers: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, number>>
+          lastEventNumbers: ReadonlyDeep<
+            SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, number>>
+          >
         ) => ({
           processEvent: <T>(streamId: EventStreamId, eventNumber: number, event: T) =>
             pipe(
