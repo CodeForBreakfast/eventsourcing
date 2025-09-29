@@ -71,16 +71,15 @@ const publishMessageToClient =
   (message: ReadonlyDeep<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
       Ref.get(clientState.connectionStateRef),
-      Effect.flatMap((connectionState) => {
-        if (connectionState !== 'connected') {
-          return Effect.fail(
-            new TransportError({
-              message: 'Cannot publish message: client is not connected',
-            })
-          );
-        }
-
-        return Effect.try({
+      Effect.filterOrFail(
+        (connectionState) => connectionState === 'connected',
+        () =>
+          new TransportError({
+            message: 'Cannot publish message: client is not connected',
+          })
+      ),
+      Effect.flatMap(() =>
+        Effect.try({
           try: () => {
             const serialized = JSON.stringify(message);
             clientState.socket.send(serialized);
@@ -90,8 +89,8 @@ const publishMessageToClient =
               message: 'Failed to send message to client',
               cause: error,
             }),
-        });
-      })
+        })
+      )
     );
 
 const subscribeToClientMessages =
