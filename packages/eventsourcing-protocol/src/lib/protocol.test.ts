@@ -297,10 +297,7 @@ describe('Protocol Behavior Tests', () => {
               ];
 
               return pipe(
-                Effect.all(
-                  commands.map((cmd) => sendCommand(cmd)),
-                  { concurrency: 'unbounded' }
-                ),
+                Effect.all(commands.map(sendCommand), { concurrency: 'unbounded' }),
                 Effect.tap((results) =>
                   Effect.sync(() => {
                     expect(results).toHaveLength(3);
@@ -696,12 +693,7 @@ describe('Protocol Behavior Tests', () => {
                       )
                     ),
                     // Send commands concurrently while events are being received
-                    pipe(
-                      Effect.all(
-                        commands.map((cmd) => sendCommand(cmd)),
-                        { concurrency: 'unbounded' }
-                      )
-                    ),
+                    pipe(Effect.all(commands.map(sendCommand), { concurrency: 'unbounded' })),
                   ],
                   { concurrency: 'unbounded' }
                 ),
@@ -2260,7 +2252,7 @@ describe('Protocol Behavior Tests', () => {
                 // eslint-disable-next-line functional/prefer-immutable-types
                 cmds: ReadonlyDeep<readonly Command[]>
               ) =>
-                Effect.forEach(cmds, (cmd) => sendCommand(cmd), {
+                Effect.forEach(cmds, sendCommand, {
                   concurrency: 1,
                 });
 
