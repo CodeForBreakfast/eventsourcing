@@ -80,12 +80,12 @@ export default [
             '^HashSet\\.HashSet<.*>$',
             '^Stream\\.Stream<.*>$',
             '^PubSub\\.PubSub<.*>$',
-            // ReadonlyDeep wrapper containing Effect types
-            '^ReadonlyDeep<.*>$',
-            '^Readonly<.*>$',
           ],
           parameters: {
-            enforcement: 'ReadonlyDeep',
+            // Use ReadonlyShallow for parameters because Effect types contain internal
+            // mutable state. ReadonlyShallow ensures readonly wrappers while allowing
+            // Effect types within the structure.
+            enforcement: 'ReadonlyShallow',
           },
         },
       ],
