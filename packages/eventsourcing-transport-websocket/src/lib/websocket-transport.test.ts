@@ -315,10 +315,10 @@ describe('WebSocket Transport - Legacy Edge Cases', () => {
     )
   );
 
-  it.skip('should handle invalid protocol URL - skipped due to test runner timeout issues', () =>
+  it.skip('should handle invalid protocol URL - skipped due to test runner timeout issues', () => {
     // Invalid URL - Socket abstraction times out after 3 seconds
     // but test runner times out before that can complete
-    pipe(
+    return pipe(
       WebSocketConnector.connect('not-a-websocket-url'),
       Effect.either,
       Effect.map((result) => {
@@ -328,5 +328,6 @@ describe('WebSocket Transport - Legacy Edge Cases', () => {
           expect(result.left.message).toContain('timeout');
         }
       })
-    ));
+    );
+  });
 });
