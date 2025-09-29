@@ -1,4 +1,5 @@
 import { Context, Data, Effect, Option, ParseResult, Schema, Sink, Stream, pipe } from 'effect';
+import type { ReadonlyDeep } from 'type-fest';
 import { beginning, toStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { EventNumber, type ProjectionEventStore, EventStoreError } from './eventstore-shim';
 
@@ -13,13 +14,13 @@ export interface Projection<TData> {
 
 export const loadProjection =
   <TEvent, TData>(
-    eventstoreTag: Readonly<
+    eventstoreTag: ReadonlyDeep<
       Context.Tag<ProjectionEventStore<TEvent>, ProjectionEventStore<TEvent>>
     >,
     apply: (
-      data: Readonly<Option.Option<TData>>
+      data: ReadonlyDeep<Option.Option<TData>>
     ) => (
-      event: Readonly<TEvent>
+      event: ReadonlyDeep<TEvent>
     ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>
   ) =>
   (
@@ -54,8 +55,8 @@ export const loadProjection =
                   { nextEventNumber: 0, data: Option.none<TData>() },
                   ({ nextEventNumber, data: before }, event) =>
                     pipe(
-                      event,
-                      apply(before),
+                      event as ReadonlyDeep<TEvent>,
+                      apply(before as ReadonlyDeep<Option.Option<TData>>),
                       Effect.map(Option.some),
                       Effect.tap((after) =>
                         Effect.annotateCurrentSpan({
