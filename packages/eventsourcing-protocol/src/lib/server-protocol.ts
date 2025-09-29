@@ -20,10 +20,10 @@ import {
   type Server,
 } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
-import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import {
   Event,
-  CommandMessage,
+  WireCommandMessage,
   CommandResultMessage,
   EventMessage,
   SubscribeMessage,
@@ -44,7 +44,7 @@ export class ServerProtocolError extends Data.TaggedError('ServerProtocolError')
 // ============================================================================
 
 export interface ServerProtocolService {
-  readonly onCommand: Stream.Stream<Command, never, never>;
+  readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
   readonly sendResult: (
     commandId: string,
     // eslint-disable-next-line functional/prefer-immutable-types
@@ -95,9 +95,9 @@ const currentTimestamp = () =>
     Effect.map((millis) => new Date(millis))
   );
 
-const handleCommandMessage =
+const handleWireCommandMessage =
   // eslint-disable-next-line functional/prefer-immutable-types
-  (commandQueue: Queue.Queue<Command>) => (wireMessage: ReadonlyDeep<CommandMessage>) =>
+  (commandQueue: Queue.Queue<WireCommand>) => (wireMessage: ReadonlyDeep<WireCommandMessage>) =>
     Queue.offer(commandQueue, {
       id: wireMessage.id,
       target: wireMessage.target,
@@ -125,14 +125,14 @@ const handleSubscribeMessage =
 
 const processIncomingMessage =
   // eslint-disable-next-line functional/prefer-immutable-types
-  (commandQueue: Queue.Queue<Command>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
+  (commandQueue: Queue.Queue<WireCommand>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
     // eslint-disable-next-line functional/prefer-immutable-types
     (message: ReadonlyDeep<TransportMessage>) =>
       pipe(
         parseTransportPayload(message),
         Effect.flatMap((parsedMessage) => {
           if (parsedMessage.type === 'command') {
-            return handleCommandMessage(commandQueue)(parsedMessage);
+            return handleWireCommandMessage(commandQueue)(parsedMessage);
           }
           if (parsedMessage.type === 'subscribe') {
             return handleSubscribeMessage(stateRef, connectionId)(parsedMessage);
@@ -223,7 +223,7 @@ const createServerProtocolService = (
 ): Effect.Effect<ServerProtocolService, TransportError, Scope.Scope> =>
   pipe(
     Effect.all([
-      Queue.unbounded<Command>(),
+      Queue.unbounded<WireCommand>(),
       Ref.make<ServerState>({
         subscriptions: HashMap.empty(),
       }),
@@ -256,7 +256,7 @@ const createServerProtocolService = (
         ),
         Effect.forkScoped,
         Effect.as({
-          onCommand: Stream.fromQueue(commandQueue),
+          onWireCommand: Stream.fromQueue(commandQueue),
           sendResult: createResultSender(server),
           publishEvent: createEventPublisher(server, stateRef),
         })

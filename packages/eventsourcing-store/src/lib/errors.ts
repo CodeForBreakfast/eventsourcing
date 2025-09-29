@@ -151,15 +151,6 @@ export const isEventSourcingError = (
   ].includes(tag as string);
 };
 
-// Legacy compatibility helpers
-export const resourceError = (resource: string, cause: unknown) =>
-  new EventStoreResourceError({
-    resource,
-    operation: 'access',
-    cause,
-    recoveryHint: 'Check resource availability and permissions',
-  });
-
 // Error creation helpers
 export const eventStoreError = {
   read: (streamId: string | undefined, details: string, cause?: unknown) =>

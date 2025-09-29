@@ -1,7 +1,7 @@
 import { Effect, pipe, Stream } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { EventStoreService, beginning, toStreamId } from '@codeforbreakfast/eventsourcing-store';
-import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingServiceInterface } from './commandProcessingService';
 import { CommandRouter } from './commandHandling';
 
@@ -11,7 +11,7 @@ export const createCommandProcessingService = (
   pipe(
     EventStoreService,
     Effect.map((eventStore) => ({
-      processCommand: (command: Readonly<Command>) =>
+      processCommand: (command: Readonly<WireCommand>) =>
         pipe(
           router.route(command),
           Effect.flatMap((handler) => handler.execute(command)),

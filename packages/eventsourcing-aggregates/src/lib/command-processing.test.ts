@@ -11,7 +11,7 @@ import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { Command } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
@@ -25,7 +25,7 @@ import { createCommandProcessingService } from './commandProcessingFactory';
 // Test Data
 // ============================================================================
 
-const testCommand: Command = {
+const testCommand: WireCommand = {
   id: 'cmd-123',
   target: 'user',
   name: 'CreateUser',
@@ -46,7 +46,7 @@ const createTestEvent = (streamId: string, eventNumber: number): Event => ({
 const createMockRouter = (
   handlers: ReadonlyMap<string, CommandHandler> = new Map()
 ): CommandRouter => ({
-  route: (command: Readonly<Command>) => {
+  route: (command: Readonly<WireCommand>) => {
     const key = `${command.target}:${command.name}`;
     const handler = handlers.get(key);
     if (!handler) {
@@ -229,14 +229,14 @@ describe('Command Processing Service', () => {
     ]);
     const router = createMockRouter(handlers);
 
-    const orderCommand: Command = {
+    const orderCommand: WireCommand = {
       ...testCommand,
       id: 'cmd-order-123',
       target: 'order',
       name: 'CreateOrder',
     };
 
-    const updateCommand: Command = {
+    const updateCommand: WireCommand = {
       ...testCommand,
       id: 'cmd-update-123',
       target: 'nonexistent',

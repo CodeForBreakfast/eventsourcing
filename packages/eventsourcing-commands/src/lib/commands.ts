@@ -18,12 +18,6 @@ export const WireCommand = Schema.Struct({
 });
 export type WireCommand = typeof WireCommand.Type;
 
-/**
- * Legacy Command export for backward compatibility
- * @deprecated Use WireCommand for clarity
- */
-export type Command = WireCommand;
-
 // ============================================================================
 // Domain Command Types
 // ============================================================================

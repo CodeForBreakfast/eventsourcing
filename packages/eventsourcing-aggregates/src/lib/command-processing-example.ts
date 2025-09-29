@@ -8,7 +8,7 @@ import {
   createCommandProcessingService,
 } from '../index';
 import { Event } from '@codeforbreakfast/eventsourcing-store';
-import { Command } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
 // ============================================================================
 // Example Usage of Command Processing Service
@@ -16,7 +16,7 @@ import { Command } from '@codeforbreakfast/eventsourcing-commands';
 
 // Example: Create a simple command handler
 const userCommandHandler: CommandHandler = {
-  execute: (command: ReadonlyDeep<Command>) =>
+  execute: (command: ReadonlyDeep<WireCommand>) =>
     Effect.succeed([
       {
         position: { streamId: command.target, eventNumber: 1 },
@@ -29,7 +29,7 @@ const userCommandHandler: CommandHandler = {
 
 // Example: Create a command router
 const createRouter = (): CommandRouter => ({
-  route: (command: ReadonlyDeep<Command>) => {
+  route: (command: ReadonlyDeep<WireCommand>) => {
     if (command.target === 'user' && command.name === 'CreateUser') {
       return Effect.succeed(userCommandHandler);
     }
@@ -49,7 +49,7 @@ export const CommandProcessingServiceLive = Layer.effect(
 );
 
 // Example: Usage in application code
-export const processUserCommand = (command: ReadonlyDeep<Command>) =>
+export const processUserCommand = (command: ReadonlyDeep<WireCommand>) =>
   pipe(
     CommandProcessingService,
     Effect.flatMap((service) => service.processCommand(command)),

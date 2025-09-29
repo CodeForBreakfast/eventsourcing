@@ -1,7 +1,13 @@
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { Effect, Stream, Duration, pipe, TestClock, TestContext, Either, Schema } from 'effect';
-import { ProtocolLive, sendCommand, subscribe, CommandTimeoutError, Event } from './protocol';
-import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import {
+  ProtocolLive,
+  sendWireCommand,
+  subscribe,
+  WireCommandTimeoutError,
+  Event,
+} from './protocol';
+import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { ServerProtocolLive, ServerProtocol } from './server-protocol';
 import {
   InMemoryAcceptor,
@@ -48,14 +54,14 @@ const setupTestEnvironment = pipe(
 );
 
 // ============================================================================
-// Test Server Protocol - Handles Commands and Subscriptions
+// Test Server Protocol - Handles WireCommands and Subscriptions
 // ============================================================================
 
 const createTestServerProtocol = (
   // eslint-disable-next-line functional/prefer-immutable-types
   server: ReadonlyDeep<InMemoryServer>,
   // eslint-disable-next-line functional/prefer-immutable-types
-  commandHandler: (cmd: ReadonlyDeep<Command>) => CommandResult = () => ({
+  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult = () => ({
     _tag: 'Success',
     position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
   }),
@@ -104,7 +110,7 @@ const createTestServerProtocol = (
                             parsedMessage.name &&
                             parsedMessage.payload !== undefined
                           ) {
-                            const command: Command = {
+                            const command: WireCommand = {
                               id: parsedMessage.id,
                               target: parsedMessage.target,
                               name: parsedMessage.name,
@@ -163,7 +169,7 @@ const createTestServerProtocol = (
   );
 
 describe('Protocol Behavior Tests', () => {
-  describe('Command Sending and Results', () => {
+  describe('WireCommand Sending and Results', () => {
     it.effect('should send command and receive success result', () =>
       pipe(
         setupTestEnvironment,
@@ -174,7 +180,7 @@ describe('Protocol Behavior Tests', () => {
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 42 },
             })),
             Effect.flatMap(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
                 name: 'UpdateProfile',
@@ -182,7 +188,7 @@ describe('Protocol Behavior Tests', () => {
               };
 
               return pipe(
-                sendCommand(command),
+                sendWireCommand(command),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     expect(result._tag).toBe('Success');
@@ -217,7 +223,7 @@ describe('Protocol Behavior Tests', () => {
               },
             })),
             Effect.flatMap(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
                 name: 'UpdateProfile',
@@ -225,7 +231,7 @@ describe('Protocol Behavior Tests', () => {
               };
 
               return pipe(
-                sendCommand(command),
+                sendWireCommand(command),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     expect(result._tag).toBe('Failure');
@@ -270,12 +276,12 @@ describe('Protocol Behavior Tests', () => {
                     error: {
                       _tag: 'UnknownError',
                       commandId: command.id,
-                      message: 'Command failed',
+                      message: 'WireCommand failed',
                     },
                   };
             }),
             Effect.flatMap(() => {
-              const commands: readonly Command[] = [
+              const commands: readonly WireCommand[] = [
                 {
                   id: crypto.randomUUID(),
                   target: 'user-1',
@@ -297,7 +303,7 @@ describe('Protocol Behavior Tests', () => {
               ];
 
               return pipe(
-                Effect.all(commands.map(sendCommand), { concurrency: 'unbounded' }),
+                Effect.all(commands.map(sendWireCommand), { concurrency: 'unbounded' }),
                 Effect.tap((results) =>
                   Effect.sync(() => {
                     expect(results).toHaveLength(3);
@@ -316,15 +322,15 @@ describe('Protocol Behavior Tests', () => {
     );
   });
 
-  describe('Command Timeout Behavior', () => {
+  describe('WireCommand Timeout Behavior', () => {
     it.effect('should timeout commands after 10 seconds', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ clientTransport }) => {
-          const command: Command = {
+          const command: WireCommand = {
             id: crypto.randomUUID(),
             target: 'user-123',
-            name: 'SlowCommand',
+            name: 'SlowWireCommand',
             payload: { data: 'test' },
           };
 
@@ -332,7 +338,7 @@ describe('Protocol Behavior Tests', () => {
             Effect.all(
               [
                 pipe(
-                  sendCommand(command),
+                  sendWireCommand(command),
                   Effect.either,
                   Effect.provide(ProtocolLive(clientTransport))
                 ),
@@ -345,8 +351,8 @@ describe('Protocol Behavior Tests', () => {
               Effect.sync(() => {
                 expect(Either.isLeft(result)).toBe(true);
                 if (Either.isLeft(result)) {
-                  expect(result.left).toBeInstanceOf(CommandTimeoutError);
-                  if (result.left instanceof CommandTimeoutError) {
+                  expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
+                  if (result.left instanceof WireCommandTimeoutError) {
                     expect(result.left.commandId).toBe(command.id);
                     expect(result.left.timeoutMs).toBe(10000);
                   }
@@ -370,15 +376,15 @@ describe('Protocol Behavior Tests', () => {
               position: { streamId: unsafeCreateStreamId('user-123'), eventNumber: 1 },
             })),
             Effect.flatMap(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
-                name: 'FastCommand',
+                name: 'FastWireCommand',
                 payload: { data: 'test' },
               };
 
               return pipe(
-                sendCommand(command),
+                sendWireCommand(command),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     expect(result._tag).toBe('Success');
@@ -667,7 +673,7 @@ describe('Protocol Behavior Tests', () => {
               ]
             ),
             Effect.flatMap(() => {
-              const commands: readonly Command[] = [
+              const commands: readonly WireCommand[] = [
                 {
                   id: crypto.randomUUID(),
                   target: 'user-1',
@@ -693,7 +699,7 @@ describe('Protocol Behavior Tests', () => {
                       )
                     ),
                     // Send commands concurrently while events are being received
-                    pipe(Effect.all(commands.map(sendCommand), { concurrency: 'unbounded' })),
+                    pipe(Effect.all(commands.map(sendWireCommand), { concurrency: 'unbounded' })),
                   ],
                   { concurrency: 'unbounded' }
                 ),
@@ -1258,15 +1264,15 @@ describe('Protocol Behavior Tests', () => {
               }))
             ),
             Effect.flatMap(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
-                name: 'TestCommand',
+                name: 'TestWireCommand',
                 payload: { data: 'test' },
               };
 
               return pipe(
-                sendCommand(command),
+                sendWireCommand(command),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     expect(result._tag).toBe('Success');
@@ -1307,15 +1313,15 @@ describe('Protocol Behavior Tests', () => {
               }))
             ),
             Effect.flatMap(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
-                name: 'TestCommand',
+                name: 'TestWireCommand',
                 payload: { data: 'test' },
               };
 
               return pipe(
-                sendCommand(command),
+                sendWireCommand(command),
                 Effect.tap((result) =>
                   Effect.sync(() => {
                     expect(result._tag).toBe('Success');
@@ -1336,10 +1342,10 @@ describe('Protocol Behavior Tests', () => {
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
             Effect.sync(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
-                name: 'TestCommand',
+                name: 'TestWireCommand',
                 payload: { data: 'test' },
               };
               return command;
@@ -1350,7 +1356,7 @@ describe('Protocol Behavior Tests', () => {
                   [
                     // Send the command and expect it to timeout due to malformed response
                     pipe(
-                      sendCommand(command),
+                      sendWireCommand(command),
                       Effect.either,
                       Effect.provide(ProtocolLive(clientTransport))
                     ),
@@ -1383,8 +1389,8 @@ describe('Protocol Behavior Tests', () => {
                     // Should timeout because malformed response is ignored
                     expect(Either.isLeft(result)).toBe(true);
                     if (Either.isLeft(result)) {
-                      expect(result.left).toBeInstanceOf(CommandTimeoutError);
-                      if (result.left instanceof CommandTimeoutError) {
+                      expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
+                      if (result.left instanceof WireCommandTimeoutError) {
                         expect(result.left.commandId).toBe(command.id);
                       }
                     }
@@ -1405,10 +1411,10 @@ describe('Protocol Behavior Tests', () => {
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
             Effect.sync(() => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
-                name: 'TestCommand',
+                name: 'TestWireCommand',
                 payload: { data: 'test' },
               };
               return command;
@@ -1419,7 +1425,7 @@ describe('Protocol Behavior Tests', () => {
                   [
                     // Send the command and expect it to timeout due to malformed response
                     pipe(
-                      sendCommand(command),
+                      sendWireCommand(command),
                       Effect.either,
                       Effect.provide(ProtocolLive(clientTransport))
                     ),
@@ -1452,8 +1458,8 @@ describe('Protocol Behavior Tests', () => {
                     // Should timeout because malformed response is ignored
                     expect(Either.isLeft(result)).toBe(true);
                     if (Either.isLeft(result)) {
-                      expect(result.left).toBeInstanceOf(CommandTimeoutError);
-                      if (result.left instanceof CommandTimeoutError) {
+                      expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
+                      if (result.left instanceof WireCommandTimeoutError) {
                         expect(result.left.commandId).toBe(command.id);
                       }
                     }
@@ -1472,7 +1478,7 @@ describe('Protocol Behavior Tests', () => {
   describe('Transport Failure & Recovery', () => {
     // These tests simulate transport failure scenarios. Since the in-memory transport
     // doesn't have explicit disconnect/failure methods, we test the practical effects:
-    // - Commands timeout when no server responds (simulating connection loss)
+    // - WireCommands timeout when no server responds (simulating connection loss)
     // - Subscriptions clean up properly when their scopes end
     // - New connections can be established after failures
     it.effect('should clean up pending commands when transport disconnects', () =>
@@ -1485,10 +1491,10 @@ describe('Protocol Behavior Tests', () => {
               [
                 // Send command that will timeout since no server responds
                 pipe(
-                  sendCommand({
+                  sendWireCommand({
                     id: crypto.randomUUID(),
                     target: 'user-123',
-                    name: 'SlowCommand',
+                    name: 'SlowWireCommand',
                     payload: { data: 'test' },
                   }),
                   Effect.either,
@@ -1506,7 +1512,7 @@ describe('Protocol Behavior Tests', () => {
                 // when transport disconnects - pending commands timeout
                 expect(Either.isLeft(result)).toBe(true);
                 if (Either.isLeft(result)) {
-                  expect(result.left).toBeInstanceOf(CommandTimeoutError);
+                  expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
                 }
               })
             )
@@ -1608,10 +1614,10 @@ describe('Protocol Behavior Tests', () => {
             })),
             Effect.flatMap(() =>
               pipe(
-                sendCommand({
+                sendWireCommand({
                   id: crypto.randomUUID(),
                   target: 'first-connection',
-                  name: 'TestCommand',
+                  name: 'TestWireCommand',
                   payload: { data: 'first' },
                 }),
                 Effect.tap((result) =>
@@ -1655,14 +1661,14 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Server Protocol Integration', () => {
-    it.effect('should emit commands through server protocol onCommand stream', () =>
+    it.effect('should emit commands through server protocol onWireCommand stream', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           pipe(
             ServerProtocol,
             Effect.flatMap((serverProtocol) => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-123',
                 name: 'CreateUser',
@@ -1672,9 +1678,9 @@ describe('Protocol Behavior Tests', () => {
               return pipe(
                 Effect.all(
                   [
-                    // Listen for commands on the server protocol's onCommand stream
+                    // Listen for commands on the server protocol's onWireCommand stream
                     pipe(
-                      serverProtocol.onCommand,
+                      serverProtocol.onWireCommand,
                       Stream.take(1),
                       Stream.runCollect,
                       Effect.map((commands) => Array.from(commands))
@@ -1684,7 +1690,7 @@ describe('Protocol Behavior Tests', () => {
                       Effect.sleep(Duration.millis(50)),
                       Effect.flatMap(() =>
                         pipe(
-                          sendCommand(command),
+                          sendWireCommand(command),
                           Effect.provide(ProtocolLive(clientTransport)),
                           Effect.either
                         )
@@ -1695,21 +1701,21 @@ describe('Protocol Behavior Tests', () => {
                   ],
                   { concurrency: 'unbounded' }
                 ),
-                Effect.tap(([receivedCommands, commandResult, _]) =>
+                Effect.tap(([receivedWireCommands, commandResult, _]) =>
                   Effect.sync(() => {
                     // Verify the command was received by the server protocol
-                    expect(receivedCommands).toHaveLength(1);
+                    expect(receivedWireCommands).toHaveLength(1);
 
-                    const receivedCommand = receivedCommands[0]!;
-                    expect(receivedCommand.id).toBe(command.id);
-                    expect(receivedCommand.target).toBe(command.target);
-                    expect(receivedCommand.name).toBe(command.name);
-                    expect(receivedCommand.payload).toEqual(command.payload);
+                    const receivedWireCommand = receivedWireCommands[0]!;
+                    expect(receivedWireCommand.id).toBe(command.id);
+                    expect(receivedWireCommand.target).toBe(command.target);
+                    expect(receivedWireCommand.name).toBe(command.name);
+                    expect(receivedWireCommand.payload).toEqual(command.payload);
 
                     // The command should timeout on the client side since we're not responding
                     expect(Either.isLeft(commandResult)).toBe(true);
                     if (Either.isLeft(commandResult)) {
-                      expect(commandResult.left).toBeInstanceOf(CommandTimeoutError);
+                      expect(commandResult.left).toBeInstanceOf(WireCommandTimeoutError);
                     }
                   })
                 )
@@ -1730,7 +1736,7 @@ describe('Protocol Behavior Tests', () => {
           pipe(
             ServerProtocol,
             Effect.flatMap((serverProtocol) => {
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'user-456',
                 name: 'UpdateProfile',
@@ -1749,23 +1755,23 @@ describe('Protocol Behavior Tests', () => {
                 Effect.all(
                   [
                     // Send command from client
-                    pipe(sendCommand(command), Effect.provide(ProtocolLive(clientTransport))),
+                    pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport))),
                     // Server processes the command and sends result
                     pipe(
-                      serverProtocol.onCommand,
+                      serverProtocol.onWireCommand,
                       Stream.take(1),
                       Stream.runCollect,
                       Effect.flatMap((commands) => {
-                        const receivedCommand = Array.from(commands)[0]!;
+                        const receivedWireCommand = Array.from(commands)[0]!;
                         // Verify we got the command, then send a result
                         return pipe(
                           Effect.sync(() => {
-                            expect(receivedCommand.id).toBe(command.id);
-                            expect(receivedCommand.target).toBe(command.target);
-                            expect(receivedCommand.name).toBe(command.name);
+                            expect(receivedWireCommand.id).toBe(command.id);
+                            expect(receivedWireCommand.target).toBe(command.target);
+                            expect(receivedWireCommand.name).toBe(command.name);
                           }),
                           Effect.flatMap(() =>
-                            serverProtocol.sendResult(receivedCommand.id, successResult)
+                            serverProtocol.sendResult(receivedWireCommand.id, successResult)
                           )
                         );
                       })
@@ -1880,16 +1886,16 @@ describe('Protocol Behavior Tests', () => {
               };
             }),
             Effect.flatMap(() => {
-              const duplicateCommandId = crypto.randomUUID();
-              const command1: Command = {
-                id: duplicateCommandId, // Same ID
+              const duplicateWireCommandId = crypto.randomUUID();
+              const command1: WireCommand = {
+                id: duplicateWireCommandId, // Same ID
                 target: 'user-123',
                 name: 'CreateUser',
                 payload: { name: 'Alice' },
               };
 
-              const command2: Command = {
-                id: duplicateCommandId, // Same ID as command1
+              const command2: WireCommand = {
+                id: duplicateWireCommandId, // Same ID as command1
                 target: 'user-456',
                 name: 'CreateUser',
                 payload: { name: 'Bob' },
@@ -1900,12 +1906,12 @@ describe('Protocol Behavior Tests', () => {
                   [
                     // Send both commands with the same ID concurrently
                     pipe(
-                      sendCommand(command1),
+                      sendWireCommand(command1),
                       Effect.either,
                       Effect.provide(ProtocolLive(clientTransport))
                     ),
                     pipe(
-                      sendCommand(command2),
+                      sendWireCommand(command2),
                       Effect.either,
                       Effect.provide(ProtocolLive(clientTransport))
                     ),
@@ -2014,10 +2020,10 @@ describe('Protocol Behavior Tests', () => {
                 },
               };
 
-              const command: Command = {
+              const command: WireCommand = {
                 id: crypto.randomUUID(),
                 target: 'bulk-stream',
-                name: 'BulkImportCommand',
+                name: 'BulkImportWireCommand',
                 payload: largePayload,
               };
 
@@ -2026,7 +2032,7 @@ describe('Protocol Behavior Tests', () => {
                   [
                     // Send the large command and verify it succeeds
                     pipe(
-                      sendCommand(command),
+                      sendWireCommand(command),
                       Effect.tap((result) =>
                         Effect.sync(() => {
                           expect(result._tag).toBe('Success');
@@ -2240,19 +2246,19 @@ describe('Protocol Behavior Tests', () => {
             })),
             Effect.flatMap(() => {
               // Create multiple commands to send sequentially
-              const commands: readonly Command[] = Array.from({ length: 5 }, (_, i) => ({
+              const commands: readonly WireCommand[] = Array.from({ length: 5 }, (_, i) => ({
                 id: crypto.randomUUID(),
                 target: `user-${i + 1}`,
-                name: 'SequentialCommand',
+                name: 'SequentialWireCommand',
                 payload: { sequence: i + 1, data: `test-data-${i + 1}` },
               }));
 
               // Send commands sequentially (not concurrently) to test cleanup between commands
               const sendSequentially = (
                 // eslint-disable-next-line functional/prefer-immutable-types
-                cmds: ReadonlyDeep<readonly Command[]>
+                cmds: ReadonlyDeep<readonly WireCommand[]>
               ) =>
-                Effect.forEach(cmds, sendCommand, {
+                Effect.forEach(cmds, sendWireCommand, {
                   concurrency: 1,
                 });
 
