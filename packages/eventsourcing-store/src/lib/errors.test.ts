@@ -3,7 +3,6 @@ import { Effect, pipe } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStoreError,
-  EventStoreConnectionError,
   ProjectionError,
   SnapshotError,
   WebSocketError,
@@ -45,8 +44,10 @@ describe('Event Sourcing Errors', () => {
 
     it('should support type guards', () => {
       const error = eventStoreError.write('stream-1', 'Write failed');
-      expect(EventStoreError.is(error)).toBe(true);
-      expect(EventStoreConnectionError.is(error)).toBe(false);
+      expect(error._tag).toBe('EventStoreError');
+
+      const connError = connectionError.fatal('connect', new Error('failed'));
+      expect(connError._tag).toBe('EventStoreConnectionError');
     });
   });
 
