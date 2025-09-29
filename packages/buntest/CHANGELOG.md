@@ -1,5 +1,14 @@
 # @codeforbreakfast/buntest
 
+## 0.2.2
+
+### Patch Changes
+
+- [#153](https://github.com/CodeForBreakfast/eventsourcing/pull/153) [`b1a2f97`](https://github.com/CodeForBreakfast/eventsourcing/commit/b1a2f9710bf40d879b1cbaa53ca001664d88f9df) Thanks [@GraemeF](https://github.com/GraemeF)! - Simplified type definitions while strengthening type safety:
+  - Error classes no longer expose redundant static `is` methods - use built-in tag discrimination instead
+  - Improved type guard implementation using Effect's discriminated union pattern
+  - Test service definitions now use proper service interfaces instead of bare string literals
+
 ## 0.2.1
 
 ### Patch Changes

@@ -1,5 +1,16 @@
 # @codeforbreakfast/eventsourcing-testing-contracts
 
+## 0.3.4
+
+### Patch Changes
+
+- [#154](https://github.com/CodeForBreakfast/eventsourcing/pull/154) [`ac00ba4`](https://github.com/CodeForBreakfast/eventsourcing/commit/ac00ba4fc20800df3527541e8eebbeda61356c99) Thanks [@GraemeF](https://github.com/GraemeF)! - Simplify arrow functions in pipe operations
+
+  Removed unnecessary arrow functions that were just forwarding parameters to other functions, making the code cleaner and more readable. This includes simplifications like changing `(cmd) => sendCommand(cmd)` to just `sendCommand` and `(msg) => transport.publish(msg)` to `transport.publish`.
+
+- Updated dependencies [[`6395dc3`](https://github.com/CodeForBreakfast/eventsourcing/commit/6395dc36c02168a7edce261f4270c8f1e0ba34c4)]:
+  - @codeforbreakfast/eventsourcing-transport@0.3.4
+
 ## 0.3.3
 
 ### Patch Changes
