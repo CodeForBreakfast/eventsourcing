@@ -272,7 +272,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
                   },
                 ];
 
-                return Effect.forEach(messages, (msg) => transport.publish(msg));
+                return Effect.forEach(messages, transport.publish);
               })
             )
           )
@@ -419,7 +419,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
                           { id: '3', type: 'type-a', payload: 'a2' },
                           { id: '4', type: 'type-b', payload: 'b2' },
                         ];
-                        return Effect.forEach(messages, (msg) => transport.publish(msg));
+                        return Effect.forEach(messages, transport.publish);
                       }),
                       Effect.flatMap(() =>
                         Effect.all([Fiber.join(subscription1), Fiber.join(subscription2)])
@@ -500,7 +500,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
                                 payload: { priority: 'high', value: 30 },
                               }, // Should match
                             ];
-                            return Effect.forEach(testMessages, (msg) => transport.publish(msg));
+                            return Effect.forEach(testMessages, transport.publish);
                           }),
                           Effect.flatMap(() => Fiber.join(filteredMessages)),
                           Effect.tap((results) =>
