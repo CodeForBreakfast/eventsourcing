@@ -65,6 +65,7 @@
       "version": "0.3.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "type-fest": "^5.0.1",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
