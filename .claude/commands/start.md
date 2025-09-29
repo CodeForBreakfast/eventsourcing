@@ -1,5 +1,5 @@
 ---
-allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(cd:*), Bash(bun install:*), Bash(pwd:*), Bash(mise trust), Bash(mise install), Bash(git pull:*), Bash(git checkout:*), Bash(git worktree add:*), SlashCommand(/add-dir *)
+allowed-tools: Bash(git worktree *), Bash(git fetch:*), Bash(git status:*), Bash(git branch:*), Bash(cd:*), Bash(bun install:*), Bash(pwd:*), Bash(mise trust), Bash(mise install), Bash(git pull:*), Bash(git checkout:*), Bash(git worktree add:*)
 description: Start a new piece of work using git worktree
 ---
 
@@ -27,7 +27,6 @@ IMPORTANT: Always use worktrees for feature development to maintain clean separa
    - Run `bun install` to set up dependencies in the new worktree
    - Run `git status` to confirm branch and clean state
    - Run `pwd` to show current worktree location
-   - Run `/add-dir` command with the worktree path to enable Claude Code access without permission prompts
 
 **Worktree Benefits:**
 
