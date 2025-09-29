@@ -5,8 +5,6 @@
  * Generic transport behaviors are covered by contract tests.
  */
 
-/* eslint-disable functional/prefer-immutable-types, functional/prefer-readonly-type */
-
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, pipe, Stream, Layer, Option } from 'effect';
 import * as Socket from '@effect/platform/Socket';
@@ -36,17 +34,17 @@ const WebSocketState = {
 
 // Mock WebSocket factory that behaves like a real WebSocket for Socket.makeWebSocket
 const createMockWebSocket = (
-  url: Readonly<string>,
-  _protocols?: Readonly<string | readonly string[]>,
-  config: Readonly<TestSocketConfig> = {}
+  url: string,
+  _protocols?: string | readonly string[],
+  config: TestSocketConfig = {}
 ): Readonly<globalThis.WebSocket> => {
   // Mutable state for the mock (contained within closure)
   let readyState: number = WebSocketState.CONNECTING;
   let openTimeout: NodeJS.Timeout | undefined;
-  const eventListeners = new Map<string, Array<(event: unknown) => void>>();
+  const eventListeners = new Map<string, readonly ((event: unknown) => void)[]>();
 
   const dispatchEvent = (event: unknown): boolean => {
-    const listeners = eventListeners.get((event as { type: string }).type);
+    const listeners = eventListeners.get((event as { readonly type: string }).type);
     if (listeners) {
       listeners.forEach((listener) => {
         try {
@@ -109,19 +107,15 @@ const createMockWebSocket = (
     CLOSED: WebSocketState.CLOSED,
 
     addEventListener(type: string, listener: (event: unknown) => void) {
-      if (!eventListeners.has(type)) {
-        eventListeners.set(type, []);
-      }
-      eventListeners.get(type)!.push(listener);
+      const currentListeners = eventListeners.get(type) ?? [];
+      eventListeners.set(type, [...currentListeners, listener]);
     },
 
     removeEventListener(type: string, listener: (event: unknown) => void) {
       const listeners = eventListeners.get(type);
       if (listeners) {
-        const index = listeners.indexOf(listener);
-        if (index > -1) {
-          listeners.splice(index, 1);
-        }
+        const filteredListeners = listeners.filter((l) => l !== listener);
+        eventListeners.set(type, filteredListeners);
       }
     },
 
@@ -155,11 +149,12 @@ const createMockWebSocket = (
 
 // Test WebSocketConstructor that creates MockWebSockets
 const createTestWebSocketConstructor =
-  (config: Readonly<TestSocketConfig>) => (url: string, protocols?: string | readonly string[]) => {
+  (config: TestSocketConfig) =>
+  (url: string, protocols?: string | readonly string[]): Readonly<globalThis.WebSocket> => {
     return createMockWebSocket(url, protocols, config);
   };
 
-const createTestSocketLayer = (config: Readonly<TestSocketConfig> = {}) =>
+const createTestSocketLayer = (config: TestSocketConfig = {}) =>
   Layer.succeed(Socket.WebSocketConstructor, createTestWebSocketConstructor(config));
 
 // =============================================================================
