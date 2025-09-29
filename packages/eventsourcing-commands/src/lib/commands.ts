@@ -206,7 +206,7 @@ export const buildCommandSchema = <
  * Validates and transforms a wire command into a domain command
  */
 export const validateCommand =
-  <TPayload, TPayloadInput>(payloadSchema: ReadonlyDeep<Schema.Schema<TPayload, TPayloadInput>>) =>
+  <TPayload, TPayloadInput>(payloadSchema: Schema.Schema<TPayload, TPayloadInput>) =>
   (wireCommand: ReadonlyDeep<WireCommand>) =>
     pipe(
       Schema.decodeUnknown(payloadSchema)(wireCommand.payload),
