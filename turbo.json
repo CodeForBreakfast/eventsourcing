@@ -74,13 +74,20 @@
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
+        "src/**/*.test.ts",
+        "src/**/*.spec.ts",
+        "tests/**/*.ts",
+        "tests/**/*.tsx",
         "**/*.test.ts",
         "**/*.spec.ts",
         "*.config.js",
         "*.config.ts",
+        "*.config.mjs",
         "tsconfig*.json",
         ".eslintrc*",
-        "$TURBO_ROOT$/eslint.config.*",
+        "eslint.config.*",
+        "$TURBO_ROOT$/eslint.config.mjs",
+        "$TURBO_ROOT$/.eslintrc*",
         "package.json"
       ]
     },
