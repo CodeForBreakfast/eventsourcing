@@ -103,6 +103,7 @@ export default [
             // Interfaces/types containing Effect/Schema types which are immutable-by-contract
             '.*Internal.*',
             '.*State',
+            '.*Store',
             'Incoming.*',
           ],
         },
