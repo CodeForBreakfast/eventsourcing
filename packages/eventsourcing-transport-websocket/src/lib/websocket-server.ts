@@ -6,8 +6,9 @@
  */
 
 /* eslint-disable functional/prefer-immutable-types */
-// Effect types (Ref, Queue, Stream) contain internal mutable state by design.
-// We manage mutations properly through Effect's APIs (Ref.update, etc.) rather than direct mutation.
+// Effect types (Ref, Queue, Stream, HashMap, HashSet) contain internal mutable state by design.
+// This is safe because Effect manages mutations through controlled APIs (Ref.set, HashMap.set, etc.)
+// rather than allowing direct mutation. We use immutable operations throughout.
 
 import { Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
 import {
