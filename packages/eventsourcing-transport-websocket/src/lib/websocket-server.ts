@@ -9,7 +9,7 @@
 // Effect types (Ref, Queue, Stream) contain internal mutable state by design.
 // We manage mutations properly through Effect's APIs (Ref.update, etc.) rather than direct mutation.
 
-import { Effect, Stream, Scope, Ref, Queue, HashSet, pipe } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -41,7 +41,7 @@ interface ClientState {
 
 interface ServerState {
   readonly server: Bun.Server | null; // Bun Server
-  readonly clients: ReadonlyMap<Server.ClientId, Readonly<ClientState>>;
+  readonly clients: HashMap.HashMap<Server.ClientId, Readonly<ClientState>>;
   readonly newConnectionsQueue: Readonly<Queue.Queue<Server.ClientConnection>>;
 }
 
@@ -210,10 +210,7 @@ const createWebSocketServer = (
                     Effect.flatMap(() =>
                       Ref.update(serverStateRef, (state) => ({
                         ...state,
-                        clients: new Map([
-                          ...state.clients,
-                          [clientState.id, clientState],
-                        ]) as ReadonlyMap<Server.ClientId, Readonly<ClientState>>,
+                        clients: HashMap.set(state.clients, clientState.id, clientState),
                       }))
                     ),
                     Effect.flatMap(() => {
@@ -248,13 +245,12 @@ const createWebSocketServer = (
                 Ref.get(serverStateRef),
                 Effect.flatMap((state) => {
                   const clientId = ws.data.clientId;
-                  const clientState = state.clients.get(clientId);
-
-                  if (!clientState) {
-                    return Effect.void;
-                  }
-
-                  return handleClientMessage(clientState, message);
+                  return pipe(
+                    HashMap.get(state.clients, clientId),
+                    Effect.map((clientState) => handleClientMessage(clientState, message)),
+                    Effect.flatten,
+                    Effect.orElse(() => Effect.void)
+                  );
                 })
               )
             );
@@ -266,22 +262,21 @@ const createWebSocketServer = (
                 Ref.get(serverStateRef),
                 Effect.flatMap((state) => {
                   const clientId = ws.data.clientId;
-                  const clientState = state.clients.get(clientId);
-
-                  if (!clientState) {
-                    return Effect.void;
-                  }
-
                   return pipe(
-                    updateClientConnectionState(clientState, 'disconnected'),
-                    Effect.flatMap(() =>
-                      Ref.update(serverStateRef, (s) => ({
-                        ...s,
-                        clients: new Map(
-                          [...s.clients].filter(([id]) => id !== clientId)
-                        ) as ReadonlyMap<Server.ClientId, ClientState>,
-                      }))
-                    )
+                    HashMap.get(state.clients, clientId),
+                    Effect.map((clientState) =>
+                      pipe(
+                        updateClientConnectionState(clientState, 'disconnected'),
+                        Effect.flatMap(() =>
+                          Ref.update(serverStateRef, (s) => ({
+                            ...s,
+                            clients: HashMap.remove(s.clients, clientId),
+                          }))
+                        )
+                      )
+                    ),
+                    Effect.flatten,
+                    Effect.orElse(() => Effect.void)
                   );
                 })
               )
@@ -324,7 +319,7 @@ const createServerTransport = (
       Ref.get(serverStateRef),
       Effect.flatMap((state) =>
         Effect.forEach(
-          Array.from(state.clients.values()),
+          HashMap.values(state.clients),
           (clientState) =>
             pipe(
               publishMessageToClient(clientState)(message),
@@ -348,7 +343,7 @@ const cleanupServer = (
       pipe(
         // First, notify all clients they're being disconnected
         Effect.forEach(
-          Array.from(state.clients.values()),
+          HashMap.values(state.clients),
           (clientState) =>
             pipe(
               updateClientConnectionState(clientState, 'disconnected'),
@@ -360,7 +355,7 @@ const cleanupServer = (
           Effect.sync(() => {
             try {
               // Close all client connections
-              Array.from(state.clients.values()).forEach((clientState) => {
+              Array.from(HashMap.values(state.clients)).forEach((clientState) => {
                 try {
                   clientState.socket.close(1001, 'Server shutting down');
                 } catch {
@@ -390,14 +385,11 @@ const createWebSocketServerTransport = (
       Queue.unbounded<Server.ClientConnection>(),
       Effect.flatMap((newConnectionsQueue) =>
         pipe(
-          Ref.make({
+          Ref.make<ServerState>({
             server: null,
-            clients: new Map<Server.ClientId, ClientState>() as ReadonlyMap<
-              Server.ClientId,
-              ClientState
-            >,
+            clients: HashMap.empty(),
             newConnectionsQueue,
-          } as ServerState),
+          }),
           Effect.flatMap((serverStateRef) =>
             pipe(
               createWebSocketServer(config, serverStateRef),
