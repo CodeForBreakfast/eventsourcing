@@ -13,7 +13,7 @@ const LoggerLive = silentLogger;
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
 
-export const FooEventStoreTest = (store: Readonly<InMemoryStore<FooEvent>>) =>
+export const FooEventStoreTest = (store: InMemoryStore<FooEvent>) =>
   Layer.effect(
     FooEventStore,
     pipe(store, makeInMemoryEventStore, Effect.map(encodedEventStore(FooEvent)))

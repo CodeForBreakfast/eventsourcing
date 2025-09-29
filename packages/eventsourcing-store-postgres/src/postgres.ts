@@ -21,11 +21,11 @@ export const PgLive = pipe(
   Effect.map((config) => {
     // Extract the properties from the configuration value
     const { username, password, database, host, port } = config as unknown as {
-      username: string;
-      password: Redacted.Redacted<string>;
-      database: string;
-      host: string;
-      port: number;
+      readonly username: string;
+      readonly password: Redacted.Redacted<string>;
+      readonly database: string;
+      readonly host: string;
+      readonly port: number;
     };
 
     return PgClient.layer({

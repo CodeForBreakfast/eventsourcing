@@ -5,12 +5,12 @@ import { CommandProcessingServiceInterface } from './commandProcessingService';
 import { CommandRouter } from './commandHandling';
 
 export const createCommandProcessingService = (
-  router: CommandRouter
+  router: Readonly<CommandRouter>
 ): Effect.Effect<CommandProcessingServiceInterface, never, EventStoreService> =>
   pipe(
     EventStoreService,
     Effect.map((eventStore) => ({
-      processCommand: (command: Command) =>
+      processCommand: (command: Readonly<Command>) =>
         pipe(
           router.route(command),
           Effect.flatMap((handler) => handler.execute(command)),

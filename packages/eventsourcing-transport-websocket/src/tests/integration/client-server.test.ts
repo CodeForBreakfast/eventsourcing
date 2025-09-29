@@ -8,6 +8,8 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
+/* eslint-disable functional/prefer-immutable-types */
+
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe } from 'effect';
 import {
@@ -95,8 +97,8 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, ne
     },
 
     waitForConnectionState: (
-      transport: ClientTransport,
-      expectedState: ConnectionState,
+      transport: Readonly<ClientTransport>,
+      expectedState: Readonly<ConnectionState>,
       timeoutMs?: number
     ) => defaultWaitForConnectionState(transport.connectionState, expectedState, timeoutMs),
 

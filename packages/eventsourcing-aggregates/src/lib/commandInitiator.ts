@@ -8,9 +8,9 @@ import { CurrentUserError } from './currentUser';
 export const CommandInitiatorId = Schema.Union(PersonId);
 export type CommandInitiatorId = typeof CommandInitiatorId.Type;
 
-export interface CommandContextInterface {
-  readonly getInitiatorId: Effect.Effect<Option.Option<CommandInitiatorId>, CurrentUserError>;
-}
+export type CommandContextInterface = ReadonlyDeep<{
+  getInitiatorId: Effect.Effect<ReadonlyDeep<Option.Option<CommandInitiatorId>>, CurrentUserError>;
+}>;
 
 export class CommandContext extends Effect.Tag('CommandContext')<
   CommandContext,

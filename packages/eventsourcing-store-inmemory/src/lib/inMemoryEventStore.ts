@@ -14,7 +14,7 @@ export interface SubscribableEventStore<T> extends EventStore<T> {
 }
 
 export const makeInMemoryEventStore = <T>(
-  store: Readonly<InMemoryStore<T>>
+  store: InMemoryStore<T>
 ): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
     append: (to: EventStreamPosition) =>
@@ -44,7 +44,7 @@ export const makeInMemoryEventStore = <T>(
   });
 
 export const makeSubscribableInMemoryEventStore = <T>(
-  store: Readonly<InMemoryStore<T>>
+  store: InMemoryStore<T>
 ): Effect.Effect<SubscribableEventStore<T>, never, never> =>
   pipe(
     makeInMemoryEventStore(store),

@@ -23,20 +23,20 @@ class AggregateSnapshotStoreService extends Effect.Tag('TestSnapshotStore')<
 
 // Test types
 interface MyEvent {
-  id: string;
-  type: string;
-  data: unknown;
+  readonly id: string;
+  readonly type: string;
+  readonly data: unknown;
 }
 
 interface UserProjection {
-  id: string;
-  name: string;
-  email: string;
+  readonly id: string;
+  readonly name: string;
+  readonly email: string;
 }
 
 interface AggregateSnapshot {
-  version: number;
-  state: unknown;
+  readonly version: number;
+  readonly state: unknown;
 }
 
 describe('Service Definitions', () => {

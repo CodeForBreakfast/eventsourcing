@@ -22,14 +22,18 @@ export type CommandRegistrations = Record<string, CommandRegistration<any, any>>
 export type CommandNames<T extends CommandRegistrations> = keyof T;
 
 export interface CommandRegistry {
-  readonly dispatch: (wireCommand: WireCommand) => Effect.Effect<CommandResult, never, never>;
+  readonly dispatch: (
+    wireCommand: Readonly<WireCommand>
+  ) => Effect.Effect<CommandResult, never, never>;
   readonly listCommandNames: () => ReadonlyArray<string>;
 }
 
 export const makeCommandRegistry = <T extends CommandRegistrations>(
-  registrations: T
+  registrations: Readonly<T>
 ): CommandRegistry => {
-  const dispatchWire = (wireCommand: WireCommand): Effect.Effect<CommandResult, never, never> => {
+  const dispatchWire = (
+    wireCommand: Readonly<WireCommand>
+  ): Effect.Effect<CommandResult, never, never> => {
     const registration = registrations[wireCommand.name];
     if (!registration) {
       return Effect.succeed({
@@ -52,11 +56,11 @@ export const makeCommandRegistry = <T extends CommandRegistrations>(
 };
 
 const dispatchWithRegistration = (
-  wireCommand: WireCommand,
+  wireCommand: Readonly<WireCommand>,
   // Safe `any` because the registration comes from a typed record and
   // payload validation ensures runtime type safety
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  registration: CommandRegistration<any, any>
+  registration: Readonly<CommandRegistration<any, any>>
 ): Effect.Effect<CommandResult, never, never> =>
   pipe(
     validateCommand(registration.payloadSchema)(wireCommand),
@@ -69,8 +73,8 @@ const dispatchWithRegistration = (
   );
 
 const handleValidationError = (
-  _wireCommand: WireCommand,
-  error: CommandValidationError
+  _wireCommand: Readonly<WireCommand>,
+  error: Readonly<CommandValidationError>
 ): Effect.Effect<CommandResult, never, never> =>
   Effect.succeed({
     _tag: 'Failure' as const,
@@ -83,12 +87,12 @@ const handleValidationError = (
   });
 
 const executeHandler = (
-  wireCommand: WireCommand,
+  wireCommand: Readonly<WireCommand>,
   // Safe `any` because the command has been validated by the schema before reaching here
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  domainCommand: DomainCommand<any>,
+  domainCommand: Readonly<DomainCommand<any>>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  handler: CommandHandler<DomainCommand<any>>
+  handler: Readonly<CommandHandler<DomainCommand<any>>>
 ): Effect.Effect<CommandResult, never, never> =>
   pipe(
     handler.handle(domainCommand),
@@ -113,23 +117,24 @@ export class CommandRegistryService extends Effect.Tag('CommandRegistryService')
 >() {}
 
 export const makeCommandRegistryLayer = <T extends CommandRegistrations>(
-  registrations: T
+  registrations: Readonly<T>
 ): Layer.Layer<CommandRegistryService, never, never> =>
   Layer.succeed(CommandRegistryService, makeCommandRegistry(registrations));
 
 export const createCommandRegistration = <TPayload, TPayloadInput>(
-  payloadSchema: Schema.Schema<TPayload, TPayloadInput>,
-  handler: CommandHandler<DomainCommand<TPayload>>
+  payloadSchema: Readonly<Schema.Schema<TPayload, TPayloadInput>>,
+  handler: Readonly<CommandHandler<DomainCommand<TPayload>>>
 ): CommandRegistration<TPayload, TPayloadInput> => ({
   payloadSchema,
   handler,
 });
 
-export const buildCommandRegistrations = <T extends CommandRegistrations>(registrations: T): T =>
-  registrations;
+export const buildCommandRegistrations = <T extends CommandRegistrations>(
+  registrations: Readonly<T>
+): Readonly<T> => registrations;
 
 export const dispatchCommand = (
-  wireCommand: WireCommand
+  wireCommand: Readonly<WireCommand>
 ): Effect.Effect<CommandResult, never, CommandRegistryService> =>
   pipe(
     CommandRegistryService,

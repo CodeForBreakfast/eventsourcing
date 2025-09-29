@@ -43,8 +43,10 @@ const createTestEvent = (streamId: string, eventNumber: number): Event => ({
 // Mock Router Implementation
 // ============================================================================
 
-const createMockRouter = (handlers: Map<string, CommandHandler> = new Map()): CommandRouter => ({
-  route: (command: Command) => {
+const createMockRouter = (
+  handlers: ReadonlyMap<string, CommandHandler> = new Map()
+): CommandRouter => ({
+  route: (command: Readonly<Command>) => {
     const key = `${command.target}:${command.name}`;
     const handler = handlers.get(key);
     if (!handler) {

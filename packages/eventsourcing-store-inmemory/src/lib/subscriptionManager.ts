@@ -20,8 +20,8 @@ import {
 } from '@codeforbreakfast/eventsourcing-store';
 
 interface SubscriptionData<T> {
-  pubsub: PubSub.PubSub<T>;
-  subscribers: number;
+  readonly pubsub: PubSub.PubSub<T>;
+  readonly subscribers: number;
 }
 
 export interface InMemorySubscriptionManagerService {
@@ -35,8 +35,8 @@ export interface InMemorySubscriptionManagerService {
 
   readonly getSubscriptionMetrics: () => Effect.Effect<
     {
-      activeStreams: number;
-      totalSubscribers: number;
+      readonly activeStreams: number;
+      readonly totalSubscribers: number;
     },
     never,
     never
@@ -48,6 +48,7 @@ export class InMemorySubscriptionManager extends Effect.Tag('InMemorySubscriptio
   InMemorySubscriptionManagerService
 >() {}
 
+/* eslint-disable functional/prefer-immutable-types */
 const getOrCreateSubscription = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
   streamId: EventStreamId
@@ -154,7 +155,7 @@ export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
         pipe(
           getOrCreateSubscription(ref, streamId),
           Effect.tap(() => incrementSubscribers(ref, streamId)),
-          Effect.flatMap((subData: Readonly<SubscriptionData<T>>) =>
+          Effect.flatMap((subData: SubscriptionData<T>) =>
             pipe(
               PubSub.subscribe(subData.pubsub),
               Effect.map((queue: Queue.Dequeue<T>) =>
@@ -203,8 +204,8 @@ export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
 
       getSubscriptionMetrics: (): Effect.Effect<
         {
-          activeStreams: number;
-          totalSubscribers: number;
+          readonly activeStreams: number;
+          readonly totalSubscribers: number;
         },
         never,
         never
@@ -224,3 +225,4 @@ export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
 
 export const InMemorySubscriptionManagerLive = <T>() =>
   Layer.effect(InMemorySubscriptionManager, makeInMemorySubscriptionManager<T>());
+/* eslint-enable functional/prefer-immutable-types */

@@ -31,7 +31,6 @@ describe('Transport Testing Contracts Package', () => {
 
   describe('Mock Transport Implementation', () => {
     it('should create mock transport within scope', async () => {
-      // eslint-disable-next-line no-restricted-syntax
       await Effect.runPromise(
         Effect.scoped(
           pipe(
@@ -60,7 +59,6 @@ describe('Transport Testing Contracts Package', () => {
     });
 
     it.skip('should handle publish and subscribe', async () => {
-      // eslint-disable-next-line no-restricted-syntax
       await Effect.runPromise(
         Effect.scoped(
           pipe(

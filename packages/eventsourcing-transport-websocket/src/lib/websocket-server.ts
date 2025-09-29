@@ -5,6 +5,8 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
+/* eslint-disable functional/immutable-data, functional/prefer-immutable-types, functional/prefer-readonly-type */
+
 import { Effect, Stream, Scope, Ref, Queue, pipe } from 'effect';
 import {
   TransportMessage,
@@ -27,17 +29,17 @@ interface WebSocketServerConfig {
 
 interface ClientState {
   readonly id: Server.ClientId;
-  readonly socket: ServerWebSocket<{ clientId: Server.ClientId }>; // Bun WebSocket
-  connectionState: ConnectionState; // Mutable for simplicity
+  readonly socket: ServerWebSocket<{ readonly clientId: Server.ClientId }>; // Bun WebSocket
+  readonly connectionState: ConnectionState; // Make readonly in interface but mutable internally
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
-  readonly subscribers: Set<Queue.Queue<TransportMessage>>;
+  readonly subscribers: ReadonlySet<Queue.Queue<TransportMessage>>;
   readonly connectedAt: Date;
 }
 
 interface ServerState {
   readonly server: Bun.Server | null; // Bun Server
-  readonly clients: Map<Server.ClientId, ClientState>;
-  readonly newConnectionsQueue: Queue.Queue<Server.ClientConnection>;
+  readonly clients: ReadonlyMap<Server.ClientId, Readonly<ClientState>>;
+  readonly newConnectionsQueue: Readonly<Queue.Queue<Server.ClientConnection>>;
 }
 
 // =============================================================================
@@ -45,8 +47,8 @@ interface ServerState {
 // =============================================================================
 
 const createClientConnectionStateStream = (
-  clientState: ClientState
-): Stream.Stream<ConnectionState, never, never> =>
+  clientState: Readonly<ClientState>
+): Readonly<Stream.Stream<ConnectionState, never, never>> =>
   Stream.unwrapScoped(
     pipe(
       Effect.succeed(clientState),
@@ -62,8 +64,8 @@ const createClientConnectionStateStream = (
   );
 
 const publishMessageToClient =
-  (clientState: ClientState) =>
-  (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
+  (clientState: Readonly<ClientState>) =>
+  (message: Readonly<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     Effect.try({
       try: () => {
         if (clientState.connectionState !== 'connected') {
@@ -81,15 +83,15 @@ const publishMessageToClient =
     });
 
 const subscribeToClientMessages =
-  (clientState: ClientState) =>
+  (clientState: Readonly<ClientState>) =>
   (
-    filter?: (message: TransportMessage) => boolean
+    filter?: (message: Readonly<TransportMessage>) => boolean
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap((queue) =>
         Effect.sync(() => {
-          clientState.subscribers.add(queue);
+          (clientState.subscribers as Set<Readonly<Queue.Queue<TransportMessage>>>).add(queue);
         })
       ),
       Effect.map((queue) => {
@@ -107,7 +109,7 @@ const subscribeToClientMessages =
       })
     );
 
-const createClientTransport = (clientState: ClientState): Client.Transport => ({
+const createClientTransport = (clientState: Readonly<ClientState>): Client.Transport => ({
   connectionState: createClientConnectionStateStream(clientState),
   publish: publishMessageToClient(clientState),
   subscribe: subscribeToClientMessages(clientState),
@@ -118,19 +120,19 @@ const createClientTransport = (clientState: ClientState): Client.Transport => ({
 // =============================================================================
 
 const updateClientConnectionState = (
-  clientState: ClientState,
-  newState: ConnectionState
+  clientState: Readonly<ClientState>,
+  newState: Readonly<ConnectionState>
 ): Effect.Effect<void, never, never> =>
   pipe(
     Effect.sync(() => {
-      clientState.connectionState = newState;
+      (clientState as { connectionState: ConnectionState }).connectionState = newState;
     }),
     Effect.flatMap(() => Queue.offer(clientState.connectionStateQueue, newState))
   );
 
 const handleClientMessage = (
-  clientState: ClientState,
-  data: string
+  clientState: Readonly<ClientState>,
+  data: Readonly<string>
 ): Effect.Effect<void, never, never> =>
   pipe(
     Effect.sync(() => {
@@ -157,8 +159,8 @@ const handleClientMessage = (
 // =============================================================================
 
 const createWebSocketServer = (
-  config: WebSocketServerConfig,
-  serverStateRef: Ref.Ref<ServerState>
+  config: Readonly<WebSocketServerConfig>,
+  serverStateRef: Readonly<Ref.Ref<ServerState>>
 ): Effect.Effect<Bun.Server, Server.ServerStartError, never> =>
   Effect.async<Bun.Server, Server.ServerStartError>((resume) => {
     try {
@@ -166,7 +168,7 @@ const createWebSocketServer = (
         port: config.port,
         hostname: config.host,
         websocket: {
-          open: (ws: ServerWebSocket<{ clientId: Server.ClientId }>) => {
+          open: (ws: Readonly<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
             Effect.runSync(
               pipe(
                 Effect.sync(() => ({
@@ -183,7 +185,9 @@ const createWebSocketServer = (
                           socket: ws,
                           connectionState: 'connecting' as ConnectionState,
                           connectionStateQueue,
-                          subscribers: new Set<Queue.Queue<TransportMessage>>(),
+                          subscribers: new Set<Queue.Queue<TransportMessage>>() as ReadonlySet<
+                            Queue.Queue<TransportMessage>
+                          >,
                           connectedAt,
                         }) as ClientState
                     )
@@ -196,11 +200,18 @@ const createWebSocketServer = (
                     Effect.flatMap(() =>
                       Ref.update(serverStateRef, (state) => ({
                         ...state,
-                        clients: new Map(state.clients.set(clientState.id, clientState)),
+                        clients: new Map(
+                          (state.clients as Map<Server.ClientId, Readonly<ClientState>>).set(
+                            clientState.id,
+                            clientState
+                          )
+                        ) as ReadonlyMap<Server.ClientId, Readonly<ClientState>>,
                       }))
                     ),
                     Effect.flatMap(() => {
-                      ws.data = { clientId: clientState.id };
+                      (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
+                        clientId: clientState.id,
+                      };
                       // Now transition to "connected"
                       return updateClientConnectionState(clientState, 'connected');
                     }),
@@ -219,7 +230,10 @@ const createWebSocketServer = (
             );
           },
 
-          message: (ws: ServerWebSocket<{ clientId: Server.ClientId }>, message: string) => {
+          message: (
+            ws: Readonly<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
+            message: Readonly<string>
+          ) => {
             Effect.runSync(
               pipe(
                 Ref.get(serverStateRef),
@@ -237,7 +251,7 @@ const createWebSocketServer = (
             );
           },
 
-          close: (ws: ServerWebSocket<{ clientId: Server.ClientId }>) => {
+          close: (ws: Readonly<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
             Effect.runSync(
               pipe(
                 Ref.get(serverStateRef),
@@ -254,7 +268,9 @@ const createWebSocketServer = (
                     Effect.flatMap(() =>
                       Ref.update(serverStateRef, (s) => ({
                         ...s,
-                        clients: new Map([...s.clients].filter(([id]) => id !== clientId)),
+                        clients: new Map(
+                          [...s.clients].filter(([id]) => id !== clientId)
+                        ) as ReadonlyMap<Server.ClientId, ClientState>,
                       }))
                     )
                   );
@@ -287,12 +303,12 @@ const createWebSocketServer = (
   });
 
 const createServerTransport = (
-  serverStateRef: Ref.Ref<ServerState>,
-  connectionsQueue: Queue.Queue<Server.ClientConnection>
-): Server.Transport & { __serverStateRef: Ref.Ref<ServerState> } => ({
+  serverStateRef: Readonly<Ref.Ref<ServerState>>,
+  connectionsQueue: Readonly<Queue.Queue<Server.ClientConnection>>
+): Server.Transport & { readonly __serverStateRef: Readonly<Ref.Ref<ServerState>> } => ({
   connections: Stream.fromQueue(connectionsQueue),
 
-  broadcast: (message: TransportMessage): Effect.Effect<void, TransportError, never> =>
+  broadcast: (message: Readonly<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
       Ref.get(serverStateRef),
       Effect.flatMap((state) =>
@@ -312,7 +328,9 @@ const createServerTransport = (
   __serverStateRef: serverStateRef,
 });
 
-const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void, never, never> =>
+const cleanupServer = (
+  serverStateRef: Readonly<Ref.Ref<ServerState>>
+): Effect.Effect<void, never, never> =>
   pipe(
     Ref.get(serverStateRef),
     Effect.flatMap((state) =>
@@ -331,13 +349,13 @@ const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void
           Effect.sync(() => {
             try {
               // Close all client connections
-              for (const clientState of state.clients.values()) {
+              Array.from(state.clients.values()).forEach((clientState) => {
                 try {
                   clientState.socket.close(1001, 'Server shutting down');
                 } catch {
                   // Ignore errors during cleanup
                 }
-              }
+              });
 
               // Stop the server
               if (state.server && state.server.stop) {
@@ -354,7 +372,7 @@ const cleanupServer = (serverStateRef: Ref.Ref<ServerState>): Effect.Effect<void
   );
 
 const createWebSocketServerTransport = (
-  config: WebSocketServerConfig
+  config: Readonly<WebSocketServerConfig>
 ): Effect.Effect<Server.Transport, Server.ServerStartError, Scope.Scope> =>
   Effect.acquireRelease(
     pipe(
@@ -363,7 +381,10 @@ const createWebSocketServerTransport = (
         pipe(
           Ref.make({
             server: null,
-            clients: new Map<Server.ClientId, ClientState>(),
+            clients: new Map<Server.ClientId, ClientState>() as ReadonlyMap<
+              Server.ClientId,
+              ClientState
+            >,
             newConnectionsQueue,
           } as ServerState),
           Effect.flatMap((serverStateRef) =>
@@ -382,7 +403,9 @@ const createWebSocketServerTransport = (
     ),
     (transport) => {
       const serverStateRef = (
-        transport as Server.Transport & { __serverStateRef: Ref.Ref<ServerState> }
+        transport as Server.Transport & {
+          readonly __serverStateRef: Readonly<Ref.Ref<ServerState>>;
+        }
       ).__serverStateRef;
       return serverStateRef ? cleanupServer(serverStateRef) : Effect.void;
     }
@@ -393,7 +416,9 @@ const createWebSocketServerTransport = (
 // =============================================================================
 
 const webSocketAcceptorImpl = {
-  make: (config: WebSocketServerConfig): Effect.Effect<Server.AcceptorInterface, never, never> =>
+  make: (
+    config: Readonly<WebSocketServerConfig>
+  ): Effect.Effect<Server.AcceptorInterface, never, never> =>
     Effect.succeed({
       start: () => createWebSocketServerTransport(config),
     }),

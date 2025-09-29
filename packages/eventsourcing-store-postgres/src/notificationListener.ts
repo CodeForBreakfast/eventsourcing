@@ -10,9 +10,9 @@ import {
  * Interface for handling notification events
  */
 export interface NotificationPayload {
-  stream_id: string;
-  event_number: number;
-  event_payload: string;
+  readonly stream_id: string;
+  readonly event_number: number;
+  readonly event_payload: string;
 }
 
 /**
@@ -63,18 +63,18 @@ export class NotificationListener extends Effect.Tag('NotificationListener')<
     /**
      * Listen for notifications on a specific stream's channel
      */
-    listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
 
     /**
      * Stop listening for notifications on a specific stream's channel
      */
-    unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
 
     /**
      * Get a stream of notifications for all channels we're listening to
      */
-    notifications: Stream.Stream<
-      { streamId: EventStreamId; payload: NotificationPayload },
+    readonly notifications: Stream.Stream<
+      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
       EventStoreError,
       never
     >;
@@ -82,12 +82,12 @@ export class NotificationListener extends Effect.Tag('NotificationListener')<
     /**
      * Start the notification listener background process
      */
-    start: Effect.Effect<void, EventStoreError, never>;
+    readonly start: Effect.Effect<void, EventStoreError, never>;
 
     /**
      * Stop the notification listener and cleanup
      */
-    stop: Effect.Effect<void, EventStoreError, never>;
+    readonly stop: Effect.Effect<void, EventStoreError, never>;
   }>
 >() {}
 
@@ -101,8 +101,8 @@ export const NotificationListenerLive = Layer.effect(
       client: PgClient.PgClient,
       activeChannels: Ref.make(new Set<string>()),
       notificationQueue: Queue.unbounded<{
-        streamId: EventStreamId;
-        payload: NotificationPayload;
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
       }>(),
     }),
     Effect.map(({ client, activeChannels, notificationQueue }) => ({

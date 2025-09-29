@@ -5,6 +5,8 @@
  * Generic transport behaviors are covered by contract tests.
  */
 
+/* eslint-disable functional/prefer-immutable-types, functional/prefer-readonly-type */
+
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, pipe, Stream, Layer, Option } from 'effect';
 import * as Socket from '@effect/platform/Socket';
@@ -34,14 +36,14 @@ const WebSocketState = {
 
 // Mock WebSocket factory that behaves like a real WebSocket for Socket.makeWebSocket
 const createMockWebSocket = (
-  url: string,
-  _protocols?: string | string[],
-  config: TestSocketConfig = {}
-): globalThis.WebSocket => {
+  url: Readonly<string>,
+  _protocols?: Readonly<string | readonly string[]>,
+  config: Readonly<TestSocketConfig> = {}
+): Readonly<globalThis.WebSocket> => {
   // Mutable state for the mock (contained within closure)
   let readyState: number = WebSocketState.CONNECTING;
   let openTimeout: NodeJS.Timeout | undefined;
-  const eventListeners = new Map<string, ((event: unknown) => void)[]>();
+  const eventListeners = new Map<string, Array<(event: unknown) => void>>();
 
   const dispatchEvent = (event: unknown): boolean => {
     const listeners = eventListeners.get((event as { type: string }).type);
@@ -78,9 +80,9 @@ const createMockWebSocket = (
       // Send preloaded messages if configured
       if (config.preloadedMessages) {
         setTimeout(() => {
-          for (const message of config.preloadedMessages!) {
+          config.preloadedMessages!.forEach((message) => {
             dispatchEvent({ type: 'message', data: message });
-          }
+          });
         }, 100);
       }
     }, openDelay);
@@ -153,11 +155,11 @@ const createMockWebSocket = (
 
 // Test WebSocketConstructor that creates MockWebSockets
 const createTestWebSocketConstructor =
-  (config: TestSocketConfig) => (url: string, protocols?: string | string[]) => {
+  (config: Readonly<TestSocketConfig>) => (url: string, protocols?: string | readonly string[]) => {
     return createMockWebSocket(url, protocols, config);
   };
 
-const createTestSocketLayer = (config: TestSocketConfig = {}) =>
+const createTestSocketLayer = (config: Readonly<TestSocketConfig> = {}) =>
   Layer.succeed(Socket.WebSocketConstructor, createTestWebSocketConstructor(config));
 
 // =============================================================================

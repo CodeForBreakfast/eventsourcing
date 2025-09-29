@@ -3,6 +3,7 @@ import parser from '@typescript-eslint/parser';
 import unusedImports from 'eslint-plugin-unused-imports';
 import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
+import functionalPlugin from 'eslint-plugin-functional';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -52,6 +53,62 @@ const testSyntaxRestrictions = [
 
 export default [
   {
+    name: 'functional-immutability',
+    files: ['**/*.ts', '**/*.tsx'],
+    languageOptions: {
+      ...commonLanguageOptions,
+      parserOptions: {
+        ...commonLanguageOptions.parserOptions,
+        project: true,
+      },
+    },
+    plugins: {
+      functional: functionalPlugin,
+    },
+    rules: {
+      // Immutability rules
+      'functional/prefer-immutable-types': [
+        'error',
+        {
+          enforcement: 'ReadonlyShallow',
+          ignoreInferredTypes: true,
+          parameters: {
+            enforcement: 'ReadonlyDeep',
+          },
+        },
+      ],
+      'functional/type-declaration-immutability': [
+        'error',
+        {
+          rules: [
+            {
+              identifiers: ['I.+'],
+              immutability: 'ReadonlyDeep',
+              comparator: 'AtLeast',
+            },
+          ],
+        },
+      ],
+      'functional/no-let': 'error',
+      'functional/immutable-data': [
+        'error',
+        {
+          ignoreImmediateMutation: true,
+          ignoreClasses: true,
+          ignoreAccessorPattern: ['draft.**', '**.draft'],
+        },
+      ],
+      'functional/prefer-readonly-type': 'error',
+      'functional/no-method-signature': 'off', // Allow method signatures for Effect services
+      'functional/no-mixed-types': 'off', // Allow mixed types for Effect services
+      'functional/no-return-void': 'off', // Allow void returns for Effect
+      'functional/functional-parameters': 'off', // Too strict for current codebase
+      'functional/no-expression-statements': 'off', // Too restrictive
+      'functional/no-conditional-statements': 'off', // Would require full rewrite
+      'functional/no-loop-statements': 'error',
+    },
+  },
+  {
     name: 'typescript-base',
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: commonLanguageOptions,
@@ -95,7 +152,15 @@ export default [
   },
   {
     name: 'buntest-integration',
-    files: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    files: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/*test*.ts',
+      '**/*test*.tsx',
+      '**/testing/**/*.ts',
+    ],
     languageOptions: commonLanguageOptions,
     plugins: commonPlugins,
     rules: {
@@ -112,10 +177,42 @@ export default [
         },
       ],
       'no-restricted-syntax': ['error', ...effectSyntaxRestrictions, ...testSyntaxRestrictions],
+      // Allow let in tests for setup/teardown patterns
+      'functional/no-let': 'off',
+      // Relax immutability for test data manipulation
+      'functional/immutable-data': 'off',
+    },
+  },
+  {
+    name: 'testing-contracts-exceptions',
+    files: [
+      '**/eventsourcing-testing-contracts/**/*.ts',
+      '**/eventsourcing-testing-contracts/**/*.tsx',
+    ],
+    languageOptions: commonLanguageOptions,
+    plugins: {
+      functional: functionalPlugin,
+    },
+    rules: {
+      // Disable immutability rules for testing contract files
+      'functional/prefer-immutable-types': 'off',
+      'functional/prefer-readonly-type': 'off',
+      'functional/no-let': 'off',
+      'functional/immutable-data': 'off',
+      'functional/type-declaration-immutability': 'off',
+      'no-restricted-imports': 'off',
+      'no-restricted-syntax': 'off',
     },
   },
   {
     name: 'ignore-patterns',
-    ignores: ['**/node_modules/**', '**/dist/**', '**/build/**', '**/*.js', '**/*.mjs'],
+    ignores: [
+      '**/node_modules/**',
+      '**/dist/**',
+      '**/build/**',
+      '**/*.js',
+      '**/*.mjs',
+      '**/build.ts',
+    ],
   },
 ];

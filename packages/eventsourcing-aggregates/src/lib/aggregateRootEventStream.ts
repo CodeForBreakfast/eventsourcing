@@ -174,7 +174,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
           id,
           toStreamId,
           Effect.flatMap(beginning),
-          Effect.flatMap((position: EventStreamPosition) => eventStore.read(position)),
+          Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position)),
           Effect.flatMap((stream) =>
             pipe(
               stream,
@@ -200,8 +200,8 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
               nextEventNumber,
               data,
             }: Readonly<{
-              nextEventNumber: number;
-              data: Option.Option<TState>;
+              readonly nextEventNumber: number;
+              readonly data: Option.Option<TState>;
             }>) =>
               pipe(
                 nextEventNumber,

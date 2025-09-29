@@ -3,7 +3,7 @@ import { beginning, toStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { EventNumber, type ProjectionEventStore, EventStoreError } from './eventstore-shim';
 
 export class MissingProjectionError extends Data.TaggedError('MissingProjectionError')<{
-  message: string;
+  readonly message: string;
 }> {}
 
 export interface Projection<TData> {

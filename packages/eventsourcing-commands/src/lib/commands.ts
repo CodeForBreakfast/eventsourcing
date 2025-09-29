@@ -136,7 +136,7 @@ export type CommandResult = typeof CommandResult.Type;
  */
 export const createCommandSchema = <TName extends string, TPayload, TPayloadInput>(
   name: TName,
-  payloadSchema: Schema.Schema<TPayload, TPayloadInput>
+  payloadSchema: Readonly<Schema.Schema<TPayload, TPayloadInput>>
 ) =>
   Schema.Struct({
     id: Schema.String,
@@ -149,8 +149,8 @@ export const createCommandSchema = <TName extends string, TPayload, TPayloadInpu
  * Validates and transforms a wire command into a domain command
  */
 export const validateCommand =
-  <TPayload, TPayloadInput>(payloadSchema: Schema.Schema<TPayload, TPayloadInput>) =>
-  (wireCommand: WireCommand) =>
+  <TPayload, TPayloadInput>(payloadSchema: Readonly<Schema.Schema<TPayload, TPayloadInput>>) =>
+  (wireCommand: Readonly<WireCommand>) =>
     pipe(
       Schema.decodeUnknown(payloadSchema)(wireCommand.payload),
       Effect.mapError(
@@ -183,5 +183,5 @@ export interface CommandHandler<
   TError = never,
   TResult = CommandResult,
 > {
-  readonly handle: (command: TCommand) => Effect.Effect<TResult, TError, never>;
+  readonly handle: (command: Readonly<TCommand>) => Effect.Effect<TResult, TError, never>;
 }

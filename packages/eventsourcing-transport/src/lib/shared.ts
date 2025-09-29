@@ -85,7 +85,7 @@ export const makeTransportMessage = (
   id: string,
   type: string,
   payload: string,
-  metadata?: Record<string, unknown>
+  metadata?: Readonly<Record<string, unknown>>
 ): TransportMessage => ({
   id: MessageId(id),
   type,

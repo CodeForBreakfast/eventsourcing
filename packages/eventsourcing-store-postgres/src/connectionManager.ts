@@ -4,8 +4,8 @@ import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/ev
 
 // Extended PgClient type with direct query access
 interface PgClientWithQuery extends PgClient.PgClient {
-  query: (sql: string) => Promise<unknown>;
-  end: () => Promise<void>;
+  readonly query: (sql: string) => Promise<unknown>;
+  readonly end: () => Promise<void>;
 }
 
 /**
@@ -15,17 +15,17 @@ interface ConnectionManagerService {
   /**
    * Get dedicated connection for LISTEN operations
    */
-  getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
+  readonly getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
 
   /**
    * Execute health check on listening connection
    */
-  healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
+  readonly healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
 
   /**
    * Gracefully close the listen connection
    */
-  shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
+  readonly shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
 }
 
 export class ConnectionManager extends Effect.Tag('ConnectionManager')<

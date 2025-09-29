@@ -144,9 +144,9 @@ describe('Event Sourcing Errors', () => {
 
       const serialized = JSON.stringify(error);
       const deserialized = JSON.parse(serialized) as {
-        _tag: string;
-        operation: string;
-        streamId: string;
+        readonly _tag: string;
+        readonly operation: string;
+        readonly streamId: string;
       };
 
       expect(deserialized._tag).toBe('EventStoreError');

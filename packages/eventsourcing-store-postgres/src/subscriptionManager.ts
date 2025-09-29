@@ -20,7 +20,7 @@ import {
  * Container for subscription data for a specific stream
  */
 interface SubscriptionData<T> {
-  pubsub: PubSub.PubSub<T>;
+  readonly pubsub: PubSub.PubSub<T>;
 }
 
 /**
@@ -93,7 +93,7 @@ const getOrCreatePubSub = <T>(
         HashMap.get(streamId)(subscriptions),
         Option.match({
           onNone: () => Effect.die("Subscription should exist but doesn't"),
-          onSome: (data: Readonly<SubscriptionData<T>>) => Effect.succeed(data),
+          onSome: (data: SubscriptionData<T>) => Effect.succeed(data),
         })
       )
     )
@@ -128,7 +128,7 @@ const publishToStream = <T>(
         HashMap.get(streamId)(subscriptions),
         Option.match({
           onNone: () => Effect.succeed(undefined),
-          onSome: (subData: Readonly<SubscriptionData<T>>) =>
+          onSome: (subData: SubscriptionData<T>) =>
             pipe(
               PubSub.publish(event)(subData.pubsub),
               Effect.tapError((error) =>
@@ -156,7 +156,7 @@ export const SubscriptionManagerLive = Layer.effect(
       ): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
         pipe(
           getOrCreatePubSub(ref, streamId),
-          Effect.map((pubsub: Readonly<SubscriptionData<string>>) =>
+          Effect.map((pubsub: SubscriptionData<string>) =>
             pipe(
               Stream.fromPubSub(pubsub.pubsub),
               Stream.retry(

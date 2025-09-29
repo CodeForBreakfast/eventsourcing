@@ -11,7 +11,7 @@ export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
      * Process an event, ensuring proper ordering and deduplication
      * Returns Some(event) if the event should be processed, None if it's a duplicate or out of order
      */
-    processEvent: <T>(
+    readonly processEvent: <T>(
       streamId: EventStreamId,
       eventNumber: number,
       event: T
