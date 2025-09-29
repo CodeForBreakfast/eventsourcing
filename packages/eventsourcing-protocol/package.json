@@ -70,7 +70,7 @@
     "@codeforbreakfast/eventsourcing-commands": "workspace:*",
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-    "type-fest": "^5.0.1"
+    "type-fest": "5.0.1"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
