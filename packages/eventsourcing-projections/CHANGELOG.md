@@ -1,5 +1,12 @@
 # @codeforbreakfast/eventsourcing-projections
 
+## 0.5.4
+
+### Patch Changes
+
+- Updated dependencies [[`b1a2f97`](https://github.com/CodeForBreakfast/eventsourcing/commit/b1a2f9710bf40d879b1cbaa53ca001664d88f9df), [`6395dc3`](https://github.com/CodeForBreakfast/eventsourcing/commit/6395dc36c02168a7edce261f4270c8f1e0ba34c4)]:
+  - @codeforbreakfast/eventsourcing-store@0.7.4
+
 ## 0.5.3
 
 ### Patch Changes

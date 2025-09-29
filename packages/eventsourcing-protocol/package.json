@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-protocol",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Event sourcing protocol implementation over any transport - Protocol implementation with message serialization, command correlation, and subscription management",
   "type": "module",
   "main": "./dist/index.js",

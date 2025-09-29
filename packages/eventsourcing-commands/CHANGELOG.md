@@ -1,5 +1,22 @@
 # @codeforbreakfast/eventsourcing-commands
 
+## 0.3.1
+
+### Patch Changes
+
+- [#150](https://github.com/CodeForBreakfast/eventsourcing/pull/150) [`6395dc3`](https://github.com/CodeForBreakfast/eventsourcing/commit/6395dc36c02168a7edce261f4270c8f1e0ba34c4) Thanks [@GraemeF](https://github.com/GraemeF)! - Strengthen type immutability across all packages
+
+  Added comprehensive immutability checks using ESLint's functional programming rules to enforce readonly types throughout the codebase. This improves type safety by preventing accidental mutations of parameters and return values.
+  - Added `type-fest` dependency where needed for `ReadonlyDeep` utility type
+  - Applied `ReadonlyDeep` to function parameters requiring deep immutability
+  - Added `readonly` modifiers to arrays and interface properties
+  - Strategic ESLint disable comments for Effect library types that require internal mutability
+
+  These changes ensure better type safety without affecting runtime behavior or breaking existing APIs.
+
+- Updated dependencies [[`b1a2f97`](https://github.com/CodeForBreakfast/eventsourcing/commit/b1a2f9710bf40d879b1cbaa53ca001664d88f9df), [`6395dc3`](https://github.com/CodeForBreakfast/eventsourcing/commit/6395dc36c02168a7edce261f4270c8f1e0ba34c4)]:
+  - @codeforbreakfast/eventsourcing-store@0.7.4
+
 ## 0.3.0
 
 ### Minor Changes
