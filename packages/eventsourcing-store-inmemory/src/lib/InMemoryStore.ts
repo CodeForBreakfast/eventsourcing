@@ -21,7 +21,6 @@ const emptyStream = <V>(): Effect.Effect<EventStream<V>, never, never> =>
 
 const appendToExistingEventStream =
   <V = never>(position: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
-  // eslint-disable-next-line functional/prefer-immutable-types
   (eventStream: EventStream<V>) =>
     eventStream.events.length === position.eventNumber
       ? Effect.succeed(
@@ -40,7 +39,6 @@ const appendToExistingEventStream =
 
 const appendToEventStream =
   <V = never>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
-  // eslint-disable-next-line functional/prefer-immutable-types
   ({
     eventStreamsById,
     allEventsStream,
@@ -53,7 +51,7 @@ const appendToEventStream =
         onNone: () =>
           pipe(emptyStream<V>(), Effect.flatMap(appendToExistingEventStream(streamEnd, newEvents))),
       }),
-      // eslint-disable-next-line functional/prefer-immutable-types
+
       Effect.flatMap((updatedEventStream: EventStream<V>) =>
         pipe(
           eventStreamsById,
@@ -84,7 +82,6 @@ const appendToEventStream =
 
 const ensureEventStream =
   <V = never>(streamId: EventStreamId) =>
-  // eslint-disable-next-line functional/prefer-immutable-types
   ({ eventStreamsById, allEventsStream }: Value<V>): Effect.Effect<Value<V>, never, never> =>
     pipe(
       emptyStream<V>(),
@@ -95,7 +92,7 @@ const ensureEventStream =
             streamId,
             Option.match({
               onNone: () => Option.some(emptyStream),
-              // eslint-disable-next-line functional/prefer-immutable-types
+
               onSome: (existing: EventStream<V>) => Option.some(existing),
             })
           )
@@ -132,7 +129,6 @@ export const make = <V>() =>
   pipe(
     emptyStream<{ readonly streamId: EventStreamId; readonly event: V }>(),
     Effect.flatMap(
-      // eslint-disable-next-line functional/prefer-immutable-types
       (allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>) =>
         SynchronizedRef.make<Value<V>>({
           eventStreamsById: HashMap.empty<EventStreamId, EventStream<V>>(),
@@ -140,7 +136,6 @@ export const make = <V>() =>
         })
     ),
     Effect.map(
-      // eslint-disable-next-line functional/prefer-immutable-types
       (value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({
         append: (streamEnd) => (newEvents) =>
           pipe(
@@ -165,7 +160,7 @@ export const make = <V>() =>
                     Effect.dieMessage(
                       'Event stream not found - this should not happen because we ensure it exists'
                     ),
-                  // eslint-disable-next-line functional/prefer-immutable-types
+
                   onSome: (eventStream: EventStream<V>) =>
                     Effect.succeed(
                       pipe(
@@ -192,7 +187,7 @@ export const make = <V>() =>
                     Effect.dieMessage(
                       'Event stream not found - this should not happen because we ensure it exists'
                     ),
-                  // eslint-disable-next-line functional/prefer-immutable-types
+
                   onSome: (eventStream: EventStream<V>) =>
                     Effect.succeed(pipe(eventStream.events, Stream.fromChunk)),
                 })

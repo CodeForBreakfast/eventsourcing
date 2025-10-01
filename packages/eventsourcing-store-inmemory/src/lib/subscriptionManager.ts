@@ -48,7 +48,6 @@ export class InMemorySubscriptionManager extends Effect.Tag('InMemorySubscriptio
   InMemorySubscriptionManagerService
 >() {}
 
-/* eslint-disable functional/prefer-immutable-types */
 const getOrCreateSubscription = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
   streamId: EventStreamId
@@ -225,4 +224,3 @@ export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
 
 export const InMemorySubscriptionManagerLive = <T>() =>
   Layer.effect(InMemorySubscriptionManager, makeInMemorySubscriptionManager<T>());
-/* eslint-enable functional/prefer-immutable-types */

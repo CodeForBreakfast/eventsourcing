@@ -51,7 +51,7 @@ export const makeEventRowService: Effect.Effect<
   SqlClient.SqlClient
 > = pipe(
   SqlClient.SqlClient,
-  // eslint-disable-next-line functional/prefer-immutable-types -- SQL client cannot be deeply readonly as it contains methods and connection state
+
   Effect.flatMap((sql: SqlClient.SqlClient) =>
     pipe(
       Effect.all({
@@ -143,7 +143,7 @@ export const EventSubscriptionServicesLive = Layer.mergeAll(
  */
 export const makeSqlEventStoreWithSubscriptionManager = (
   subscriptionManager: SubscriptionManagerService,
-  // eslint-disable-next-line functional/prefer-immutable-types
+
   notificationListener: Readonly<{
     readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
@@ -210,7 +210,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               pipe(
                 // Get all events in stream to check position
                 eventRows.selectAllEventsInStream(end.streamId),
-                // eslint-disable-next-line functional/prefer-immutable-types
+
                 Effect.map((events: readonly EventRow[]) => {
                   // Find the last event in the stream
                   if (events.length === 0) {
@@ -289,7 +289,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           // Read returns only historical events - no live updates
           return pipe(
             eventRows.selectAllEventsInStream(from.streamId),
-            // eslint-disable-next-line functional/prefer-immutable-types
+
             Effect.map((events: readonly EventRow[]) => {
               const filteredEvents = events
                 // eslint-disable-next-line functional/prefer-immutable-types
@@ -335,7 +335,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
               pipe(
                 // Then get historical events
                 eventRows.selectAllEventsInStream(from.streamId),
-                // eslint-disable-next-line functional/prefer-immutable-types
+
                 Effect.map((events: readonly EventRow[]) => {
                   const filteredEvents = events
                     // eslint-disable-next-line functional/prefer-immutable-types
