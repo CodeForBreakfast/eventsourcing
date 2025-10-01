@@ -66,7 +66,6 @@ export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =
 
         return pipe(
           Ref.get(channelsRef),
-          // eslint-disable-next-line functional/prefer-immutable-types
           Effect.flatMap((channels: ReadonlyMap<string, PubSub.PubSub<TEvent>>) => {
             if (channels.has(key)) {
               const channel = channels.get(key);
@@ -78,12 +77,10 @@ export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =
             // Create the channel and then update the map in two separate steps
             return pipe(
               PubSub.unbounded<TEvent>(),
-              // eslint-disable-next-line functional/prefer-immutable-types
               Effect.flatMap((channel: PubSub.PubSub<TEvent>) => {
                 // First, update the map by adding the channel
                 return pipe(
                   channelsRef,
-                  // eslint-disable-next-line functional/prefer-immutable-types
                   Ref.update((channels: ReadonlyMap<string, PubSub.PubSub<TEvent>>) => {
                     // Create a new map with the added channel using immutable operations
                     return new Map<string, PubSub.PubSub<TEvent>>([
@@ -106,11 +103,9 @@ export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =
           Effect.catchAll(
             pipe(
               getOrCreateChannel(streamId),
-              // eslint-disable-next-line functional/prefer-immutable-types
               Effect.flatMap((channel: PubSub.PubSub<TEvent>) =>
                 pipe(
                   PubSub.subscribe(channel),
-                  // eslint-disable-next-line functional/prefer-immutable-types
                   Effect.map((queue: Queue.Dequeue<TEvent>) =>
                     Stream.fromQueue(queue, { shutdown: true })
                   )
@@ -130,7 +125,6 @@ export const makeStreamHandler = <TEvent, TStreamId extends string = string>() =
           Effect.catchAll(
             pipe(
               getOrCreateChannel(streamId),
-              // eslint-disable-next-line functional/prefer-immutable-types
               Effect.flatMap((channel: PubSub.PubSub<TEvent>) =>
                 pipe(
                   // Increment the events counter

@@ -1,5 +1,5 @@
 import { PgClient } from '@effect/sql-pg';
-import { Duration, Effect, Layer, Schedule, pipe } from 'effect';
+import { Context, Duration, Effect, Layer, Schedule, pipe } from 'effect';
 import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
 import type { ReadonlyDeep } from 'type-fest';
 
@@ -12,26 +12,28 @@ interface PgClientWithQuery extends PgClient.PgClient {
 /**
  * ConnectionManager service for managing PostgreSQL notification connections
  */
-interface ConnectionManagerService {
-  /**
-   * Get dedicated connection for LISTEN operations
-   */
-  readonly getListenConnection: Effect.Effect<PgClient.PgClient, EventStoreConnectionError, never>;
-
-  /**
-   * Execute health check on listening connection
-   */
-  readonly healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
-
-  /**
-   * Gracefully close the listen connection
-   */
-  readonly shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
-}
-
-export class ConnectionManager extends Effect.Tag('ConnectionManager')<
+export class ConnectionManager extends Context.Tag('ConnectionManager')<
   ConnectionManager,
-  ConnectionManagerService
+  {
+    /**
+     * Get dedicated connection for LISTEN operations
+     */
+    readonly getListenConnection: Effect.Effect<
+      PgClient.PgClient,
+      EventStoreConnectionError,
+      never
+    >;
+
+    /**
+     * Execute health check on listening connection
+     */
+    readonly healthCheck: Effect.Effect<void, EventStoreConnectionError, never>;
+
+    /**
+     * Gracefully close the listen connection
+     */
+    readonly shutdown: Effect.Effect<void, EventStoreConnectionError, never>;
+  }
 >() {}
 
 /**

@@ -2,18 +2,16 @@
 import { Schema } from 'effect';
 const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
-import { Data, Effect, Option } from 'effect';
+import { Context, Data, Option } from 'effect';
 
 export class CurrentUserError extends Data.TaggedError('CurrentUserError')<{
   readonly message: string;
   readonly reason: Error;
 }> {}
 
-export interface CurrentUserServiceInterface {
-  readonly getCurrentUser: () => Readonly<Option.Option<PersonId>>;
-}
-
-export class CurrentUser extends Effect.Tag('CurrentUser')<
+export class CurrentUser extends Context.Tag('CurrentUser')<
   CurrentUser,
-  CurrentUserServiceInterface
+  {
+    readonly getCurrentUser: () => Readonly<Option.Option<PersonId>>;
+  }
 >() {}

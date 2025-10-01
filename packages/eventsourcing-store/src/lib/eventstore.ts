@@ -70,8 +70,7 @@ export const positionFromEventNumber = (streamId: EventStreamId, eventNumber: Ev
   );
 
 // Re-export service definitions
-export type { EventStore } from './services';
-export { EventStoreService } from './services';
+export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 

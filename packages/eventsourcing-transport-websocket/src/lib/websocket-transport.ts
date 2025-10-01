@@ -5,7 +5,7 @@
  * Provides proper Effect-based WebSocket handling with structured lifecycle management.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
+import { Context, Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
   TransportError,
@@ -325,7 +325,7 @@ const connectWebSocket = (
 // WebSocket Connector Implementation
 // =============================================================================
 
-const webSocketConnectorImpl: Client.ConnectorInterface = {
+const webSocketConnectorImpl: Context.Tag.Service<typeof Client.Connector> = {
   connect: connectWebSocket,
 };
 

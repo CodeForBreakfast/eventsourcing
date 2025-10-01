@@ -1,5 +1,5 @@
 import {
-  Effect,
+  Context,
   Stream,
   Data,
   Layer,
@@ -11,6 +11,7 @@ import {
   Match,
   Scope,
   Clock,
+  Effect,
 } from 'effect';
 import { type ReadonlyDeep } from 'type-fest';
 import {
@@ -40,29 +41,23 @@ export class ServerProtocolError extends Data.TaggedError('ServerProtocolError')
 }> {}
 
 // ============================================================================
-// Server Protocol Service Interface
-// ============================================================================
-
-export interface ServerProtocolService {
-  readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
-  readonly sendResult: (
-    commandId: string,
-    // eslint-disable-next-line functional/prefer-immutable-types
-    result: ReadonlyDeep<CommandResult>
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
-  readonly publishEvent: (
-    // eslint-disable-next-line functional/prefer-immutable-types
-    event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
-}
-
-// ============================================================================
 // Service Tag
 // ============================================================================
 
-export class ServerProtocol extends Effect.Tag('ServerProtocol')<
+export class ServerProtocol extends Context.Tag('ServerProtocol')<
   ServerProtocol,
-  ServerProtocolService
+  {
+    readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
+    readonly sendResult: (
+      commandId: string,
+      // eslint-disable-next-line functional/prefer-immutable-types
+      result: ReadonlyDeep<CommandResult>
+    ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+    readonly publishEvent: (
+      // eslint-disable-next-line functional/prefer-immutable-types
+      event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
+    ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+  }
 >() {}
 
 // ============================================================================
@@ -220,7 +215,7 @@ const createEventPublisher =
 const createServerProtocolService = (
   // eslint-disable-next-line functional/prefer-immutable-types
   server: ReadonlyDeep<Server.Transport>
-): Effect.Effect<ServerProtocolService, TransportError, Scope.Scope> =>
+): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> =>
   pipe(
     Effect.all([
       Queue.unbounded<WireCommand>(),

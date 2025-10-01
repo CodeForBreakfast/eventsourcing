@@ -1,4 +1,4 @@
-import { Config, Data, Effect, Layer, Option, Schedule, pipe, Ref, HashMap } from 'effect';
+import { Config, Context, Data, Effect, Layer, Option, Schedule, pipe, Ref, HashMap } from 'effect';
 
 /**
  * Configuration for API port and WebSocket connections
@@ -67,7 +67,7 @@ export const ConnectionConfigSchema = Config.all({
 /**
  * Environment configuration for connection settings
  */
-export class ConnectionConfigTag extends Effect.Tag('ConnectionConfig')<
+export class ConnectionConfigTag extends Context.Tag('ConnectionConfig')<
   ConnectionConfigTag,
   ConnectionConfig
 >() {}
@@ -109,44 +109,39 @@ export interface ConnectionStatus {
 }
 
 /**
- * Interface for connection management operations
- */
-export interface ConnectionManagerService {
-  /**
-   * Get the API port for the server
-   */
-  readonly getApiPort: () => Effect.Effect<number, never, never>;
-
-  /**
-   * Connect to a WebSocket endpoint with robust retry handling
-   */
-  readonly connectWithRetry: (
-    url: string,
-    options?: Readonly<Record<string, unknown>>
-  ) => Effect.Effect<ConnectionHandle, ConnectionError, never>;
-
-  /**
-   * Get the status of a connection
-   */
-  readonly getConnectionStatus: (
-    url: string
-  ) => Effect.Effect<ConnectionStatus, ConnectionError, never>;
-
-  /**
-   * Set up a heartbeat on a connection to keep it alive
-   */
-  readonly setupHeartbeat: (
-    connection: Readonly<ConnectionHandle>,
-    url: string
-  ) => Effect.Effect<{ readonly fiber: unknown }, ConnectionError, never>;
-}
-
-/**
  * Context Tag for ConnectionManager
  */
-export class ConnectionManager extends Effect.Tag('ConnectionManager')<
+export class ConnectionManager extends Context.Tag('ConnectionManager')<
   ConnectionManager,
-  ConnectionManagerService
+  {
+    /**
+     * Get the API port for the server
+     */
+    readonly getApiPort: () => Effect.Effect<number, never, never>;
+
+    /**
+     * Connect to a WebSocket endpoint with robust retry handling
+     */
+    readonly connectWithRetry: (
+      url: string,
+      options?: Readonly<Record<string, unknown>>
+    ) => Effect.Effect<ConnectionHandle, ConnectionError, never>;
+
+    /**
+     * Get the status of a connection
+     */
+    readonly getConnectionStatus: (
+      url: string
+    ) => Effect.Effect<ConnectionStatus, ConnectionError, never>;
+
+    /**
+     * Set up a heartbeat on a connection to keep it alive
+     */
+    readonly setupHeartbeat: (
+      connection: Readonly<ConnectionHandle>,
+      url: string
+    ) => Effect.Effect<{ readonly fiber: unknown }, ConnectionError, never>;
+  }
 >() {}
 
 /**
@@ -157,6 +152,11 @@ type ConnectionStatusUpdate = {
   readonly lastHeartbeat?: Option.Option<Date>;
   readonly reconnectAttempts?: number;
 };
+
+/**
+ * Extract the service type from the ConnectionManager tag
+ */
+export type ConnectionManagerService = Context.Tag.Service<typeof ConnectionManager>;
 
 /**
  * Creates a live implementation of the ConnectionManager

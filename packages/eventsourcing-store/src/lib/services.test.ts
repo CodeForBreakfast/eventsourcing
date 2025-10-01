@@ -2,24 +2,22 @@ import { Effect, Layer, pipe, Stream } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type { EventStore, ProjectionStore, SnapshotStore } from './services';
-import { EventStoreService, ProjectionStoreService, SnapshotStoreService } from './services';
+import {
+  EventStore as EventStoreTag,
+  ProjectionStore as ProjectionStoreTag,
+  SnapshotStore as SnapshotStoreTag,
+} from './services';
 import { eventStoreError } from './errors';
 
 // Test-specific typed service tags
-class MyEventStoreService extends Effect.Tag('TestEventStore')<
-  MyEventStoreService,
-  EventStore<MyEvent>
->() {}
+const MyEventStoreService = EventStoreTag<MyEvent>();
+const UserProjectionStoreService = ProjectionStoreTag<UserProjection>();
+const AggregateSnapshotStoreService = SnapshotStoreTag<AggregateSnapshot>();
 
-class UserProjectionStoreService extends Effect.Tag('TestProjectionStore')<
-  UserProjectionStoreService,
-  ProjectionStore<UserProjection>
->() {}
-
-class AggregateSnapshotStoreService extends Effect.Tag('TestSnapshotStore')<
-  AggregateSnapshotStoreService,
-  SnapshotStore<AggregateSnapshot>
->() {}
+// Also create untyped versions for the generic tests
+const EventStoreService = EventStoreTag<unknown>();
+const ProjectionStoreService = ProjectionStoreTag<unknown>();
+const SnapshotStoreService = SnapshotStoreTag<unknown>();
 
 // Test types
 interface MyEvent {
@@ -42,9 +40,9 @@ interface AggregateSnapshot {
 describe('Service Definitions', () => {
   describe('EventStoreService', () => {
     it('should create a valid service tag', () => {
-      // Effect.Tag doesn't expose _tag directly, but we can verify it's a valid tag
+      // GenericTag factory returns an object with tag methods
       expect(EventStoreService).toBeDefined();
-      expect(typeof EventStoreService).toBe('function');
+      expect(typeof EventStoreService).toBe('object');
     });
 
     it.layer(
@@ -107,7 +105,7 @@ describe('Service Definitions', () => {
   describe('ProjectionStoreService', () => {
     it('should create a valid service tag', () => {
       expect(ProjectionStoreService).toBeDefined();
-      expect(typeof ProjectionStoreService).toBe('function');
+      expect(typeof ProjectionStoreService).toBe('object');
     });
 
     it.layer(
@@ -142,7 +140,7 @@ describe('Service Definitions', () => {
   describe('SnapshotStoreService', () => {
     it('should create a valid service tag', () => {
       expect(SnapshotStoreService).toBeDefined();
-      expect(typeof SnapshotStoreService).toBe('function');
+      expect(typeof SnapshotStoreService).toBe('object');
     });
 
     it.layer(

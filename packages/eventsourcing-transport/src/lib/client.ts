@@ -5,7 +5,7 @@
  * management and bidirectional message communication using pure functional patterns.
  */
 
-import { Effect, Stream, Scope } from 'effect';
+import { Context, Effect, Stream, Scope } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import type { TransportMessage, ConnectionState, TransportError, ConnectionError } from './shared';
 
@@ -35,7 +35,8 @@ export interface Transport {
 }
 
 /**
- * Service interface for creating client transport connections.
+ * Service tag for Client Transport Connector.
+ * Creates connections to transport servers.
  *
  * The connect method should use Effect.acquireRelease to ensure proper cleanup:
  * - Acquire: establish connection, create transport
@@ -44,27 +45,17 @@ export interface Transport {
  * The Scope requirement ensures the transport is automatically
  * disconnected when the scope closes.
  */
-export interface ConnectorInterface {
-  readonly connect: (url: string) => Effect.Effect<Transport, ConnectionError, Scope.Scope>;
-}
-
-// ============================================================================
-// Service Definitions using Effect.Tag
-// ============================================================================
-
-/**
- * Service tag for Client Transport Connector.
- * Creates connections to transport servers.
- */
-export class Connector extends Effect.Tag('@transport/Client.Connector')<
+export class Connector extends Context.Tag('@transport/Client.Connector')<
   Connector,
-  ConnectorInterface
+  {
+    readonly connect: (url: string) => Effect.Effect<Transport, ConnectionError, Scope.Scope>;
+  }
 >() {}
 
 /**
  * Connected transport service for testing and dependency injection
  */
-export class ConnectedTransport extends Effect.Tag('@transport/Client.ConnectedTransport')<
+export class ConnectedTransport extends Context.Tag('@transport/Client.ConnectedTransport')<
   ConnectedTransport,
   Transport
 >() {}
