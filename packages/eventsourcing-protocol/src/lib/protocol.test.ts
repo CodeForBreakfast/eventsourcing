@@ -58,9 +58,8 @@ const setupTestEnvironment = pipe(
 // ============================================================================
 
 const createTestServerProtocol = (
-  // eslint-disable-next-line functional/prefer-immutable-types
   server: ReadonlyDeep<InMemoryServer>,
-  // eslint-disable-next-line functional/prefer-immutable-types
+
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult = () => ({
     _tag: 'Success',
     position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
@@ -72,98 +71,85 @@ const createTestServerProtocol = (
     Stream.take(1),
     Stream.runCollect,
     Effect.map((connections) => Array.from(connections)[0]!),
-    Effect.flatMap(
-      (
-        // eslint-disable-next-line functional/prefer-immutable-types
-        serverConnection: ReadonlyDeep<Server.ClientConnection>
-      ) =>
-        pipe(
-          serverConnection.transport.subscribe(),
-          Effect.flatMap(
-            (
-              // eslint-disable-next-line functional/prefer-immutable-types
-              messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>
-            ) =>
-              Effect.forkScoped(
-                Stream.runForEach(
-                  messageStream,
-                  (
-                    // eslint-disable-next-line functional/prefer-immutable-types
-                    message: ReadonlyDeep<TransportMessage>
-                  ) =>
-                    pipe(
-                      Effect.try(() => JSON.parse(message.payload as string)),
-                      Effect.flatMap(
-                        (parsedMessage: {
-                          readonly type: string;
-                          readonly id?: string;
-                          readonly streamId?: string;
-                          readonly target?: string;
-                          readonly name?: string;
-                          readonly payload?: unknown;
-                          readonly [key: string]: unknown;
-                        }) => {
-                          if (
-                            parsedMessage.type === 'command' &&
-                            parsedMessage.id &&
-                            parsedMessage.target &&
-                            parsedMessage.name &&
-                            parsedMessage.payload !== undefined
-                          ) {
-                            const command: WireCommand = {
-                              id: parsedMessage.id,
-                              target: parsedMessage.target,
-                              name: parsedMessage.name,
-                              payload: parsedMessage.payload,
-                            };
-                            const result = commandHandler(command);
-                            const response = makeTransportMessage(
+    Effect.flatMap((serverConnection: ReadonlyDeep<Server.ClientConnection>) =>
+      pipe(
+        serverConnection.transport.subscribe(),
+        Effect.flatMap((messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>) =>
+          Effect.forkScoped(
+            Stream.runForEach(messageStream, (message: ReadonlyDeep<TransportMessage>) =>
+              pipe(
+                Effect.try(() => JSON.parse(message.payload as string)),
+                Effect.flatMap(
+                  (parsedMessage: {
+                    readonly type: string;
+                    readonly id?: string;
+                    readonly streamId?: string;
+                    readonly target?: string;
+                    readonly name?: string;
+                    readonly payload?: unknown;
+                    readonly [key: string]: unknown;
+                  }) => {
+                    if (
+                      parsedMessage.type === 'command' &&
+                      parsedMessage.id &&
+                      parsedMessage.target &&
+                      parsedMessage.name &&
+                      parsedMessage.payload !== undefined
+                    ) {
+                      const command: WireCommand = {
+                        id: parsedMessage.id,
+                        target: parsedMessage.target,
+                        name: parsedMessage.name,
+                        payload: parsedMessage.payload,
+                      };
+                      const result = commandHandler(command);
+                      const response = makeTransportMessage(
+                        crypto.randomUUID(),
+                        'command_result',
+                        JSON.stringify({
+                          type: 'command_result',
+                          commandId: command.id,
+                          success: result._tag === 'Success',
+                          ...(result._tag === 'Success'
+                            ? { position: result.position }
+                            : { error: JSON.stringify(result.error) }),
+                        })
+                      );
+                      return server.broadcast(response);
+                    }
+
+                    if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
+                      const events = subscriptionHandler(parsedMessage.streamId);
+                      return Effect.forEach(
+                        events,
+                        (event) =>
+                          server.broadcast(
+                            makeTransportMessage(
                               crypto.randomUUID(),
-                              'command_result',
+                              'event',
                               JSON.stringify({
-                                type: 'command_result',
-                                commandId: command.id,
-                                success: result._tag === 'Success',
-                                ...(result._tag === 'Success'
-                                  ? { position: result.position }
-                                  : { error: JSON.stringify(result.error) }),
+                                type: 'event',
+                                streamId: parsedMessage.streamId,
+                                position: event.position,
+                                eventType: event.type,
+                                data: event.data,
+                                timestamp: event.timestamp.toISOString(),
                               })
-                            );
-                            return server.broadcast(response);
-                          }
+                            )
+                          ),
+                        { discard: true }
+                      );
+                    }
 
-                          if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
-                            const events = subscriptionHandler(parsedMessage.streamId);
-                            return Effect.forEach(
-                              events,
-                              (event) =>
-                                server.broadcast(
-                                  makeTransportMessage(
-                                    crypto.randomUUID(),
-                                    'event',
-                                    JSON.stringify({
-                                      type: 'event',
-                                      streamId: parsedMessage.streamId,
-                                      position: event.position,
-                                      eventType: event.type,
-                                      data: event.data,
-                                      timestamp: event.timestamp.toISOString(),
-                                    })
-                                  )
-                                ),
-                              { discard: true }
-                            );
-                          }
-
-                          return Effect.void;
-                        }
-                      ),
-                      Effect.catchAll(() => Effect.void)
-                    )
-                )
+                    return Effect.void;
+                  }
+                ),
+                Effect.catchAll(() => Effect.void)
               )
+            )
           )
         )
+      )
     ),
     Effect.asVoid
   );
@@ -2254,10 +2240,7 @@ describe('Protocol Behavior Tests', () => {
               }));
 
               // Send commands sequentially (not concurrently) to test cleanup between commands
-              const sendSequentially = (
-                // eslint-disable-next-line functional/prefer-immutable-types
-                cmds: ReadonlyDeep<readonly WireCommand[]>
-              ) =>
+              const sendSequentially = (cmds: ReadonlyDeep<readonly WireCommand[]>) =>
                 Effect.forEach(cmds, sendWireCommand, {
                   concurrency: 1,
                 });
