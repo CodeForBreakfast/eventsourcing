@@ -104,7 +104,6 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
     },
 
     waitForConnectionState: (
-      // eslint-disable-next-line functional/prefer-immutable-types
       transport: ClientTransport,
       expectedState: ConnectionState,
       timeoutMs?: number

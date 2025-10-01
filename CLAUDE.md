@@ -9,8 +9,8 @@
 5. Run `bun install` to set up dependencies
 6. ONLY THEN start making changes in the isolated worktree
 
-- Always use Bun wherever possible.
 - Always use turbo to run tasks.
+- Always use Bun instead of node or npm.
 - PR titles must follow conventional commits
 
 ## Worktree Benefits
