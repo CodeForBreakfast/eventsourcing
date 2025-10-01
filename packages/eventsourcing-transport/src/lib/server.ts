@@ -5,7 +5,7 @@
  * management, broadcasting, and server lifecycle using pure functional patterns.
  */
 
-import { Effect, Stream, Scope, Data, Brand } from 'effect';
+import { Context, Effect, Stream, Scope, Data, Brand } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import type { TransportMessage, TransportError } from './shared';
 import type { Transport as ClientTransport } from './client';
@@ -58,7 +58,8 @@ export interface Transport {
 }
 
 /**
- * Service interface for creating transport servers.
+ * Service tag for Server Transport Acceptor.
+ * Accepts client connections and creates server transports.
  *
  * Uses Effect.acquireRelease for lifecycle management:
  * - Acquire: start server, accept connections
@@ -67,21 +68,11 @@ export interface Transport {
  * Configuration is implementation-specific and should be passed
  * when constructing the service implementation.
  */
-export interface AcceptorInterface {
-  readonly start: () => Effect.Effect<Transport, ServerStartError, Scope.Scope>;
-}
-
-// ============================================================================
-// Service Definitions using Effect.Tag
-// ============================================================================
-
-/**
- * Service tag for Server Transport Acceptor.
- * Accepts client connections and creates server transports.
- */
-export class Acceptor extends Effect.Tag('@transport/Server.Acceptor')<
+export class Acceptor extends Context.Tag('@transport/Server.Acceptor')<
   Acceptor,
-  AcceptorInterface
+  {
+    readonly start: () => Effect.Effect<Transport, ServerStartError, Scope.Scope>;
+  }
 >() {}
 
 // ============================================================================

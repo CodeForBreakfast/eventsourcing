@@ -5,13 +5,9 @@
  * Combines WebSocket transport with default protocol for rapid development.
  */
 
-import { Effect, Layer, pipe } from 'effect';
+import { Context, Effect, Layer, pipe } from 'effect';
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
-import {
-  Protocol,
-  ProtocolLive,
-  type ProtocolService,
-} from '@codeforbreakfast/eventsourcing-protocol';
+import { Protocol, ProtocolLive } from '@codeforbreakfast/eventsourcing-protocol';
 import type { TransportError, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
 import type { Scope } from 'effect/Scope';
 
@@ -20,7 +16,11 @@ import type { Scope } from 'effect/Scope';
  */
 export const connect = (
   url: string
-): Effect.Effect<ProtocolService, TransportError | ConnectionError, Protocol | Scope> => {
+): Effect.Effect<
+  Context.Tag.Service<typeof Protocol>,
+  TransportError | ConnectionError,
+  Protocol | Scope
+> => {
   // Create the layer stack
   const protocolLayer = pipe(
     WebSocketConnector.connect(url),

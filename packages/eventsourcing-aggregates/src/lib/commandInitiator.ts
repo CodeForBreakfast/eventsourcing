@@ -1,4 +1,4 @@
-import { Effect, Layer, Option, Schema } from 'effect';
+import { Context, Effect, Layer, Option, Schema } from 'effect';
 
 // Mock PersonId for now - replace with actual implementation
 const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
@@ -8,14 +8,11 @@ import { CurrentUserError } from './currentUser';
 export const CommandInitiatorId = Schema.Union(PersonId);
 export type CommandInitiatorId = typeof CommandInitiatorId.Type;
 
-// eslint-disable-next-line functional/type-declaration-immutability
-export interface ICommandContext {
-  readonly getInitiatorId: Effect.Effect<Option.Option<CommandInitiatorId>, CurrentUserError>;
-}
-
-export class CommandContext extends Effect.Tag('CommandContext')<
+export class CommandContext extends Context.Tag('CommandContext')<
   CommandContext,
-  ICommandContext
+  {
+    readonly getInitiatorId: Effect.Effect<Option.Option<CommandInitiatorId>, CurrentUserError>;
+  }
 >() {}
 
 export const CommandContextTest = (initiatorId: Readonly<Option.Option<CommandInitiatorId>>) =>

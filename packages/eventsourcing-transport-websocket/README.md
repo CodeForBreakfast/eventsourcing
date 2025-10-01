@@ -269,9 +269,9 @@ The transport is protocol-agnostic and moves `TransportMessage` objects between 
 #### WebSocketConnector
 
 ```typescript
-const WebSocketConnector: Client.ConnectorInterface<TransportMessage> = {
+const WebSocketConnector: Context.Tag.Service<typeof Client.Connector> = {
   connect(url: string): Effect.Effect<
-    Client.Transport<TransportMessage>,
+    Client.Transport,
     ConnectionError,
     Scope.Scope
   >
@@ -301,7 +301,7 @@ const WebSocketAcceptor: {
   make(config: {
     port: number;
     host: string;
-  }): Effect.Effect<Server.AcceptorInterface, never, never>;
+  }): Effect.Effect<Context.Tag.Service<typeof Server.Acceptor>, never, never>;
 };
 ```
 

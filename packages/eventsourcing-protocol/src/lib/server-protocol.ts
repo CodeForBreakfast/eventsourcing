@@ -1,5 +1,5 @@
 import {
-  Effect,
+  Context,
   Stream,
   Data,
   Layer,
@@ -11,6 +11,7 @@ import {
   Match,
   Scope,
   Clock,
+  Effect,
 } from 'effect';
 import { type ReadonlyDeep } from 'type-fest';
 import {
@@ -39,29 +40,22 @@ export class ServerProtocolError extends Data.TaggedError('ServerProtocolError')
   readonly reason: string;
 }> {}
 
-// ============================================================================
-// Server Protocol Service Interface
-// ============================================================================
-
-export interface ServerProtocolService {
-  readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
-  readonly sendResult: (
-    commandId: string,
-
-    result: ReadonlyDeep<CommandResult>
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
-  readonly publishEvent: (
-    event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
-}
-
-// ============================================================================
-// Service Tag
-// ============================================================================
-
-export class ServerProtocol extends Effect.Tag('ServerProtocol')<
+/**
+ * Service tag for Server Protocol.
+ * Handles wire commands, command results, and event publishing for server-side protocol operations.
+ */
+export class ServerProtocol extends Context.Tag('ServerProtocol')<
   ServerProtocol,
-  ServerProtocolService
+  {
+    readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
+    readonly sendResult: (
+      commandId: string,
+      result: ReadonlyDeep<CommandResult>
+    ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+    readonly publishEvent: (
+      event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
+    ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+  }
 >() {}
 
 // ============================================================================
@@ -208,7 +202,7 @@ const createEventPublisher =
 
 const createServerProtocolService = (
   server: ReadonlyDeep<Server.Transport>
-): Effect.Effect<ServerProtocolService, TransportError, Scope.Scope> =>
+): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> =>
   pipe(
     Effect.all([
       Queue.unbounded<WireCommand>(),

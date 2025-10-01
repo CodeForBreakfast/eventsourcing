@@ -35,12 +35,10 @@ import {
 
   // Command context services
   CommandContext,
-  CommandContextInterface,
   CommandInitiatorId,
 
   // Current user services
   CurrentUser,
-  CurrentUserServiceInterface,
   CurrentUserError,
 
   // Helper functions

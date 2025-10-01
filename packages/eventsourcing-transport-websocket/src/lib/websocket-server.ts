@@ -5,7 +5,7 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
-import { Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
+import { Context, Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -417,7 +417,7 @@ const createWebSocketServerTransport = (
 const webSocketAcceptorImpl = {
   make: (
     config: ReadonlyDeep<WebSocketServerConfig>
-  ): Effect.Effect<Server.AcceptorInterface, never, never> =>
+  ): Effect.Effect<Context.Tag.Service<typeof Server.Acceptor>, never, never> =>
     Effect.succeed({
       start: () => createWebSocketServerTransport(config),
     }),

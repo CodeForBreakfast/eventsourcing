@@ -1,5 +1,5 @@
 import {
-  Effect,
+  Context,
   Stream,
   Queue,
   Deferred,
@@ -14,6 +14,7 @@ import {
   Scope,
   Match,
   Clock,
+  Effect,
 } from 'effect';
 import {
   makeTransportMessage,
@@ -110,24 +111,25 @@ interface ProtocolState {
   readonly subscriptions: HashMap.HashMap<string, Queue.Queue<Event>>;
 }
 
-export interface ProtocolService {
-  readonly sendWireCommand: (
-    command: ReadonlyDeep<WireCommand>
-  ) => Effect.Effect<
-    CommandResult,
-    TransportError | WireCommandTimeoutError | ProtocolValidationError,
-    never
-  >;
-  readonly subscribe: (
-    streamId: string
-  ) => Effect.Effect<
-    Stream.Stream<Event, ProtocolValidationError, never>,
-    TransportError | ProtocolValidationError,
-    never
-  >;
-}
-
-export class Protocol extends Effect.Tag('Protocol')<Protocol, ProtocolService>() {}
+export class Protocol extends Context.Tag('Protocol')<
+  Protocol,
+  {
+    readonly sendWireCommand: (
+      command: ReadonlyDeep<WireCommand>
+    ) => Effect.Effect<
+      CommandResult,
+      TransportError | WireCommandTimeoutError | ProtocolValidationError,
+      never
+    >;
+    readonly subscribe: (
+      streamId: string
+    ) => Effect.Effect<
+      Stream.Stream<Event, ProtocolValidationError, never>,
+      TransportError | ProtocolValidationError,
+      never
+    >;
+  }
+>() {}
 
 const parseTransportPayload = (message: ReadonlyDeep<TransportMessage>) =>
   pipe(
@@ -387,7 +389,7 @@ const createSubscriber =
 
 const createProtocolService = (
   transport: ReadonlyDeep<Client.Transport>
-): Effect.Effect<ProtocolService, TransportError, Scope.Scope> =>
+): Effect.Effect<Context.Tag.Service<typeof Protocol>, TransportError, Scope.Scope> =>
   pipe(
     Ref.make<ProtocolState>({
       pendingWireCommands: HashMap.empty(),

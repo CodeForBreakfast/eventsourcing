@@ -1,4 +1,4 @@
-import { Effect, ParseResult, Sink, Stream } from 'effect';
+import { Context, Effect, ParseResult, Sink, Stream } from 'effect';
 import { EventStreamPosition } from './streamTypes';
 import {
   EventStoreError,
@@ -54,11 +54,8 @@ export interface EventStore<TEvent> {
   >;
 }
 
-// Create EventStore service tag - generic version must be created per use case
-export class EventStoreService extends Effect.Tag('@eventsourcing/EventStore')<
-  EventStoreService,
-  EventStore<unknown>
->() {}
+export const EventStore = <TEvent = unknown>() =>
+  Context.GenericTag<EventStore<TEvent>>('@eventsourcing/EventStore');
 
 // Projection Store service interface
 export interface ProjectionStore<TState> {
@@ -69,10 +66,8 @@ export interface ProjectionStore<TState> {
   readonly clear: () => Effect.Effect<void, ProjectionError>;
 }
 
-export class ProjectionStoreService extends Effect.Tag('@eventsourcing/ProjectionStore')<
-  ProjectionStoreService,
-  ProjectionStore<unknown>
->() {}
+export const ProjectionStore = <TState = unknown>() =>
+  Context.GenericTag<ProjectionStore<TState>>('@eventsourcing/ProjectionStore');
 
 // Snapshot Store service interface
 export interface SnapshotStore<TSnapshot> {
@@ -92,9 +87,5 @@ export interface SnapshotStore<TSnapshot> {
   readonly list: (aggregateId: string) => Effect.Effect<readonly number[], SnapshotError>;
 }
 
-export class SnapshotStoreService extends Effect.Tag('@eventsourcing/SnapshotStore')<
-  SnapshotStoreService,
-  SnapshotStore<unknown>
->() {}
-
-// Note: EventStore type is exported from eventstore.ts for backward compatibility
+export const SnapshotStore = <TSnapshot = unknown>() =>
+  Context.GenericTag<SnapshotStore<TSnapshot>>('@eventsourcing/SnapshotStore');

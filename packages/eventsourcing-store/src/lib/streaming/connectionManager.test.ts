@@ -4,7 +4,7 @@ import { describe, expect, it, silentLogger } from '@codeforbreakfast/buntest';
 // Mock implementation for testing
 const LoggerLive = silentLogger;
 import {
-  type ConnectionManagerService,
+  ConnectionManagerService,
   DefaultConnectionConfig,
   makeConnectionManager,
 } from './connectionManager';

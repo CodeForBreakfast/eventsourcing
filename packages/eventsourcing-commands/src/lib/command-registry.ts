@@ -1,4 +1,4 @@
-import { Schema, Effect, pipe, Layer, Match } from 'effect';
+import { Schema, Context, Effect, pipe, Layer, Match } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,
@@ -10,23 +10,21 @@ import {
   CommandMatcher,
 } from './commands';
 
-export interface CommandRegistry {
-  readonly dispatch: (
-    wireCommand: ReadonlyDeep<WireCommand>
-  ) => Effect.Effect<CommandResult, never, never>;
-  readonly listCommandNames: () => ReadonlyArray<string>;
-}
-
-export class CommandRegistryService extends Effect.Tag('CommandRegistryService')<
-  CommandRegistryService,
-  CommandRegistry
+export class CommandRegistry extends Context.Tag('CommandRegistry')<
+  CommandRegistry,
+  {
+    readonly dispatch: (
+      wireCommand: ReadonlyDeep<WireCommand>
+    ) => Effect.Effect<CommandResult, never, never>;
+    readonly listCommandNames: () => ReadonlyArray<string>;
+  }
 >() {}
 
 export const dispatchCommand = (
   wireCommand: ReadonlyDeep<WireCommand>
-): Effect.Effect<CommandResult, never, CommandRegistryService> =>
+): Effect.Effect<CommandResult, never, CommandRegistry> =>
   pipe(
-    CommandRegistryService,
+    CommandRegistry,
     Effect.flatMap((registry) => registry.dispatch(wireCommand))
   );
 
@@ -50,7 +48,7 @@ export const makeCommandRegistry = <
 >(
   commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
-): CommandRegistry => {
+): Context.Tag.Service<typeof CommandRegistry> => {
   // Build the exhaustive command schema
   const commandSchema = buildCommandSchema(commands);
 
@@ -113,5 +111,5 @@ export const makeCommandRegistryLayer = <
 >(
   commands: ReadonlyDeep<T>,
   matcher: CommandMatcher<CommandFromDefinitions<T>>
-): Layer.Layer<CommandRegistryService, never, never> =>
-  Layer.succeed(CommandRegistryService, makeCommandRegistry(commands, matcher));
+): Layer.Layer<CommandRegistry, never, never> =>
+  Layer.succeed(CommandRegistry, makeCommandRegistry(commands, matcher));

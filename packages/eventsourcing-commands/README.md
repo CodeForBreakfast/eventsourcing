@@ -225,14 +225,14 @@ Creates an Effect Layer containing the command registry:
 ```typescript
 import {
   makeCommandRegistryLayer,
-  CommandRegistryService,
+  CommandRegistry,
 } from '@codeforbreakfast/eventsourcing-commands';
 
 const layer = makeCommandRegistryLayer(commands, commandMatcher);
 
 // Use in your Effect program
 const program = Effect.gen(function* () {
-  const registry = yield* CommandRegistryService;
+  const registry = yield* CommandRegistry;
   return yield* registry.dispatch(wireCommand);
 }).pipe(Effect.provide(layer));
 ```

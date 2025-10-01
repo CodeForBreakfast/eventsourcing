@@ -2,7 +2,7 @@ import { Effect, Layer, pipe, Stream } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import {
   EventStreamPosition,
-  EventStoreService,
+  EventStoreTag,
   beginning,
   toStreamId,
   Event,
@@ -16,6 +16,8 @@ import { CommandProcessingError, CommandRoutingError } from './commandProcessing
 import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
 import { createCommandProcessingService } from './commandProcessingFactory';
+
+const EventStoreService = EventStoreTag<unknown>();
 
 // ============================================================================
 // Test Implementation
