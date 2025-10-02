@@ -96,91 +96,84 @@ const createStreamPosition = (
   eventNumber: EventNumber
 ) => pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
 
-const writeEventsToPosition = <TEvent>(
-  eventstore: EventStore<TEvent>,
-  events: Chunk.Chunk<TEvent>,
-  position: EventStreamPosition
-) => pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
+const writeEventsToPosition =
+  <TEvent>(events: Chunk.Chunk<TEvent>, position: EventStreamPosition) =>
+  (eventstore: EventStore<TEvent>) =>
+    pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
 
-const commitToEventStore = <TEvent>(
-  eventstore: EventStore<TEvent>,
-  id: string,
-  eventNumber: EventNumber,
-  events: Chunk.Chunk<TEvent>
-) =>
-  pipe(
-    id,
-    toStreamId,
-    Effect.flatMap((streamId) => createStreamPosition(streamId, eventNumber)),
-    Effect.flatMap((position) => writeEventsToPosition(eventstore, events, position))
-  );
+const commitToEventStore =
+  <TEvent>(id: string, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
+  (eventstore: EventStore<TEvent>) =>
+    pipe(
+      id,
+      toStreamId,
+      Effect.flatMap((streamId) => createStreamPosition(streamId, eventNumber)),
+      Effect.flatMap((position) => writeEventsToPosition(events, position)(eventstore))
+    );
 
 const commit =
   <TEvent, TTag>(eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>) =>
   (options: CommitOptions) =>
     pipe(
       eventstoreTag,
-      Effect.flatMap((eventstore) =>
-        commitToEventStore(
-          eventstore,
-          options.id,
-          options.eventNumber,
-          options.events as Chunk.Chunk<TEvent>
-        )
+      Effect.flatMap(
+        commitToEventStore(options.id, options.eventNumber, options.events as Chunk.Chunk<TEvent>)
       )
     );
 
-const updateStateWithEvent = <TState>(
-  stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>,
-  newState: TState
-) =>
-  pipe(
-    stateRef,
-    Ref.update(() => ({
-      nextEventNumber: 0,
-      data: Option.some(newState),
-    }))
-  );
+const updateStateWithEvent =
+  <TState>(newState: TState) =>
+  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+    pipe(
+      stateRef,
+      Ref.update(() => ({
+        nextEventNumber: 0,
+        data: Option.some(newState),
+      }))
+    );
 
-const applyAndUpdateState = <TState, TEvent>(
-  apply: (
-    state: Readonly<Option.Option<TState>>
-  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-  stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>,
-  before: Option.Option<TState>,
-  event: TEvent
-) =>
-  pipe(
-    event,
-    apply(before),
-    Effect.flatMap((newState) => updateStateWithEvent(stateRef, newState))
-  );
+const applyAndUpdateState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    before: Option.Option<TState>,
+    event: TEvent
+  ) =>
+  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+    pipe(
+      event,
+      apply(before),
+      Effect.flatMap((newState) => updateStateWithEvent(newState)(stateRef))
+    );
 
-const applyEventToState = <TState, TEvent>(
-  apply: (
-    state: Readonly<Option.Option<TState>>
-  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-  stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>,
-  event: TEvent
-) =>
-  pipe(
-    stateRef,
-    Ref.get,
-    Effect.flatMap(({ data: before }) => applyAndUpdateState(apply, stateRef, before, event))
-  );
+const applyEventToState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    event: TEvent
+  ) =>
+  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+    pipe(
+      stateRef,
+      Ref.get,
+      Effect.flatMap(({ data: before }) => applyAndUpdateState(apply, before, event)(stateRef))
+    );
 
-const foldEventsIntoState = <TState, TEvent>(
-  apply: (
-    state: Readonly<Option.Option<TState>>
-  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-  stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>,
-  stream: Stream.Stream<TEvent, unknown>
-) =>
-  pipe(
-    stream,
-    Stream.runForEach((event) => applyEventToState(apply, stateRef, event)),
-    Effect.flatMap(() => Ref.get(stateRef))
-  );
+const foldEventsIntoState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    stream: Stream.Stream<TEvent, unknown>
+  ) =>
+  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+    pipe(
+      stream,
+      Stream.runForEach((event) => applyEventToState(apply, event)(stateRef)),
+      Effect.flatMap(() => Ref.get(stateRef))
+    );
 
 const processEventStream = <TState, TEvent>(
   apply: (
@@ -190,7 +183,7 @@ const processEventStream = <TState, TEvent>(
 ) =>
   pipe(
     Ref.make({ nextEventNumber: 0, data: Option.none<TState>() }),
-    Effect.flatMap((stateRef) => foldEventsIntoState(apply, stateRef, stream))
+    Effect.flatMap(foldEventsIntoState(apply, stream))
   );
 
 const decodeEventNumber = (nextEventNumber: number, data: Option.Option<unknown>) =>
@@ -210,18 +203,19 @@ const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
     Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position))
   );
 
-const loadAggregateState = <TState, TEvent>(
-  eventStore: EventStore<TEvent>,
-  id: string,
-  apply: (
-    state: Readonly<Option.Option<TState>>
-  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
-) =>
-  pipe(
-    loadStreamEvents(eventStore, id),
-    Effect.flatMap((stream) => processEventStream(apply, stream)),
-    Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
-  );
+const loadAggregateState =
+  <TState, TEvent>(
+    id: string,
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
+  ) =>
+  (eventStore: EventStore<TEvent>) =>
+    pipe(
+      loadStreamEvents(eventStore, id),
+      Effect.flatMap((stream) => processEventStream(apply, stream)),
+      Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
+    );
 
 /**
  * Creates an aggregate root with event sourcing capabilities
@@ -274,11 +268,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
     nextEventNumber: 0,
     data: Option.none(),
   }),
-  load: (id: string) =>
-    pipe(
-      tag,
-      Effect.flatMap((eventStore) => loadAggregateState(eventStore, id, apply))
-    ),
+  load: (id: string) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
   commit: commit<TEvent, TTag>(tag),
   commands,
 });

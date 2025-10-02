@@ -77,31 +77,32 @@ const decodeProjectionEventNumber = <TData>(
     )
   );
 
-const loadAndProcessEvents = <TEvent, TData>(
-  eventstore: ProjectionEventStore<TEvent>,
-  id: string,
-  apply: (
-    data: ReadonlyDeep<Option.Option<TData>>
-  ) => (
-    event: ReadonlyDeep<TEvent>
-  ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>
-) =>
-  pipe(
-    id,
-    toStreamId,
-    Effect.flatMap(beginning),
-    Effect.tap((position) =>
-      Effect.annotateCurrentSpan({
-        position,
-      })
-    ),
-    Effect.flatMap(eventstore.read),
-    Effect.map((stream) => Stream.take(Number.MAX_SAFE_INTEGER)(stream)),
-    Effect.flatMap((stream) => foldEvents(apply, stream)),
-    Effect.flatMap(({ nextEventNumber, data }) =>
-      decodeProjectionEventNumber(nextEventNumber, data)
-    )
-  );
+const loadAndProcessEvents =
+  <TEvent, TData>(
+    id: string,
+    apply: (
+      data: ReadonlyDeep<Option.Option<TData>>
+    ) => (
+      event: ReadonlyDeep<TEvent>
+    ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>
+  ) =>
+  (eventstore: ProjectionEventStore<TEvent>) =>
+    pipe(
+      id,
+      toStreamId,
+      Effect.flatMap(beginning),
+      Effect.tap((position) =>
+        Effect.annotateCurrentSpan({
+          position,
+        })
+      ),
+      Effect.flatMap(eventstore.read),
+      Effect.map((stream) => Stream.take(Number.MAX_SAFE_INTEGER)(stream)),
+      Effect.flatMap((stream) => foldEvents(apply, stream)),
+      Effect.flatMap(({ nextEventNumber, data }) =>
+        decodeProjectionEventNumber(nextEventNumber, data)
+      )
+    );
 
 export const loadProjection =
   <TEvent, TData>(
@@ -123,6 +124,6 @@ export const loadProjection =
   > =>
     pipe(
       eventstoreTag,
-      Effect.flatMap((eventstore) => loadAndProcessEvents(eventstore, id, apply)),
+      Effect.flatMap(loadAndProcessEvents(id, apply)),
       Effect.withSpan('loadProjection')
     );

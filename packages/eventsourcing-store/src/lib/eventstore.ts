@@ -3,29 +3,23 @@ import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './st
 import type { EventStore } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
 
-const countEventsAndCreatePosition = (
-  streamId: EventStreamId,
-  stream: Stream.Stream<unknown, unknown>
-) =>
-  pipe(
-    stream,
-    Stream.runCount,
-    Effect.map((count) => ({
-      streamId,
-      eventNumber: count,
-    })),
-    Effect.flatMap(Schema.decode(EventStreamPosition))
-  );
+const countEventsAndCreatePosition =
+  (streamId: EventStreamId) => (stream: Stream.Stream<unknown, unknown>) =>
+    pipe(
+      stream,
+      Stream.runCount,
+      Effect.map((count) => ({
+        streamId,
+        eventNumber: count,
+      })),
+      Effect.flatMap(Schema.decode(EventStreamPosition))
+    );
 
 const readAndCountEvents = <TEvent>(
   eventStore: EventStore<TEvent>,
   streamId: EventStreamId,
   startPos: EventStreamPosition
-) =>
-  pipe(
-    eventStore.read(startPos),
-    Effect.flatMap((stream) => countEventsAndCreatePosition(streamId, stream))
-  );
+) => pipe(eventStore.read(startPos), Effect.flatMap(countEventsAndCreatePosition(streamId)));
 
 /**
  * Gets the current end position of a stream
