@@ -6,7 +6,7 @@
  * and subscription behaviors.
  */
 
-import { Effect, Stream, pipe, Chunk, Duration, Fiber, Schema } from 'effect';
+import { Effect, Stream, pipe, Chunk, Duration, Fiber, Schema, Ref } from 'effect';
 import { describe, expect, it, beforeEach, afterEach } from '@codeforbreakfast/buntest';
 import type {
   TransportMessage,
@@ -163,27 +163,34 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const stateHistory: ConnectionState[] = [];
-                return pipe(
-                  transport.connectionState,
-                  Stream.take(3),
-                  Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state))),
-                  Effect.fork,
-                  Effect.flatMap((stateMonitoring) =>
+              Effect.flatMap((transport) =>
+                pipe(
+                  Ref.make(Chunk.empty<ConnectionState>()),
+                  Effect.flatMap((stateHistoryRef) =>
                     pipe(
-                      Effect.sleep(Duration.millis(200)),
-                      Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
-                      Effect.tap(() =>
-                        Effect.sync(() => {
-                          expect(stateHistory.length).toBeGreaterThan(0);
-                          expect(stateHistory[0]).toBe('connected');
-                        })
+                      transport.connectionState,
+                      Stream.take(3),
+                      Stream.runForEach((state) =>
+                        Ref.update(stateHistoryRef, Chunk.append(state))
+                      ),
+                      Effect.fork,
+                      Effect.flatMap((stateMonitoring) =>
+                        pipe(
+                          Effect.sleep(Duration.millis(200)),
+                          Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
+                          Effect.flatMap(() => Ref.get(stateHistoryRef)),
+                          Effect.tap((stateHistory) =>
+                            Effect.sync(() => {
+                              expect(Chunk.size(stateHistory)).toBeGreaterThan(0);
+                              expect(Chunk.unsafeGet(stateHistory, 0)).toBe('connected');
+                            })
+                          )
+                        )
                       )
                     )
                   )
-                );
-              })
+                )
+              )
             )
           )
         );
@@ -549,39 +556,42 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const stateHistory: ConnectionState[] = [];
-                return pipe(
-                  transport.connectionState,
-                  Stream.take(2),
-                  Stream.runForEach((state) =>
-                    Effect.sync(() => {
-                      stateHistory.push(state);
-                    })
-                  ),
-                  Effect.fork,
-                  Effect.flatMap((stateMonitoring) =>
+              Effect.flatMap((transport) =>
+                pipe(
+                  Ref.make(Chunk.empty<ConnectionState>()),
+                  Effect.flatMap((stateHistoryRef) =>
                     pipe(
-                      Effect.sleep(Duration.millis(100)),
-                      Effect.flatMap(() =>
-                        context.simulateDisconnect
-                          ? pipe(
-                              context.simulateDisconnect(),
-                              Effect.flatMap(() => Effect.sleep(Duration.millis(50)))
-                            )
-                          : Effect.void
+                      transport.connectionState,
+                      Stream.take(2),
+                      Stream.runForEach((state) =>
+                        Ref.update(stateHistoryRef, Chunk.append(state))
                       ),
-                      Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
-                      Effect.tap(() =>
-                        Effect.sync(() => {
-                          expect(stateHistory.length).toBeGreaterThan(0);
-                          expect(stateHistory[0]).toBe('connected');
-                        })
+                      Effect.fork,
+                      Effect.flatMap((stateMonitoring) =>
+                        pipe(
+                          Effect.sleep(Duration.millis(100)),
+                          Effect.flatMap(() =>
+                            context.simulateDisconnect
+                              ? pipe(
+                                  context.simulateDisconnect(),
+                                  Effect.flatMap(() => Effect.sleep(Duration.millis(50)))
+                                )
+                              : Effect.void
+                          ),
+                          Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
+                          Effect.flatMap(() => Ref.get(stateHistoryRef)),
+                          Effect.tap((stateHistory) =>
+                            Effect.sync(() => {
+                              expect(Chunk.size(stateHistory)).toBeGreaterThan(0);
+                              expect(Chunk.unsafeGet(stateHistory, 0)).toBe('connected');
+                            })
+                          )
+                        )
                       )
                     )
                   )
-                );
-              })
+                )
+              )
             )
           )
         );
@@ -591,8 +601,8 @@ export const runClientTransportContractTests: TransportTestRunner = (
         await Effect.runPromise(
           Effect.scoped(
             pipe(
-              Effect.sync(() => [] as ConnectionState[]),
-              Effect.flatMap((stateHistory) =>
+              Ref.make(Chunk.empty<ConnectionState>()),
+              Effect.flatMap((stateHistoryRef) =>
                 pipe(
                   Effect.fork(context.makeConnectedTransport('test://localhost')),
                   Effect.flatMap((connectionFiber) =>
@@ -605,7 +615,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
                             pipe(
                               transport.connectionState,
                               Stream.runForEach((state) =>
-                                Effect.sync(() => stateHistory.push(state))
+                                Ref.update(stateHistoryRef, Chunk.append(state))
                               )
                             )
                           ),
@@ -617,9 +627,10 @@ export const runClientTransportContractTests: TransportTestRunner = (
                               Stream.runDrain,
                               Effect.flatMap(() => Effect.sleep(Duration.millis(10))),
                               Effect.flatMap(() => Fiber.interrupt(stateCollectorFiber)),
-                              Effect.tap(() =>
+                              Effect.flatMap(() => Ref.get(stateHistoryRef)),
+                              Effect.tap((stateHistory) =>
                                 Effect.sync(() => {
-                                  const observedStates = stateHistory;
+                                  const observedStates = Chunk.toReadonlyArray(stateHistory);
                                   expect(observedStates.length).toBeGreaterThanOrEqual(1);
                                   expect(observedStates[observedStates.length - 1]).toBe(
                                     'connected'
@@ -658,31 +669,39 @@ export const runClientTransportContractTests: TransportTestRunner = (
                   Stream.filter((state) => state === 'connected'),
                   Stream.take(1),
                   Stream.runDrain,
-                  Effect.flatMap(() => {
-                    const stateHistory: ConnectionState[] = [];
-                    return pipe(
-                      Effect.fork(
+                  Effect.flatMap(() =>
+                    pipe(
+                      Ref.make(Chunk.empty<ConnectionState>()),
+                      Effect.flatMap((stateHistoryRef) =>
                         pipe(
-                          transport.connectionState,
-                          Stream.take(3),
-                          Stream.runForEach((state) => Effect.sync(() => stateHistory.push(state)))
-                        )
-                      ),
-                      Effect.flatMap((lateSubscriberFiber) =>
-                        pipe(
-                          Effect.sleep(Duration.millis(50)),
-                          Effect.flatMap(() => Fiber.interrupt(lateSubscriberFiber)),
-                          Effect.tap(() =>
-                            Effect.sync(() => {
-                              expect(stateHistory[0]).toBe('connected');
-                              expect(stateHistory.length).toBe(1);
-                              expect(stateHistory).toEqual(['connected']);
-                            })
+                          Effect.fork(
+                            pipe(
+                              transport.connectionState,
+                              Stream.take(3),
+                              Stream.runForEach((state) =>
+                                Ref.update(stateHistoryRef, Chunk.append(state))
+                              )
+                            )
+                          ),
+                          Effect.flatMap((lateSubscriberFiber) =>
+                            pipe(
+                              Effect.sleep(Duration.millis(50)),
+                              Effect.flatMap(() => Fiber.interrupt(lateSubscriberFiber)),
+                              Effect.flatMap(() => Ref.get(stateHistoryRef)),
+                              Effect.tap((stateHistory) =>
+                                Effect.sync(() => {
+                                  const states = Chunk.toReadonlyArray(stateHistory);
+                                  expect(states[0]).toBe('connected');
+                                  expect(states.length).toBe(1);
+                                  expect(states).toEqual(['connected']);
+                                })
+                              )
+                            )
                           )
                         )
                       )
-                    );
-                  })
+                    )
+                  )
                 )
               )
             )

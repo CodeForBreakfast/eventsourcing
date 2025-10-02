@@ -5,7 +5,19 @@
  * Provides proper Effect-based WebSocket handling with structured lifecycle management.
  */
 
-import { Context, Effect, Stream, Scope, Ref, Queue, PubSub, pipe, Layer, Deferred } from 'effect';
+import {
+  Context,
+  Effect,
+  Stream,
+  Scope,
+  Ref,
+  Queue,
+  PubSub,
+  pipe,
+  Layer,
+  Deferred,
+  HashSet,
+} from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
   TransportError,
@@ -23,7 +35,7 @@ interface WebSocketInternalState {
   readonly socket: Socket.Socket | null;
   readonly connectionState: ConnectionState;
   readonly connectionStatePubSub: Readonly<PubSub.PubSub<ConnectionState>>;
-  readonly subscribers: ReadonlySet<Readonly<Queue.Queue<TransportMessage>>>;
+  readonly subscribers: HashSet.HashSet<Readonly<Queue.Queue<TransportMessage>>>;
 }
 
 interface InternalTransport extends Client.Transport {
@@ -98,9 +110,7 @@ const subscribeToMessages =
       Effect.tap((queue) =>
         Ref.update(stateRef, (state) => ({
           ...state,
-          subscribers: new Set([...state.subscribers, queue]) as ReadonlySet<
-            Queue.Queue<TransportMessage>
-          >,
+          subscribers: HashSet.add(state.subscribers, queue),
         }))
       ),
       Effect.map((queue) => {
@@ -206,7 +216,7 @@ const createInitialState = (): Effect.Effect<Ref.Ref<WebSocketInternalState>, ne
         socket: null,
         connectionState: 'connecting',
         connectionStatePubSub,
-        subscribers: new Set() as ReadonlySet<Queue.Queue<TransportMessage>>,
+        subscribers: HashSet.empty(),
       };
       return Ref.make(initialState);
     })
@@ -224,9 +234,7 @@ const cleanupConnection = (
         socket: null,
         connectionState: 'disconnected' as ConnectionState,
         connectionStatePubSub: s.connectionStatePubSub,
-        subscribers: new Set<Queue.Queue<TransportMessage>>() as ReadonlySet<
-          Queue.Queue<TransportMessage>
-        >,
+        subscribers: HashSet.empty(),
       }))
     ),
     Effect.asVoid

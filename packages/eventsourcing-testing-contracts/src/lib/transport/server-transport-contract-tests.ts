@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect, Stream, Scope, pipe, Option, Exit, Fiber, Duration, Chunk } from 'effect';
+import { Effect, Stream, Scope, pipe, Option, Exit, Fiber, Duration, Chunk, Ref } from 'effect';
 import type { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
@@ -293,29 +293,34 @@ export const runServerTransportContractTests: ServerTestRunner = (
                         }
 
                         const connection = serverConnection.value;
-                        const stateHistory: ConnectionState[] = [];
 
                         return pipe(
-                          Effect.fork(
+                          Ref.make(Chunk.empty<ConnectionState>()),
+                          Effect.flatMap((stateHistoryRef) =>
                             pipe(
-                              connection.connectionState,
-                              Stream.take(2),
-                              Stream.runForEach((state) =>
-                                Effect.sync(() => stateHistory.push(state))
-                              )
-                            )
-                          ),
-                          Effect.flatMap((stateMonitor) =>
-                            pipe(
-                              Effect.sleep(Duration.millis(50)),
-                              Effect.flatMap(() => client.disconnect()),
-                              Effect.flatMap(() => Effect.sleep(Duration.millis(100))),
-                              Effect.flatMap(() => Fiber.interrupt(stateMonitor)),
-                              Effect.tap(() =>
-                                Effect.sync(() => {
-                                  expect(stateHistory.length).toBeGreaterThan(0);
-                                  expect(stateHistory[0]).toBe('connected');
-                                })
+                              Effect.fork(
+                                pipe(
+                                  connection.connectionState,
+                                  Stream.take(2),
+                                  Stream.runForEach((state) =>
+                                    Ref.update(stateHistoryRef, Chunk.append(state))
+                                  )
+                                )
+                              ),
+                              Effect.flatMap((stateMonitor) =>
+                                pipe(
+                                  Effect.sleep(Duration.millis(50)),
+                                  Effect.flatMap(() => client.disconnect()),
+                                  Effect.flatMap(() => Effect.sleep(Duration.millis(100))),
+                                  Effect.flatMap(() => Fiber.interrupt(stateMonitor)),
+                                  Effect.flatMap(() => Ref.get(stateHistoryRef)),
+                                  Effect.tap((stateHistory) =>
+                                    Effect.sync(() => {
+                                      expect(Chunk.size(stateHistory)).toBeGreaterThan(0);
+                                      expect(Chunk.unsafeGet(stateHistory, 0)).toBe('connected');
+                                    })
+                                  )
+                                )
                               )
                             )
                           )
@@ -640,50 +645,65 @@ export const runServerTransportContractTests: ServerTestRunner = (
                       Effect.flatMap(([client1, client2]) =>
                         pipe(
                           context.waitForConnectionCount(server, 2),
-                          Effect.flatMap(() => {
-                            const client1StateHistory: ConnectionState[] = [];
-                            const client2StateHistory: ConnectionState[] = [];
-
-                            return pipe(
+                          Effect.flatMap(() =>
+                            pipe(
                               Effect.all([
-                                Effect.fork(
-                                  pipe(
-                                    client1.connectionState,
-                                    Stream.runForEach((state) =>
-                                      Effect.sync(() => client1StateHistory.push(state))
-                                    )
-                                  )
-                                ),
-                                Effect.fork(
-                                  pipe(
-                                    client2.connectionState,
-                                    Stream.runForEach((state) =>
-                                      Effect.sync(() => client2StateHistory.push(state))
-                                    )
-                                  )
-                                ),
+                                Ref.make(Chunk.empty<ConnectionState>()),
+                                Ref.make(Chunk.empty<ConnectionState>()),
                               ]),
-                              Effect.flatMap(([stateMonitor1, stateMonitor2]) =>
+                              Effect.flatMap(([client1StateHistoryRef, client2StateHistoryRef]) =>
                                 pipe(
-                                  Effect.sleep(Duration.millis(50)),
-                                  Effect.flatMap(() => Scope.close(serverScope, Exit.void)),
-                                  Effect.flatMap(() => Effect.sleep(Duration.millis(200))),
-                                  Effect.flatMap(() =>
-                                    Effect.all([
-                                      Fiber.interrupt(stateMonitor1),
-                                      Fiber.interrupt(stateMonitor2),
-                                    ])
-                                  ),
-                                  Effect.tap(() =>
-                                    Effect.sync(() => {
-                                      expect(client1StateHistory).toContain('disconnected');
-                                      expect(client2StateHistory).toContain('disconnected');
-                                    })
+                                  Effect.all([
+                                    Effect.fork(
+                                      pipe(
+                                        client1.connectionState,
+                                        Stream.runForEach((state) =>
+                                          Ref.update(client1StateHistoryRef, Chunk.append(state))
+                                        )
+                                      )
+                                    ),
+                                    Effect.fork(
+                                      pipe(
+                                        client2.connectionState,
+                                        Stream.runForEach((state) =>
+                                          Ref.update(client2StateHistoryRef, Chunk.append(state))
+                                        )
+                                      )
+                                    ),
+                                  ]),
+                                  Effect.flatMap(([stateMonitor1, stateMonitor2]) =>
+                                    pipe(
+                                      Effect.sleep(Duration.millis(50)),
+                                      Effect.flatMap(() => Scope.close(serverScope, Exit.void)),
+                                      Effect.flatMap(() => Effect.sleep(Duration.millis(200))),
+                                      Effect.flatMap(() =>
+                                        Effect.all([
+                                          Fiber.interrupt(stateMonitor1),
+                                          Fiber.interrupt(stateMonitor2),
+                                        ])
+                                      ),
+                                      Effect.flatMap(() =>
+                                        Effect.all([
+                                          Ref.get(client1StateHistoryRef),
+                                          Ref.get(client2StateHistoryRef),
+                                        ])
+                                      ),
+                                      Effect.tap(([client1StateHistory, client2StateHistory]) =>
+                                        Effect.sync(() => {
+                                          expect(
+                                            Chunk.toReadonlyArray(client1StateHistory)
+                                          ).toContain('disconnected');
+                                          expect(
+                                            Chunk.toReadonlyArray(client2StateHistory)
+                                          ).toContain('disconnected');
+                                        })
+                                      )
+                                    )
                                   )
                                 )
                               )
-                            );
-                          })
+                            )
+                          )
                         )
                       )
                     )
