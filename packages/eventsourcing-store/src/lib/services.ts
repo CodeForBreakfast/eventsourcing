@@ -54,7 +54,7 @@ export interface EventStore<TEvent> {
   >;
 }
 
-export const EventStore = <TEvent = unknown>() =>
+export const EventStore = <TEvent>() =>
   Context.GenericTag<EventStore<TEvent>>('@eventsourcing/EventStore');
 
 // Projection Store service interface
@@ -66,7 +66,7 @@ export interface ProjectionStore<TState> {
   readonly clear: () => Effect.Effect<void, ProjectionError>;
 }
 
-export const ProjectionStore = <TState = unknown>() =>
+export const ProjectionStore = <TState>() =>
   Context.GenericTag<ProjectionStore<TState>>('@eventsourcing/ProjectionStore');
 
 // Snapshot Store service interface
@@ -87,5 +87,5 @@ export interface SnapshotStore<TSnapshot> {
   readonly list: (aggregateId: string) => Effect.Effect<readonly number[], SnapshotError>;
 }
 
-export const SnapshotStore = <TSnapshot = unknown>() =>
+export const SnapshotStore = <TSnapshot>() =>
   Context.GenericTag<SnapshotStore<TSnapshot>>('@eventsourcing/SnapshotStore');

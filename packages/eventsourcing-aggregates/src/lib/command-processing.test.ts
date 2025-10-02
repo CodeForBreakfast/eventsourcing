@@ -17,7 +17,7 @@ import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
 import { createCommandProcessingService } from './commandProcessingFactory';
 
-const EventStoreService = EventStoreTag<unknown>();
+const EventStoreService = EventStoreTag<Event>();
 
 // ============================================================================
 // Test Implementation
@@ -82,7 +82,7 @@ const failingHandler: CommandHandler = {
 
 const testLayer = Layer.effect(
   EventStoreService,
-  pipe(InMemoryStore.make<unknown>(), Effect.flatMap(makeInMemoryEventStore))
+  pipe(InMemoryStore.make<Event>(), Effect.flatMap(makeInMemoryEventStore))
 );
 
 // ============================================================================
