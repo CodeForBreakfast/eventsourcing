@@ -1,5 +1,5 @@
-/* eslint-disable functional/prefer-immutable-types, functional/prefer-readonly-type, no-restricted-imports, no-restricted-syntax */
-import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe } from 'effect';
+/* eslint-disable no-restricted-imports, no-restricted-syntax */
+import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
 import { type EventStore, ConcurrencyConflictError } from '../eventstore';
@@ -426,7 +426,7 @@ export function runEventStoreTestSuite<E>(
       });
 
       it('should receive events written to a subscribed stream', async () => {
-        const receivedEvents: FooEvent[] = [];
+        const receivedEventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
 
         // First write some initial events to the stream
         await runPromiseWithEventStore(
@@ -454,11 +454,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     stream,
                     Stream.take(3), // Take initial event + 2 live events
-                    Stream.tap((event) =>
-                      Effect.sync(() => {
-                        receivedEvents.push(event);
-                      })
-                    ),
+                    Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
                     Stream.runDrain
                   )
                 )
@@ -501,6 +497,9 @@ export function runEventStoreTestSuite<E>(
         ]);
 
         // Verify events were received (historical + live)
+        const receivedEvents = await Effect.runPromise(
+          pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+        );
         expect(receivedEvents).toEqual([
           { bar: 'initial-event' },
           { bar: 'live-event-1' },
@@ -509,8 +508,8 @@ export function runEventStoreTestSuite<E>(
       });
 
       it('should handle multiple subscribers to the same stream', async () => {
-        const subscriber1Events: FooEvent[] = [];
-        const subscriber2Events: FooEvent[] = [];
+        const subscriber1EventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
+        const subscriber2EventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
 
         // Create first subscription
         const subscription1 = runPromiseWithEventStore(
@@ -525,11 +524,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     stream,
                     Stream.take(1),
-                    Stream.tap((event) =>
-                      Effect.sync(() => {
-                        subscriber1Events.push(event);
-                      })
-                    ),
+                    Stream.tap((event) => Ref.update(subscriber1EventsRef, Chunk.append(event))),
                     Stream.runDrain
                   )
                 )
@@ -551,11 +546,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     stream,
                     Stream.take(1),
-                    Stream.tap((event) =>
-                      Effect.sync(() => {
-                        subscriber2Events.push(event);
-                      })
-                    ),
+                    Stream.tap((event) => Ref.update(subscriber2EventsRef, Chunk.append(event))),
                     Stream.runDrain
                   )
                 )
@@ -587,12 +578,18 @@ export function runEventStoreTestSuite<E>(
         ]);
 
         // Both subscribers should receive the same event
+        const subscriber1Events = await Effect.runPromise(
+          pipe(Ref.get(subscriber1EventsRef), Effect.map(Chunk.toReadonlyArray))
+        );
+        const subscriber2Events = await Effect.runPromise(
+          pipe(Ref.get(subscriber2EventsRef), Effect.map(Chunk.toReadonlyArray))
+        );
         expect(subscriber1Events).toEqual([{ bar: 'multi-subscriber-event' }]);
         expect(subscriber2Events).toEqual([{ bar: 'multi-subscriber-event' }]);
       });
 
       it('should handle subscription to non-existent stream', async () => {
-        const receivedEvents: FooEvent[] = [];
+        const receivedEventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
 
         // Subscribe to stream that doesn't exist
         const subscription = runPromiseWithEventStore(
@@ -607,11 +604,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     stream,
                     Stream.take(0), // Take 0 since stream doesn't exist
-                    Stream.tap((event) =>
-                      Effect.sync(() => {
-                        receivedEvents.push(event);
-                      })
-                    ),
+                    Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
                     Stream.runDrain
                   )
                 )
@@ -623,6 +616,7 @@ export function runEventStoreTestSuite<E>(
         await Promise.race([subscription, new Promise((resolve) => setTimeout(resolve, 500))]);
 
         // Should receive no events
+        const receivedEvents = await Effect.runPromise(Ref.get(receivedEventsRef));
         expect(receivedEvents).toHaveLength(0);
       });
     });
@@ -634,7 +628,7 @@ export function runEventStoreTestSuite<E>(
     if (supportsHorizontalScaling) {
       describe('horizontal scaling with multiple instances', () => {
         it('should support cross-instance event propagation', async () => {
-          const receivedEvents: FooEvent[] = [];
+          const receivedEventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
           const streamId = await Effect.runPromise(newEventStreamId());
 
           // Create TWO separate EventStore instances (simulating different application instances)
@@ -682,11 +676,7 @@ export function runEventStoreTestSuite<E>(
                     pipe(
                       stream,
                       Stream.take(3), // Expect 2 historical + 1 new event
-                      Stream.tap((event) =>
-                        Effect.sync(() => {
-                          receivedEvents.push(event);
-                        })
-                      ),
+                      Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
                       Stream.runDrain
                     )
                   )
@@ -714,6 +704,9 @@ export function runEventStoreTestSuite<E>(
           );
 
           // Wait for subscription to complete
+          const receivedEvents = await Effect.runPromise(
+            pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+          );
           await Promise.race([
             subscriberFiber,
             new Promise((_, reject) =>
@@ -730,10 +723,13 @@ export function runEventStoreTestSuite<E>(
           ]);
 
           // Verify we received all events (2 historical + 1 live)
-          expect(receivedEvents).toHaveLength(3);
-          expect(receivedEvents[0]).toEqual({ bar: 'event-1' });
-          expect(receivedEvents[1]).toEqual({ bar: 'event-2' });
-          expect(receivedEvents[2]).toEqual({ bar: 'event-3-live' });
+          const finalReceivedEvents = await Effect.runPromise(
+            pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+          );
+          expect(finalReceivedEvents).toHaveLength(3);
+          expect(finalReceivedEvents[0]).toEqual({ bar: 'event-1' });
+          expect(finalReceivedEvents[1]).toEqual({ bar: 'event-2' });
+          expect(finalReceivedEvents[2]).toEqual({ bar: 'event-3-live' });
         });
       });
     }
