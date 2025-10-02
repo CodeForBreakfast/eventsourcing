@@ -16,10 +16,12 @@ bun add @codeforbreakfast/eventsourcing-aggregates effect
 
 - **Functional Aggregate Patterns**: Composable functions for building domain aggregates with Effect
 - **Type-Safe Event Sourcing**: Schema-validated events with automatic state reconstruction
+- **Domain-Specific Command Processing**: Generic command layer that maintains strong typing for each domain's events
 - **Command Context Tracking**: Built-in command tracking with user attribution
 - **Event Metadata**: Automatic timestamping and originator tracking for all events
 - **Effect Integration**: Built on Effect for composable, functional aggregate operations
 - **Testing Support**: Test-friendly APIs for unit testing aggregate behavior
+- **Serialization Boundary Pattern**: Events stay strongly-typed throughout domain layer, generic only at storage/wire boundaries
 
 ## Core Exports
 
@@ -32,6 +34,14 @@ import {
   AggregateState,
   EventMetadata,
   EventOriginatorId,
+
+  // Command processing
+  CommandHandler,
+  CommandRouter,
+  createCommandProcessingService,
+  CommandProcessingService,
+  CommandProcessingError,
+  CommandRoutingError,
 
   // Command context services
   CommandContext,
@@ -520,6 +530,121 @@ const handleTransferCommand = (command: TransferCommand) =>
     )
   );
 ```
+
+## Command Processing
+
+The package provides a generic command processing layer that maintains strong typing for domain events.
+
+### Type-Safe Command Handlers
+
+Command handlers are generic over your domain event types:
+
+```typescript
+import { Effect, Schema, Context } from 'effect';
+import {
+  CommandHandler,
+  CommandRouter,
+  createCommandProcessingService,
+  CommandProcessingService,
+} from '@codeforbreakfast/eventsourcing-aggregates';
+import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
+import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+
+// 1. Define domain-specific events
+const UserCreated = Schema.Struct({
+  type: Schema.Literal('UserCreated'),
+  data: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+  }),
+});
+
+const UserUpdated = Schema.Struct({
+  type: Schema.Literal('UserUpdated'),
+  data: Schema.Struct({
+    name: Schema.String,
+  }),
+});
+
+const UserEvent = Schema.Union(UserCreated, UserUpdated);
+type UserEvent = typeof UserEvent.Type;
+
+// 2. Create domain-specific event store tag
+const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
+  'UserEventStore'
+);
+
+// 3. Create typed command handlers
+const createUserHandler: CommandHandler<UserEvent> = {
+  execute: (command) =>
+    Effect.succeed([
+      {
+        type: 'UserCreated' as const,
+        data: {
+          name: command.payload.name,
+          email: command.payload.email,
+        },
+      },
+    ]),
+};
+
+// 4. Create command router
+const createUserRouter = (): CommandRouter<UserEvent> => ({
+  route: (command) => {
+    if (command.target === 'user' && command.name === 'CreateUser') {
+      return Effect.succeed(createUserHandler);
+    }
+    return Effect.fail(
+      new CommandRoutingError({
+        target: command.target,
+        message: `No handler found for ${command.target}:${command.name}`,
+      })
+    );
+  },
+});
+
+// 5. Create the command processing service
+const UserCommandProcessingService = Layer.effect(
+  CommandProcessingService,
+  createCommandProcessingService(UserEventStore)(createUserRouter())
+);
+
+// 6. Use the service
+const processCommand = (command: WireCommand) =>
+  pipe(
+    CommandProcessingService,
+    Effect.flatMap((service) => service.processCommand(command)),
+    Effect.provide(UserCommandProcessingService),
+    Effect.provide(userEventStoreLayer) // Provide your event store implementation
+  );
+```
+
+### Key Principles
+
+**⚠️ IMPORTANT: Never use generic `Event` types in domain code**
+
+The `Event` type from `@codeforbreakfast/eventsourcing-store` has `data: Schema.Unknown` and is only for serialization boundaries (storage, wire protocol).
+
+```typescript
+// ❌ WRONG - Loses type safety
+const handler: CommandHandler = {
+  execute: () => Effect.succeed([{ type: 'UserCreated', data: { name: 'John' } } as Event]),
+};
+
+// ✅ CORRECT - Maintains type safety
+const handler: CommandHandler<UserEvent> = {
+  execute: () =>
+    Effect.succeed([{ type: 'UserCreated', data: { name: 'John', email: 'john@example.com' } }]),
+};
+```
+
+Each aggregate or bounded context should:
+
+1. Define its own event union type
+2. Create a named event store tag
+3. Use typed command handlers and routers
+
+See [ARCHITECTURE.md](./ARCHITECTURE.md) for detailed design rationale.
 
 ## Integration with Event Stores
 

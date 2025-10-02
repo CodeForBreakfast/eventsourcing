@@ -1,12 +1,6 @@
-import { Effect, Layer, pipe, Stream } from 'effect';
+import { Effect, Layer, pipe, Stream, Schema, Context } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
-import {
-  EventStreamPosition,
-  EventStoreTag,
-  beginning,
-  toStreamId,
-  Event,
-} from '@codeforbreakfast/eventsourcing-store';
+import { beginning, toStreamId, type EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   makeInMemoryEventStore,
   InMemoryStore,
@@ -17,11 +11,31 @@ import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
 import { createCommandProcessingService } from './commandProcessingFactory';
 
-const EventStoreService = EventStoreTag<unknown>();
+// ============================================================================
+// Test Domain Events
+// ============================================================================
 
-// ============================================================================
-// Test Implementation
-// ============================================================================
+const UserCreated = Schema.Struct({
+  type: Schema.Literal('UserCreated'),
+  data: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+  }),
+});
+
+const OrderCreated = Schema.Struct({
+  type: Schema.Literal('OrderCreated'),
+  data: Schema.Struct({
+    orderId: Schema.String,
+  }),
+});
+
+const TestEvent = Schema.Union(UserCreated, OrderCreated);
+type TestEvent = typeof TestEvent.Type;
+
+const TestEventStore = Context.GenericTag<EventStore<TestEvent>, EventStore<TestEvent>>(
+  'TestEventStore'
+);
 
 // ============================================================================
 // Test Data
@@ -34,11 +48,9 @@ const testCommand: WireCommand = {
   payload: { name: 'John', email: 'john@example.com' },
 };
 
-const createTestEvent = (streamId: string, eventNumber: number): Event => ({
-  position: { streamId, eventNumber } as EventStreamPosition,
-  type: 'UserCreated',
+const createTestEvent = (): TestEvent => ({
+  type: 'UserCreated' as const,
   data: { name: 'John', email: 'john@example.com' },
-  timestamp: new Date(),
 });
 
 // ============================================================================
@@ -46,8 +58,8 @@ const createTestEvent = (streamId: string, eventNumber: number): Event => ({
 // ============================================================================
 
 const createMockRouter = (
-  handlers: ReadonlyMap<string, CommandHandler> = new Map()
-): CommandRouter => ({
+  handlers: ReadonlyMap<string, CommandHandler<TestEvent>> = new Map()
+): CommandRouter<TestEvent> => ({
   route: (command: Readonly<WireCommand>) => {
     const key = `${command.target}:${command.name}`;
     const handler = handlers.get(key);
@@ -63,11 +75,11 @@ const createMockRouter = (
   },
 });
 
-const successHandler: CommandHandler = {
-  execute: () => Effect.succeed([createTestEvent('user-1', 1)]),
+const successHandler: CommandHandler<TestEvent> = {
+  execute: () => Effect.succeed([createTestEvent()]),
 };
 
-const failingHandler: CommandHandler = {
+const failingHandler: CommandHandler<TestEvent> = {
   execute: () =>
     Effect.fail(
       new CommandProcessingError({
@@ -81,8 +93,8 @@ const failingHandler: CommandHandler = {
 // ============================================================================
 
 const testLayer = Layer.effect(
-  EventStoreService,
-  pipe(InMemoryStore.make<unknown>(), Effect.flatMap(makeInMemoryEventStore))
+  TestEventStore,
+  pipe(InMemoryStore.make<TestEvent>(), Effect.flatMap(makeInMemoryEventStore))
 );
 
 // ============================================================================
@@ -94,7 +106,7 @@ describe('Command Processing Service', () => {
     const router = createMockRouter();
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.map((service) => {
         expect(typeof service.processCommand).toBe('function');
       }),
@@ -107,7 +119,7 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Success');
@@ -124,16 +136,16 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) =>
         pipe(
-          EventStoreService,
+          TestEventStore,
           Effect.flatMap((eventStore) =>
             pipe(
               service.processCommand(testCommand),
               Effect.flatMap(() =>
                 pipe(
-                  toStreamId('user-1'),
+                  toStreamId('user'),
                   Effect.flatMap(beginning),
                   Effect.flatMap((startPosition) =>
                     pipe(
@@ -158,7 +170,7 @@ describe('Command Processing Service', () => {
     const router = createMockRouter();
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
@@ -178,7 +190,7 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
@@ -195,10 +207,10 @@ describe('Command Processing Service', () => {
 
   it.effect('should route commands to correct handlers', () => {
     let handlerCalled = false;
-    const testHandler: CommandHandler = {
+    const testHandler: CommandHandler<TestEvent> = {
       execute: () => {
         handlerCalled = true;
-        return Effect.succeed([createTestEvent('user', 1)]);
+        return Effect.succeed([createTestEvent()]);
       },
     };
 
@@ -206,7 +218,7 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map(() => {
         expect(handlerCalled).toBe(true);
@@ -216,12 +228,13 @@ describe('Command Processing Service', () => {
   });
 
   it.effect('should support multiple command handlers', () => {
-    const updateUserHandler: CommandHandler = {
-      execute: () => Effect.succeed([createTestEvent('user-2', 1)]),
+    const updateUserHandler: CommandHandler<TestEvent> = {
+      execute: () => Effect.succeed([createTestEvent()]),
     };
 
-    const createOrderHandler: CommandHandler = {
-      execute: () => Effect.succeed([createTestEvent('order', 1)]),
+    const createOrderHandler: CommandHandler<TestEvent> = {
+      execute: () =>
+        Effect.succeed([{ type: 'OrderCreated' as const, data: { orderId: 'order-1' } }]),
     };
 
     const handlers = new Map([
@@ -248,7 +261,7 @@ describe('Command Processing Service', () => {
     const testCommands = [testCommand, orderCommand, updateCommand] as const;
 
     return pipe(
-      createCommandProcessingService(router),
+      createCommandProcessingService(TestEventStore)(router),
       Effect.flatMap((service) =>
         pipe(
           Effect.all(testCommands.map((cmd) => service.processCommand(cmd))),
@@ -270,7 +283,7 @@ describe('Command Processing Service', () => {
 
     const ServiceLayer = Layer.effect(
       CommandProcessingService,
-      createCommandProcessingService(router)
+      createCommandProcessingService(TestEventStore)(router)
     );
 
     return pipe(
