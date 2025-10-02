@@ -299,6 +299,43 @@ export default [
     },
   },
   {
+    name: 'eventsourcing-protocol-simple-pipes',
+    files: ['packages/eventsourcing-protocol/**/*.ts', 'packages/eventsourcing-protocol/**/*.tsx'],
+    ignores: ['**/*.test.ts', '**/*.test.tsx', '**/*.spec.ts', '**/*.spec.tsx'],
+    languageOptions: commonLanguageOptions,
+    plugins: {
+      '@typescript-eslint': typescript,
+    },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.name="pipe"] CallExpression[callee.name="pipe"]',
+          message:
+            'Nested pipe() calls are forbidden. Extract the inner pipe to a separate named function that returns an Effect.',
+        },
+        {
+          selector:
+            'ArrowFunctionExpression:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+        {
+          selector:
+            'FunctionDeclaration:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+        {
+          selector:
+            'FunctionExpression:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+      ],
+    },
+  },
+  {
     name: 'ignore-patterns',
     ignores: [
       '**/node_modules/**',
