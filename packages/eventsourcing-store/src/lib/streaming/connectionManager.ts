@@ -158,128 +158,147 @@ type ConnectionStatusUpdate = {
  */
 export type ConnectionManagerService = Context.Tag.Service<typeof ConnectionManager>;
 
+const getOrCreateDefaultStatus = (
+  statusMap: HashMap.HashMap<string, ConnectionStatus>,
+  url: string
+): ConnectionStatus =>
+  pipe(
+    HashMap.get(statusMap, url),
+    Option.getOrElse(
+      () =>
+        ({
+          isConnected: false,
+          lastHeartbeat: Option.none(),
+          reconnectAttempts: 0,
+          url,
+        }) as const
+    )
+  );
+
+const extractStatusFromMap = (statusMap: HashMap.HashMap<string, ConnectionStatus>, url: string) =>
+  pipe(HashMap.get(statusMap, url), Option.getOrThrow);
+
+const updateAndExtractStatus = (
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>,
+  url: string,
+  updates: ConnectionStatusUpdate
+) =>
+  pipe(
+    Ref.updateAndGet(connectionStatuses, (statusMap) => {
+      const current = getOrCreateDefaultStatus(statusMap, url);
+      const newStatus: ConnectionStatus = {
+        isConnected: updates.isConnected ?? current.isConnected,
+        lastHeartbeat: updates.lastHeartbeat ?? current.lastHeartbeat,
+        reconnectAttempts: updates.reconnectAttempts ?? current.reconnectAttempts,
+        url: current.url,
+      };
+      return HashMap.set(statusMap, url, newStatus);
+    }),
+    Effect.map((statusMap) => extractStatusFromMap(statusMap, url))
+  );
+
+const mockConnect = (
+  _url: string,
+  _options?: Readonly<Record<string, unknown>>
+): Effect.Effect<ConnectionHandle, never, never> =>
+  Effect.succeed({
+    ping: () => Promise.resolve(true),
+    close: () => Promise.resolve(void 0),
+  } as const);
+
+const createRetryPolicy = (config: Readonly<ConnectionConfig>) =>
+  pipe(
+    Schedule.exponential(config.initialRetryDelayMs, 2.0),
+    Schedule.compose(Schedule.recurs(config.maxRetryAttempts))
+  );
+
+const connectAndUpdateStatus = (
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>,
+  url: string,
+  options: Readonly<Record<string, unknown>> | undefined,
+  retryPolicy: Schedule.Schedule<unknown, unknown, never>
+): Effect.Effect<ConnectionHandle, ConnectionError, never> =>
+  pipe(
+    mockConnect(url, options),
+    Effect.tap(() =>
+      updateAndExtractStatus(connectionStatuses, url, {
+        isConnected: true,
+        lastHeartbeat: Option.some(new Date()),
+      })
+    ),
+    Effect.retry(retryPolicy),
+    Effect.mapError(() => new ConnectionError({ message: `Failed to connect to ${url}` }))
+  );
+
+const resetAndConnect = (
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>,
+  url: string,
+  options: Readonly<Record<string, unknown>> | undefined,
+  retryPolicy: Schedule.Schedule<unknown, unknown, never>
+): Effect.Effect<ConnectionHandle, ConnectionError, never> =>
+  pipe(
+    updateAndExtractStatus(connectionStatuses, url, {
+      isConnected: false,
+      reconnectAttempts: 0,
+    }),
+    Effect.flatMap(() => connectAndUpdateStatus(connectionStatuses, url, options, retryPolicy))
+  );
+
+const findStatusInMap = (statusMap: HashMap.HashMap<string, ConnectionStatus>, url: string) =>
+  HashMap.get(statusMap, url);
+
+const matchStatusOption = (status: Readonly<Option.Option<ConnectionStatus>>, url: string) =>
+  Option.match(status, {
+    onNone: () => Effect.fail(new ConnectionError({ message: `No connection status for ${url}` })),
+    onSome: (s: Readonly<ConnectionStatus>) => Effect.succeed(s),
+  });
+
+const getStatusFromRef = (
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>,
+  url: string
+) =>
+  pipe(
+    Ref.get(connectionStatuses),
+    Effect.map((statusMap) => findStatusInMap(statusMap, url)),
+    Effect.flatMap((status) => matchStatusOption(status, url))
+  );
+
+const repeatHeartbeat = (
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>,
+  config: Readonly<ConnectionConfig>,
+  url: string
+) =>
+  pipe(
+    updateAndExtractStatus(connectionStatuses, url, {
+      lastHeartbeat: Option.some(new Date()),
+    }),
+    Effect.repeat(Schedule.spaced(config.heartbeatIntervalMs)),
+    Effect.forkDaemon,
+    Effect.map((fiber) => ({ fiber }) as const)
+  );
+
+const buildConnectionManager = (
+  config: Readonly<ConnectionConfig>,
+  connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>
+): ConnectionManagerService => ({
+  getApiPort: () => Effect.succeed(config.apiPort),
+  connectWithRetry: (url: string, options?: Readonly<Record<string, unknown>>) =>
+    resetAndConnect(connectionStatuses, url, options, createRetryPolicy(config)),
+  getConnectionStatus: (url: string) => getStatusFromRef(connectionStatuses, url),
+  setupHeartbeat: (_connection: Readonly<ConnectionHandle>, url: string) =>
+    repeatHeartbeat(connectionStatuses, config, url),
+});
+
 /**
  * Creates a live implementation of the ConnectionManager
  */
 export const makeConnectionManager = (
   config: Readonly<ConnectionConfig>
-): Effect.Effect<ConnectionManagerService, never, never> => {
-  return pipe(
-    // Create a reference to immutable HashMap to store connection statuses
+): Effect.Effect<ConnectionManagerService, never, never> =>
+  pipe(
     Ref.make(HashMap.empty<string, ConnectionStatus>()),
-    Effect.map(
-      (connectionStatuses: Readonly<Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>>) => {
-        /**
-         * Updates the connection status for a URL using immutable operations
-         */
-        const updateConnectionStatus = (
-          url: string,
-          updates: ConnectionStatusUpdate
-        ): Effect.Effect<ConnectionStatus, never, never> => {
-          return pipe(
-            Ref.updateAndGet(connectionStatuses, (statusMap) => {
-              const current = pipe(
-                HashMap.get(statusMap, url),
-                Option.getOrElse(
-                  () =>
-                    ({
-                      isConnected: false,
-                      lastHeartbeat: Option.none(),
-                      reconnectAttempts: 0,
-                      url,
-                    }) as const
-                )
-              );
-
-              const newStatus: ConnectionStatus = {
-                isConnected: updates.isConnected ?? current.isConnected,
-                lastHeartbeat: updates.lastHeartbeat ?? current.lastHeartbeat,
-                reconnectAttempts: updates.reconnectAttempts ?? current.reconnectAttempts,
-                url: current.url,
-              };
-
-              return HashMap.set(statusMap, url, newStatus);
-            }),
-            Effect.map((statusMap) => pipe(HashMap.get(statusMap, url), Option.getOrThrow))
-          );
-        };
-
-        // Create a mock connection function for testing
-        const mockConnect = (
-          _url: string,
-          _options?: Readonly<Record<string, unknown>>
-        ): Effect.Effect<ConnectionHandle, never, never> => {
-          return Effect.succeed({
-            ping: () => Promise.resolve(true),
-            close: () => Promise.resolve(void 0),
-          } as const);
-        };
-
-        const connectionManager: ConnectionManagerService = {
-          getApiPort: () => Effect.succeed(config.apiPort),
-
-          connectWithRetry: (url: string, options?: Readonly<Record<string, unknown>>) => {
-            // Create exponential backoff retry policy
-            const retryPolicy = pipe(
-              Schedule.exponential(config.initialRetryDelayMs, 2.0),
-              Schedule.compose(Schedule.recurs(config.maxRetryAttempts))
-            );
-
-            // Connect with retry (using mock for simplicity)
-            return pipe(
-              // First reset connection status
-              updateConnectionStatus(url, {
-                isConnected: false,
-                reconnectAttempts: 0,
-              }),
-              Effect.flatMap(() =>
-                pipe(
-                  mockConnect(url, options),
-                  Effect.tap(() =>
-                    updateConnectionStatus(url, {
-                      isConnected: true,
-                      lastHeartbeat: Option.some(new Date()),
-                    })
-                  ),
-                  Effect.retry(retryPolicy)
-                )
-              )
-            );
-          },
-
-          getConnectionStatus: (url: string) =>
-            pipe(
-              Ref.get(connectionStatuses),
-              Effect.map((statusMap) => HashMap.get(statusMap, url)),
-              Effect.flatMap((status) =>
-                Option.match(status, {
-                  onNone: () =>
-                    Effect.fail(
-                      new ConnectionError({ message: `No connection status for ${url}` })
-                    ),
-                  onSome: (s: Readonly<ConnectionStatus>) => Effect.succeed(s),
-                })
-              )
-            ),
-
-          setupHeartbeat: (_connection: Readonly<ConnectionHandle>, url: string) => {
-            // Set up recurring heartbeat (simplified)
-            return pipe(
-              updateConnectionStatus(url, {
-                lastHeartbeat: Option.some(new Date()),
-              }),
-              Effect.repeat(Schedule.spaced(config.heartbeatIntervalMs)),
-              Effect.forkDaemon,
-              Effect.map((fiber) => ({ fiber }) as const)
-            );
-          },
-        };
-
-        return connectionManager;
-      }
-    )
+    Effect.map((connectionStatuses) => buildConnectionManager(config, connectionStatuses))
   );
-};
 
 /**
  * Live Layer implementation of the ConnectionManager

@@ -12,6 +12,97 @@ export interface Projection<TData> {
   readonly data: Option.Option<TData>;
 }
 
+const applyEventAndAnnotate = <TEvent, TData>(
+  apply: (
+    data: ReadonlyDeep<Option.Option<TData>>
+  ) => (
+    event: ReadonlyDeep<TEvent>
+  ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>,
+  nextEventNumber: number,
+  before: Readonly<Option.Option<TData>>,
+  event: Readonly<TEvent>
+) =>
+  pipe(
+    event as ReadonlyDeep<TEvent>,
+    apply(before as ReadonlyDeep<Option.Option<TData>>),
+    Effect.map(Option.some),
+    Effect.tap((after) =>
+      Effect.annotateCurrentSpan({
+        eventNumber: nextEventNumber,
+        event,
+        before,
+        after,
+      })
+    ),
+    Effect.map((after) => ({
+      nextEventNumber: nextEventNumber + 1,
+      data: after,
+    })),
+    Effect.withSpan('apply event')
+  );
+
+const foldEvents = <TEvent, TData>(
+  apply: (
+    data: ReadonlyDeep<Option.Option<TData>>
+  ) => (
+    event: ReadonlyDeep<TEvent>
+  ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>,
+  stream: Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>
+) =>
+  pipe(
+    stream,
+    Stream.run(
+      Sink.foldLeftEffect(
+        { nextEventNumber: 0, data: Option.none<TData>() },
+        ({ nextEventNumber, data: before }, event) =>
+          applyEventAndAnnotate(apply, nextEventNumber, before, event)
+      )
+    ),
+    Effect.withSpan('apply events')
+  );
+
+const decodeProjectionEventNumber = <TData>(
+  nextEventNumber: number,
+  data: Readonly<Option.Option<TData>>
+): Effect.Effect<Projection<TData>, ParseResult.ParseError> =>
+  pipe(
+    nextEventNumber,
+    Schema.decode(EventNumber),
+    Effect.map(
+      (nextEventNumber: EventNumber): Projection<TData> =>
+        ({
+          nextEventNumber,
+          data,
+        }) as const
+    )
+  );
+
+const loadAndProcessEvents = <TEvent, TData>(
+  eventstore: ProjectionEventStore<TEvent>,
+  id: string,
+  apply: (
+    data: ReadonlyDeep<Option.Option<TData>>
+  ) => (
+    event: ReadonlyDeep<TEvent>
+  ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>
+) =>
+  pipe(
+    id,
+    toStreamId,
+    Effect.flatMap(beginning),
+    Effect.tap((position) =>
+      Effect.annotateCurrentSpan({
+        position,
+      })
+    ),
+    Effect.flatMap(eventstore.read),
+    Effect.map((stream) => Stream.take(Number.MAX_SAFE_INTEGER)(stream)),
+    Effect.flatMap((stream) => foldEvents(apply, stream)),
+    Effect.flatMap(({ nextEventNumber, data }) =>
+      decodeProjectionEventNumber(nextEventNumber, data)
+    )
+  );
+
 export const loadProjection =
   <TEvent, TData>(
     eventstoreTag: ReadonlyDeep<
@@ -32,65 +123,6 @@ export const loadProjection =
   > =>
     pipe(
       eventstoreTag,
-      Effect.flatMap((eventstore) =>
-        pipe(
-          id,
-          toStreamId,
-          Effect.flatMap(beginning),
-          Effect.tap((position) =>
-            Effect.annotateCurrentSpan({
-              position,
-            })
-          ),
-          Effect.flatMap(eventstore.read),
-          Effect.map((stream) =>
-            // Apply timeout to the stream
-            Stream.take(Number.MAX_SAFE_INTEGER)(stream)
-          ),
-          Effect.flatMap((stream) =>
-            pipe(
-              stream,
-              Stream.run(
-                Sink.foldLeftEffect(
-                  { nextEventNumber: 0, data: Option.none<TData>() },
-                  ({ nextEventNumber, data: before }, event) =>
-                    pipe(
-                      event as ReadonlyDeep<TEvent>,
-                      apply(before as ReadonlyDeep<Option.Option<TData>>),
-                      Effect.map(Option.some),
-                      Effect.tap((after) =>
-                        Effect.annotateCurrentSpan({
-                          eventNumber: nextEventNumber,
-                          event,
-                          before,
-                          after,
-                        })
-                      ),
-                      Effect.map((after) => ({
-                        nextEventNumber: nextEventNumber + 1,
-                        data: after,
-                      })),
-                      Effect.withSpan('apply event')
-                    )
-                )
-              ),
-              Effect.withSpan('apply events')
-            )
-          ),
-          Effect.flatMap(({ nextEventNumber, data }) =>
-            pipe(
-              nextEventNumber,
-              Schema.decode(EventNumber),
-              Effect.map(
-                (nextEventNumber: EventNumber) =>
-                  ({
-                    nextEventNumber,
-                    data,
-                  }) as const
-              )
-            )
-          )
-        )
-      ),
+      Effect.flatMap((eventstore) => loadAndProcessEvents(eventstore, id, apply)),
       Effect.withSpan('loadProjection')
     );
