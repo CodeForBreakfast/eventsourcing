@@ -1,5 +1,5 @@
 import { PgClient } from '@effect/sql-pg';
-import { Effect, Layer, pipe, Stream, Ref, Queue, Schema } from 'effect';
+import { Effect, Layer, pipe, Stream, Ref, Queue, Schema, HashSet } from 'effect';
 import {
   EventStreamId,
   EventStoreError,
@@ -99,7 +99,7 @@ export const NotificationListenerLive = Layer.effect(
   pipe(
     Effect.all({
       client: PgClient.PgClient,
-      activeChannels: Ref.make(new Set<string>()),
+      activeChannels: Ref.make(HashSet.empty<string>()),
       notificationQueue: Queue.unbounded<{
         readonly streamId: EventStreamId;
         readonly payload: NotificationPayload;
@@ -113,7 +113,7 @@ export const NotificationListenerLive = Layer.effect(
             const channelName = makeChannelName(streamId);
             return pipe(
               // Add channel to active set
-              Ref.update(activeChannels, (channels) => new Set([...channels, channelName])),
+              Ref.update(activeChannels, HashSet.add(channelName)),
               Effect.flatMap(() =>
                 pipe(
                   Effect.logDebug(`Successfully started listening on channel: ${channelName}`),
@@ -169,13 +169,7 @@ export const NotificationListenerLive = Layer.effect(
           Effect.logDebug(`Stopping LISTEN for stream: ${streamId}`),
           Effect.flatMap(() => {
             const channelName = makeChannelName(streamId);
-            return pipe(
-              Ref.update(
-                activeChannels,
-                (channels) => new Set([...channels].filter((ch) => ch !== channelName))
-              ),
-              Effect.asVoid
-            );
+            return pipe(Ref.update(activeChannels, HashSet.remove(channelName)), Effect.asVoid);
           }),
           Effect.mapError((error) =>
             eventStoreError.subscribe(
@@ -211,7 +205,7 @@ export const NotificationListenerLive = Layer.effect(
             Effect.logDebug(`Cleaning up channel: ${channelName}`)
           )
         ),
-        Effect.flatMap(() => Ref.set(activeChannels, new Set())),
+        Effect.flatMap(() => Ref.set(activeChannels, HashSet.empty())),
         Effect.asVoid
       ),
     }))
