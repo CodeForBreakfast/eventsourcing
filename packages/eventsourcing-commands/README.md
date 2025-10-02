@@ -142,7 +142,7 @@ interface WireCommand {
 Domain commands are the validated internal representation:
 
 ```typescript
-interface DomainCommand<TPayload = unknown> {
+interface DomainCommand<TPayload> {
   readonly id: string;
   readonly target: string;
   readonly name: string;

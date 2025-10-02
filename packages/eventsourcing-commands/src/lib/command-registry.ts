@@ -36,7 +36,9 @@ export const dispatchCommand = (
  * Helper to create a command matcher using Effect's pattern matching
  * Since our commands use 'name' instead of '_tag', this provides a convenient API
  */
-export const createCommandMatcher = <TCommands extends DomainCommand>() => Match.type<TCommands>();
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const createCommandMatcher = <TCommands extends DomainCommand<any>>() =>
+  Match.type<TCommands>();
 
 /**
  * Builds a command registry using Effect's pattern matching

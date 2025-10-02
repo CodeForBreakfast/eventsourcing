@@ -26,7 +26,7 @@ export type WireCommand = typeof WireCommand.Type;
  * Base domain command interface
  * The validated internal representation
  */
-export interface DomainCommand<TPayload = unknown> {
+export interface DomainCommand<TPayload> {
   readonly id: string;
   readonly target: string;
   readonly name: string;
@@ -235,6 +235,7 @@ export const validateCommand =
  * Command matcher function type
  * Uses Effect's pattern matching for exhaustive command handling
  */
-export type CommandMatcher<TCommands extends DomainCommand> = (
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export type CommandMatcher<TCommands extends DomainCommand<any>> = (
   command: ReadonlyDeep<TCommands>
 ) => Effect.Effect<CommandResult, never, never>;

@@ -1,4 +1,4 @@
-import { Context, Effect, ParseResult, Sink, Stream } from 'effect';
+import { Effect, ParseResult, Sink, Stream } from 'effect';
 import { EventStreamPosition } from './streamTypes';
 import {
   EventStoreError,
@@ -54,9 +54,6 @@ export interface EventStore<TEvent> {
   >;
 }
 
-export const EventStore = <TEvent = unknown>() =>
-  Context.GenericTag<EventStore<TEvent>>('@eventsourcing/EventStore');
-
 // Projection Store service interface
 export interface ProjectionStore<TState> {
   readonly get: (id: string) => Effect.Effect<TState | null, ProjectionError>;
@@ -65,9 +62,6 @@ export interface ProjectionStore<TState> {
   readonly list: () => Effect.Effect<readonly string[], ProjectionError>;
   readonly clear: () => Effect.Effect<void, ProjectionError>;
 }
-
-export const ProjectionStore = <TState = unknown>() =>
-  Context.GenericTag<ProjectionStore<TState>>('@eventsourcing/ProjectionStore');
 
 // Snapshot Store service interface
 export interface SnapshotStore<TSnapshot> {
@@ -86,6 +80,3 @@ export interface SnapshotStore<TSnapshot> {
   readonly delete: (aggregateId: string) => Effect.Effect<void, SnapshotError>;
   readonly list: (aggregateId: string) => Effect.Effect<readonly number[], SnapshotError>;
 }
-
-export const SnapshotStore = <TSnapshot = unknown>() =>
-  Context.GenericTag<SnapshotStore<TSnapshot>>('@eventsourcing/SnapshotStore');
