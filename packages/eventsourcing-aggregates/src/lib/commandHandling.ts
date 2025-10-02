@@ -1,16 +1,15 @@
 import { Effect } from 'effect';
-import { Event } from '@codeforbreakfast/eventsourcing-store';
 import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 
-export interface CommandHandler {
+export interface CommandHandler<TEvent> {
   readonly execute: (
     command: Readonly<WireCommand>
-  ) => Effect.Effect<readonly Event[], CommandProcessingError, never>;
+  ) => Effect.Effect<readonly TEvent[], CommandProcessingError, never>;
 }
 
-export interface CommandRouter {
+export interface CommandRouter<TEvent> {
   readonly route: (
     command: Readonly<WireCommand>
-  ) => Effect.Effect<CommandHandler, CommandRoutingError, never>;
+  ) => Effect.Effect<CommandHandler<TEvent>, CommandRoutingError, never>;
 }

@@ -170,6 +170,50 @@ interface EventStreamPosition {
 }
 ```
 
+### Creating Event Store Service Tags
+
+**⚠️ IMPORTANT: Always create domain-specific event store tags**
+
+Each aggregate or bounded context should create its own typed event store tag using `Context.GenericTag`:
+
+```typescript
+import { Schema, Context } from 'effect';
+import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
+
+// 1. Define your domain events
+const UserCreated = Schema.Struct({
+  type: Schema.Literal('UserCreated'),
+  data: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+  }),
+});
+
+const UserUpdated = Schema.Struct({
+  type: Schema.Literal('UserUpdated'),
+  data: Schema.Struct({
+    email: Schema.String,
+  }),
+});
+
+// 2. Create event union
+const UserEvent = Schema.Union(UserCreated, UserUpdated);
+type UserEvent = typeof UserEvent.Type;
+
+// 3. Create domain-specific event store tag
+export const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
+  'UserEventStore'
+);
+```
+
+**Do NOT use:**
+
+- Generic `Event` type in domain code
+- Factory functions with default type parameters
+- `EventStore<unknown>()` or `EventStore<Event>()`
+
+The generic `Event` type exists only for serialization boundaries (storage implementations, wire protocol). Your domain code should always use specific event union types.
+
 ## Available Implementations
 
 This package provides core interfaces and types. For concrete implementations, use:

@@ -1,4 +1,4 @@
-import { Effect, Layer, pipe } from 'effect';
+import { Effect, Layer, pipe, Schema, Context } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   CommandProcessingService,
@@ -7,28 +7,51 @@ import {
   CommandRoutingError,
   createCommandProcessingService,
 } from '../index';
-import { Event } from '@codeforbreakfast/eventsourcing-store';
+import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
 // ============================================================================
 // Example Usage of Command Processing Service
 // ============================================================================
 
+// Example: Define your domain-specific events
+const UserCreated = Schema.Struct({
+  type: Schema.Literal('UserCreated'),
+  data: Schema.Struct({
+    name: Schema.String,
+    email: Schema.String,
+  }),
+});
+
+const UserUpdated = Schema.Struct({
+  type: Schema.Literal('UserUpdated'),
+  data: Schema.Struct({
+    name: Schema.String,
+  }),
+});
+
+// Example: Union of all user events
+const UserEvent = Schema.Union(UserCreated, UserUpdated);
+type UserEvent = typeof UserEvent.Type;
+
+// Example: Create a domain-specific event store tag
+const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
+  'UserEventStore'
+);
+
 // Example: Create a simple command handler
-const userCommandHandler: CommandHandler = {
+const userCommandHandler: CommandHandler<UserEvent> = {
   execute: (command: ReadonlyDeep<WireCommand>) =>
     Effect.succeed([
       {
-        position: { streamId: command.target, eventNumber: 1 },
-        type: 'UserCreated',
-        data: command.payload,
-        timestamp: new Date(),
-      } as Event,
+        type: 'UserCreated' as const,
+        data: command.payload as { readonly name: string; readonly email: string },
+      },
     ]),
 };
 
 // Example: Create a command router
-const createRouter = (): CommandRouter => ({
+const createRouter = (): CommandRouter<UserEvent> => ({
   route: (command: ReadonlyDeep<WireCommand>) => {
     if (command.target === 'user' && command.name === 'CreateUser') {
       return Effect.succeed(userCommandHandler);
@@ -45,7 +68,7 @@ const createRouter = (): CommandRouter => ({
 // Example: Create the service layer
 export const CommandProcessingServiceLive = Layer.effect(
   CommandProcessingService,
-  createCommandProcessingService(createRouter())
+  createCommandProcessingService(UserEventStore)(createRouter())
 );
 
 // Example: Usage in application code
