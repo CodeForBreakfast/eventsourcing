@@ -17,6 +17,301 @@ import type {
 } from '../test-layer-interfaces';
 import { TransportMessageSchema } from '../test-layer-interfaces';
 
+const verifyInitialConnectionState = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    transport.connectionState,
+    Stream.take(1),
+    Stream.runHead,
+    Effect.tap((initialState) =>
+      Effect.sync(() => {
+        expect(initialState._tag).toBe('Some');
+        if (initialState._tag === 'Some') {
+          expect(initialState.value).toBe('connected');
+        }
+      })
+    )
+  );
+
+const interruptAfterDelay = (fiber: Fiber.Fiber<unknown, unknown>) =>
+  pipe(
+    Effect.sleep(Duration.millis(100)),
+    Effect.flatMap(() => Fiber.interrupt(fiber))
+  );
+
+const monitorConnectionStateThenInterrupt = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    transport.connectionState,
+    Stream.runForEach((state: ConnectionState) =>
+      Effect.sync(() => {
+        void state;
+      })
+    ),
+    Effect.fork,
+    Effect.flatMap(interruptAfterDelay)
+  );
+
+const collectStateHistoryThenVerify = (
+  stateHistoryRef: Ref.Ref<Chunk.Chunk<ConnectionState>>,
+  stateMonitoring: Fiber.Fiber<void, never>
+) =>
+  pipe(
+    Effect.sleep(Duration.millis(200)),
+    Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
+    Effect.flatMap(() => Ref.get(stateHistoryRef)),
+    Effect.tap((stateHistory) =>
+      Effect.sync(() => {
+        expect(Chunk.size(stateHistory)).toBeGreaterThan(0);
+        expect(Chunk.unsafeGet(stateHistory, 0)).toBe('connected');
+      })
+    )
+  );
+
+const monitorConnectionStateHistory = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    Ref.make(Chunk.empty<ConnectionState>()),
+    Effect.flatMap((stateHistoryRef) =>
+      pipe(
+        transport.connectionState,
+        Stream.take(3),
+        Stream.runForEach((state) => Ref.update(stateHistoryRef, Chunk.append(state))),
+        Effect.fork,
+        Effect.flatMap((stateMonitoring) =>
+          collectStateHistoryThenVerify(stateHistoryRef, stateMonitoring)
+        )
+      )
+    )
+  );
+
+const publishSimpleMessage = (transport: ConnectedTransportTestInterface) => {
+  const messageInput = {
+    id: 'test-1',
+    type: 'test-message',
+    payload: { content: 'hello world' },
+  };
+
+  return pipe(
+    Schema.decodeUnknown(TransportMessageSchema)(messageInput),
+    Effect.flatMap((message) => transport.publish(message))
+  );
+};
+
+const publishVariousMessageTypes = (transport: ConnectedTransportTestInterface) => {
+  const messages: TransportMessage[] = [
+    { id: 'string-msg', type: 'test', payload: 'simple string' },
+    { id: 'number-msg', type: 'test', payload: 42 },
+    { id: 'boolean-msg', type: 'test', payload: true },
+    { id: 'object-msg', type: 'test', payload: { nested: { data: [1, 2, 3] } } },
+    { id: 'array-msg', type: 'test', payload: [{ a: 1 }, { b: 2 }] },
+    { id: 'null-msg', type: 'test', payload: null },
+  ];
+
+  return Effect.forEach(messages, transport.publish);
+};
+
+const publishMessageWithMetadata = (transport: ConnectedTransportTestInterface) => {
+  const message: TransportMessage = {
+    id: 'meta-msg',
+    type: 'test-message',
+    payload: { content: 'test' },
+    metadata: {
+      source: 'test-suite',
+      priority: 'high',
+      customField: { nested: 'value' },
+    },
+  };
+
+  return transport.publish(message);
+};
+
+const publishAndHandleError = (transport: ConnectedTransportTestInterface) => {
+  const message: TransportMessage = {
+    id: '',
+    type: 'test',
+    payload: 'should be handled gracefully',
+  };
+
+  return pipe(
+    transport.publish(message),
+    Effect.map(() => 'success' as const),
+    Effect.catchAll(() => Effect.succeed('error' as const)),
+    Effect.tap((result) => Effect.sync(() => expect(['success', 'error']).toContain(result)))
+  );
+};
+
+const publishTestMessageAfterDelay = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    Effect.sleep(Duration.millis(50)),
+    Effect.flatMap(() => {
+      const testMessage: TransportMessage = {
+        id: 'sub-test-1',
+        type: 'subscription-test',
+        payload: { data: 'received' },
+      };
+      return transport.publish(testMessage);
+    })
+  );
+
+const verifyReceivedMessage = (messages: readonly TransportMessage[]) =>
+  Effect.sync(() => {
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.id).toBe('sub-test-1');
+    expect(messages[0]?.type).toBe('subscription-test');
+  });
+
+const collectMessageThenPublishAndVerify = (
+  stream: Stream.Stream<TransportMessage, never, never>,
+  transport: ConnectedTransportTestInterface
+) =>
+  pipe(
+    stream,
+    Stream.take(1),
+    Stream.runCollect,
+    Effect.map(Chunk.toReadonlyArray),
+    Effect.fork,
+    Effect.flatMap((messagePromise) =>
+      pipe(
+        publishTestMessageAfterDelay(transport),
+        Effect.flatMap(() => Fiber.join(messagePromise)),
+        Effect.tap(verifyReceivedMessage)
+      )
+    )
+  );
+
+const receivePublishedMessages = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    transport.subscribe(),
+    Effect.flatMap((stream) => collectMessageThenPublishAndVerify(stream, transport))
+  );
+
+const forkStreamCollection =
+  (count: number) => (stream: Stream.Stream<TransportMessage, never, never>) =>
+    pipe(
+      stream,
+      Stream.take(count),
+      Stream.runCollect,
+      Effect.map(Chunk.toReadonlyArray),
+      Effect.fork
+    );
+
+const subscribeAndCollectMessages = (
+  transport: ConnectedTransportTestInterface,
+  filter: (msg: TransportMessage) => boolean,
+  count: number
+) => pipe(transport.subscribe(filter), Effect.flatMap(forkStreamCollection(count)));
+
+const publishMultipleTypedMessages = (transport: ConnectedTransportTestInterface) => {
+  const messages = [
+    { id: '1', type: 'type-a', payload: 'a1' },
+    { id: '2', type: 'type-b', payload: 'b1' },
+    { id: '3', type: 'type-a', payload: 'a2' },
+    { id: '4', type: 'type-b', payload: 'b2' },
+  ];
+  return Effect.forEach(messages, transport.publish);
+};
+
+const verifyTypedMessages = ([typeAMessages, typeBMessages]: [
+  readonly TransportMessage[],
+  readonly TransportMessage[],
+]) =>
+  Effect.sync(() => {
+    expect(typeAMessages).toHaveLength(2);
+    expect(typeBMessages).toHaveLength(2);
+    expect(typeAMessages.every((msg) => msg.type === 'type-a')).toBe(true);
+    expect(typeBMessages.every((msg) => msg.type === 'type-b')).toBe(true);
+  });
+
+const publishAndVerifyTypedSubscriptions = (
+  subscription1: Fiber.Fiber<readonly TransportMessage[], never>,
+  subscription2: Fiber.Fiber<readonly TransportMessage[], never>,
+  transport: ConnectedTransportTestInterface
+) =>
+  pipe(
+    Effect.sleep(Duration.millis(50)),
+    Effect.flatMap(() => publishMultipleTypedMessages(transport)),
+    Effect.flatMap(() => Effect.all([Fiber.join(subscription1), Fiber.join(subscription2)])),
+    Effect.tap(verifyTypedMessages)
+  );
+
+const testMultipleConcurrentSubscriptions = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    Effect.all([
+      subscribeAndCollectMessages(transport, (msg) => msg.type === 'type-a', 2),
+      subscribeAndCollectMessages(transport, (msg) => msg.type === 'type-b', 2),
+    ]),
+    Effect.flatMap(([subscription1, subscription2]) =>
+      publishAndVerifyTypedSubscriptions(subscription1, subscription2, transport)
+    )
+  );
+
+const FilteredPayloadSchema = Schema.Struct({
+  priority: Schema.Literal('high'),
+  value: Schema.Number.pipe(Schema.greaterThan(10)),
+});
+
+const complexFilter = (msg: TransportMessage): boolean => {
+  if (msg.type !== 'filtered-test') return false;
+  const parseResult = Schema.decodeUnknownEither(FilteredPayloadSchema)(msg.payload);
+  return parseResult._tag === 'Right';
+};
+
+const publishFilterTestMessages = (transport: ConnectedTransportTestInterface) => {
+  const testMessages = [
+    { id: '1', type: 'filtered-test', payload: { priority: 'high', value: 15 } },
+    { id: '2', type: 'filtered-test', payload: { priority: 'low', value: 20 } },
+    { id: '3', type: 'filtered-test', payload: { priority: 'high', value: 5 } },
+    { id: '4', type: 'other-test', payload: { priority: 'high', value: 25 } },
+    { id: '5', type: 'filtered-test', payload: { priority: 'high', value: 30 } },
+  ];
+  return Effect.forEach(testMessages, transport.publish);
+};
+
+const verifyFilteredResults = (results: readonly TransportMessage[]) =>
+  Effect.sync(() => {
+    expect(results).toHaveLength(2);
+    expect(results[0]?.id).toBe('1');
+    expect(results[1]?.id).toBe('5');
+  });
+
+const publishAndVerifyFilteredMessages = (
+  filteredMessages: Fiber.Fiber<readonly TransportMessage[], never>,
+  transport: ConnectedTransportTestInterface
+) =>
+  pipe(
+    Effect.sleep(Duration.millis(50)),
+    Effect.flatMap(() => publishFilterTestMessages(transport)),
+    Effect.flatMap(() => Fiber.join(filteredMessages)),
+    Effect.tap(verifyFilteredResults)
+  );
+
+const forkAndVerifyFilteredMessages =
+  (transport: ConnectedTransportTestInterface) =>
+  (stream: Stream.Stream<TransportMessage, never, never>) =>
+    pipe(
+      stream,
+      Stream.take(2),
+      Stream.runCollect,
+      Effect.map(Chunk.toReadonlyArray),
+      Effect.fork,
+      Effect.flatMap((filteredMessages) =>
+        publishAndVerifyFilteredMessages(filteredMessages, transport)
+      )
+    );
+
+const testSubscriptionWithComplexFilter = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    transport.subscribe(complexFilter),
+    Effect.flatMap(forkAndVerifyFilteredMessages(transport))
+  );
+
+const testSubscriptionErrorHandling = (transport: ConnectedTransportTestInterface) =>
+  pipe(
+    transport.subscribe(() => {
+      throw new Error('Filter error');
+    }),
+    Effect.either,
+    Effect.tap((result) => Effect.sync(() => expect(['Left', 'Right']).toContain(result._tag)))
+  );
+
 /**
  * Core client transport contract tests.
  *
@@ -95,21 +390,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) =>
-                pipe(
-                  transport.connectionState,
-                  Stream.take(1),
-                  Stream.runHead,
-                  Effect.tap((initialState) =>
-                    Effect.sync(() => {
-                      expect(initialState._tag).toBe('Some');
-                      if (initialState._tag === 'Some') {
-                        expect(initialState.value).toBe('connected');
-                      }
-                    })
-                  )
-                )
-              )
+              Effect.flatMap(verifyInitialConnectionState)
             )
           )
         );
@@ -127,34 +408,13 @@ export const runClientTransportContractTests: TransportTestRunner = (
                   transport = t;
                 })
               ),
-              Effect.flatMap((t) =>
-                pipe(
-                  t.connectionState,
-                  Stream.runForEach((state: ConnectionState) =>
-                    Effect.sync(() => {
-                      // Just consume the state to test the stream works
-                      void state;
-                    })
-                  ),
-                  Effect.fork,
-                  Effect.flatMap((stateMonitoring) =>
-                    pipe(
-                      Effect.sleep(Duration.millis(100)),
-                      Effect.flatMap(() => Fiber.interrupt(stateMonitoring))
-                    )
-                  )
-                )
-              )
+              Effect.flatMap(monitorConnectionStateThenInterrupt)
             )
           )
         );
 
-        // After scope closes, should be disconnected
-        // Give it a moment for cleanup
         await Effect.runPromise(Effect.sleep(Duration.millis(50)));
 
-        // We can't directly test the state after scope closes since transport is gone,
-        // but we verify the transport was created successfully
         expect(transport).toBeDefined();
       });
 
@@ -163,34 +423,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) =>
-                pipe(
-                  Ref.make(Chunk.empty<ConnectionState>()),
-                  Effect.flatMap((stateHistoryRef) =>
-                    pipe(
-                      transport.connectionState,
-                      Stream.take(3),
-                      Stream.runForEach((state) =>
-                        Ref.update(stateHistoryRef, Chunk.append(state))
-                      ),
-                      Effect.fork,
-                      Effect.flatMap((stateMonitoring) =>
-                        pipe(
-                          Effect.sleep(Duration.millis(200)),
-                          Effect.flatMap(() => Fiber.interrupt(stateMonitoring)),
-                          Effect.flatMap(() => Ref.get(stateHistoryRef)),
-                          Effect.tap((stateHistory) =>
-                            Effect.sync(() => {
-                              expect(Chunk.size(stateHistory)).toBeGreaterThan(0);
-                              expect(Chunk.unsafeGet(stateHistory, 0)).toBe('connected');
-                            })
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
+              Effect.flatMap(monitorConnectionStateHistory)
             )
           )
         );
@@ -223,18 +456,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const messageInput = {
-                  id: 'test-1',
-                  type: 'test-message',
-                  payload: { content: 'hello world' },
-                };
-
-                return pipe(
-                  Schema.decodeUnknown(TransportMessageSchema)(messageInput),
-                  Effect.flatMap((message) => transport.publish(message))
-                );
-              })
+              Effect.flatMap(publishSimpleMessage)
             )
           )
         );
@@ -245,42 +467,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const messages: TransportMessage[] = [
-                  {
-                    id: 'string-msg',
-                    type: 'test',
-                    payload: 'simple string',
-                  },
-                  {
-                    id: 'number-msg',
-                    type: 'test',
-                    payload: 42,
-                  },
-                  {
-                    id: 'boolean-msg',
-                    type: 'test',
-                    payload: true,
-                  },
-                  {
-                    id: 'object-msg',
-                    type: 'test',
-                    payload: { nested: { data: [1, 2, 3] } },
-                  },
-                  {
-                    id: 'array-msg',
-                    type: 'test',
-                    payload: [{ a: 1 }, { b: 2 }],
-                  },
-                  {
-                    id: 'null-msg',
-                    type: 'test',
-                    payload: null,
-                  },
-                ];
-
-                return Effect.forEach(messages, transport.publish);
-              })
+              Effect.flatMap(publishVariousMessageTypes)
             )
           )
         );
@@ -291,20 +478,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const message: TransportMessage = {
-                  id: 'meta-msg',
-                  type: 'test-message',
-                  payload: { content: 'test' },
-                  metadata: {
-                    source: 'test-suite',
-                    priority: 'high',
-                    customField: { nested: 'value' },
-                  },
-                };
-
-                return transport.publish(message);
-              })
+              Effect.flatMap(publishMessageWithMetadata)
             )
           )
         );
@@ -315,22 +489,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const message: TransportMessage = {
-                  id: '',
-                  type: 'test',
-                  payload: 'should be handled gracefully',
-                };
-
-                return pipe(
-                  transport.publish(message),
-                  Effect.map(() => 'success' as const),
-                  Effect.catchAll(() => Effect.succeed('error' as const)),
-                  Effect.tap((result) =>
-                    Effect.sync(() => expect(['success', 'error']).toContain(result))
-                  )
-                );
-              })
+              Effect.flatMap(publishAndHandleError)
             )
           )
         );
@@ -343,41 +502,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) =>
-                pipe(
-                  transport.subscribe(),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.take(1),
-                      Stream.runCollect,
-                      Effect.map(Chunk.toReadonlyArray),
-                      Effect.fork,
-                      Effect.flatMap((messagePromise) =>
-                        pipe(
-                          Effect.sleep(Duration.millis(50)),
-                          Effect.flatMap(() => {
-                            const testMessage: TransportMessage = {
-                              id: 'sub-test-1',
-                              type: 'subscription-test',
-                              payload: { data: 'received' },
-                            };
-                            return transport.publish(testMessage);
-                          }),
-                          Effect.flatMap(() => Fiber.join(messagePromise)),
-                          Effect.tap((messages) =>
-                            Effect.sync(() => {
-                              expect(messages).toHaveLength(1);
-                              expect(messages[0]?.id).toBe('sub-test-1');
-                              expect(messages[0]?.type).toBe('subscription-test');
-                            })
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
-              )
+              Effect.flatMap(receivePublishedMessages)
             )
           )
         );
@@ -388,61 +513,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) =>
-                pipe(
-                  Effect.all([
-                    pipe(
-                      transport.subscribe((msg) => msg.type === 'type-a'),
-                      Effect.flatMap((stream) =>
-                        pipe(
-                          stream,
-                          Stream.take(2),
-                          Stream.runCollect,
-                          Effect.map(Chunk.toReadonlyArray),
-                          Effect.fork
-                        )
-                      )
-                    ),
-                    pipe(
-                      transport.subscribe((msg) => msg.type === 'type-b'),
-                      Effect.flatMap((stream) =>
-                        pipe(
-                          stream,
-                          Stream.take(2),
-                          Stream.runCollect,
-                          Effect.map(Chunk.toReadonlyArray),
-                          Effect.fork
-                        )
-                      )
-                    ),
-                  ]),
-                  Effect.flatMap(([subscription1, subscription2]) =>
-                    pipe(
-                      Effect.sleep(Duration.millis(50)),
-                      Effect.flatMap(() => {
-                        const messages = [
-                          { id: '1', type: 'type-a', payload: 'a1' },
-                          { id: '2', type: 'type-b', payload: 'b1' },
-                          { id: '3', type: 'type-a', payload: 'a2' },
-                          { id: '4', type: 'type-b', payload: 'b2' },
-                        ];
-                        return Effect.forEach(messages, transport.publish);
-                      }),
-                      Effect.flatMap(() =>
-                        Effect.all([Fiber.join(subscription1), Fiber.join(subscription2)])
-                      ),
-                      Effect.tap(([typeAMessages, typeBMessages]) =>
-                        Effect.sync(() => {
-                          expect(typeAMessages).toHaveLength(2);
-                          expect(typeBMessages).toHaveLength(2);
-                          expect(typeAMessages.every((msg) => msg.type === 'type-a')).toBe(true);
-                          expect(typeBMessages.every((msg) => msg.type === 'type-b')).toBe(true);
-                        })
-                      )
-                    )
-                  )
-                )
-              )
+              Effect.flatMap(testMultipleConcurrentSubscriptions)
             )
           )
         );
@@ -453,76 +524,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) => {
-                const FilteredPayloadSchema = Schema.Struct({
-                  priority: Schema.Literal('high'),
-                  value: Schema.Number.pipe(Schema.greaterThan(10)),
-                });
-
-                const complexFilter = (msg: TransportMessage): boolean => {
-                  if (msg.type !== 'filtered-test') return false;
-                  const parseResult = Schema.decodeUnknownEither(FilteredPayloadSchema)(
-                    msg.payload
-                  );
-                  return parseResult._tag === 'Right';
-                };
-
-                return pipe(
-                  transport.subscribe(complexFilter),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.take(2),
-                      Stream.runCollect,
-                      Effect.map(Chunk.toReadonlyArray),
-                      Effect.fork,
-                      Effect.flatMap((filteredMessages) =>
-                        pipe(
-                          Effect.sleep(Duration.millis(50)),
-                          Effect.flatMap(() => {
-                            const testMessages = [
-                              {
-                                id: '1',
-                                type: 'filtered-test',
-                                payload: { priority: 'high', value: 15 },
-                              }, // Should match
-                              {
-                                id: '2',
-                                type: 'filtered-test',
-                                payload: { priority: 'low', value: 20 },
-                              }, // Should not match (priority)
-                              {
-                                id: '3',
-                                type: 'filtered-test',
-                                payload: { priority: 'high', value: 5 },
-                              }, // Should not match (value)
-                              {
-                                id: '4',
-                                type: 'other-test',
-                                payload: { priority: 'high', value: 25 },
-                              }, // Should not match (type)
-                              {
-                                id: '5',
-                                type: 'filtered-test',
-                                payload: { priority: 'high', value: 30 },
-                              }, // Should match
-                            ];
-                            return Effect.forEach(testMessages, transport.publish);
-                          }),
-                          Effect.flatMap(() => Fiber.join(filteredMessages)),
-                          Effect.tap((results) =>
-                            Effect.sync(() => {
-                              expect(results).toHaveLength(2);
-                              expect(results[0]?.id).toBe('1');
-                              expect(results[1]?.id).toBe('5');
-                            })
-                          )
-                        )
-                      )
-                    )
-                  )
-                );
-              })
+              Effect.flatMap(testSubscriptionWithComplexFilter)
             )
           )
         );
@@ -533,17 +535,7 @@ export const runClientTransportContractTests: TransportTestRunner = (
           Effect.scoped(
             pipe(
               context.makeConnectedTransport('test://localhost'),
-              Effect.flatMap((transport) =>
-                pipe(
-                  transport.subscribe(() => {
-                    throw new Error('Filter error');
-                  }),
-                  Effect.either,
-                  Effect.tap((result) =>
-                    Effect.sync(() => expect(['Left', 'Right']).toContain(result._tag))
-                  )
-                )
-              )
+              Effect.flatMap(testSubscriptionErrorHandling)
             )
           )
         );

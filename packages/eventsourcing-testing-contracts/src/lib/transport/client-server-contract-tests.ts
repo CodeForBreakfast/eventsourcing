@@ -190,32 +190,28 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
     describe('Connection Management', () => {
       test('should establish basic client-server connection', async () => {
+        const pair = context.makeTransportPair();
+
         const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap(() => Effect.sleep(100)),
-              Effect.flatMap(() => pair.makeClient()),
-              Effect.flatMap((client) =>
-                pipe(
-                  context.waitForConnectionState(client, 'connected'),
-                  Effect.flatMap(() =>
-                    pipe(
-                      client.connectionState,
-                      Stream.filter((state) => state === 'connected'),
-                      Stream.take(1),
-                      Stream.runHead,
-                      Effect.flatMap((clientState) => {
-                        if (Option.isSome(clientState)) {
-                          return Effect.sync(() => expect(clientState.value).toBe('connected'));
-                        } else {
-                          return Effect.fail(new Error('Expected client to reach connected state'));
-                        }
-                      })
-                    )
+          pair.makeServer(),
+          Effect.flatMap(() => Effect.sleep(100)),
+          Effect.flatMap(() => pair.makeClient()),
+          Effect.flatMap((client) =>
+            Effect.flatMap(context.waitForConnectionState(client, 'connected'), () =>
+              Effect.flatMap(
+                Stream.runHead(
+                  Stream.take(
+                    Stream.filter(client.connectionState, (state) => state === 'connected'),
+                    1
                   )
-                )
+                ),
+                (clientState) => {
+                  if (Option.isSome(clientState)) {
+                    return Effect.sync(() => expect(clientState.value).toBe('connected'));
+                  } else {
+                    return Effect.fail(new Error('Expected client to reach connected state'));
+                  }
+                }
               )
             )
           )
@@ -225,38 +221,28 @@ export const runClientServerContractTests: ClientServerTestRunner = (
       });
 
       test('should handle multiple clients connecting to same server', async () => {
+        const pair = context.makeTransportPair();
+
         const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() =>
-                    Effect.all([pair.makeClient(), pair.makeClient(), pair.makeClient()])
-                  ),
-                  Effect.flatMap(([client1, client2, client3]) =>
-                    pipe(
-                      Effect.all([
-                        context.waitForConnectionState(client1, 'connected'),
-                        context.waitForConnectionState(client2, 'connected'),
-                        context.waitForConnectionState(client3, 'connected'),
-                      ]),
-                      Effect.flatMap(() =>
-                        pipe(
-                          server.connections,
-                          Stream.take(3),
-                          Stream.runCollect,
-                          Effect.timeout(5000),
-                          Effect.tap((connections) =>
-                            Effect.sync(() => expect(Array.from(connections)).toHaveLength(3))
-                          )
-                        )
+          pair.makeServer(),
+          Effect.flatMap((server) =>
+            Effect.flatMap(Effect.sleep(100), () =>
+              Effect.flatMap(
+                Effect.all([pair.makeClient(), pair.makeClient(), pair.makeClient()]),
+                ([client1, client2, client3]) =>
+                  Effect.flatMap(
+                    Effect.all([
+                      context.waitForConnectionState(client1, 'connected'),
+                      context.waitForConnectionState(client2, 'connected'),
+                      context.waitForConnectionState(client3, 'connected'),
+                    ]),
+                    () =>
+                      Effect.tap(
+                        Effect.timeout(Stream.runCollect(Stream.take(server.connections, 3)), 5000),
+                        (connections) =>
+                          Effect.sync(() => expect(Array.from(connections)).toHaveLength(3))
                       )
-                    )
                   )
-                )
               )
             )
           )
@@ -268,56 +254,38 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
     describe('Message Communication', () => {
       test('should support client-to-server message publishing', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => pair.makeClient()),
-                  Effect.flatMap((client) =>
-                    pipe(
-                      context.waitForConnectionState(client, 'connected'),
-                      Effect.flatMap(() =>
-                        pipe(
-                          server.connections,
-                          Stream.take(1),
-                          Stream.runHead,
-                          Effect.flatMap((serverConnection) => {
-                            if (!Option.isSome(serverConnection)) {
-                              return Effect.fail(
-                                new Error('Expected server connection to be available')
-                              );
-                            }
-                            const connection = serverConnection.value;
+        const pair = context.makeTransportPair();
+        const testMessage = context.makeTestMessage('test.message', { data: 'hello server' });
 
-                            return pipe(
-                              connection.transport.subscribe(),
-                              Effect.flatMap((messageStream) => {
-                                const testMessage = context.makeTestMessage('test.message', {
-                                  data: 'hello server',
-                                });
-                                return pipe(
-                                  client.publish(testMessage),
-                                  Effect.flatMap(() => context.collectMessages(messageStream, 1)),
-                                  Effect.tap((receivedMessages) =>
-                                    Effect.sync(() => {
-                                      expect(receivedMessages).toHaveLength(1);
-                                      expect(receivedMessages[0]?.type).toBe('test.message');
-                                      expect(receivedMessages[0]?.payload).toBe(
-                                        JSON.stringify({ data: 'hello server' })
-                                      );
-                                    })
-                                  )
-                                );
-                              })
-                            );
-                          })
+        const program = pipe(
+          pair.makeServer(),
+          Effect.flatMap((server) =>
+            Effect.flatMap(Effect.sleep(100), () =>
+              Effect.flatMap(pair.makeClient(), (client) =>
+                Effect.flatMap(context.waitForConnectionState(client, 'connected'), () =>
+                  Effect.flatMap(
+                    Stream.runHead(Stream.take(server.connections, 1)),
+                    (serverConnection) => {
+                      if (!Option.isSome(serverConnection)) {
+                        return Effect.fail(new Error('Expected server connection to be available'));
+                      }
+                      const connection = serverConnection.value;
+                      return Effect.flatMap(connection.transport.subscribe(), (messageStream) =>
+                        Effect.tap(
+                          Effect.flatMap(client.publish(testMessage), () =>
+                            context.collectMessages(messageStream, 1)
+                          ),
+                          (receivedMessages) =>
+                            Effect.sync(() => {
+                              expect(receivedMessages).toHaveLength(1);
+                              expect(receivedMessages[0]?.type).toBe('test.message');
+                              expect(receivedMessages[0]?.payload).toBe(
+                                JSON.stringify({ data: 'hello server' })
+                              );
+                            })
                         )
-                      )
-                    )
+                      );
+                    }
                   )
                 )
               )
@@ -329,193 +297,249 @@ export const runClientServerContractTests: ClientServerTestRunner = (
       });
 
       test('should support server-to-client broadcasting', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => Effect.all([pair.makeClient(), pair.makeClient()])),
-                  Effect.flatMap(([client1, client2]) =>
-                    pipe(
-                      Effect.all([
-                        context.waitForConnectionState(client1, 'connected'),
-                        context.waitForConnectionState(client2, 'connected'),
-                      ]),
-                      Effect.flatMap(() => Effect.all([client1.subscribe(), client2.subscribe()])),
-                      Effect.flatMap(([client1Messages, client2Messages]) => {
-                        const broadcastMessage = context.makeTestMessage('server.broadcast', {
-                          announcement: 'hello all clients',
-                        });
-                        return pipe(
-                          server.broadcast(broadcastMessage),
-                          Effect.flatMap(() =>
-                            Effect.all([
-                              context.collectMessages(client1Messages, 1),
-                              context.collectMessages(client2Messages, 1),
-                            ])
-                          ),
-                          Effect.tap(([client1Received, client2Received]) =>
-                            Effect.sync(() => {
-                              // Both clients should receive the broadcast
-                              expect(client1Received).toHaveLength(1);
-                              expect(client1Received[0]?.type).toBe('server.broadcast');
-                              expect(client1Received[0]?.payload).toBe(
-                                JSON.stringify({ announcement: 'hello all clients' })
-                              );
+        const verifyBroadcast = ([client1Received, client2Received]: [
+          TransportMessage[],
+          TransportMessage[],
+        ]) =>
+          Effect.sync(() => {
+            expect(client1Received).toHaveLength(1);
+            expect(client1Received[0]?.type).toBe('server.broadcast');
+            expect(client1Received[0]?.payload).toBe(
+              JSON.stringify({ announcement: 'hello all clients' })
+            );
 
-                              expect(client2Received).toHaveLength(1);
-                              expect(client2Received[0]?.type).toBe('server.broadcast');
-                              expect(client2Received[0]?.payload).toBe(
-                                JSON.stringify({ announcement: 'hello all clients' })
-                              );
-                            })
-                          )
-                        );
-                      })
-                    )
-                  )
-                )
+            expect(client2Received).toHaveLength(1);
+            expect(client2Received[0]?.type).toBe('server.broadcast');
+            expect(client2Received[0]?.payload).toBe(
+              JSON.stringify({ announcement: 'hello all clients' })
+            );
+          });
+
+        const broadcastAndCollect = (
+          server: ServerTransport,
+          client1Messages: Stream.Stream<TransportMessage, never, never>,
+          client2Messages: Stream.Stream<TransportMessage, never, never>
+        ) => {
+          const broadcastMessage = context.makeTestMessage('server.broadcast', {
+            announcement: 'hello all clients',
+          });
+          return pipe(
+            server.broadcast(broadcastMessage),
+            Effect.flatMap(() =>
+              Effect.all([
+                context.collectMessages(client1Messages, 1),
+                context.collectMessages(client2Messages, 1),
+              ])
+            ),
+            Effect.tap(verifyBroadcast)
+          );
+        };
+
+        const subscribeAndBroadcast = (
+          server: ServerTransport,
+          client1: ClientTransport,
+          client2: ClientTransport
+        ) =>
+          pipe(
+            Effect.all([client1.subscribe(), client2.subscribe()]),
+            Effect.flatMap(([client1Messages, client2Messages]) =>
+              broadcastAndCollect(server, client1Messages, client2Messages)
+            )
+          );
+
+        const waitForClientsAndBroadcast = (
+          server: ServerTransport,
+          client1: ClientTransport,
+          client2: ClientTransport
+        ) =>
+          pipe(
+            Effect.all([
+              context.waitForConnectionState(client1, 'connected'),
+              context.waitForConnectionState(client2, 'connected'),
+            ]),
+            Effect.flatMap(() => subscribeAndBroadcast(server, client1, client2))
+          );
+
+        const createClientsAndBroadcast = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            Effect.all([pair.makeClient(), pair.makeClient()]),
+            Effect.flatMap(([client1, client2]) =>
+              waitForClientsAndBroadcast(server, client1, client2)
+            )
+          );
+
+        const setupServerAndBroadcast = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createClientsAndBroadcast(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndBroadcast)
         );
 
         await Effect.runPromise(Effect.scoped(program));
       });
 
       test('should support bidirectional communication', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => pair.makeClient()),
-                  Effect.flatMap((client) =>
-                    pipe(
-                      context.waitForConnectionState(client, 'connected'),
-                      Effect.flatMap(() =>
-                        pipe(
-                          server.connections,
-                          Stream.take(1),
-                          Stream.runHead,
-                          Effect.flatMap((serverConnection) => {
-                            if (!Option.isSome(serverConnection)) {
-                              return Effect.fail(
-                                new Error('Expected server connection to be available')
-                              );
-                            }
-                            const connection = serverConnection.value;
+        const verifyServerReceived = (serverReceivedMessages: TransportMessage[]) =>
+          Effect.sync(() => {
+            expect(serverReceivedMessages[0]?.payload).toBe(JSON.stringify({ query: 'ping' }));
+          });
 
-                            return pipe(
-                              Effect.all([client.subscribe(), connection.transport.subscribe()]),
-                              Effect.flatMap(([clientMessages, serverMessages]) => {
-                                const clientMessage = context.makeTestMessage('client.request', {
-                                  query: 'ping',
-                                });
-                                return pipe(
-                                  client.publish(clientMessage),
-                                  Effect.flatMap(() => context.collectMessages(serverMessages, 1)),
-                                  Effect.tap((serverReceivedMessages) =>
-                                    Effect.sync(() => {
-                                      expect(serverReceivedMessages[0]?.payload).toBe(
-                                        JSON.stringify({ query: 'ping' })
-                                      );
-                                    })
-                                  ),
-                                  Effect.flatMap(() => {
-                                    const serverResponse = context.makeTestMessage(
-                                      'server.response',
-                                      { result: 'pong' }
-                                    );
-                                    return connection.transport.publish(serverResponse);
-                                  }),
-                                  Effect.flatMap(() => context.collectMessages(clientMessages, 1)),
-                                  Effect.tap((clientReceivedMessages) =>
-                                    Effect.sync(() => {
-                                      expect(clientReceivedMessages[0]?.payload).toBe(
-                                        JSON.stringify({ result: 'pong' })
-                                      );
-                                    })
-                                  )
-                                );
-                              })
-                            );
-                          })
-                        )
-                      )
-                    )
-                  )
-                )
+        const verifyClientReceived = (clientReceivedMessages: TransportMessage[]) =>
+          Effect.sync(() => {
+            expect(clientReceivedMessages[0]?.payload).toBe(JSON.stringify({ result: 'pong' }));
+          });
+
+        const sendServerResponseAndVerify = (
+          connection: ServerConnection,
+          clientMessages: Stream.Stream<TransportMessage, never, never>
+        ) => {
+          const serverResponse = context.makeTestMessage('server.response', { result: 'pong' });
+          return pipe(
+            connection.transport.publish(serverResponse),
+            Effect.flatMap(() => context.collectMessages(clientMessages, 1)),
+            Effect.tap(verifyClientReceived)
+          );
+        };
+
+        const publishClientRequestAndVerify = (
+          client: ClientTransport,
+          serverMessages: Stream.Stream<TransportMessage, never, never>,
+          connection: ServerConnection,
+          clientMessages: Stream.Stream<TransportMessage, never, never>
+        ) => {
+          const clientMessage = context.makeTestMessage('client.request', { query: 'ping' });
+          return pipe(
+            client.publish(clientMessage),
+            Effect.flatMap(() => context.collectMessages(serverMessages, 1)),
+            Effect.tap(verifyServerReceived),
+            Effect.flatMap(() => sendServerResponseAndVerify(connection, clientMessages))
+          );
+        };
+
+        const subscribeAndCommunicate = (client: ClientTransport, connection: ServerConnection) =>
+          pipe(
+            Effect.all([client.subscribe(), connection.transport.subscribe()]),
+            Effect.flatMap(([clientMessages, serverMessages]) =>
+              publishClientRequestAndVerify(client, serverMessages, connection, clientMessages)
+            )
+          );
+
+        const handleServerConnection =
+          (client: ClientTransport) => (serverConnection: Option.Option<ServerConnection>) => {
+            if (!Option.isSome(serverConnection)) {
+              return Effect.fail(new Error('Expected server connection to be available'));
+            }
+            const connection = serverConnection.value;
+            return subscribeAndCommunicate(client, connection);
+          };
+
+        const getConnectionAndCommunicate = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            server.connections,
+            Stream.take(1),
+            Stream.runHead,
+            Effect.flatMap(handleServerConnection(client))
+          );
+
+        const waitAndCommunicate = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            context.waitForConnectionState(client, 'connected'),
+            Effect.flatMap(() => getConnectionAndCommunicate(server, client))
+          );
+
+        const createClientAndCommunicate = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            pair.makeClient(),
+            Effect.flatMap((client) => waitAndCommunicate(server, client))
+          );
+
+        const setupServerAndCommunicate = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createClientAndCommunicate(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndCommunicate)
         );
 
         await Effect.runPromise(Effect.scoped(program));
       });
 
       test('should filter messages correctly on client side', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => pair.makeClient()),
-                  Effect.flatMap((client) =>
-                    pipe(
-                      context.waitForConnectionState(client, 'connected'),
-                      Effect.flatMap(() =>
-                        pipe(
-                          client.subscribe((msg) => msg.type.startsWith('important.')),
-                          Effect.flatMap((filteredMessages) =>
-                            pipe(
-                              Effect.all([
-                                server.broadcast(
-                                  context.makeTestMessage('normal.message', { data: 1 })
-                                ),
-                                server.broadcast(
-                                  context.makeTestMessage('important.alert', { data: 2 })
-                                ),
-                                server.broadcast(
-                                  context.makeTestMessage('debug.info', { data: 3 })
-                                ),
-                                server.broadcast(
-                                  context.makeTestMessage('important.notification', { data: 4 })
-                                ),
-                              ]),
-                              Effect.flatMap(() => context.collectMessages(filteredMessages, 2)),
-                              Effect.tap((receivedMessages) =>
-                                Effect.sync(() => {
-                                  expect(receivedMessages).toHaveLength(2);
-                                  expect(receivedMessages[0]?.type).toBe('important.alert');
-                                  expect(receivedMessages[0]?.payload).toBe(
-                                    JSON.stringify({ data: 2 })
-                                  );
-                                  expect(receivedMessages[1]?.type).toBe('important.notification');
-                                  expect(receivedMessages[1]?.payload).toBe(
-                                    JSON.stringify({ data: 4 })
-                                  );
-                                })
-                              )
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
+        const verifyFilteredMessages = (receivedMessages: TransportMessage[]) =>
+          Effect.sync(() => {
+            expect(receivedMessages).toHaveLength(2);
+            expect(receivedMessages[0]?.type).toBe('important.alert');
+            expect(receivedMessages[0]?.payload).toBe(JSON.stringify({ data: 2 }));
+            expect(receivedMessages[1]?.type).toBe('important.notification');
+            expect(receivedMessages[1]?.payload).toBe(JSON.stringify({ data: 4 }));
+          });
+
+        const broadcastMessagesAndCollect = (
+          server: ServerTransport,
+          filteredMessages: Stream.Stream<TransportMessage, never, never>
+        ) =>
+          pipe(
+            Effect.all([
+              server.broadcast(context.makeTestMessage('normal.message', { data: 1 })),
+              server.broadcast(context.makeTestMessage('important.alert', { data: 2 })),
+              server.broadcast(context.makeTestMessage('debug.info', { data: 3 })),
+              server.broadcast(context.makeTestMessage('important.notification', { data: 4 })),
+            ]),
+            Effect.flatMap(() => context.collectMessages(filteredMessages, 2)),
+            Effect.tap(verifyFilteredMessages)
+          );
+
+        const subscribeAndBroadcast = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            client.subscribe((msg) => msg.type.startsWith('important.')),
+            Effect.flatMap((filteredMessages) =>
+              broadcastMessagesAndCollect(server, filteredMessages)
+            )
+          );
+
+        const waitAndTest = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            context.waitForConnectionState(client, 'connected'),
+            Effect.flatMap(() => subscribeAndBroadcast(server, client))
+          );
+
+        const createClientAndTest = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            pair.makeClient(),
+            Effect.flatMap((client) => waitAndTest(server, client))
+          );
+
+        const setupServerAndTest = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createClientAndTest(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndTest)
         );
 
         await Effect.runPromise(Effect.scoped(program));
@@ -524,151 +548,197 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
     describe('Connection Lifecycle', () => {
       test('should handle graceful client disconnection', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => Scope.make()),
-                  Effect.flatMap((clientScope) =>
-                    pipe(
-                      Scope.extend(pair.makeClient(), clientScope),
-                      Effect.flatMap((client) =>
-                        pipe(
-                          context.waitForConnectionState(client, 'connected'),
-                          Effect.flatMap(() =>
-                            pipe(
-                              server.connections,
-                              Stream.take(1),
-                              Stream.runHead,
-                              Effect.flatMap((serverConnection) => {
-                                if (!Option.isSome(serverConnection)) {
-                                  return Effect.fail(
-                                    new Error('Expected server connection to be available')
-                                  );
-                                }
+        const verifyDisconnectedState = (finalClientState: Option.Option<ConnectionState>) => {
+          if (Option.isSome(finalClientState)) {
+            return Effect.sync(() => expect(finalClientState.value).toBe('disconnected'));
+          } else {
+            return Effect.fail(new Error('Expected final client state to be available'));
+          }
+        };
 
-                                return pipe(
-                                  Scope.close(clientScope, Exit.void),
-                                  Effect.flatMap(() => Effect.sleep(100)),
-                                  Effect.flatMap(() =>
-                                    pipe(
-                                      serverConnection.value.transport.connectionState,
-                                      Stream.filter((state) => state === 'disconnected'),
-                                      Stream.take(1),
-                                      Stream.runHead,
-                                      Effect.timeout(2000),
-                                      Effect.flatMap((finalClientState) => {
-                                        if (Option.isSome(finalClientState)) {
-                                          return Effect.sync(() =>
-                                            expect(finalClientState.value).toBe('disconnected')
-                                          );
-                                        } else {
-                                          return Effect.fail(
-                                            new Error('Expected final client state to be available')
-                                          );
-                                        }
-                                      })
-                                    )
-                                  )
-                                );
-                              })
-                            )
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
+        const waitForDisconnectedState = (connection: ServerConnection) =>
+          pipe(
+            connection.transport.connectionState,
+            Stream.filter((state) => state === 'disconnected'),
+            Stream.take(1),
+            Stream.runHead,
+            Effect.timeout(2000),
+            Effect.flatMap(verifyDisconnectedState)
+          );
+
+        const closeScopeAndVerify = (clientScope: Scope.Scope, connection: ServerConnection) =>
+          pipe(
+            Scope.close(clientScope, Exit.void),
+            Effect.flatMap(() => Effect.sleep(100)),
+            Effect.flatMap(() => waitForDisconnectedState(connection))
+          );
+
+        const handleServerConnection =
+          (clientScope: Scope.Scope) => (serverConnection: Option.Option<ServerConnection>) => {
+            if (!Option.isSome(serverConnection)) {
+              return Effect.fail(new Error('Expected server connection to be available'));
+            }
+            return closeScopeAndVerify(clientScope, serverConnection.value);
+          };
+
+        const getConnectionAndDisconnect = (server: ServerTransport, clientScope: Scope.Scope) =>
+          pipe(
+            server.connections,
+            Stream.take(1),
+            Stream.runHead,
+            Effect.flatMap(handleServerConnection(clientScope))
+          );
+
+        const waitAndDisconnect = (
+          client: ClientTransport,
+          server: ServerTransport,
+          clientScope: Scope.Scope
+        ) =>
+          pipe(
+            context.waitForConnectionState(client, 'connected'),
+            Effect.flatMap(() => getConnectionAndDisconnect(server, clientScope))
+          );
+
+        const createClientAndDisconnect = (
+          clientScope: Scope.Scope,
+          server: ServerTransport,
+          pair: TransportPair
+        ) =>
+          pipe(
+            Scope.extend(pair.makeClient(), clientScope),
+            Effect.flatMap((client) => waitAndDisconnect(client, server, clientScope))
+          );
+
+        const createScopeAndTest = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            Scope.make(),
+            Effect.flatMap((clientScope) => createClientAndDisconnect(clientScope, server, pair))
+          );
+
+        const setupServerAndTest = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createScopeAndTest(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndTest)
         );
 
         await Effect.runPromise(Effect.scoped(program));
       });
 
       test('should handle server shutdown gracefully', async () => {
+        const verifyDisconnectedState = (disconnectedState: Option.Option<ConnectionState>) => {
+          if (Option.isSome(disconnectedState)) {
+            return Effect.sync(() => expect(disconnectedState.value).toBe('disconnected'));
+          } else {
+            return Effect.fail(new Error('Expected disconnected state to be available'));
+          }
+        };
+
+        const waitForDisconnection = (client: ClientTransport) =>
+          pipe(
+            client.connectionState,
+            Stream.filter((state) => state === 'disconnected'),
+            Stream.take(1),
+            Stream.runHead,
+            Effect.timeout(5000),
+            Effect.flatMap(verifyDisconnectedState)
+          );
+
+        const closeServerAndVerify = (serverScope: Scope.Scope, client: ClientTransport) =>
+          pipe(
+            Scope.close(serverScope, Exit.void),
+            Effect.flatMap(() => waitForDisconnection(client))
+          );
+
+        const waitAndCloseServer = (client: ClientTransport, serverScope: Scope.Scope) =>
+          pipe(
+            context.waitForConnectionState(client, 'connected'),
+            Effect.flatMap(() => closeServerAndVerify(serverScope, client))
+          );
+
+        const createClientAndTest = (serverScope: Scope.Scope, pair: TransportPair) =>
+          pipe(
+            pair.makeClient(),
+            Effect.flatMap((client) => waitAndCloseServer(client, serverScope))
+          );
+
+        const setupServerAndClient = (serverScope: Scope.Scope, pair: TransportPair) =>
+          pipe(
+            Scope.extend(pair.makeServer(), serverScope),
+            Effect.flatMap(() => Effect.sleep(100)),
+            Effect.flatMap(() => createClientAndTest(serverScope, pair))
+          );
+
+        const createScopeAndTest = (pair: TransportPair) =>
+          pipe(
+            Scope.make(),
+            Effect.flatMap((serverScope) => setupServerAndClient(serverScope, pair))
+          );
+
         const program = pipe(
           Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              Scope.make(),
-              Effect.flatMap((serverScope) =>
-                pipe(
-                  Scope.extend(pair.makeServer(), serverScope),
-                  Effect.flatMap(() => Effect.sleep(100)),
-                  Effect.flatMap(() => pair.makeClient()),
-                  Effect.flatMap((client) =>
-                    pipe(
-                      context.waitForConnectionState(client, 'connected'),
-                      Effect.flatMap(() => Scope.close(serverScope, Exit.void)),
-                      Effect.flatMap(() =>
-                        pipe(
-                          client.connectionState,
-                          Stream.filter((state) => state === 'disconnected'),
-                          Stream.take(1),
-                          Stream.runHead,
-                          Effect.timeout(5000),
-                          Effect.flatMap((disconnectedState) => {
-                            if (Option.isSome(disconnectedState)) {
-                              return Effect.sync(() =>
-                                expect(disconnectedState.value).toBe('disconnected')
-                              );
-                            } else {
-                              return Effect.fail(
-                                new Error('Expected disconnected state to be available')
-                              );
-                            }
-                          })
-                        )
-                      )
-                    )
-                  )
-                )
-              )
-            )
-          )
+          Effect.flatMap(createScopeAndTest)
         );
 
         await Effect.runPromise(Effect.scoped(program));
       });
 
       test('should clean up resources when scope closes', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => Effect.all([pair.makeClient(), pair.makeClient()])),
-                  Effect.flatMap(([client1, client2]) =>
-                    pipe(
-                      Effect.all([
-                        context.waitForConnectionState(client1, 'connected'),
-                        context.waitForConnectionState(client2, 'connected'),
-                      ]),
-                      Effect.flatMap(() =>
-                        pipe(
-                          server.connections,
-                          Stream.take(2),
-                          Stream.runCollect,
-                          Effect.tap((connections) =>
-                            Effect.sync(() => expect(Array.from(connections)).toHaveLength(2))
-                          )
-                        )
-                      )
-                    )
-                  )
-                )
+        const verifyConnectionCount = (connections: unknown) =>
+          Effect.sync(() => expect(Array.from(connections as Iterable<unknown>)).toHaveLength(2));
+
+        const collectAndVerifyConnections = (server: ServerTransport) =>
+          pipe(
+            server.connections,
+            Stream.take(2),
+            Stream.runCollect,
+            Effect.tap(verifyConnectionCount)
+          );
+
+        const waitForClientsAndVerify = (
+          server: ServerTransport,
+          client1: ClientTransport,
+          client2: ClientTransport
+        ) =>
+          pipe(
+            Effect.all([
+              context.waitForConnectionState(client1, 'connected'),
+              context.waitForConnectionState(client2, 'connected'),
+            ]),
+            Effect.flatMap(() => collectAndVerifyConnections(server))
+          );
+
+        const createClientsAndVerify = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            Effect.all([pair.makeClient(), pair.makeClient()]),
+            Effect.flatMap(([client1, client2]) =>
+              waitForClientsAndVerify(server, client1, client2)
+            )
+          );
+
+        const setupServerAndClients = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createClientsAndVerify(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndClients)
         );
 
         await Effect.runPromise(Effect.scoped(program));
@@ -677,57 +747,70 @@ export const runClientServerContractTests: ClientServerTestRunner = (
 
     describe('Error Handling', () => {
       test('should handle malformed messages gracefully', async () => {
-        const program = pipe(
-          Effect.sync(() => context.makeTransportPair()),
-          Effect.flatMap((pair) =>
-            pipe(
-              pair.makeServer(),
-              Effect.flatMap((server) =>
-                pipe(
-                  Effect.sleep(100),
-                  Effect.flatMap(() => pair.makeClient()),
-                  Effect.flatMap((client) =>
-                    pipe(
-                      context.waitForConnectionState(client, 'connected'),
-                      Effect.flatMap(() =>
-                        pipe(
-                          server.connections,
-                          Stream.take(1),
-                          Stream.runHead,
-                          Effect.flatMap((serverConnection) => {
-                            if (!Option.isSome(serverConnection)) {
-                              return Effect.fail(
-                                new Error('Expected server connection to be available')
-                              );
-                            }
-                            const connection = serverConnection.value;
+        const verifyReceivedMessage = (receivedMessages: TransportMessage[]) =>
+          Effect.sync(() => expect(receivedMessages[0]?.type).toBe('valid.message'));
 
-                            return pipe(
-                              connection.transport.subscribe(),
-                              Effect.flatMap((messageStream) => {
-                                const validMessage = context.makeTestMessage('valid.message', {
-                                  data: 'good',
-                                });
-                                return pipe(
-                                  client.publish(validMessage),
-                                  Effect.flatMap(() => context.collectMessages(messageStream, 1)),
-                                  Effect.tap((receivedMessages) =>
-                                    Effect.sync(() =>
-                                      expect(receivedMessages[0]?.type).toBe('valid.message')
-                                    )
-                                  )
-                                );
-                              })
-                            );
-                          })
-                        )
-                      )
-                    )
-                  )
-                )
+        const publishAndVerify = (
+          client: ClientTransport,
+          messageStream: Stream.Stream<TransportMessage, never, never>
+        ) => {
+          const validMessage = context.makeTestMessage('valid.message', { data: 'good' });
+          return pipe(
+            client.publish(validMessage),
+            Effect.flatMap(() => context.collectMessages(messageStream, 1)),
+            Effect.tap(verifyReceivedMessage)
+          );
+        };
+
+        const subscribeAndPublish = (connection: ServerConnection, client: ClientTransport) =>
+          pipe(
+            connection.transport.subscribe(),
+            Effect.flatMap((messageStream) => publishAndVerify(client, messageStream))
+          );
+
+        const handleServerConnection =
+          (client: ClientTransport) => (serverConnection: Option.Option<ServerConnection>) => {
+            if (!Option.isSome(serverConnection)) {
+              return Effect.fail(new Error('Expected server connection to be available'));
+            }
+            const connection = serverConnection.value;
+            return subscribeAndPublish(connection, client);
+          };
+
+        const getConnectionAndPublish = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            server.connections,
+            Stream.take(1),
+            Stream.runHead,
+            Effect.flatMap(handleServerConnection(client))
+          );
+
+        const waitAndPublish = (server: ServerTransport, client: ClientTransport) =>
+          pipe(
+            context.waitForConnectionState(client, 'connected'),
+            Effect.flatMap(() => getConnectionAndPublish(server, client))
+          );
+
+        const createClientAndPublish = (server: ServerTransport, pair: TransportPair) =>
+          pipe(
+            pair.makeClient(),
+            Effect.flatMap((client) => waitAndPublish(server, client))
+          );
+
+        const setupServerAndTest = (pair: TransportPair) =>
+          pipe(
+            pair.makeServer(),
+            Effect.flatMap((server) =>
+              pipe(
+                Effect.sleep(100),
+                Effect.flatMap(() => createClientAndPublish(server, pair))
               )
             )
-          )
+          );
+
+        const program = pipe(
+          Effect.sync(() => context.makeTransportPair()),
+          Effect.flatMap(setupServerAndTest)
         );
 
         await Effect.runPromise(Effect.scoped(program));

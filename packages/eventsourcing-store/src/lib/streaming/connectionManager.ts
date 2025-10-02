@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer, Option, Schedule, pipe, Ref, HashMap } from 'effect';
+import { Config, Context, Data, Effect, Layer, Option, Schedule, Ref, HashMap } from 'effect';
 
 /**
  * Configuration for API port and WebSocket connections
@@ -45,22 +45,22 @@ export const DefaultConnectionConfig: ConnectionConfig = {
  * Config schema for connection settings
  */
 export const ConnectionConfigSchema = Config.all({
-  apiPort: pipe(Config.number('apiPort'), Config.withDefault(DefaultConnectionConfig.apiPort)),
-  maxRetryAttempts: pipe(
+  apiPort: Config.withDefault(Config.number('apiPort'), DefaultConnectionConfig.apiPort),
+  maxRetryAttempts: Config.withDefault(
     Config.number('maxRetryAttempts'),
-    Config.withDefault(DefaultConnectionConfig.maxRetryAttempts)
+    DefaultConnectionConfig.maxRetryAttempts
   ),
-  initialRetryDelayMs: pipe(
+  initialRetryDelayMs: Config.withDefault(
     Config.number('initialRetryDelayMs'),
-    Config.withDefault(DefaultConnectionConfig.initialRetryDelayMs)
+    DefaultConnectionConfig.initialRetryDelayMs
   ),
-  socketTimeoutMs: pipe(
+  socketTimeoutMs: Config.withDefault(
     Config.number('socketTimeoutMs'),
-    Config.withDefault(DefaultConnectionConfig.socketTimeoutMs)
+    DefaultConnectionConfig.socketTimeoutMs
   ),
-  heartbeatIntervalMs: pipe(
+  heartbeatIntervalMs: Config.withDefault(
     Config.number('heartbeatIntervalMs'),
-    Config.withDefault(DefaultConnectionConfig.heartbeatIntervalMs)
+    DefaultConnectionConfig.heartbeatIntervalMs
   ),
 });
 
@@ -74,11 +74,9 @@ export class ConnectionConfigTag extends Context.Tag('ConnectionConfig')<
 
 export const ConnectionConfigLive = Layer.effect(
   ConnectionConfigTag,
-  pipe(
+  Effect.mapError(
     Config.unwrap(ConnectionConfigSchema),
-    Effect.mapError(
-      (error) => new Error(`Failed to load connection configuration: ${JSON.stringify(error)}`)
-    )
+    (error) => new Error(`Failed to load connection configuration: ${JSON.stringify(error)}`)
   )
 );
 
@@ -161,27 +159,21 @@ export type ConnectionManagerService = Context.Tag.Service<typeof ConnectionMana
 const getOrCreateDefaultStatus =
   (url: string) =>
   (statusMap: HashMap.HashMap<string, ConnectionStatus>): ConnectionStatus =>
-    pipe(
-      HashMap.get(statusMap, url),
-      Option.getOrElse(
-        () =>
-          ({
-            isConnected: false,
-            lastHeartbeat: Option.none(),
-            reconnectAttempts: 0,
-            url,
-          }) as const
-      )
-    );
+    Option.getOrElse(HashMap.get(statusMap, url), () => ({
+      isConnected: false,
+      lastHeartbeat: Option.none(),
+      reconnectAttempts: 0,
+      url,
+    }));
 
 const extractStatusFromMap =
   (url: string) => (statusMap: HashMap.HashMap<string, ConnectionStatus>) =>
-    pipe(HashMap.get(statusMap, url), Option.getOrThrow);
+    Option.getOrThrow(HashMap.get(statusMap, url));
 
 const updateAndExtractStatus =
   (url: string, updates: ConnectionStatusUpdate) =>
   (connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>) =>
-    pipe(
+    Effect.map(
       Ref.updateAndGet(connectionStatuses, (statusMap) => {
         const current = getOrCreateDefaultStatus(url)(statusMap);
         const newStatus: ConnectionStatus = {
@@ -192,7 +184,7 @@ const updateAndExtractStatus =
         };
         return HashMap.set(statusMap, url, newStatus);
       }),
-      Effect.map(extractStatusFromMap(url))
+      extractStatusFromMap(url)
     );
 
 const mockConnect = (
@@ -205,9 +197,9 @@ const mockConnect = (
   } as const);
 
 const createRetryPolicy = (config: Readonly<ConnectionConfig>) =>
-  pipe(
+  Schedule.compose(
     Schedule.exponential(config.initialRetryDelayMs, 2.0),
-    Schedule.compose(Schedule.recurs(config.maxRetryAttempts))
+    Schedule.recurs(config.maxRetryAttempts)
   );
 
 const connectAndUpdateStatus =
@@ -219,16 +211,17 @@ const connectAndUpdateStatus =
   (
     connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>
   ): Effect.Effect<ConnectionHandle, ConnectionError, never> =>
-    pipe(
-      mockConnect(url, options),
-      Effect.tap(() =>
-        updateAndExtractStatus(url, {
-          isConnected: true,
-          lastHeartbeat: Option.some(new Date()),
-        })(connectionStatuses)
+    Effect.mapError(
+      Effect.retry(
+        Effect.tap(mockConnect(url, options), () =>
+          updateAndExtractStatus(url, {
+            isConnected: true,
+            lastHeartbeat: Option.some(new Date()),
+          })(connectionStatuses)
+        ),
+        retryPolicy
       ),
-      Effect.retry(retryPolicy),
-      Effect.mapError(() => new ConnectionError({ message: `Failed to connect to ${url}` }))
+      () => new ConnectionError({ message: `Failed to connect to ${url}` })
     );
 
 const resetAndConnect =
@@ -240,12 +233,12 @@ const resetAndConnect =
   (
     connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>
   ): Effect.Effect<ConnectionHandle, ConnectionError, never> =>
-    pipe(
+    Effect.flatMap(
       updateAndExtractStatus(url, {
         isConnected: false,
         reconnectAttempts: 0,
       })(connectionStatuses),
-      Effect.flatMap(() => connectAndUpdateStatus(url, options, retryPolicy)(connectionStatuses))
+      () => connectAndUpdateStatus(url, options, retryPolicy)(connectionStatuses)
     );
 
 const findStatusInMap = (url: string) => (statusMap: HashMap.HashMap<string, ConnectionStatus>) =>
@@ -259,22 +252,24 @@ const matchStatusOption = (url: string) => (status: Readonly<Option.Option<Conne
 
 const getStatusFromRef =
   (url: string) => (connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>) =>
-    pipe(
-      Ref.get(connectionStatuses),
-      Effect.map(findStatusInMap(url)),
-      Effect.flatMap(matchStatusOption(url))
+    Effect.flatMap(
+      Effect.map(Ref.get(connectionStatuses), findStatusInMap(url)),
+      matchStatusOption(url)
     );
 
 const repeatHeartbeat =
   (config: Readonly<ConnectionConfig>, url: string) =>
   (connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>) =>
-    pipe(
-      updateAndExtractStatus(url, {
-        lastHeartbeat: Option.some(new Date()),
-      })(connectionStatuses),
-      Effect.repeat(Schedule.spaced(config.heartbeatIntervalMs)),
-      Effect.forkDaemon,
-      Effect.map((fiber) => ({ fiber }) as const)
+    Effect.map(
+      Effect.forkDaemon(
+        Effect.repeat(
+          updateAndExtractStatus(url, {
+            lastHeartbeat: Option.some(new Date()),
+          })(connectionStatuses),
+          Schedule.spaced(config.heartbeatIntervalMs)
+        )
+      ),
+      (fiber) => ({ fiber }) as const
     );
 
 const buildConnectionManager =
@@ -296,10 +291,7 @@ const buildConnectionManager =
 export const makeConnectionManager = (
   config: Readonly<ConnectionConfig>
 ): Effect.Effect<ConnectionManagerService, never, never> =>
-  pipe(
-    Ref.make(HashMap.empty<string, ConnectionStatus>()),
-    Effect.map(buildConnectionManager(config))
-  );
+  Effect.map(Ref.make(HashMap.empty<string, ConnectionStatus>()), buildConnectionManager(config));
 
 /**
  * Live Layer implementation of the ConnectionManager

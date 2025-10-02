@@ -56,24 +56,19 @@ export type InMemoryConnector = () => Effect.Effect<Client.Transport, Connection
 // =============================================================================
 
 const disconnectClient = (clientState: ReadonlyDeep<InMemoryClientState>): Effect.Effect<void> =>
-  pipe(
-    Ref.set(clientState.connectionState, 'disconnected'),
+  Ref.set(clientState.connectionState, 'disconnected').pipe(
     Effect.zipRight(PubSub.publish(clientState.connectionStatePubSub, 'disconnected'))
   );
 
 const disconnectAllClients = (
   serverState: ReadonlyDeep<InMemoryServerState>
 ): Effect.Effect<void> =>
-  pipe(
-    Ref.get(serverState.clientConnections),
+  Ref.get(serverState.clientConnections).pipe(
     Effect.flatMap((connections: ReadonlyDeep<HashMap.HashMap<string, InMemoryClientConnection>>) =>
-      pipe(
+      Effect.forEach(
         HashMap.values(connections),
-        Effect.forEach(
-          ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
-            disconnectClient(clientState),
-          { discard: true }
-        )
+        ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) => disconnectClient(clientState),
+        { discard: true }
       )
     )
   );
@@ -86,11 +81,9 @@ const createConnectionStateStream = (
   clientState: ReadonlyDeep<InMemoryClientState>
 ): ReadonlyDeep<Stream.Stream<ConnectionState>> =>
   Stream.unwrapScoped(
-    pipe(
-      PubSub.subscribe(clientState.connectionStatePubSub),
+    PubSub.subscribe(clientState.connectionStatePubSub).pipe(
       Effect.flatMap((queue: ReadonlyDeep<Queue.Dequeue<ConnectionState>>) =>
-        pipe(
-          Ref.get(clientState.connectionState),
+        Ref.get(clientState.connectionState).pipe(
           Effect.map((currentState: ReadonlyDeep<ConnectionState>) =>
             Stream.concat(Stream.succeed(currentState), Stream.fromQueue(queue))
           )
@@ -106,8 +99,7 @@ const publishWithConnectionCheck =
     errorMessage: ReadonlyDeep<string>
   ) =>
   (message: ReadonlyDeep<TransportMessage>): Effect.Effect<void, TransportError> =>
-    pipe(
-      Ref.get(clientState.connectionState),
+    Ref.get(clientState.connectionState).pipe(
       Effect.flatMap((state: ReadonlyDeep<ConnectionState>) =>
         state !== 'connected'
           ? Effect.fail(new TransportError({ message: errorMessage }))
@@ -115,20 +107,24 @@ const publishWithConnectionCheck =
       )
     );
 
+const forwardMessagesToSubscriber = (
+  sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
+  subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
+) =>
+  Stream.fromQueue(sourceQueue).pipe(
+    Stream.runForEach((message: ReadonlyDeep<TransportMessage>) =>
+      Queue.offer(subscriberQueue, message)
+    ),
+    Effect.forkDaemon
+  );
+
 const createSimpleSubscription = (
   sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
   filter?: (message: ReadonlyDeep<TransportMessage>) => boolean
 ): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
-  pipe(
-    Queue.unbounded<TransportMessage>(),
+  Queue.unbounded<TransportMessage>().pipe(
     Effect.tap((subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
-      pipe(
-        Stream.fromQueue(sourceQueue),
-        Stream.runForEach((message: ReadonlyDeep<TransportMessage>) =>
-          Queue.offer(subscriberQueue, message)
-        ),
-        Effect.forkDaemon
-      )
+      forwardMessagesToSubscriber(sourceQueue, subscriberQueue)
     ),
     Effect.map((queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
       const baseStream = Stream.fromQueue(queue);
@@ -139,49 +135,53 @@ const createSimpleSubscription = (
 const addSubscriber = (
   clientState: ReadonlyDeep<InMemoryClientState>,
   subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
-): Effect.Effect<void> => pipe(Ref.update(clientState.subscribers, HashSet.add(subscriberQueue)));
+): Effect.Effect<void> => Ref.update(clientState.subscribers, HashSet.add(subscriberQueue));
 
 const forwardToSubscribers = (
   clientState: ReadonlyDeep<InMemoryClientState>,
   message: ReadonlyDeep<TransportMessage>,
   excludeQueue?: ReadonlyDeep<Queue.Queue<TransportMessage>>
 ): Effect.Effect<void> =>
-  pipe(
-    Ref.get(clientState.subscribers),
+  Ref.get(clientState.subscribers).pipe(
     Effect.flatMap((subscribers: ReadonlyDeep<HashSet.HashSet<Queue.Queue<TransportMessage>>>) =>
-      pipe(
+      Effect.forEach(
         HashSet.values(subscribers),
-        Effect.forEach(
-          (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
-            if (excludeQueue && queue === excludeQueue) {
-              return Effect.void;
-            }
-            return Queue.offer(queue, message);
-          },
-          { discard: true }
-        )
+        (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
+          if (excludeQueue && queue === excludeQueue) {
+            return Effect.void;
+          }
+          return Queue.offer(queue, message);
+        },
+        { discard: true }
       )
     )
+  );
+
+const handleMessageForSubscriber =
+  (
+    clientState: ReadonlyDeep<InMemoryClientState>,
+    subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
+  ) =>
+  (message: ReadonlyDeep<TransportMessage>) =>
+    Queue.offer(subscriberQueue, message).pipe(
+      Effect.zipRight(forwardToSubscribers(clientState, message, subscriberQueue))
+    );
+
+const startForwardingToSubscriber = (
+  clientState: ReadonlyDeep<InMemoryClientState>,
+  subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
+) =>
+  Stream.fromQueue(clientState.serverToClientQueue).pipe(
+    Stream.runForEach(handleMessageForSubscriber(clientState, subscriberQueue)),
+    Effect.forkDaemon
   );
 
 const setupSubscriberForwarding = (
   clientState: ReadonlyDeep<InMemoryClientState>,
   subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
 ): Effect.Effect<void> =>
-  pipe(
-    addSubscriber(clientState, subscriberQueue),
-    Effect.zipRight(
-      pipe(
-        Stream.fromQueue(clientState.serverToClientQueue),
-        Stream.runForEach((message: ReadonlyDeep<TransportMessage>) =>
-          pipe(
-            Queue.offer(subscriberQueue, message),
-            Effect.zipRight(forwardToSubscribers(clientState, message, subscriberQueue))
-          )
-        ),
-        Effect.forkDaemon
-      )
-    )
+  addSubscriber(clientState, subscriberQueue).pipe(
+    Effect.zipRight(startForwardingToSubscriber(clientState, subscriberQueue))
   );
 
 const createServerSideClientTransport = (
@@ -207,8 +207,7 @@ const createClientTransport = (
   subscribe: (
     filter?: (message: ReadonlyDeep<TransportMessage>) => boolean
   ): Effect.Effect<Stream.Stream<TransportMessage>, TransportError, never> =>
-    pipe(
-      Queue.unbounded<TransportMessage>(),
+    Queue.unbounded<TransportMessage>().pipe(
       Effect.tap((subscriberQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
         setupSubscriberForwarding(clientState, subscriberQueue)
       ),
@@ -229,11 +228,10 @@ const createClientState = (
   serverToClientQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
   connectionStatePubSub: ReadonlyDeep<PubSub.PubSub<ConnectionState>>
 ): Effect.Effect<InMemoryClientState> =>
-  pipe(
-    Effect.all([
-      Ref.make<ConnectionState>('connected'),
-      Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
-    ]),
+  Effect.all([
+    Ref.make<ConnectionState>('connected'),
+    Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
+  ]).pipe(
     Effect.map(
       ([connectionState, subscribers]: readonly [
         ReadonlyDeep<Ref.Ref<ConnectionState>>,
@@ -255,12 +253,11 @@ const createConnectionQueues = (): Effect.Effect<{
   readonly clientToServerQueue: Queue.Queue<TransportMessage>;
   readonly serverToClientQueue: Queue.Queue<TransportMessage>;
 }> =>
-  pipe(
-    Effect.all([
-      PubSub.unbounded<ConnectionState>(),
-      Queue.unbounded<TransportMessage>(),
-      Queue.unbounded<TransportMessage>(),
-    ]),
+  Effect.all([
+    PubSub.unbounded<ConnectionState>(),
+    Queue.unbounded<TransportMessage>(),
+    Queue.unbounded<TransportMessage>(),
+  ]).pipe(
     Effect.map(
       ([connectionStatePubSub, clientToServerQueue, serverToClientQueue]: readonly [
         ReadonlyDeep<PubSub.PubSub<ConnectionState>>,
@@ -293,8 +290,7 @@ const createClientConnection = (
 const createServerState = (
   connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>
 ): Effect.Effect<InMemoryServerState> =>
-  pipe(
-    Ref.make(HashMap.empty<string, InMemoryClientConnection>()),
+  Ref.make(HashMap.empty<string, InMemoryClientConnection>()).pipe(
     Effect.map(
       (
         clientConnections: ReadonlyDeep<Ref.Ref<HashMap.HashMap<string, InMemoryClientConnection>>>
@@ -309,18 +305,15 @@ const broadcastToClients = (
   serverState: ReadonlyDeep<InMemoryServerState>,
   message: ReadonlyDeep<TransportMessage>
 ): Effect.Effect<void> =>
-  pipe(
-    Ref.get(serverState.clientConnections),
+  Ref.get(serverState.clientConnections).pipe(
     Effect.flatMap((connections: ReadonlyDeep<HashMap.HashMap<string, InMemoryClientConnection>>) =>
-      pipe(
+      Effect.forEach(
         HashMap.values(connections),
-        Effect.forEach(
-          ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
-            Queue.offer(clientState.serverToClientQueue, message),
-          {
-            discard: true,
-          }
-        )
+        ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
+          Queue.offer(clientState.serverToClientQueue, message),
+        {
+          discard: true,
+        }
       )
     )
   );
@@ -330,26 +323,21 @@ const registerClientConnection = (
   clientId: ReadonlyDeep<string>,
   clientConnection: ReadonlyDeep<InMemoryClientConnection>
 ): Effect.Effect<void> =>
-  pipe(Ref.update(serverState.clientConnections, HashMap.set(clientId, clientConnection)));
+  Ref.update(serverState.clientConnections, HashMap.set(clientId, clientConnection));
 
 const unregisterClientConnection = (
   serverState: ReadonlyDeep<InMemoryServerState>,
   clientId: ReadonlyDeep<string>
 ): Effect.Effect<void> =>
-  pipe(
-    Ref.get(serverState.clientConnections),
+  Ref.get(serverState.clientConnections).pipe(
     Effect.flatMap((connections: ReadonlyDeep<HashMap.HashMap<string, InMemoryClientConnection>>) =>
-      pipe(
-        HashMap.get(connections, clientId),
-        Option.match({
-          onNone: () => Effect.void,
-          onSome: ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
-            pipe(
-              disconnectClient(clientState),
-              Effect.zipRight(Ref.update(serverState.clientConnections, HashMap.remove(clientId)))
-            ),
-        })
-      )
+      Option.match(HashMap.get(connections, clientId), {
+        onNone: () => Effect.void,
+        onSome: ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
+          disconnectClient(clientState).pipe(
+            Effect.zipRight(Ref.update(serverState.clientConnections, HashMap.remove(clientId)))
+          ),
+      })
     )
   );
 
@@ -368,8 +356,7 @@ const setupClientConnection = (
     clientState,
   };
 
-  return pipe(
-    registerClientConnection(serverState, clientId, inMemoryClientConnection),
+  return registerClientConnection(serverState, clientId, inMemoryClientConnection).pipe(
     Effect.zipRight(Queue.offer(serverState.connectionsQueue, clientConnection)),
     Effect.zipRight(PubSub.publish(connectionStatePubSub, 'connected')),
     Effect.as({
@@ -379,11 +366,39 @@ const setupClientConnection = (
   );
 };
 
+const connectClientToServer =
+  (
+    serverState: ReadonlyDeep<InMemoryServerState>,
+    connectionStatePubSub: ReadonlyDeep<PubSub.PubSub<ConnectionState>>,
+    clientToServerQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
+    serverToClientQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
+  ) =>
+  (clientState: ReadonlyDeep<InMemoryClientState>) => {
+    const clientId = generateClientId();
+    const clientConnection = createClientConnection(
+      clientId,
+      clientToServerQueue,
+      serverToClientQueue,
+      clientState
+    );
+
+    return setupClientConnection(
+      serverState,
+      clientState,
+      clientConnection,
+      connectionStatePubSub,
+      clientId
+    ).pipe(
+      Effect.flatMap(({ transport, cleanup }) =>
+        Effect.addFinalizer(() => cleanup()).pipe(Effect.as(transport))
+      )
+    );
+  };
+
 const createConnectorForServer =
   (serverState: ReadonlyDeep<InMemoryServerState>): InMemoryConnector =>
   () =>
-    pipe(
-      createConnectionQueues(),
+    createConnectionQueues().pipe(
       Effect.flatMap(
         ({
           connectionStatePubSub,
@@ -394,33 +409,15 @@ const createConnectorForServer =
           readonly clientToServerQueue: Queue.Queue<TransportMessage>;
           readonly serverToClientQueue: Queue.Queue<TransportMessage>;
         }>) =>
-          pipe(
-            createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
-            Effect.flatMap((clientState: ReadonlyDeep<InMemoryClientState>) => {
-              const clientId = generateClientId();
-              const clientConnection = createClientConnection(
-                clientId,
+          createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub).pipe(
+            Effect.flatMap(
+              connectClientToServer(
+                serverState,
+                connectionStatePubSub,
                 clientToServerQueue,
-                serverToClientQueue,
-                clientState
-              );
-
-              return pipe(
-                setupClientConnection(
-                  serverState,
-                  clientState,
-                  clientConnection,
-                  connectionStatePubSub,
-                  clientId
-                ),
-                Effect.flatMap(({ transport, cleanup }) =>
-                  pipe(
-                    Effect.addFinalizer(() => cleanup()),
-                    Effect.as(transport)
-                  )
-                )
-              );
-            })
+                serverToClientQueue
+              )
+            )
           )
       )
     );
@@ -434,14 +431,11 @@ const createInMemoryServerTransport = (): Effect.Effect<
   never,
   Scope.Scope
 > =>
-  pipe(
-    Queue.unbounded<Server.ClientConnection>(),
+  Queue.unbounded<Server.ClientConnection>().pipe(
     Effect.flatMap((connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>) =>
-      pipe(
-        createServerState(connectionsQueue),
+      createServerState(connectionsQueue).pipe(
         Effect.flatMap((serverState: ReadonlyDeep<InMemoryServerState>) =>
-          pipe(
-            Effect.addFinalizer(() => disconnectAllClients(serverState)),
+          Effect.addFinalizer(() => disconnectAllClients(serverState)).pipe(
             Effect.as({
               connections: Stream.fromQueue(connectionsQueue),
               broadcast: (message: ReadonlyDeep<TransportMessage>) =>

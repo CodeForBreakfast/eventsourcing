@@ -207,8 +207,7 @@ export const buildCommandSchema = <
 export const validateCommand =
   <TPayload, TPayloadInput>(payloadSchema: Schema.Schema<TPayload, TPayloadInput>) =>
   (wireCommand: ReadonlyDeep<WireCommand>) =>
-    pipe(
-      Schema.decodeUnknown(payloadSchema)(wireCommand.payload),
+    Schema.decodeUnknown(payloadSchema)(wireCommand.payload).pipe(
       Effect.mapError(
         (parseError) =>
           new CommandValidationError({

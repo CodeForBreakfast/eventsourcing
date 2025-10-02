@@ -23,10 +23,7 @@ export class CommandRegistry extends Context.Tag('CommandRegistry')<
 export const dispatchCommand = (
   wireCommand: ReadonlyDeep<WireCommand>
 ): Effect.Effect<CommandResult, never, CommandRegistry> =>
-  pipe(
-    CommandRegistry,
-    Effect.flatMap((registry) => registry.dispatch(wireCommand))
-  );
+  CommandRegistry.pipe(Effect.flatMap((registry) => registry.dispatch(wireCommand)));
 
 // ============================================================================
 // Command Registry with Effect Matchers
@@ -61,8 +58,7 @@ export const makeCommandRegistry = <
     command: ReadonlyDeep<CommandFromDefinitions<T>>,
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
-    pipe(
-      matcher(command),
+    matcher(command).pipe(
       Effect.exit,
       Effect.map((matcherResult) =>
         matcherResult._tag === 'Failure'
@@ -81,9 +77,7 @@ export const makeCommandRegistry = <
   const dispatch = (
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
-    pipe(
-      // Parse the entire command with the exhaustive schema
-      Schema.decodeUnknown(commandSchema)(wireCommand),
+    Schema.decodeUnknown(commandSchema)(wireCommand).pipe(
       Effect.either,
       Effect.flatMap((parseResult) => {
         if (parseResult._tag === 'Left') {

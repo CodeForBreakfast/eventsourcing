@@ -26,16 +26,15 @@ export const makeChannelName = (streamId: EventStreamId): string => `eventstore_
 const parseNotificationPayload = (
   jsonString: string
 ): Effect.Effect<NotificationPayload, EventStoreError, never> =>
-  pipe(
-    Effect.try({
-      try: () => JSON.parse(jsonString) as NotificationPayload,
-      catch: (error) =>
-        eventStoreError.read(
-          undefined,
-          `Failed to parse notification payload: ${String(error)}`,
-          error
-        ),
-    }),
+  Effect.try({
+    try: () => JSON.parse(jsonString) as NotificationPayload,
+    catch: (error) =>
+      eventStoreError.read(
+        undefined,
+        `Failed to parse notification payload: ${String(error)}`,
+        error
+      ),
+  }).pipe(
     Effect.flatMap((payload) =>
       Schema.decodeUnknown(
         Schema.Struct({
@@ -94,65 +93,96 @@ export class NotificationListener extends Effect.Tag('NotificationListener')<
 /**
  * Full PostgreSQL LISTEN/NOTIFY implementation using @effect/sql-pg
  */
+const queueNotification =
+  (
+    notificationQueue: Queue.Queue<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+    }>,
+    streamId: EventStreamId
+  ) =>
+  (payload: NotificationPayload) =>
+    Queue.offer(notificationQueue, {
+      streamId,
+      payload,
+    }).pipe(Effect.tap(() => Effect.logDebug(`Queued notification for stream ${streamId}`)));
+
+const processRawNotification =
+  (
+    notificationQueue: Queue.Queue<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+    }>,
+    streamId: EventStreamId,
+    channelName: string
+  ) =>
+  (rawPayload: string) =>
+    Effect.logDebug(`Received raw notification on ${channelName}: ${rawPayload}`).pipe(
+      Effect.flatMap(() => parseNotificationPayload(rawPayload)),
+      Effect.flatMap(queueNotification(notificationQueue, streamId)),
+      Effect.catchAll((error) =>
+        Effect.logError(`Failed to process notification for ${channelName}`, {
+          error,
+        })
+      )
+    );
+
+const startListeningOnChannel = (
+  client: PgClient.PgClient,
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+  }>,
+  streamId: EventStreamId,
+  channelName: string
+) =>
+  client
+    .listen(channelName)
+    .pipe(
+      Stream.tap(processRawNotification(notificationQueue, streamId, channelName)),
+      Stream.runDrain,
+      Effect.fork,
+      Effect.asVoid
+    );
+
+const activateChannelAndStartListening = (
+  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+  client: PgClient.PgClient,
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+  }>,
+  streamId: EventStreamId,
+  channelName: string
+) =>
+  Ref.update(activeChannels, HashSet.add(channelName)).pipe(
+    Effect.flatMap(() =>
+      Effect.logDebug(`Successfully started listening on channel: ${channelName}`)
+    ),
+    Effect.tap(() => startListeningOnChannel(client, notificationQueue, streamId, channelName))
+  );
+
 export const NotificationListenerLive = Layer.effect(
   NotificationListener,
-  pipe(
-    Effect.all({
-      client: PgClient.PgClient,
-      activeChannels: Ref.make(HashSet.empty<string>()),
-      notificationQueue: Queue.unbounded<{
-        readonly streamId: EventStreamId;
-        readonly payload: NotificationPayload;
-      }>(),
-    }),
+  Effect.all({
+    client: PgClient.PgClient,
+    activeChannels: Ref.make(HashSet.empty<string>()),
+    notificationQueue: Queue.unbounded<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+    }>(),
+  }).pipe(
     Effect.map(({ client, activeChannels, notificationQueue }) => ({
       listen: (streamId: EventStreamId): Effect.Effect<void, EventStoreError, never> =>
-        pipe(
-          Effect.logDebug(`Starting LISTEN for stream: ${streamId}`),
+        Effect.logDebug(`Starting LISTEN for stream: ${streamId}`).pipe(
           Effect.flatMap(() => {
             const channelName = makeChannelName(streamId);
-            return pipe(
-              // Add channel to active set
-              Ref.update(activeChannels, HashSet.add(channelName)),
-              Effect.flatMap(() =>
-                pipe(
-                  Effect.logDebug(`Successfully started listening on channel: ${channelName}`),
-                  // Start the stream processing in background
-                  Effect.tap(() =>
-                    pipe(
-                      client.listen(channelName),
-                      Stream.tap((rawPayload) =>
-                        pipe(
-                          Effect.logDebug(
-                            `Received raw notification on ${channelName}: ${rawPayload}`
-                          ),
-                          Effect.flatMap(() => parseNotificationPayload(rawPayload)),
-                          Effect.flatMap((payload) =>
-                            pipe(
-                              // Store in notification queue for processing
-                              Queue.offer(notificationQueue, {
-                                streamId,
-                                payload,
-                              }),
-                              Effect.tap(() =>
-                                Effect.logDebug(`Queued notification for stream ${streamId}`)
-                              )
-                            )
-                          ),
-                          Effect.catchAll((error) =>
-                            Effect.logError(`Failed to process notification for ${channelName}`, {
-                              error,
-                            })
-                          )
-                        )
-                      ),
-                      Stream.runDrain,
-                      Effect.fork,
-                      Effect.asVoid
-                    )
-                  )
-                )
-              )
+            return activateChannelAndStartListening(
+              activeChannels,
+              client,
+              notificationQueue,
+              streamId,
+              channelName
             );
           }),
           Effect.mapError((error) =>
@@ -165,11 +195,10 @@ export const NotificationListenerLive = Layer.effect(
         ),
 
       unlisten: (streamId: EventStreamId): Effect.Effect<void, EventStoreError, never> =>
-        pipe(
-          Effect.logDebug(`Stopping LISTEN for stream: ${streamId}`),
+        Effect.logDebug(`Stopping LISTEN for stream: ${streamId}`).pipe(
           Effect.flatMap(() => {
             const channelName = makeChannelName(streamId);
-            return pipe(Ref.update(activeChannels, HashSet.remove(channelName)), Effect.asVoid);
+            return Ref.update(activeChannels, HashSet.remove(channelName)).pipe(Effect.asVoid);
           }),
           Effect.mapError((error) =>
             eventStoreError.subscribe(
@@ -180,8 +209,7 @@ export const NotificationListenerLive = Layer.effect(
           )
         ),
 
-      notifications: pipe(
-        Queue.take(notificationQueue),
+      notifications: Queue.take(notificationQueue).pipe(
         Stream.repeatEffect,
         Stream.mapError((error) =>
           eventStoreError.read(
@@ -192,13 +220,11 @@ export const NotificationListenerLive = Layer.effect(
         )
       ),
 
-      start: pipe(
-        Effect.logInfo('PostgreSQL notification listener started with LISTEN/NOTIFY support'),
-        Effect.asVoid
-      ),
+      start: Effect.logInfo(
+        'PostgreSQL notification listener started with LISTEN/NOTIFY support'
+      ).pipe(Effect.asVoid),
 
-      stop: pipe(
-        Effect.logInfo('PostgreSQL notification listener stopped'),
+      stop: Effect.logInfo('PostgreSQL notification listener stopped').pipe(
         Effect.flatMap(() => Ref.get(activeChannels)),
         Effect.flatMap((channels) =>
           Effect.forEach(Array.from(channels), (channelName) =>

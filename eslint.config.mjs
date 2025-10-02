@@ -242,25 +242,26 @@ export default [
       'no-restricted-syntax': [
         'error',
         {
-          selector: 'CallExpression[callee.name="pipe"] CallExpression[callee.name="pipe"]',
+          selector:
+            ':function:not(VariableDeclarator[parent.kind="const"] > *) CallExpression[callee.type="Identifier"][callee.name="pipe"]:has(CallExpression[callee.type="Identifier"][callee.name="pipe"])',
           message:
             'Nested pipe() calls are forbidden. Extract the inner pipe to a separate named function that returns an Effect.',
         },
         {
           selector:
-            'ArrowFunctionExpression:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+            'ArrowFunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
           message:
             'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
         },
         {
           selector:
-            'FunctionDeclaration:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+            'FunctionDeclaration:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
           message:
             'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
         },
         {
           selector:
-            'FunctionExpression:has(CallExpression[callee.name="pipe"]) CallExpression[callee.name="pipe"] ~ CallExpression[callee.name="pipe"]',
+            'FunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
           message:
             'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
         },
