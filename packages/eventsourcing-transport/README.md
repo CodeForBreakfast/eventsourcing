@@ -42,19 +42,20 @@ interface TransportConnector<TMessage extends TransportMessage = TransportMessag
 }
 ```
 
-### `TransportMessage<TPayload>`
+### `TransportMessage`
 
 The base message type that all transport implementations must handle:
 
 ```typescript
-interface TransportMessage<TPayload = unknown> {
+interface TransportMessage {
   readonly id: string;
   readonly type: string;
-  readonly payload: TPayload;
-  readonly metadata?: Record<string, unknown>;
-  readonly timestamp?: Date;
+  readonly payload: string; // Always a JSON string - transport doesn't parse it
+  readonly metadata: Record<string, unknown>;
 }
 ```
+
+The transport layer only validates the envelope structure. The payload is always a serialized JSON string - the transport doesn't care what's inside.
 
 ## Error Types
 

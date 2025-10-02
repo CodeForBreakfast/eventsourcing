@@ -8,13 +8,7 @@ export * from './lib/eventstore';
 // Note: In-memory implementation moved to @codeforbreakfast/eventsourcing-store-inmemory
 
 // Streaming utilities
-export {
-  StreamHandler,
-  StreamHandlerLive,
-  makeStreamHandler,
-  StreamingError,
-  type StreamHandlerService,
-} from './lib/streaming';
+export { StreamingError, type StreamHandlerService } from './lib/streaming';
 
 // Testing utilities
 export * from './lib/testing/eventstore-test-suite';

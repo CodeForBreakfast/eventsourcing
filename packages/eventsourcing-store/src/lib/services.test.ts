@@ -1,23 +1,33 @@
-import { Effect, Layer, pipe, Stream } from 'effect';
+import { Effect, Layer, pipe, Stream, Context } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type { EventStore, ProjectionStore, SnapshotStore } from './services';
-import {
-  EventStore as EventStoreTag,
-  ProjectionStore as ProjectionStoreTag,
-  SnapshotStore as SnapshotStoreTag,
-} from './services';
 import { eventStoreError } from './errors';
 
 // Test-specific typed service tags
-const MyEventStoreService = EventStoreTag<MyEvent>();
-const UserProjectionStoreService = ProjectionStoreTag<UserProjection>();
-const AggregateSnapshotStoreService = SnapshotStoreTag<AggregateSnapshot>();
+const MyEventStoreService = Context.GenericTag<EventStore<MyEvent>, EventStore<MyEvent>>(
+  'MyEventStore'
+);
+const UserProjectionStoreService = Context.GenericTag<
+  ProjectionStore<UserProjection>,
+  ProjectionStore<UserProjection>
+>('UserProjectionStore');
+const AggregateSnapshotStoreService = Context.GenericTag<
+  SnapshotStore<AggregateSnapshot>,
+  SnapshotStore<AggregateSnapshot>
+>('AggregateSnapshotStore');
 
-// Also create untyped versions for the generic tests
-const EventStoreService = EventStoreTag<unknown>();
-const ProjectionStoreService = ProjectionStoreTag<unknown>();
-const SnapshotStoreService = SnapshotStoreTag<unknown>();
+// Also create generic versions for the generic tests
+const EventStoreService = Context.GenericTag<EventStore<unknown>, EventStore<unknown>>(
+  'EventStore'
+);
+const ProjectionStoreService = Context.GenericTag<
+  ProjectionStore<unknown>,
+  ProjectionStore<unknown>
+>('ProjectionStore');
+const SnapshotStoreService = Context.GenericTag<SnapshotStore<unknown>, SnapshotStore<unknown>>(
+  'SnapshotStore'
+);
 
 // Test types
 interface MyEvent {
