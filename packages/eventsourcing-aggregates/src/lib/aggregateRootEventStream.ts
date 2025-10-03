@@ -19,7 +19,7 @@ import {
 } from 'effect';
 
 // Mock PersonId for now - replace with actual implementation
-const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
+const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
 import { CommandContext } from './commandInitiator';
 
@@ -123,7 +123,7 @@ const commit =
 
 const updateStateWithEvent =
   <TState>(newState: TState) =>
-  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
     pipe(
       stateRef,
       Ref.update(() => ({
@@ -137,10 +137,10 @@ const applyAndUpdateState =
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-    before: Option.Option<TState>,
-    event: TEvent
+    before: Readonly<Option.Option<TState>>,
+    event: Readonly<TEvent>
   ) =>
-  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
     pipe(
       event,
       apply(before),
@@ -152,9 +152,9 @@ const applyEventToState =
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-    event: TEvent
+    event: Readonly<TEvent>
   ) =>
-  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
     pipe(
       stateRef,
       Ref.get,
@@ -168,7 +168,7 @@ const foldEventsIntoState =
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
     stream: Stream.Stream<TEvent, unknown>
   ) =>
-  (stateRef: Ref.Ref<{ nextEventNumber: number; data: Option.Option<TState> }>) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
     pipe(
       stream,
       Stream.runForEach((event) => applyEventToState(apply, event)(stateRef)),
@@ -186,7 +186,10 @@ const processEventStream = <TState, TEvent>(
     Effect.flatMap(foldEventsIntoState(apply, stream))
   );
 
-const decodeEventNumber = (nextEventNumber: number, data: Option.Option<unknown>) =>
+const decodeEventNumber = (
+  nextEventNumber: Readonly<number>,
+  data: Readonly<Option.Option<unknown>>
+) =>
   pipe(
     nextEventNumber,
     Schema.decode(EventNumber),
@@ -280,6 +283,17 @@ export const EventMetadata = Schema.Struct({
 });
 export type EventMetadata = typeof EventMetadata.Type;
 
+const createMetadataFromInitiator = (currentTime: number) => (initiatorId: unknown) => ({
+  occurredAt: new Date(currentTime),
+  originator: initiatorId,
+});
+
+const getInitiatorId = (currentTime: number) => (commandContext: typeof CommandContext.Service) =>
+  pipe(commandContext.getInitiatorId, Effect.map(createMetadataFromInitiator(currentTime)));
+
+const getMetadataFromContext = (currentTime: number) =>
+  pipe(CommandContext, Effect.flatMap(getInitiatorId(currentTime)));
+
 /**
  * Creates event metadata with timestamp and originator information
  *
@@ -295,23 +309,7 @@ export type EventMetadata = typeof EventMetadata.Type;
  * @throws {NoSuchElementException} If CommandContext is not available
  */
 export const eventMetadata = () =>
-  pipe(
-    Clock.currentTimeMillis,
-    Effect.flatMap((currentTime) =>
-      pipe(
-        CommandContext,
-        Effect.flatMap((commandContext) =>
-          pipe(
-            commandContext.getInitiatorId,
-            Effect.map((initiatorId) => ({
-              occurredAt: new Date(currentTime),
-              originator: initiatorId,
-            }))
-          )
-        )
-      )
-    )
-  );
+  pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext));
 
 /**
  * Creates a schema for domain events with type, metadata, and data fields
