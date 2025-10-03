@@ -90,6 +90,10 @@ export default [
             '^HashSet\\.HashSet<.*>$',
             '^Stream\\.Stream<.*>$',
             '^PubSub\\.PubSub<.*>$',
+            // Bun types wrapped in ReadonlyDeep are treated as immutable at boundaries
+            'ServerWebSocket<.*>$',
+            // Built-in types wrapped in ReadonlyDeep are treated as immutable
+            '^ReadonlyDeep<Date>$',
           ],
           parameters: {
             // Use ReadonlyShallow for parameters because Effect types contain internal

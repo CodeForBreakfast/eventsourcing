@@ -170,13 +170,11 @@ const handleClientMessage = (
 // WebSocket Server Implementation
 // =============================================================================
 
-/* eslint-disable functional/prefer-immutable-types -- Bun.ServerWebSocket is a third-party mutable type wrapped in ReadonlyDeep */
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
 ): Effect.Effect<ClientState, never, never> =>
-  /* eslint-enable functional/prefer-immutable-types */
   pipe(
     Effect.all({
       connectionStateQueue: Queue.unbounded<ConnectionState>(),
