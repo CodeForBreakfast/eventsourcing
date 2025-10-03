@@ -34,6 +34,7 @@ module.exports = {
           'src/components/.*/index[.]ts$', // Component barrel exports
           'dist/.*[.]js$', // Built files
           'build[.](?:ts|js|mjs|cjs)$', // Build scripts
+          'packages/eslint-test-rules/.*', // ESLint rule test files - intentionally not imported
         ],
       },
       to: {},

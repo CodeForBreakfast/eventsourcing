@@ -5,7 +5,13 @@ import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import {
+  type WireCommand,
+  type CommandResult,
+  isCommandSuccess,
+  isCommandFailure,
+  type CommandFailure,
+} from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
@@ -14,6 +20,17 @@ import { createCommandProcessingService } from './commandProcessingFactory';
 // ============================================================================
 // Test Domain Events
 // ============================================================================
+
+const UnknownErrorSchema = Schema.Struct({
+  _tag: Schema.Literal('UnknownError'),
+  commandId: Schema.String,
+  message: Schema.String,
+});
+
+const isUnknownError = (
+  error: CommandFailure['error']
+): error is Extract<CommandFailure['error'], { readonly _tag: 'UnknownError' }> =>
+  pipe(error, Schema.is(UnknownErrorSchema));
 
 const UserCreated = Schema.Struct({
   type: Schema.Literal('UserCreated'),
@@ -124,9 +141,10 @@ describe('Command Processing Service', () => {
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
-        expect(result._tag).toBe('Success');
-        if (result._tag === 'Success') {
+        if (isCommandSuccess(result)) {
           expect(result.position).toBeDefined();
+        } else {
+          expect(true).toBe(false);
         }
       }),
       Effect.provide(testLayer)
@@ -201,12 +219,15 @@ describe('Command Processing Service', () => {
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
-        expect(result._tag).toBe('Failure');
-        if (result._tag === 'Failure') {
-          expect(result.error._tag).toBe('UnknownError');
-          if (result.error._tag === 'UnknownError') {
-            expect(result.error.message).toContain('No handler found');
+        if (isCommandFailure(result)) {
+          const error = result.error;
+          if (isUnknownError(error)) {
+            expect(error.message).toContain('No handler found');
+          } else {
+            expect(true).toBe(false);
           }
+        } else {
+          expect(true).toBe(false);
         }
       }),
       Effect.provide(testLayer)
@@ -222,12 +243,15 @@ describe('Command Processing Service', () => {
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
-        expect(result._tag).toBe('Failure');
-        if (result._tag === 'Failure') {
-          expect(result.error._tag).toBe('UnknownError');
-          if (result.error._tag === 'UnknownError') {
-            expect(result.error.message).toContain('Handler execution failed');
+        if (isCommandFailure(result)) {
+          const error = result.error;
+          if (isUnknownError(error)) {
+            expect(error.message).toContain('Handler execution failed');
+          } else {
+            expect(true).toBe(false);
           }
+        } else {
+          expect(true).toBe(false);
         }
       }),
       Effect.provide(testLayer)
@@ -301,9 +325,9 @@ describe('Command Processing Service', () => {
       createCommandProcessingService(TestEventStore),
       Effect.flatMap(processAllCommands),
       Effect.map(([userResult, orderResult, updateResult]) => {
-        expect(userResult!._tag).toBe('Success');
-        expect(orderResult!._tag).toBe('Success');
-        expect(updateResult!._tag).toBe('Failure');
+        expect(isCommandSuccess(userResult!)).toBe(true);
+        expect(isCommandSuccess(orderResult!)).toBe(true);
+        expect(isCommandFailure(updateResult!)).toBe(true);
       }),
       Effect.provide(testLayer)
     );
@@ -322,7 +346,7 @@ describe('Command Processing Service', () => {
       CommandProcessingService,
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
-        expect(result._tag).toBe('Success');
+        expect(isCommandSuccess(result)).toBe(true);
       }),
       Effect.provide(ServiceLayer),
       Effect.provide(testLayer)

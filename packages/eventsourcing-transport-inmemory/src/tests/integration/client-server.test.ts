@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Stream, pipe } from 'effect';
+import { Effect, Stream, pipe, Option } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -175,8 +175,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Stream.take(1),
       Stream.runHead,
       Effect.tap((state) => {
-        expect(state._tag).toBe('Some');
-        if (state._tag === 'Some') {
+        expect(Option.isSome(state)).toBe(true);
+        if (Option.isSome(state)) {
           expect(state.value).toBe('connected');
         }
         return Effect.void;
@@ -216,14 +216,14 @@ describe('In-Memory Client-Server Specific Tests', () => {
     );
 
   const verifyMultipleClientStates = (
-    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
-    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    state1: Readonly<Option.Option<ConnectionState>>,
+    state2: Readonly<Option.Option<ConnectionState>>,
     connections: ReadonlyArray<{ readonly clientId: string }>
   ) =>
     Effect.sync(() => {
-      expect(state1._tag).toBe('Some');
-      expect(state2._tag).toBe('Some');
-      if (state1._tag === 'Some' && state2._tag === 'Some') {
+      expect(Option.isSome(state1)).toBe(true);
+      expect(Option.isSome(state2)).toBe(true);
+      if (Option.isSome(state1) && Option.isSome(state2)) {
         expect(state1.value).toBe('connected');
         expect(state2.value).toBe('connected');
       }
@@ -235,8 +235,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   const verifyConnectionsAfterStates = (
     server: InMemoryServer,
-    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
-    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' }
+    state1: Readonly<Option.Option<ConnectionState>>,
+    state2: Readonly<Option.Option<ConnectionState>>
   ) =>
     pipe(
       server,

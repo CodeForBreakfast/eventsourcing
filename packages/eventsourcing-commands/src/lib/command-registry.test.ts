@@ -2,7 +2,7 @@ import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Schema, Effect, pipe, Match } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import type { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
-import { WireCommand, defineCommand, CommandFromDefinitions } from './commands';
+import { WireCommand, defineCommand, CommandFromDefinitions, CommandResult } from './commands';
 import { makeCommandRegistry } from './command-registry';
 
 describe('Command Registry', () => {
@@ -43,18 +43,24 @@ describe('Command Registry', () => {
       },
     };
 
+    const assertSuccess = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', (success) => {
+          expect(success.position.eventNumber).toBe(1);
+        }),
+        Match.tag('Failure', () => {
+          expect(true).toBe(false);
+        }),
+        Match.exhaustive
+      );
+
     // Dispatch the command
     return pipe(
       wireCommand,
       registry.dispatch,
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result._tag).toBe('Success');
-          if (result._tag === 'Success') {
-            expect(result.position.eventNumber).toBe(1);
-          }
-        })
-      )
+      Effect.tap((result) => Effect.sync(() => assertSuccess(result)))
     );
   });
 
@@ -89,22 +95,37 @@ describe('Command Registry', () => {
       },
     };
 
+    type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
+
+    const assertValidationErrorDetails = (error: FailureError) =>
+      pipe(
+        error,
+        Match.value,
+        Match.tag('ValidationError', (validationError) => {
+          expect(validationError.commandId).toBe('cmd-123');
+          expect(validationError.commandName).toBe('CreateUser');
+          expect(validationError.validationErrors.length).toBeGreaterThan(0);
+        }),
+        Match.orElse(() => {
+          expect(true).toBe(false);
+        })
+      );
+
+    const assertValidationError = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', () => {
+          expect(true).toBe(false);
+        }),
+        Match.tag('Failure', (failure) => assertValidationErrorDetails(failure.error)),
+        Match.exhaustive
+      );
+
     return pipe(
       invalidCommand,
       registry.dispatch,
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result._tag).toBe('Failure');
-          if (result._tag === 'Failure') {
-            expect(result.error._tag).toBe('ValidationError');
-            if (result.error._tag === 'ValidationError') {
-              expect(result.error.commandId).toBe('cmd-123');
-              expect(result.error.commandName).toBe('CreateUser');
-              expect(result.error.validationErrors.length).toBeGreaterThan(0);
-            }
-          }
-        })
-      )
+      Effect.tap((result) => Effect.sync(() => assertValidationError(result)))
     );
   });
 
@@ -136,21 +157,36 @@ describe('Command Registry', () => {
       payload: {},
     };
 
+    type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
+
+    const assertUnknownCommandErrorDetails = (error: FailureError) =>
+      pipe(
+        error,
+        Match.value,
+        Match.tag('ValidationError', (validationError) => {
+          expect(validationError.commandName).toBe('UnknownCommand');
+          expect(validationError.validationErrors.length).toBeGreaterThan(0);
+        }),
+        Match.orElse(() => {
+          expect(true).toBe(false);
+        })
+      );
+
+    const assertUnknownCommand = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', () => {
+          expect(true).toBe(false);
+        }),
+        Match.tag('Failure', (failure) => assertUnknownCommandErrorDetails(failure.error)),
+        Match.exhaustive
+      );
+
     return pipe(
       unknownCommand,
       registry.dispatch,
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result._tag).toBe('Failure');
-          if (result._tag === 'Failure') {
-            expect(result.error._tag).toBe('ValidationError');
-            if (result.error._tag === 'ValidationError') {
-              expect(result.error.commandName).toBe('UnknownCommand');
-              expect(result.error.validationErrors.length).toBeGreaterThan(0);
-            }
-          }
-        })
-      )
+      Effect.tap((result) => Effect.sync(() => assertUnknownCommand(result)))
     );
   });
 
@@ -180,17 +216,35 @@ describe('Command Registry', () => {
       },
     };
 
+    type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
+
+    const assertUnknownErrorDetails = (error: FailureError) =>
+      pipe(
+        error,
+        Match.value,
+        Match.tag('UnknownError', () => {
+          expect(true).toBe(true);
+        }),
+        Match.orElse(() => {
+          expect(true).toBe(false);
+        })
+      );
+
+    const assertUnknownError = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', () => {
+          expect(true).toBe(false);
+        }),
+        Match.tag('Failure', (failure) => assertUnknownErrorDetails(failure.error)),
+        Match.exhaustive
+      );
+
     return pipe(
       wireCommand,
       registry.dispatch,
-      Effect.tap((result) =>
-        Effect.sync(() => {
-          expect(result._tag).toBe('Failure');
-          if (result._tag === 'Failure') {
-            expect(result.error._tag).toBe('UnknownError');
-          }
-        })
-      )
+      Effect.tap((result) => Effect.sync(() => assertUnknownError(result)))
     );
   });
 
@@ -241,13 +295,39 @@ describe('Command Registry', () => {
       payload: { newEmail: 'new@example.com' },
     };
 
+    const assertSuccess0 = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', () => {
+          expect(true).toBe(true);
+        }),
+        Match.tag('Failure', () => {
+          expect(true).toBe(false);
+        }),
+        Match.exhaustive
+      );
+
+    const assertSuccess1 = (result: CommandResult) =>
+      pipe(
+        result,
+        Match.value,
+        Match.tag('Success', () => {
+          expect(true).toBe(true);
+        }),
+        Match.tag('Failure', () => {
+          expect(true).toBe(false);
+        }),
+        Match.exhaustive
+      );
+
     return pipe(
       [registry.dispatch(createCommand), registry.dispatch(updateCommand)] as const,
       Effect.all,
       Effect.tap((results) =>
         Effect.sync(() => {
-          expect(results[0]._tag).toBe('Success');
-          expect(results[1]._tag).toBe('Success');
+          assertSuccess0(results[0]);
+          assertSuccess1(results[1]);
         })
       )
     );

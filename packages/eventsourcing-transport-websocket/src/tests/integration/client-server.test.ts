@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Stream, pipe } from 'effect';
+import { Effect, Stream, pipe, Option, Either } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -145,8 +145,8 @@ const checkConnectionState = (client: {
     Stream.take(1),
     Stream.runHead,
     Effect.tap((state) => {
-      expect(state._tag).toBe('Some');
-      if (state._tag === 'Some') {
+      expect(Option.isSome(state)).toBe(true);
+      if (Option.isSome(state)) {
         expect(state.value).toBe('connected');
       }
       return Effect.void;
@@ -180,7 +180,7 @@ describe('WebSocket Client-Server Specific Tests', () => {
       WebSocketConnector.connect,
       Effect.either,
       Effect.tap((result) => {
-        expect(result._tag).toBe('Left');
+        expect(Either.isLeft(result)).toBe(true);
         return Effect.void;
       })
     );

@@ -123,6 +123,14 @@ export const CommandResult = Schema.Union(CommandSuccess, CommandFailure);
 export type CommandResult = typeof CommandResult.Type;
 
 // ============================================================================
+// Command Result Type Guards
+// ============================================================================
+
+export const isCommandSuccess = Schema.is(CommandSuccess);
+
+export const isCommandFailure = Schema.is(CommandFailure);
+
+// ============================================================================
 // Command Validation Helpers
 // ============================================================================
 

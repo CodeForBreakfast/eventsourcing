@@ -8,7 +8,7 @@ import {
   createCommandProcessingService,
 } from '../index';
 import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
-import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand, isCommandSuccess } from '@codeforbreakfast/eventsourcing-commands';
 
 // ============================================================================
 // Example Usage of Command Processing Service
@@ -90,7 +90,7 @@ export const exampleProgram = pipe(
   },
   processUserCommand,
   Effect.map((result) => {
-    if (result._tag === 'Success') {
+    if (isCommandSuccess(result)) {
       console.log('Command processed successfully:', result.position);
     } else {
       console.error('Command failed:', result.error);

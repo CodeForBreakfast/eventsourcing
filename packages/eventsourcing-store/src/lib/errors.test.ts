@@ -24,7 +24,7 @@ describe('Event Sourcing Errors', () => {
         recoveryHint: 'Check permissions',
       });
 
-      expect(error._tag).toBe('EventStoreError');
+      expect(error).toBeInstanceOf(EventStoreError);
       expect(error.operation).toBe('read');
       expect(error.streamId).toBe('test-stream');
       expect(error.details).toBe('Failed to read stream');
@@ -45,10 +45,10 @@ describe('Event Sourcing Errors', () => {
 
     it('should support type guards', () => {
       const error = eventStoreError.write('stream-1', 'Write failed');
-      expect(error._tag).toBe('EventStoreError');
+      expect(error).toBeInstanceOf(EventStoreError);
 
       const connError = connectionError.fatal('connect', new Error('failed'));
-      expect(connError._tag).toBe('EventStoreConnectionError');
+      expect(isEventSourcingError(connError)).toBe(true);
     });
   });
 
@@ -97,7 +97,7 @@ describe('Event Sourcing Errors', () => {
       ];
 
       errors.forEach((error) => {
-        expect(error._tag).toBe('EventStoreError');
+        expect(error).toBeInstanceOf(EventStoreError);
         expect(error.recoveryHint).toBeDefined();
       });
     });
@@ -151,7 +151,7 @@ describe('Event Sourcing Errors', () => {
         readonly streamId: string;
       };
 
-      expect(deserialized._tag).toBe('EventStoreError');
+      expect(deserialized['_tag']).toBe('EventStoreError');
       expect(deserialized.operation).toBe('write');
       expect(deserialized.streamId).toBe('test-stream');
     });
@@ -165,7 +165,7 @@ describe('Event Sourcing Errors', () => {
         details: 'test details',
       });
 
-      expect(error._tag).toBe('EventStoreError');
+      expect(error).toBeInstanceOf(EventStoreError);
       expect(error.operation).toBe('read');
       expect(error.streamId).toBe('test-stream');
       expect(error.details).toBe('test details');
@@ -178,7 +178,7 @@ describe('Event Sourcing Errors', () => {
         details: 'test details',
       });
 
-      expect(error._tag).toBe('EventStoreError');
+      expect(error).toBeInstanceOf(EventStoreError);
       expect(error.operation).toBe('write');
       expect(error.streamId).toBe('test-stream');
       expect(error.details).toBe('test details');
@@ -191,7 +191,7 @@ describe('Event Sourcing Errors', () => {
         details: 'test details',
       });
 
-      expect(error._tag).toBe('EventStoreError');
+      expect(error).toBeInstanceOf(EventStoreError);
       expect(error.operation).toBe('subscribe');
       expect(error.streamId).toBe('test-stream');
       expect(error.details).toBe('test details');

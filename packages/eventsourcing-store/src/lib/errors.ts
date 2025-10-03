@@ -1,4 +1,4 @@
-import { Data } from 'effect';
+import { Data, Predicate } from 'effect';
 
 // Base error for all event sourcing operations
 export class EventSourcingError extends Data.TaggedError('EventSourcingError')<
@@ -133,23 +133,18 @@ export const isEventSourcingError = (
   | SnapshotError
   | SnapshotVersionError
   | WebSocketError
-  | WebSocketProtocolError => {
-  if (typeof u !== 'object' || u === null || !('_tag' in u)) return false;
-  const tag = (u as { readonly _tag: unknown })._tag;
-  return [
-    'EventSourcingError',
-    'EventStoreError',
-    'EventStoreConnectionError',
-    'EventStoreResourceError',
-    'ConcurrencyConflictError',
-    'ProjectionError',
-    'ProjectionStateError',
-    'SnapshotError',
-    'SnapshotVersionError',
-    'WebSocketError',
-    'WebSocketProtocolError',
-  ].includes(tag as string);
-};
+  | WebSocketProtocolError =>
+  Predicate.isTagged(u, 'EventSourcingError') ||
+  Predicate.isTagged(u, 'EventStoreError') ||
+  Predicate.isTagged(u, 'EventStoreConnectionError') ||
+  Predicate.isTagged(u, 'EventStoreResourceError') ||
+  Predicate.isTagged(u, 'ConcurrencyConflictError') ||
+  Predicate.isTagged(u, 'ProjectionError') ||
+  Predicate.isTagged(u, 'ProjectionStateError') ||
+  Predicate.isTagged(u, 'SnapshotError') ||
+  Predicate.isTagged(u, 'SnapshotVersionError') ||
+  Predicate.isTagged(u, 'WebSocketError') ||
+  Predicate.isTagged(u, 'WebSocketProtocolError');
 
 // Error creation helpers
 export const eventStoreError = {
