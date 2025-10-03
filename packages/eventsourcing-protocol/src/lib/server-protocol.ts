@@ -130,6 +130,24 @@ const processIncomingMessage =
       Effect.catchAll(() => Effect.void)
     );
 
+const buildResultMessage = (commandId: string, result: ReadonlyDeep<CommandResult>) =>
+  pipe(
+    Match.value(result),
+    Match.when({ _tag: 'Success' }, (res) => ({
+      type: 'command_result' as const,
+      commandId,
+      success: true,
+      position: res.position,
+    })),
+    Match.when({ _tag: 'Failure' }, (res) => ({
+      type: 'command_result' as const,
+      commandId,
+      success: false,
+      error: JSON.stringify(res.error),
+    })),
+    Match.exhaustive
+  );
+
 const createResultSender =
   (server: ReadonlyDeep<Server.Transport>) =>
   (
@@ -140,22 +158,7 @@ const createResultSender =
     pipe(
       currentTimestamp(),
       Effect.flatMap((timestamp) => {
-        const resultMessage: CommandResultMessage = pipe(
-          Match.value(result),
-          Match.when({ _tag: 'Success' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: true,
-            position: res.position,
-          })),
-          Match.when({ _tag: 'Failure' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: false,
-            error: JSON.stringify(res.error),
-          })),
-          Match.exhaustive
-        );
+        const resultMessage: CommandResultMessage = buildResultMessage(commandId, result);
 
         return server.broadcast(
           makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
