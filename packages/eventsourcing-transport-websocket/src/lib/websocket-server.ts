@@ -175,18 +175,8 @@ const distributeMessageToSubscribers = (
 
 const parseClientMessageData = (
   data: ReadonlyDeep<string>
-): Effect.Effect<
-  { readonly _tag: 'success'; readonly message: TransportMessage } | { readonly _tag: 'error' },
-  never,
-  never
-> =>
-  Effect.sync(() => {
-    try {
-      return { _tag: 'success' as const, message: JSON.parse(data) as TransportMessage };
-    } catch {
-      return { _tag: 'error' as const };
-    }
-  });
+): Effect.Effect<TransportMessage, unknown, never> =>
+  Effect.try(() => JSON.parse(data) as TransportMessage);
 
 const handleClientMessage = (
   clientState: ReadonlyDeep<ClientState>,
@@ -195,11 +185,8 @@ const handleClientMessage = (
   pipe(
     data,
     parseClientMessageData,
-    Effect.flatMap((result) =>
-      result._tag === 'error'
-        ? Effect.void
-        : distributeMessageToSubscribers(clientState, result.message)
-    )
+    Effect.flatMap((message) => distributeMessageToSubscribers(clientState, message)),
+    Effect.catchAll(() => Effect.void)
   );
 
 // =============================================================================
@@ -363,6 +350,7 @@ const createWebSocketServer = (
                 connectedAt: new Date(),
               }));
 
+            // eslint-disable-next-line no-restricted-syntax
             Effect.runSync(
               pipe(
                 createClientIdAndTimestamp(),
@@ -378,6 +366,7 @@ const createWebSocketServer = (
             ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
             message: ReadonlyDeep<string>
           ) => {
+            // eslint-disable-next-line no-restricted-syntax
             Effect.runSync(
               pipe(
                 serverStateRef,
@@ -391,6 +380,7 @@ const createWebSocketServer = (
           },
 
           close: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
+            // eslint-disable-next-line no-restricted-syntax
             Effect.runSync(
               pipe(
                 serverStateRef,
