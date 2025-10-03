@@ -32,7 +32,7 @@ interface ClientState {
   readonly connectionStateRef: Ref.Ref<ConnectionState>;
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
   readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
-  readonly connectedAt: Date;
+  readonly connectedAt: ReadonlyDeep<Date>;
 }
 
 interface ServerState {
@@ -91,12 +91,13 @@ const publishMessageToClient =
 
 const applyFilterToMessage =
   (filter: (message: ReadonlyDeep<TransportMessage>) => boolean) =>
-  (msg: TransportMessage): boolean =>
-    pipe(
-      Effect.sync(() => filter(msg)),
-      Effect.catchAll(() => Effect.succeed(false)),
-      Effect.runSync
-    );
+  (msg: TransportMessage): boolean => {
+    try {
+      return filter(msg);
+    } catch {
+      return false;
+    }
+  };
 
 const subscribeToClientMessages =
   (clientState: ReadonlyDeep<ClientState>) =>
@@ -169,11 +170,13 @@ const handleClientMessage = (
 // WebSocket Server Implementation
 // =============================================================================
 
+/* eslint-disable functional/prefer-immutable-types -- Bun.ServerWebSocket is a third-party mutable type wrapped in ReadonlyDeep */
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
 ): Effect.Effect<ClientState, never, never> =>
+  /* eslint-enable functional/prefer-immutable-types */
   pipe(
     Effect.all({
       connectionStateQueue: Queue.unbounded<ConnectionState>(),
