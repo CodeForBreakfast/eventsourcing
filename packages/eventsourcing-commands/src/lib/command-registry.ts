@@ -1,4 +1,4 @@
-import { Schema, Context, Effect, Layer, Match } from 'effect';
+import { Schema, Context, Effect, Layer, Match, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,
@@ -23,7 +23,10 @@ export class CommandRegistry extends Context.Tag('CommandRegistry')<
 export const dispatchCommand = (
   wireCommand: ReadonlyDeep<WireCommand>
 ): Effect.Effect<CommandResult, never, CommandRegistry> =>
-  CommandRegistry.pipe(Effect.flatMap((registry) => registry.dispatch(wireCommand)));
+  pipe(
+    CommandRegistry,
+    Effect.flatMap((registry) => registry.dispatch(wireCommand))
+  );
 
 // ============================================================================
 // Command Registry with Effect Matchers
@@ -58,7 +61,8 @@ export const makeCommandRegistry = <
     command: ReadonlyDeep<CommandFromDefinitions<T>>,
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
-    matcher(command).pipe(
+    pipe(
+      matcher(command),
       Effect.exit,
       Effect.map((matcherResult) =>
         matcherResult._tag === 'Failure'
@@ -77,7 +81,9 @@ export const makeCommandRegistry = <
   const dispatch = (
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
-    Schema.decodeUnknown(commandSchema)(wireCommand).pipe(
+    pipe(
+      wireCommand,
+      Schema.decodeUnknown(commandSchema),
       Effect.either,
       Effect.flatMap((parseResult) => {
         if (parseResult._tag === 'Left') {
