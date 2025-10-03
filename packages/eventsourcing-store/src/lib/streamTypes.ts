@@ -28,7 +28,10 @@ export type StreamRef = typeof StreamRef.Type;
 
 // Helper functions
 export const beginning = (streamId: EventStreamId) =>
-  Schema.decode(EventStreamPosition)({
-    streamId,
-    eventNumber: 0,
-  });
+  pipe(
+    {
+      streamId,
+      eventNumber: 0,
+    },
+    Schema.decode(EventStreamPosition)
+  );
