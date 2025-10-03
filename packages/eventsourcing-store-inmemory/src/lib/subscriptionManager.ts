@@ -56,7 +56,7 @@ const createPubSubAndAddToMap = <T>(
     PubSub.bounded<T>(512),
     Effect.map((pubsub) => {
       const data = { pubsub, subscribers: 0 };
-      return HashMap.set(streamId, data)(subs);
+      return pipe(subs, HashMap.set(streamId, data));
     }),
     Effect.runSync
   );
@@ -65,7 +65,7 @@ const addSubscriptionIfMissing = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
   streamId: EventStreamId
 ) => {
-  const streamIdOption = HashMap.get(streamId)(subs);
+  const streamIdOption = pipe(subs, HashMap.get(streamId));
 
   return pipe(
     streamIdOption,
@@ -81,7 +81,8 @@ const extractSubscriptionData = <T>(
   streamId: EventStreamId
 ) =>
   pipe(
-    HashMap.get(streamId)(subscriptions),
+    subscriptions,
+    HashMap.get(streamId),
     Option.match({
       onNone: () =>
         Effect.fail(
