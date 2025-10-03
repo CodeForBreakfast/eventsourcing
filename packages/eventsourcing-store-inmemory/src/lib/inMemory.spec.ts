@@ -19,14 +19,13 @@ export const FooEventStoreTest = (store: InMemoryStore<FooEvent>) =>
     pipe(store, makeInMemoryEventStore, Effect.map(encodedEventStore(FooEvent)))
   );
 
+const makeFooEventStoreLayer = () =>
+  pipe(make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync);
+
 // Run the shared test suite for the in-memory implementation
 // Note: In-memory store doesn't support horizontal scaling since each instance has its own memory
 runEventStoreTestSuite(
   'In-memory',
-  () =>
-    pipe(
-      pipe(make<FooEvent>(), Effect.map(FooEventStoreTest), Effect.runSync),
-      Layer.provide(LoggerLive)
-    ),
+  () => pipe(makeFooEventStoreLayer(), Layer.provide(LoggerLive)),
   { supportsHorizontalScaling: false }
 );
