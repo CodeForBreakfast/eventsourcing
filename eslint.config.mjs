@@ -195,7 +195,10 @@ export default [
       '**/testing/**/*.ts',
     ],
     languageOptions: commonLanguageOptions,
-    plugins: commonPlugins,
+    plugins: {
+      ...commonPlugins,
+      functional: functionalPlugin,
+    },
     rules: {
       'no-restricted-imports': [
         'error',
@@ -214,6 +217,8 @@ export default [
       'functional/no-let': 'off',
       // Relax immutability for test data manipulation
       'functional/immutable-data': 'off',
+      // Enforce readonly arrays/tuples in tests
+      'functional/prefer-readonly-type': 'error',
     },
   },
   {
