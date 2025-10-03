@@ -94,20 +94,22 @@ const handleWireCommandMessage =
       payload: wireMessage.payload,
     });
 
+const updateSubscriptions = (state: ServerState, streamId: string, connectionId: string) =>
+  pipe(
+    HashMap.get(state.subscriptions, streamId),
+    Option.match({
+      onNone: () => HashMap.set(state.subscriptions, streamId, [connectionId]),
+      onSome: (existing) => HashMap.set(state.subscriptions, streamId, [...existing, connectionId]),
+    })
+  );
+
 const handleSubscribeMessage =
   (stateRef: Ref.Ref<ServerState>, connectionId: string) =>
   (wireMessage: ReadonlyDeep<SubscribeMessage>) =>
     pipe(
       Ref.update(stateRef, (state) => ({
         ...state,
-        subscriptions: pipe(
-          HashMap.get(state.subscriptions, wireMessage.streamId),
-          Option.match({
-            onNone: () => HashMap.set(state.subscriptions, wireMessage.streamId, [connectionId]),
-            onSome: (existing) =>
-              HashMap.set(state.subscriptions, wireMessage.streamId, [...existing, connectionId]),
-          })
-        ),
+        subscriptions: updateSubscriptions(state, wireMessage.streamId, connectionId),
       }))
     );
 
@@ -128,6 +130,24 @@ const processIncomingMessage =
       Effect.catchAll(() => Effect.void)
     );
 
+const buildResultMessage = (commandId: string, result: ReadonlyDeep<CommandResult>) =>
+  pipe(
+    Match.value(result),
+    Match.when({ _tag: 'Success' }, (res) => ({
+      type: 'command_result' as const,
+      commandId,
+      success: true,
+      position: res.position,
+    })),
+    Match.when({ _tag: 'Failure' }, (res) => ({
+      type: 'command_result' as const,
+      commandId,
+      success: false,
+      error: JSON.stringify(res.error),
+    })),
+    Match.exhaustive
+  );
+
 const createResultSender =
   (server: ReadonlyDeep<Server.Transport>) =>
   (
@@ -138,21 +158,7 @@ const createResultSender =
     pipe(
       currentTimestamp(),
       Effect.flatMap((timestamp) => {
-        const resultMessage: CommandResultMessage = Match.value(result).pipe(
-          Match.when({ _tag: 'Success' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: true,
-            position: res.position,
-          })),
-          Match.when({ _tag: 'Failure' }, (res) => ({
-            type: 'command_result' as const,
-            commandId,
-            success: false,
-            error: JSON.stringify(res.error),
-          })),
-          Match.exhaustive
-        );
+        const resultMessage: CommandResultMessage = buildResultMessage(commandId, result);
 
         return server.broadcast(
           makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
@@ -162,43 +168,95 @@ const createResultSender =
       })
     );
 
+const broadcastEventMessage = (
+  server: ReadonlyDeep<Server.Transport>,
+  event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
+) =>
+  pipe(
+    currentTimestamp(),
+    Effect.flatMap((timestamp) => {
+      const eventMessage: EventMessage = {
+        type: 'event',
+        streamId: String(event.streamId),
+        position: event.position,
+        eventType: event.type,
+        data: event.data,
+        timestamp: event.timestamp,
+      };
+
+      return server.broadcast(
+        makeTransportMessage(crypto.randomUUID(), 'event', JSON.stringify(eventMessage), {
+          timestamp: timestamp.toISOString(),
+        })
+      );
+    })
+  );
+
+const matchSubscribedConnections = (
+  server: ReadonlyDeep<Server.Transport>,
+  event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
+  state: ServerState
+) =>
+  pipe(
+    HashMap.get(state.subscriptions, String(event.streamId)),
+    Option.match({
+      onNone: () => Effect.void,
+      onSome: (_connectionIds) => broadcastEventMessage(server, event),
+    })
+  );
+
 const createEventPublisher =
   (server: ReadonlyDeep<Server.Transport>, stateRef: Ref.Ref<ServerState>) =>
   (event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>) =>
     pipe(
       Ref.get(stateRef),
-      Effect.flatMap((state) =>
-        pipe(
-          HashMap.get(state.subscriptions, String(event.streamId)),
-          Option.match({
-            onNone: () => Effect.void,
-            onSome: (_connectionIds) =>
-              pipe(
-                currentTimestamp(),
-                Effect.flatMap((timestamp) => {
-                  const eventMessage: EventMessage = {
-                    type: 'event',
-                    streamId: String(event.streamId),
-                    position: event.position,
-                    eventType: event.type,
-                    data: event.data,
-                    timestamp: event.timestamp,
-                  };
+      Effect.flatMap((state) => matchSubscribedConnections(server, event, state))
+    );
 
-                  return server.broadcast(
-                    makeTransportMessage(
-                      crypto.randomUUID(),
-                      'event',
-                      JSON.stringify(eventMessage),
-                      { timestamp: timestamp.toISOString() }
-                    )
-                  );
-                })
-              ),
-          })
+const processConnectionMessages = (
+  commandQueue: Queue.Queue<WireCommand>,
+  stateRef: Ref.Ref<ServerState>,
+  connection: Server.ClientConnection
+) =>
+  pipe(
+    connection.transport.subscribe(),
+    Effect.flatMap((messageStream) =>
+      Effect.forkScoped(
+        Stream.runForEach(
+          messageStream,
+          processIncomingMessage(commandQueue, stateRef, connection.clientId)
         )
       )
-    );
+    ),
+    Effect.flatMap(() =>
+      Effect.addFinalizer(() =>
+        Ref.update(stateRef, (state) => ({
+          ...state,
+          subscriptions: HashMap.map(state.subscriptions, (connectionIds) =>
+            connectionIds.filter((id) => id !== connection.clientId)
+          ),
+        }))
+      )
+    )
+  );
+
+const startConnectionHandler = (
+  server: ReadonlyDeep<Server.Transport>,
+  commandQueue: Queue.Queue<WireCommand>,
+  stateRef: Ref.Ref<ServerState>
+) =>
+  pipe(
+    server.connections,
+    Stream.runForEach((connection) =>
+      processConnectionMessages(commandQueue, stateRef, connection)
+    ),
+    Effect.forkScoped,
+    Effect.as({
+      onWireCommand: Stream.fromQueue(commandQueue),
+      sendResult: createResultSender(server),
+      publishEvent: createEventPublisher(server, stateRef),
+    })
+  );
 
 const createServerProtocolService = (
   server: ReadonlyDeep<Server.Transport>
@@ -211,38 +269,7 @@ const createServerProtocolService = (
       }),
     ]),
     Effect.flatMap(([commandQueue, stateRef]) =>
-      pipe(
-        server.connections,
-        Stream.runForEach((connection) =>
-          pipe(
-            connection.transport.subscribe(),
-            Effect.flatMap((messageStream) =>
-              Effect.forkScoped(
-                Stream.runForEach(
-                  messageStream,
-                  processIncomingMessage(commandQueue, stateRef, connection.clientId)
-                )
-              )
-            ),
-            Effect.flatMap(() =>
-              Effect.addFinalizer(() =>
-                Ref.update(stateRef, (state) => ({
-                  ...state,
-                  subscriptions: HashMap.map(state.subscriptions, (connectionIds) =>
-                    connectionIds.filter((id) => id !== connection.clientId)
-                  ),
-                }))
-              )
-            )
-          )
-        ),
-        Effect.forkScoped,
-        Effect.as({
-          onWireCommand: Stream.fromQueue(commandQueue),
-          sendResult: createResultSender(server),
-          publishEvent: createEventPublisher(server, stateRef),
-        })
-      )
+      startConnectionHandler(server, commandQueue, stateRef)
     )
   );
 

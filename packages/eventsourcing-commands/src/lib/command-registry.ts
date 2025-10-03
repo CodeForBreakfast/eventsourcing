@@ -1,4 +1,4 @@
-import { Schema, Context, Effect, pipe, Layer, Match } from 'effect';
+import { Schema, Context, Effect, Layer, Match, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,
@@ -57,12 +57,33 @@ export const makeCommandRegistry = <
   // Extract command names for the registry interface
   const commandNames = commands.map((cmd) => cmd.name);
 
+  const executeMatcherWithErrorHandling = (
+    command: ReadonlyDeep<CommandFromDefinitions<T>>,
+    wireCommand: ReadonlyDeep<WireCommand>
+  ): Effect.Effect<CommandResult, never, never> =>
+    pipe(
+      matcher(command),
+      Effect.exit,
+      Effect.map((matcherResult) =>
+        matcherResult._tag === 'Failure'
+          ? {
+              _tag: 'Failure' as const,
+              error: {
+                _tag: 'UnknownError' as const,
+                commandId: wireCommand.id,
+                message: String(matcherResult.cause),
+              },
+            }
+          : matcherResult.value
+      )
+    );
+
   const dispatch = (
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
     pipe(
-      // Parse the entire command with the exhaustive schema
-      Schema.decodeUnknown(commandSchema)(wireCommand),
+      wireCommand,
+      Schema.decodeUnknown(commandSchema),
       Effect.either,
       Effect.flatMap((parseResult) => {
         if (parseResult._tag === 'Left') {
@@ -79,21 +100,9 @@ export const makeCommandRegistry = <
         }
 
         // Execute the matcher with exact command type - it handles all the dispatch logic
-        return pipe(
-          matcher(parseResult.right as ReadonlyDeep<CommandFromDefinitions<T>>),
-          Effect.exit,
-          Effect.map((matcherResult) =>
-            matcherResult._tag === 'Failure'
-              ? {
-                  _tag: 'Failure' as const,
-                  error: {
-                    _tag: 'UnknownError' as const,
-                    commandId: wireCommand.id,
-                    message: String(matcherResult.cause),
-                  },
-                }
-              : matcherResult.value
-          )
+        return executeMatcherWithErrorHandling(
+          parseResult.right as ReadonlyDeep<CommandFromDefinitions<T>>,
+          wireCommand
         );
       })
     );

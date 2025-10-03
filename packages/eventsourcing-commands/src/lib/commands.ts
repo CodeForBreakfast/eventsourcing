@@ -1,4 +1,4 @@
-import { Schema, Data, pipe, Effect } from 'effect';
+import { Schema, Data, Effect, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 
@@ -208,7 +208,8 @@ export const validateCommand =
   <TPayload, TPayloadInput>(payloadSchema: Schema.Schema<TPayload, TPayloadInput>) =>
   (wireCommand: ReadonlyDeep<WireCommand>) =>
     pipe(
-      Schema.decodeUnknown(payloadSchema)(wireCommand.payload),
+      wireCommand.payload,
+      Schema.decodeUnknown(payloadSchema),
       Effect.mapError(
         (parseError) =>
           new CommandValidationError({

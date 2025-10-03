@@ -4,12 +4,11 @@ import { Schema, pipe } from 'effect';
 export const EventStreamId = pipe(
   Schema.String,
   Schema.nonEmptyString(),
-  Schema.brand('EventStreamId'),
+  Schema.brand('EventStreamId')
 );
 export type EventStreamId = typeof EventStreamId.Type;
 
-export const toStreamId = (id: string) =>
-  pipe(id, Schema.decode(EventStreamId));
+export const toStreamId = (id: string) => pipe(id, Schema.decode(EventStreamId));
 
 export const EventNumber = pipe(Schema.Number, Schema.nonNegative());
 export type EventNumber = typeof EventNumber.Type;
@@ -34,5 +33,5 @@ export const beginning = (streamId: EventStreamId) =>
       streamId,
       eventNumber: 0,
     },
-    Schema.decode(EventStreamPosition),
+    Schema.decode(EventStreamPosition)
   );

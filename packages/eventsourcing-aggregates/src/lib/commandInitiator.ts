@@ -1,7 +1,7 @@
-import { Context, Effect, Layer, Option, Schema } from 'effect';
+import { Context, Effect, Layer, Option, pipe, Schema } from 'effect';
 
 // Mock PersonId for now - replace with actual implementation
-const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
+const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
 import { CurrentUserError } from './currentUser';
 

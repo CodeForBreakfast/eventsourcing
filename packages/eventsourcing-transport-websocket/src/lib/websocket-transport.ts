@@ -13,10 +13,11 @@ import {
   Ref,
   Queue,
   PubSub,
-  pipe,
   Layer,
   Deferred,
   HashSet,
+  Fiber,
+  pipe,
 } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
@@ -46,25 +47,42 @@ interface InternalTransport extends Client.Transport {
 // Pure Functions for ConnectedTransport
 // =============================================================================
 
+const subscribeToConnectionPubSub = (state: Readonly<WebSocketInternalState>) =>
+  pipe(
+    PubSub.subscribe(state.connectionStatePubSub),
+    Effect.map((queue) =>
+      Stream.concat(Stream.succeed(state.connectionState), Stream.fromQueue(queue))
+    )
+  );
+
 const createConnectionStateStream = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
 ): Readonly<Stream.Stream<ConnectionState, never, never>> =>
   Stream.unwrapScoped(
-    pipe(
-      Ref.get(stateRef),
-      Effect.flatMap((state) =>
-        pipe(
-          // Subscribe to future updates
-          PubSub.subscribe(state.connectionStatePubSub),
-          Effect.map((queue) =>
-            // Provide current state first, then future updates
-            Stream.concat(Stream.succeed(state.connectionState), Stream.fromQueue(queue))
-          )
-        )
-      ),
-      Effect.orDie
-    )
+    pipe(Ref.get(stateRef), Effect.flatMap(subscribeToConnectionPubSub), Effect.orDie)
   );
+
+const sendSerializedMessage =
+  (writer: (data: string) => Effect.Effect<void, Socket.SocketError>) =>
+  (serialized: Readonly<string>) =>
+    pipe(
+      writer(serialized),
+      Effect.mapError(
+        (error) =>
+          new TransportError({
+            message: 'Failed to send message through WebSocket',
+            cause: error,
+          })
+      )
+    );
+
+const serializeAndSend =
+  (writer: (data: string) => Effect.Effect<void, Socket.SocketError>) =>
+  (message: Readonly<TransportMessage>) =>
+    pipe(
+      Effect.sync(() => JSON.stringify(message)),
+      Effect.flatMap(sendSerializedMessage(writer))
+    );
 
 const publishMessage =
   (
@@ -83,21 +101,16 @@ const publishMessage =
           );
         }
 
-        return pipe(
-          Effect.sync(() => JSON.stringify(message)),
-          Effect.flatMap((serialized) =>
-            writer(serialized).pipe(
-              Effect.mapError(
-                (error) =>
-                  new TransportError({
-                    message: 'Failed to send message through WebSocket',
-                    cause: error,
-                  })
-              )
-            )
-          )
-        );
+        return serializeAndSend(writer)(message);
       })
+    );
+
+const applyFilterSafely =
+  (filter: (message: Readonly<TransportMessage>) => boolean) => (msg: Readonly<TransportMessage>) =>
+    pipe(
+      Effect.sync(() => filter(msg)),
+      Effect.catchAll(() => Effect.succeed(false)),
+      Effect.runSync
     );
 
 const subscribeToMessages =
@@ -116,15 +129,7 @@ const subscribeToMessages =
       Effect.map((queue) => {
         const baseStream = Stream.fromQueue(queue);
 
-        return filter
-          ? Stream.filter(baseStream, (msg) =>
-              pipe(
-                Effect.sync(() => filter(msg)),
-                Effect.catchAll(() => Effect.succeed(false)),
-                Effect.runSync
-              )
-            )
-          : baseStream;
+        return filter ? Stream.filter(baseStream, applyFilterSafely(filter)) : baseStream;
       })
     );
 
@@ -155,6 +160,20 @@ const updateConnectionState = (
     Effect.flatMap((state) => PubSub.publish(state.connectionStatePubSub, newState))
   );
 
+const distributeMessageToSubscribers = (
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  message: TransportMessage
+) =>
+  pipe(
+    Ref.get(stateRef),
+    Effect.flatMap((state) =>
+      Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, message), {
+        discard: true,
+      })
+    ),
+    Effect.asVoid
+  );
+
 const handleIncomingMessage = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
   data: Readonly<Uint8Array>
@@ -171,15 +190,7 @@ const handleIncomingMessage = (
     Effect.flatMap((result) =>
       result._tag === 'error'
         ? Effect.void
-        : pipe(
-            Ref.get(stateRef),
-            Effect.flatMap((state) =>
-              Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, result.message), {
-                discard: true,
-              })
-            ),
-            Effect.asVoid
-          )
+        : distributeMessageToSubscribers(stateRef, result.message)
     )
   );
 
@@ -240,6 +251,145 @@ const cleanupConnection = (
     Effect.asVoid
   );
 
+const failDeferredAndUpdateState = (
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  connectionError: Readonly<ConnectionError>
+) =>
+  pipe(
+    Deferred.fail(connectedDeferred, connectionError),
+    Effect.flatMap(() => updateConnectionState(stateRef, 'error'))
+  );
+
+const handleSocketError =
+  (
+    connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+    stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+    url: Readonly<string>
+  ) =>
+  (error: Readonly<Socket.SocketError>) =>
+    pipe(
+      Deferred.isDone(connectedDeferred),
+      Effect.flatMap((wasConnected) => {
+        if (!wasConnected) {
+          const connectionError = new ConnectionError({
+            message: 'WebSocket connection failed',
+            url,
+            cause: error,
+          });
+          return failDeferredAndUpdateState(connectedDeferred, stateRef, connectionError);
+        }
+        if (Socket.SocketCloseError.is(error)) {
+          return updateConnectionState(stateRef, 'disconnected');
+        }
+        return updateConnectionState(stateRef, 'error');
+      })
+    );
+
+const monitorSocketFiber =
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
+  (fiber: Fiber.RuntimeFiber<void, never>) =>
+    pipe(
+      Fiber.await(fiber),
+      Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
+      Effect.forkScoped
+    );
+
+const handleOnOpen = (
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  connectedDeferred: Deferred.Deferred<void, ConnectionError>
+) =>
+  pipe(
+    updateConnectionState(stateRef, 'connected'),
+    Effect.flatMap(() => Deferred.succeed(connectedDeferred, void 0))
+  );
+
+const runSocketWithErrorHandling = (
+  socket: Readonly<Socket.Socket>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+  url: Readonly<string>
+) =>
+  pipe(
+    socket.run((data: Readonly<Uint8Array>) => handleIncomingMessage(stateRef, data), {
+      onOpen: handleOnOpen(stateRef, connectedDeferred),
+    }),
+    Effect.catchAll(handleSocketError(connectedDeferred, stateRef, url)),
+    Effect.forkScoped,
+    Effect.tap(monitorSocketFiber(stateRef))
+  );
+
+const awaitConnectionWithTimeout = (
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+  url: Readonly<string>
+) =>
+  pipe(
+    Deferred.await(connectedDeferred),
+    Effect.timeoutFail({
+      duration: 3000,
+      onTimeout: () =>
+        new ConnectionError({
+          message: 'WebSocket connection timeout',
+          url,
+        }),
+    })
+  );
+
+const startSocketAndWaitForConnection = (
+  socket: Readonly<Socket.Socket>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>,
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+  url: Readonly<string>
+) =>
+  pipe(
+    Effect.all({
+      fiber: runSocketWithErrorHandling(socket, stateRef, connectedDeferred, url),
+      _: awaitConnectionWithTimeout(connectedDeferred, url),
+    }),
+    Effect.map(() => createConnectedTransport(stateRef, writerRef))
+  );
+
+const setupSocketWriter =
+  (
+    writerRef: Readonly<
+      Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>
+    >,
+    stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+    connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+    url: Readonly<string>
+  ) =>
+  (socket: Readonly<Socket.Socket>) =>
+    pipe(
+      socket.writer,
+      Effect.tap((writer) => Ref.set(writerRef, (data: string) => writer(data))),
+      Effect.flatMap(() =>
+        startSocketAndWaitForConnection(socket, stateRef, writerRef, connectedDeferred, url)
+      )
+    );
+
+const createWebSocketConnectionWithProvider = (
+  url: Readonly<string>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
+) =>
+  pipe(
+    createWebSocketConnection(url, stateRef),
+    Effect.provide(Socket.layerWebSocketConstructorGlobal)
+  );
+
+const acquireWebSocketConnection = (
+  url: Readonly<string>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>,
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>
+) =>
+  pipe(
+    Effect.acquireRelease(createWebSocketConnectionWithProvider(url, stateRef), () =>
+      cleanupConnection(stateRef, writerRef)
+    ),
+    Effect.flatMap(setupSocketWriter(writerRef, stateRef, connectedDeferred, url))
+  );
+
 const connectWebSocket = (
   url: Readonly<string>
 ): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope> =>
@@ -251,82 +401,9 @@ const connectWebSocket = (
     }),
     Effect.tap(({ stateRef }) => updateConnectionState(stateRef, 'connecting')),
     Effect.flatMap(({ stateRef, writerRef, connectedDeferred }) =>
-      pipe(
-        Effect.acquireRelease(
-          pipe(
-            createWebSocketConnection(url, stateRef),
-            Effect.provide(Socket.layerWebSocketConstructorGlobal)
-          ),
-          () => cleanupConnection(stateRef, writerRef)
-        ),
-        Effect.flatMap((socket) =>
-          pipe(
-            socket.writer,
-            Effect.tap((writer) => Ref.set(writerRef, (data: string) => writer(data))),
-            Effect.flatMap(() =>
-              pipe(
-                Effect.all({
-                  fiber: socket
-                    .run((data: Readonly<Uint8Array>) => handleIncomingMessage(stateRef, data), {
-                      onOpen: pipe(
-                        updateConnectionState(stateRef, 'connected'),
-                        Effect.flatMap(() => Deferred.succeed(connectedDeferred, void 0))
-                      ),
-                    })
-                    .pipe(
-                      Effect.catchAll((error) =>
-                        pipe(
-                          Deferred.isDone(connectedDeferred),
-                          Effect.flatMap((wasConnected) => {
-                            if (!wasConnected) {
-                              // Connection failed during initial setup
-                              const connectionError = new ConnectionError({
-                                message: 'WebSocket connection failed',
-                                url,
-                                cause: error,
-                              });
-                              return pipe(
-                                Deferred.fail(connectedDeferred, connectionError),
-                                Effect.flatMap(() => updateConnectionState(stateRef, 'error'))
-                              );
-                            }
-                            // Connection was established but then closed/errored
-                            if (Socket.SocketCloseError.is(error)) {
-                              return updateConnectionState(stateRef, 'disconnected');
-                            }
-                            return updateConnectionState(stateRef, 'error');
-                          })
-                        )
-                      ),
-                      Effect.forkScoped,
-                      Effect.tap((fiber) =>
-                        // Monitor the fiber - when it completes, the socket has closed
-                        pipe(
-                          fiber.await,
-                          Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
-                          Effect.forkScoped
-                        )
-                      )
-                    ),
-                  // Wait for connection to be established (or fail) with timeout
-                  _: Deferred.await(connectedDeferred).pipe(
-                    Effect.timeoutFail({
-                      duration: 3000,
-                      onTimeout: () =>
-                        new ConnectionError({
-                          message: 'WebSocket connection timeout',
-                          url,
-                        }),
-                    })
-                  ),
-                }),
-                Effect.map(() => createConnectedTransport(stateRef, writerRef))
-              )
-            )
-          )
-        )
-      )
-    )
+      acquireWebSocketConnection(url, stateRef, writerRef, connectedDeferred)
+    ),
+    Effect.map((transport): Client.Transport => transport)
   );
 
 // =============================================================================

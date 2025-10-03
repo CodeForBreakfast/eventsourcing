@@ -1,7 +1,23 @@
-import { Effect, ParseResult, Schema, Sink, Stream, pipe } from 'effect';
+import { Effect, ParseResult, pipe, Schema, Sink, Stream } from 'effect';
 import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './streamTypes';
 import type { EventStore } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
+
+const countEventsAndCreatePosition =
+  (streamId: EventStreamId) => (stream: Stream.Stream<unknown, unknown>) =>
+    Effect.flatMap(
+      Effect.map(Stream.runCount(stream), (count) => ({
+        streamId,
+        eventNumber: count,
+      })),
+      Schema.decode(EventStreamPosition)
+    );
+
+const readAndCountEvents = <TEvent>(
+  eventStore: EventStore<TEvent>,
+  streamId: EventStreamId,
+  startPos: EventStreamPosition
+) => Effect.flatMap(eventStore.read(startPos), countEventsAndCreatePosition(streamId));
 
 /**
  * Gets the current end position of a stream
@@ -22,24 +38,8 @@ import { EventStoreError, ConcurrencyConflictError } from './errors';
 export const currentEnd =
   <TEvent>(eventStore: EventStore<TEvent>) =>
   (streamId: EventStreamId) =>
-    pipe(
-      beginning(streamId),
-      Effect.flatMap((startPos) =>
-        pipe(
-          eventStore.read(startPos), // Use read for historical events only
-          Effect.flatMap((stream) =>
-            pipe(
-              stream,
-              Stream.runCount,
-              Effect.map((count) => ({
-                streamId,
-                eventNumber: count,
-              })),
-              Effect.flatMap(Schema.decode(EventStreamPosition))
-            )
-          )
-        )
-      )
+    Effect.flatMap(beginning(streamId), (startPos) =>
+      readAndCountEvents(eventStore, streamId, startPos)
     );
 
 /**
@@ -74,6 +74,45 @@ export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 
+const decodeEvent = <A, I>(schema: Schema.Schema<A, I>, event: I) =>
+  pipe(event, Schema.decode(schema));
+
+const decodeStreamEvents = <A, I>(
+  schema: Schema.Schema<A, I>,
+  stream: Stream.Stream<I, ParseResult.ParseError | EventStoreError>
+): Stream.Stream<A, ParseResult.ParseError | EventStoreError> =>
+  pipe(
+    stream,
+    Stream.flatMap((event: I) => decodeEvent(schema, event))
+  );
+
+const readAndDecodeEvents = <A, I>(
+  schema: Schema.Schema<A, I>,
+  eventstore: Readonly<EventStore<I>>,
+  from: EventStreamPosition
+) => Effect.map(eventstore.read(from), (stream) => decodeStreamEvents(schema, stream));
+
+const subscribeAndDecodeEvents = <A, I>(
+  schema: Schema.Schema<A, I>,
+  eventstore: Readonly<EventStore<I>>,
+  from: EventStreamPosition
+) => Effect.map(eventstore.subscribe(from), (stream) => decodeStreamEvents(schema, stream));
+
+const createEncodingSink = <A, I>(
+  schema: Schema.Schema<A, I>,
+  originalSink: Sink.Sink<
+    EventStreamPosition,
+    I,
+    I,
+    ConcurrencyConflictError | ParseResult.ParseError | EventStoreError
+  >
+) => {
+  type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
+  return Sink.mapInputEffect(originalSink, (a: A) =>
+    pipe(a, Schema.encode(schema))
+  ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
+};
+
 /**
  * Creates an event store that encodes/decodes events using a schema
  *
@@ -98,36 +137,9 @@ export { ConcurrencyConflictError } from './errors';
  */
 export const encodedEventStore =
   <A, I>(schema: Schema.Schema<A, I>) =>
-  (eventstore: Readonly<EventStore<I>>): EventStore<A> =>
-    pipe(eventstore, (eventstore) => ({
-      append: (toPosition: EventStreamPosition) => {
-        // Define the expected error type
-        type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
-
-        // Get a new sink by creating a type-safe transformation pipeline
-        const originalSink = eventstore.append(toPosition);
-
-        // Use mapInputEffect to handle input transformation
-        return pipe(
-          originalSink,
-          // The simplest solution is to use the correct typings and cast
-          Sink.mapInputEffect((a: A) => Schema.encode(schema)(a))
-        ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
-      },
-      read: (from: EventStreamPosition) =>
-        pipe(
-          from,
-          eventstore.read,
-          Effect.map((stream) =>
-            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
-          )
-        ),
-      subscribe: (from: EventStreamPosition) =>
-        pipe(
-          from,
-          eventstore.subscribe,
-          Effect.map((stream) =>
-            Stream.flatMap((event: I) => pipe(event, Schema.decode(schema)))(stream)
-          )
-        ),
-    }));
+  (eventstore: Readonly<EventStore<I>>): EventStore<A> => ({
+    append: (toPosition: EventStreamPosition) =>
+      createEncodingSink(schema, eventstore.append(toPosition)),
+    read: (from: EventStreamPosition) => readAndDecodeEvents(schema, eventstore, from),
+    subscribe: (from: EventStreamPosition) => subscribeAndDecodeEvents(schema, eventstore, from),
+  });

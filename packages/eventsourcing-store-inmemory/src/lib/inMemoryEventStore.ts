@@ -13,53 +13,66 @@ export interface SubscribableEventStore<T> extends EventStore<T> {
   ) => Effect.Effect<Stream.Stream<T, never>, EventStoreError, Scope.Scope>;
 }
 
+const dropEventsFromStream = <T>(stream: Readonly<Stream.Stream<T, never, never>>, count: number) =>
+  pipe(stream, Stream.drop(count));
+
+const readHistoricalEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
+  pipe(
+    from.streamId,
+    store.getHistorical,
+    Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
+      dropEventsFromStream(stream, from.eventNumber)
+    )
+  );
+
+const readAllEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
+  pipe(
+    from.streamId,
+    store.get,
+    Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
+      dropEventsFromStream(stream, from.eventNumber)
+    )
+  );
+
+const subscribeToStreamWithError = <T>(
+  store: InMemoryStore<T>,
+  streamId: EventStreamPosition['streamId']
+) =>
+  pipe(
+    store.get(streamId),
+    Effect.mapError((error) =>
+      eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`, error)
+    )
+  );
+
+const appendChunkToStore =
+  <T>(store: InMemoryStore<T>) =>
+  (end: EventStreamPosition, chunk: Chunk.Chunk<T>) =>
+    pipe(chunk, store.append(end));
+
 export const makeInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
     append: (to: EventStreamPosition) =>
-      Sink.foldChunksEffect(
-        to,
-        () => true,
-        (end, chunk: Chunk.Chunk<T>) => pipe(chunk, store.append(end))
-      ),
-    read: (from: EventStreamPosition) =>
-      // Read returns only historical events, no live updates
-      pipe(
-        from.streamId,
-        store.getHistorical,
-        Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-          pipe(stream, Stream.drop(from.eventNumber))
-        )
-      ),
-    subscribe: (from: EventStreamPosition) =>
-      // Subscribe returns historical events + live updates
-      pipe(
-        from.streamId,
-        store.get, // Use get() which returns both historical and live events
-        Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-          pipe(stream, Stream.drop(from.eventNumber))
-        )
-      ),
+      Sink.foldChunksEffect(to, () => true, appendChunkToStore(store)),
+    read: (from: EventStreamPosition) => readHistoricalEvents(store, from),
+    subscribe: (from: EventStreamPosition) => readAllEvents(store, from),
   });
+
+const addSubscribeMethod = <T>(
+  baseStore: EventStore<T>,
+  store: InMemoryStore<T>
+): SubscribableEventStore<T> => ({
+  ...baseStore,
+  subscribeToStream: (streamId: EventStreamPosition['streamId']) =>
+    subscribeToStreamWithError(store, streamId),
+});
 
 export const makeSubscribableInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<SubscribableEventStore<T>, never, never> =>
   pipe(
     makeInMemoryEventStore(store),
-    Effect.map((baseStore) => ({
-      ...baseStore,
-      subscribeToStream: (streamId: EventStreamPosition['streamId']) =>
-        pipe(
-          store.get(streamId),
-          Effect.mapError((error) =>
-            eventStoreError.subscribe(
-              streamId,
-              `Failed to subscribe to stream: ${String(error)}`,
-              error
-            )
-          )
-        ),
-    }))
+    Effect.map((baseStore) => addSubscribeMethod(baseStore, store))
   );

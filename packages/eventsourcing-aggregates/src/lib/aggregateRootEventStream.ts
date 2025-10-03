@@ -12,14 +12,14 @@ import {
   Effect,
   Option,
   ParseResult,
+  Ref,
   Schema,
-  Sink,
   Stream,
   pipe,
 } from 'effect';
 
 // Mock PersonId for now - replace with actual implementation
-const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
+const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
 import { CommandContext } from './commandInitiator';
 
@@ -91,27 +91,133 @@ export interface CommitOptions {
  * @throws {ConcurrencyConflictError} If the event number doesn't match the stream position
  * @throws {EventStoreError} If writing to the store fails
  */
+const createStreamPosition = (
+  streamId: EventStreamPosition['streamId'],
+  eventNumber: EventNumber
+) => pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
+
+const writeEventsToPosition =
+  <TEvent>(events: Chunk.Chunk<TEvent>, position: EventStreamPosition) =>
+  (eventstore: EventStore<TEvent>) =>
+    pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
+
+const commitToEventStore =
+  <TEvent>(id: string, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
+  (eventstore: EventStore<TEvent>) =>
+    pipe(
+      id,
+      toStreamId,
+      Effect.flatMap((streamId) => createStreamPosition(streamId, eventNumber)),
+      Effect.flatMap((position) => writeEventsToPosition(events, position)(eventstore))
+    );
+
 const commit =
   <TEvent, TTag>(eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>) =>
   (options: CommitOptions) =>
     pipe(
       eventstoreTag,
-      Effect.flatMap((eventstore) =>
-        pipe(
-          options.id,
-          toStreamId,
-          Effect.flatMap((streamId) =>
-            pipe({ streamId, eventNumber: options.eventNumber }, Schema.decode(EventStreamPosition))
-          ),
-          Effect.flatMap((position) =>
-            pipe(
-              options.events as Chunk.Chunk<TEvent>,
-              Stream.fromChunk,
-              Stream.run(eventstore.append(position))
-            )
-          )
-        )
+      Effect.flatMap(
+        commitToEventStore(options.id, options.eventNumber, options.events as Chunk.Chunk<TEvent>)
       )
+    );
+
+const updateStateWithEvent =
+  <TState>(newState: TState) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
+    pipe(
+      stateRef,
+      Ref.update(() => ({
+        nextEventNumber: 0,
+        data: Option.some(newState),
+      }))
+    );
+
+const applyAndUpdateState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    before: Readonly<Option.Option<TState>>,
+    event: Readonly<TEvent>
+  ) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
+    pipe(
+      event,
+      apply(before),
+      Effect.flatMap((newState) => updateStateWithEvent(newState)(stateRef))
+    );
+
+const applyEventToState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    event: Readonly<TEvent>
+  ) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
+    pipe(
+      stateRef,
+      Ref.get,
+      Effect.flatMap(({ data: before }) => applyAndUpdateState(apply, before, event)(stateRef))
+    );
+
+const foldEventsIntoState =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+    stream: Stream.Stream<TEvent, unknown>
+  ) =>
+  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
+    pipe(
+      stream,
+      Stream.runForEach((event) => applyEventToState(apply, event)(stateRef)),
+      Effect.flatMap(() => Ref.get(stateRef))
+    );
+
+const processEventStream = <TState, TEvent>(
+  apply: (
+    state: Readonly<Option.Option<TState>>
+  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+  stream: Stream.Stream<TEvent, unknown>
+) =>
+  pipe(
+    Ref.make({ nextEventNumber: 0, data: Option.none<TState>() }),
+    Effect.flatMap(foldEventsIntoState(apply, stream))
+  );
+
+const decodeEventNumber = (
+  nextEventNumber: Readonly<number>,
+  data: Readonly<Option.Option<unknown>>
+) =>
+  pipe(
+    nextEventNumber,
+    Schema.decode(EventNumber),
+    Effect.map(
+      (decodedEventNumber: EventNumber) => ({ nextEventNumber: decodedEventNumber, data }) as const
+    )
+  );
+
+const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
+  pipe(
+    id,
+    toStreamId,
+    Effect.flatMap(beginning),
+    Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position))
+  );
+
+const loadAggregateState =
+  <TState, TEvent>(
+    id: string,
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
+  ) =>
+  (eventStore: EventStore<TEvent>) =>
+    pipe(
+      loadStreamEvents(eventStore, id),
+      Effect.flatMap((stream) => processEventStream(apply, stream)),
+      Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
     );
 
 /**
@@ -165,56 +271,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
     nextEventNumber: 0,
     data: Option.none(),
   }),
-  load: (id: string) =>
-    pipe(
-      tag,
-      Effect.flatMap((eventStore) =>
-        pipe(
-          // Create a read-only aggregate loader using the eventStore
-          id,
-          toStreamId,
-          Effect.flatMap(beginning),
-          Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position)),
-          Effect.flatMap((stream) =>
-            pipe(
-              stream,
-              Stream.run(
-                Sink.foldLeftEffect(
-                  { nextEventNumber: 0, data: Option.none<TState>() },
-                  ({ nextEventNumber, data: before }, event) =>
-                    pipe(
-                      event,
-                      apply(before),
-                      Effect.map(Option.some),
-                      Effect.map((after) => ({
-                        nextEventNumber: nextEventNumber + 1,
-                        data: after,
-                      }))
-                    )
-                )
-              )
-            )
-          ),
-          Effect.flatMap(
-            ({
-              nextEventNumber,
-              data,
-            }: Readonly<{
-              readonly nextEventNumber: number;
-              readonly data: Option.Option<TState>;
-            }>) =>
-              pipe(
-                nextEventNumber,
-                Schema.decode(EventNumber),
-                Effect.map(
-                  (decodedEventNumber: EventNumber) =>
-                    ({ nextEventNumber: decodedEventNumber, data }) as const
-                )
-              )
-          )
-        )
-      )
-    ),
+  load: (id: string) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
   commit: commit<TEvent, TTag>(tag),
   commands,
 });
@@ -225,6 +282,17 @@ export const EventMetadata = Schema.Struct({
   occurredAt: Schema.ValidDateFromSelf,
 });
 export type EventMetadata = typeof EventMetadata.Type;
+
+const createMetadataFromInitiator = (currentTime: number) => (initiatorId: unknown) => ({
+  occurredAt: new Date(currentTime),
+  originator: initiatorId,
+});
+
+const getInitiatorId = (currentTime: number) => (commandContext: typeof CommandContext.Service) =>
+  pipe(commandContext.getInitiatorId, Effect.map(createMetadataFromInitiator(currentTime)));
+
+const getMetadataFromContext = (currentTime: number) =>
+  pipe(CommandContext, Effect.flatMap(getInitiatorId(currentTime)));
 
 /**
  * Creates event metadata with timestamp and originator information
@@ -241,23 +309,7 @@ export type EventMetadata = typeof EventMetadata.Type;
  * @throws {NoSuchElementException} If CommandContext is not available
  */
 export const eventMetadata = () =>
-  pipe(
-    Clock.currentTimeMillis,
-    Effect.flatMap((currentTime) =>
-      pipe(
-        CommandContext,
-        Effect.flatMap((commandContext) =>
-          pipe(
-            commandContext.getInitiatorId,
-            Effect.map((initiatorId) => ({
-              occurredAt: new Date(currentTime),
-              originator: initiatorId,
-            }))
-          )
-        )
-      )
-    )
-  );
+  pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext));
 
 /**
  * Creates a schema for domain events with type, metadata, and data fields

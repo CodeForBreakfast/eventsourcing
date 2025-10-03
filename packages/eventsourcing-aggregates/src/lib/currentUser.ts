@@ -1,8 +1,7 @@
 // Mock PersonId for now - replace with actual implementation
-import { Schema } from 'effect';
-const PersonId = Schema.String.pipe(Schema.brand('PersonId'));
+import { Context, Data, Option, pipe, Schema } from 'effect';
+const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
 type PersonId = typeof PersonId.Type;
-import { Context, Data, Option } from 'effect';
 
 export class CurrentUserError extends Data.TaggedError('CurrentUserError')<{
   readonly message: string;

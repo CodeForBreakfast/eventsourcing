@@ -54,6 +54,42 @@ const createListenConnection = pipe(
   )
 );
 
+const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
+  pipe(
+    Effect.succeed(listenConnection),
+    Effect.flatMap((client) =>
+      Effect.tryPromise({
+        try: () => (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
+        catch: (error) => error,
+      })
+    ),
+    Effect.tap(() => Effect.logDebug('PostgreSQL notification listener health check passed')),
+    Effect.tapError((error) =>
+      Effect.logError('PostgreSQL notification listener health check failed', { error })
+    ),
+    Effect.mapError((error) =>
+      connectionError.retryable('health check notification listener', error)
+    ),
+    Effect.as(undefined)
+  );
+
+const executeShutdown = (listenConnection: PgClient.PgClient) =>
+  pipe(
+    Effect.succeed(listenConnection),
+    Effect.flatMap((client) =>
+      Effect.tryPromise({
+        try: () => (client as PgClientWithQuery).end(),
+        catch: (error) => error,
+      })
+    ),
+    Effect.tap(() => Effect.logInfo('PostgreSQL notification listener connection closed')),
+    Effect.tapError((error) =>
+      Effect.logError('Failed to close PostgreSQL notification listener connection', { error })
+    ),
+    Effect.mapError((error) => connectionError.fatal('shutdown notification listener', error)),
+    Effect.as(undefined)
+  );
+
 /**
  * Implementation of ConnectionManager service
  */
@@ -63,43 +99,17 @@ export const ConnectionManagerLive = Layer.effect(
     createListenConnection,
     Effect.map((listenConnection) => ({
       getListenConnection: Effect.succeed(listenConnection),
-
-      healthCheck: pipe(
-        Effect.succeed(listenConnection),
-        Effect.flatMap((client) =>
-          Effect.tryPromise({
-            try: () => (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
-            catch: (error) => error,
-          })
-        ),
-        Effect.tap(() => Effect.logDebug('PostgreSQL notification listener health check passed')),
-        Effect.tapError((error) =>
-          Effect.logError('PostgreSQL notification listener health check failed', { error })
-        ),
-        Effect.mapError((error) =>
-          connectionError.retryable('health check notification listener', error)
-        ),
-        Effect.as(undefined)
-      ),
-
-      shutdown: pipe(
-        Effect.succeed(listenConnection),
-        Effect.flatMap((client) =>
-          Effect.tryPromise({
-            try: () => (client as PgClientWithQuery).end(),
-            catch: (error) => error,
-          })
-        ),
-        Effect.tap(() => Effect.logInfo('PostgreSQL notification listener connection closed')),
-        Effect.tapError((error) =>
-          Effect.logError('Failed to close PostgreSQL notification listener connection', { error })
-        ),
-        Effect.mapError((error) => connectionError.fatal('shutdown notification listener', error)),
-        Effect.as(undefined)
-      ),
+      healthCheck: executeHealthCheck(listenConnection),
+      shutdown: executeShutdown(listenConnection),
     }))
   )
 );
+
+const createRetrySchedule = () =>
+  pipe(
+    Schedule.exponential(Duration.millis(100), 1.5),
+    Schedule.whileOutput((d) => Duration.toMillis(d) < 60000) // Max 1 minute delay
+  );
 
 /**
  * Wraps an effect with automatic health checks and retry policy
@@ -107,13 +117,4 @@ export const ConnectionManagerLive = Layer.effect(
 // Skip health check as it's causing issues
 export const withConnectionHealth = <A, E, R>(
   effect: ReadonlyDeep<Effect.Effect<A, E, R>>
-): Effect.Effect<A, E, R> =>
-  pipe(
-    effect,
-    Effect.retry(
-      pipe(
-        Schedule.exponential(Duration.millis(100), 1.5),
-        Schedule.whileOutput((d) => Duration.toMillis(d) < 60000) // Max 1 minute delay
-      )
-    )
-  );
+): Effect.Effect<A, E, R> => pipe(effect, Effect.retry(createRetrySchedule()));

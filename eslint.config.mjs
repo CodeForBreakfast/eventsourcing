@@ -36,6 +36,16 @@ const effectSyntaxRestrictions = [
     message:
       'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
   },
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+    message:
+      'Effect.runSync is forbidden in production code. Effects should be composed and run at the application boundary.',
+  },
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+    message:
+      'Effect.runPromise is forbidden in production code. Effects should be composed and run at the application boundary.',
+  },
 ];
 
 // Test-specific syntax restrictions
@@ -80,6 +90,10 @@ export default [
             '^HashSet\\.HashSet<.*>$',
             '^Stream\\.Stream<.*>$',
             '^PubSub\\.PubSub<.*>$',
+            // Bun types wrapped in ReadonlyDeep are treated as immutable at boundaries
+            'ServerWebSocket<.*>$',
+            // Built-in types wrapped in ReadonlyDeep are treated as immutable
+            '^ReadonlyDeep<Date>$',
           ],
           parameters: {
             // Use ReadonlyShallow for parameters because Effect types contain internal
@@ -221,6 +235,62 @@ export default [
       'functional/type-declaration-immutability': 'off',
       'no-restricted-imports': 'off',
       'no-restricted-syntax': 'off',
+    },
+  },
+  {
+    name: 'simple-pipes',
+    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+    ignores: [
+      '**/*.test.ts',
+      '**/*.test.tsx',
+      '**/*.spec.ts',
+      '**/*.spec.tsx',
+      '**/buntest/**',
+      '**/eventsourcing-testing-contracts/**',
+    ],
+    languageOptions: commonLanguageOptions,
+    plugins: {
+      '@typescript-eslint': typescript,
+    },
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: 'CallExpression[callee.type="MemberExpression"][callee.property.name="pipe"]',
+          message:
+            'Method-based .pipe() is forbidden. Use the standalone pipe() function instead for consistency.',
+        },
+        {
+          selector:
+            'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"]:not([callee.callee.object.name="Context"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Context"][callee.callee.property.name="GenericTag"]):not([callee.callee.object.name="Effect"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Data"][callee.callee.property.name="TaggedError"]):not([callee.callee.object.name="Schema"][callee.callee.property.name="Class"])',
+          message:
+            'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
+        },
+        {
+          selector:
+            'CallExpression[callee.type="Identifier"][callee.name="pipe"] CallExpression[callee.type="Identifier"][callee.name="pipe"]',
+          message:
+            'Nested pipe() calls are forbidden. Extract the inner pipe to a separate named function that returns an Effect.',
+        },
+        {
+          selector:
+            'ArrowFunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+        {
+          selector:
+            'FunctionDeclaration:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+        {
+          selector:
+            'FunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
+          message:
+            'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
+        },
+      ],
     },
   },
   {
