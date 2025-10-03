@@ -1,11 +1,11 @@
-import { Effect, Layer, pipe, Stream, Schema, Context } from 'effect';
+import { Effect, Layer, pipe, Stream, Schema, Context, Brand } from 'effect';
 import { describe, expect, it } from '@codeforbreakfast/buntest';
 import { beginning, toStreamId, type EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
 import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
@@ -135,33 +135,54 @@ describe('Command Processing Service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
 
+    const collectEventsFromStream = (
+      startPosition: {
+        readonly streamId: string & Brand.Brand<'EventStreamId'>;
+        readonly eventNumber: number;
+      },
+      eventStore: EventStore<TestEvent>
+    ) =>
+      pipe(
+        eventStore.read(startPosition),
+        Stream.runCollect,
+        Effect.map((eventArray) => {
+          expect(eventArray).toHaveLength(1);
+        })
+      );
+
+    const readEventsFromStore = (eventStore: EventStore<TestEvent>) =>
+      pipe(
+        toStreamId('user'),
+        Effect.flatMap(beginning),
+        Effect.flatMap((startPosition) => collectEventsFromStream(startPosition, eventStore))
+      );
+
+    const processCommandAndReadEvents = (
+      eventStore: EventStore<TestEvent>,
+      service: {
+        readonly processCommand: (
+          command: Readonly<WireCommand>
+        ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
+      }
+    ) =>
+      pipe(
+        service.processCommand(testCommand),
+        Effect.flatMap(() => readEventsFromStore(eventStore))
+      );
+
+    const processCommandAndVerify = (service: {
+      readonly processCommand: (
+        command: Readonly<WireCommand>
+      ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
+    }) =>
+      pipe(
+        TestEventStore,
+        Effect.flatMap((eventStore) => processCommandAndReadEvents(eventStore, service))
+      );
+
     return pipe(
       createCommandProcessingService(TestEventStore)(router),
-      Effect.flatMap((service) =>
-        pipe(
-          TestEventStore,
-          Effect.flatMap((eventStore) =>
-            pipe(
-              service.processCommand(testCommand),
-              Effect.flatMap(() =>
-                pipe(
-                  toStreamId('user'),
-                  Effect.flatMap(beginning),
-                  Effect.flatMap((startPosition) =>
-                    pipe(
-                      eventStore.read(startPosition),
-                      Stream.runCollect,
-                      Effect.map((eventArray) => {
-                        expect(eventArray).toHaveLength(1);
-                      })
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      ),
+      Effect.flatMap(processCommandAndVerify),
       Effect.provide(testLayer)
     );
   });
@@ -260,14 +281,19 @@ describe('Command Processing Service', () => {
 
     const testCommands = [testCommand, orderCommand, updateCommand] as const;
 
+    const processAllCommands = (service: {
+      readonly processCommand: (
+        command: Readonly<WireCommand>
+      ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
+    }) =>
+      pipe(
+        Effect.all(testCommands.map((cmd) => service.processCommand(cmd))),
+        Effect.map((results) => results)
+      );
+
     return pipe(
       createCommandProcessingService(TestEventStore)(router),
-      Effect.flatMap((service) =>
-        pipe(
-          Effect.all(testCommands.map((cmd) => service.processCommand(cmd))),
-          Effect.map((results) => results)
-        )
-      ),
+      Effect.flatMap(processAllCommands),
       Effect.map(([userResult, orderResult, updateResult]) => {
         expect(userResult!._tag).toBe('Success');
         expect(orderResult!._tag).toBe('Success');
