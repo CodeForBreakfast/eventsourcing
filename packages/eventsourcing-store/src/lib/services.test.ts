@@ -55,6 +55,23 @@ describe('Service Definitions', () => {
       expect(typeof EventStoreService).toBe('object');
     });
 
+    const testEventStoreErrorCatching = () =>
+      pipe(
+        EventStoreService,
+        Effect.flatMap((store) =>
+          store.read({
+            streamId: 'test' as EventStreamId,
+            eventNumber: 0,
+          } as EventStreamPosition)
+        ),
+        Effect.catchTag('EventStoreError', (error) =>
+          Effect.succeed(`Caught error: ${error.message}`)
+        ),
+        Effect.map((result) => {
+          expect(result).toContain('Caught error:');
+        })
+      );
+
     pipe(
       it.layer(
         Layer.succeed(EventStoreService, {
@@ -69,25 +86,27 @@ describe('Service Definitions', () => {
       ),
       (layeredIt) =>
         layeredIt('should work with dependency injection', (it) => {
-          it.effect('can handle dependency injection and error catching', () =>
-            pipe(
-              EventStoreService,
-              Effect.flatMap((store) =>
-                store.read({
-                  streamId: 'test' as EventStreamId,
-                  eventNumber: 0,
-                } as EventStreamPosition)
-              ),
-              Effect.catchTag('EventStoreError', (error) =>
-                Effect.succeed(`Caught error: ${error.message}`)
-              ),
-              Effect.map((result) => {
-                expect(result).toContain('Caught error:');
-              })
-            )
+          it.effect(
+            'can handle dependency injection and error catching',
+            testEventStoreErrorCatching
           );
         })
     );
+
+    const testTypedEventStore = () =>
+      pipe(
+        MyEventStoreService,
+        Effect.flatMap((store) =>
+          store.read({
+            streamId: 'test' as EventStreamId,
+            eventNumber: 0,
+          } as EventStreamPosition)
+        ),
+        Effect.map(() => 'Success'),
+        Effect.map((result) => {
+          expect(result).toBe('Success');
+        })
+      );
 
     pipe(
       it.layer(
@@ -101,21 +120,7 @@ describe('Service Definitions', () => {
       ),
       (layeredIt) =>
         layeredIt('should support typed event stores', (it) => {
-          it.effect('can work with typed events', () =>
-            pipe(
-              MyEventStoreService,
-              Effect.flatMap((store) =>
-                store.read({
-                  streamId: 'test' as EventStreamId,
-                  eventNumber: 0,
-                } as EventStreamPosition)
-              ),
-              Effect.map(() => 'Success'),
-              Effect.map((result) => {
-                expect(result).toBe('Success');
-              })
-            )
-          );
+          it.effect('can work with typed events', testTypedEventStore);
         })
     );
   });
@@ -125,6 +130,16 @@ describe('Service Definitions', () => {
       expect(ProjectionStoreService).toBeDefined();
       expect(typeof ProjectionStoreService).toBe('object');
     });
+
+    const testUserProjectionGet = () =>
+      pipe(
+        UserProjectionStoreService,
+        Effect.flatMap((store) => store.get('user-1')),
+        Effect.map((user) => user?.name ?? 'Not found'),
+        Effect.map((result) => {
+          expect(result).toBe('John');
+        })
+      );
 
     pipe(
       it.layer(
@@ -145,16 +160,7 @@ describe('Service Definitions', () => {
       ),
       (layeredIt) =>
         layeredIt('should work with dependency injection', (it) => {
-          it.effect('can get user projections', () =>
-            pipe(
-              UserProjectionStoreService,
-              Effect.flatMap((store) => store.get('user-1')),
-              Effect.map((user) => user?.name ?? 'Not found'),
-              Effect.map((result) => {
-                expect(result).toBe('John');
-              })
-            )
-          );
+          it.effect('can get user projections', testUserProjectionGet);
         })
     );
   });
@@ -164,6 +170,16 @@ describe('Service Definitions', () => {
       expect(SnapshotStoreService).toBeDefined();
       expect(typeof SnapshotStoreService).toBe('object');
     });
+
+    const testSnapshotLoad = () =>
+      pipe(
+        AggregateSnapshotStoreService,
+        Effect.flatMap((store) => store.load('agg-1')),
+        Effect.map((result) => result?.snapshot.version ?? 0),
+        Effect.map((result) => {
+          expect(result).toBe(10);
+        })
+      );
 
     pipe(
       it.layer(
@@ -182,21 +198,26 @@ describe('Service Definitions', () => {
       ),
       (layeredIt) =>
         layeredIt('should work with dependency injection', (it) => {
-          it.effect('can load aggregate snapshots', () =>
-            pipe(
-              AggregateSnapshotStoreService,
-              Effect.flatMap((store) => store.load('agg-1')),
-              Effect.map((result) => result?.snapshot.version ?? 0),
-              Effect.map((result) => {
-                expect(result).toBe(10);
-              })
-            )
-          );
+          it.effect('can load aggregate snapshots', testSnapshotLoad);
         })
     );
   });
 
   describe('Service composition', () => {
+    const testAllServicesAvailable = () =>
+      pipe(
+        Effect.all([EventStoreService, ProjectionStoreService, SnapshotStoreService]),
+        Effect.map(([eventStore, projectionStore, snapshotStore]) => {
+          expect(eventStore).toBeDefined();
+          expect(projectionStore).toBeDefined();
+          expect(snapshotStore).toBeDefined();
+          return 'All services available';
+        }),
+        Effect.map((result) => {
+          expect(result).toBe('All services available');
+        })
+      );
+
     pipe(
       it.layer(
         Layer.mergeAll(
@@ -224,21 +245,7 @@ describe('Service Definitions', () => {
       ),
       (layeredIt) =>
         layeredIt('should allow combining multiple services', (it) => {
-          it.effect('can access all services simultaneously', () =>
-            pipe(
-              Effect.all([EventStoreService, ProjectionStoreService, SnapshotStoreService]),
-              Effect.map(([eventStore, projectionStore, snapshotStore]) => {
-                // All services should be available
-                expect(eventStore).toBeDefined();
-                expect(projectionStore).toBeDefined();
-                expect(snapshotStore).toBeDefined();
-                return 'All services available';
-              }),
-              Effect.map((result) => {
-                expect(result).toBe('All services available');
-              })
-            )
-          );
+          it.effect('can access all services simultaneously', testAllServicesAvailable);
         })
     );
   });
