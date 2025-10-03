@@ -77,6 +77,11 @@ const decodeProjectionEventNumber = <TData>(
     )
   );
 
+const limitStreamToMaxSafeInteger = <TEvent>(
+  stream: Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>
+): Effect.Effect<Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>> =>
+  pipe(stream, Stream.take(Number.MAX_SAFE_INTEGER), Effect.succeed);
+
 const loadAndProcessEvents =
   <TEvent, TData>(
     id: string,
@@ -97,7 +102,7 @@ const loadAndProcessEvents =
         })
       ),
       Effect.flatMap(eventstore.read),
-      Effect.map((stream) => Stream.take(Number.MAX_SAFE_INTEGER)(stream)),
+      Effect.flatMap(limitStreamToMaxSafeInteger),
       Effect.flatMap((stream) => foldEvents(apply, stream)),
       Effect.flatMap(({ nextEventNumber, data }) =>
         decodeProjectionEventNumber(nextEventNumber, data)
