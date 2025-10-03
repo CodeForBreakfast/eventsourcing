@@ -140,7 +140,8 @@ const createResultSender =
     pipe(
       currentTimestamp(),
       Effect.flatMap((timestamp) => {
-        const resultMessage: CommandResultMessage = Match.value(result).pipe(
+        const resultMessage: CommandResultMessage = pipe(
+          Match.value(result),
           Match.when({ _tag: 'Success' }, (res) => ({
             type: 'command_result' as const,
             commandId,
