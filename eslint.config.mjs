@@ -284,11 +284,17 @@ export default [
       '**/*test*.tsx',
       '**/testing/**/*.ts',
     ],
+    ignores: ['**/buntest/**'],
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithFunctional,
     rules: {
       ...testFileImportRestrictions,
-      'no-restricted-syntax': ['error', ...effectSyntaxRestrictions, ...testSyntaxRestrictions],
+      'no-restricted-syntax': [
+        'error',
+        ...effectSyntaxRestrictions,
+        ...testSyntaxRestrictions,
+        ...simplePipeSyntaxRestrictions,
+      ],
       ...testFunctionalRules,
     },
   },
