@@ -157,20 +157,43 @@ describe('Event Sourcing Errors', () => {
   });
 
   describe('Constructor field assignment', () => {
-    it.each(['read', 'write', 'subscribe'] as const)(
-      'should create error with %s operation',
-      (operation) => {
-        const error = new EventStoreError({
-          operation,
-          streamId: 'test-stream',
-          details: 'test details',
-        });
+    it('should create error with read operation', () => {
+      const error = new EventStoreError({
+        operation: 'read',
+        streamId: 'test-stream',
+        details: 'test details',
+      });
 
-        expect(error._tag).toBe('EventStoreError');
-        expect(error.operation).toBe(operation);
-        expect(error.streamId).toBe('test-stream');
-        expect(error.details).toBe('test details');
-      }
-    );
+      expect(error._tag).toBe('EventStoreError');
+      expect(error.operation).toBe('read');
+      expect(error.streamId).toBe('test-stream');
+      expect(error.details).toBe('test details');
+    });
+
+    it('should create error with write operation', () => {
+      const error = new EventStoreError({
+        operation: 'write',
+        streamId: 'test-stream',
+        details: 'test details',
+      });
+
+      expect(error._tag).toBe('EventStoreError');
+      expect(error.operation).toBe('write');
+      expect(error.streamId).toBe('test-stream');
+      expect(error.details).toBe('test details');
+    });
+
+    it('should create error with subscribe operation', () => {
+      const error = new EventStoreError({
+        operation: 'subscribe',
+        streamId: 'test-stream',
+        details: 'test details',
+      });
+
+      expect(error._tag).toBe('EventStoreError');
+      expect(error.operation).toBe('subscribe');
+      expect(error.streamId).toBe('test-stream');
+      expect(error.details).toBe('test details');
+    });
   });
 });

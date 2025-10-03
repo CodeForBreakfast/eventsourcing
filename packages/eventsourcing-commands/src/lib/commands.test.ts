@@ -12,7 +12,7 @@ describe('Wire Commands', () => {
         payload: { email: 'test@example.com' },
       };
 
-      const result = Schema.decodeUnknownEither(WireCommand)(validCommand);
+      const result = pipe(validCommand, Schema.decodeUnknownEither(WireCommand));
       expect(result._tag).toBe('Right');
     });
 
@@ -24,7 +24,7 @@ describe('Wire Commands', () => {
         payload: { email: 'test@example.com' },
       };
 
-      const result = Schema.decodeUnknownEither(WireCommand)(invalidCommand);
+      const result = pipe(invalidCommand, Schema.decodeUnknownEither(WireCommand));
       expect(result._tag).toBe('Left');
     });
 
@@ -40,7 +40,7 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = Schema.decodeUnknownEither(WireCommand)(commandWithComplexPayload);
+      const result = pipe(commandWithComplexPayload, Schema.decodeUnknownEither(WireCommand));
       expect(result._tag).toBe('Right');
     });
   });
@@ -55,7 +55,7 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = Schema.decodeUnknownEither(CommandResult)(successResult);
+      const result = pipe(successResult, Schema.decodeUnknownEither(CommandResult));
       expect(result._tag).toBe('Right');
     });
 
@@ -70,7 +70,7 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = Schema.decodeUnknownEither(CommandResult)(failureResult);
+      const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
       expect(result._tag).toBe('Right');
     });
 
@@ -85,16 +85,16 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = Schema.decodeUnknownEither(CommandResult)(failureResult);
+      const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
       expect(result._tag).toBe('Right');
     });
   });
 
   describe('Command Validation', () => {
     const UserPayload = Schema.Struct({
-      email: Schema.String.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
-      name: Schema.String.pipe(Schema.minLength(1)),
-      age: Schema.optional(Schema.Number.pipe(Schema.between(13, 120))),
+      email: pipe(Schema.String, Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
+      name: pipe(Schema.String, Schema.minLength(1)),
+      age: Schema.optional(pipe(Schema.Number, Schema.between(13, 120))),
     });
 
     test('should validate and transform valid payload', async () => {

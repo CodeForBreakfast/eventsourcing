@@ -7,8 +7,8 @@ import { makeCommandRegistry } from './command-registry';
 
 describe('Command Registry', () => {
   const UserPayload = Schema.Struct({
-    email: Schema.String.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
-    name: Schema.String.pipe(Schema.minLength(1)),
+    email: pipe(Schema.String, Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
+    name: pipe(Schema.String, Schema.minLength(1)),
   });
 
   it.effect('should register and dispatch commands successfully', () => {
@@ -18,7 +18,8 @@ describe('Command Registry', () => {
     type Commands = CommandFromDefinitions<typeof commands>;
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
-      Match.value(command).pipe(
+      pipe(
+        Match.value(command),
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -62,7 +63,8 @@ describe('Command Registry', () => {
     type Commands = CommandFromDefinitions<typeof commands>;
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
-      Match.value(command).pipe(
+      pipe(
+        Match.value(command),
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -109,7 +111,8 @@ describe('Command Registry', () => {
     type Commands = CommandFromDefinitions<typeof commands>;
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
-      Match.value(command).pipe(
+      pipe(
+        Match.value(command),
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -152,7 +155,8 @@ describe('Command Registry', () => {
     type Commands = CommandFromDefinitions<typeof commands>;
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
-      Match.value(command).pipe(
+      pipe(
+        Match.value(command),
         Match.when({ name: 'CreateUser' }, () => Effect.die(new Error('Something went wrong'))),
         Match.exhaustive
       );
@@ -184,7 +188,7 @@ describe('Command Registry', () => {
 
   it.effect('should support multiple command types', () => {
     const UpdateEmailPayload = Schema.Struct({
-      newEmail: Schema.String.pipe(Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
+      newEmail: pipe(Schema.String, Schema.pattern(/^[^\s@]+@[^\s@]+\.[^\s@]+$/)),
     });
 
     const createUserCommand = defineCommand('CreateUser', UserPayload);
@@ -194,7 +198,8 @@ describe('Command Registry', () => {
     type Commands = CommandFromDefinitions<typeof commands>;
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
-      Match.value(command).pipe(
+      pipe(
+        Match.value(command),
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,

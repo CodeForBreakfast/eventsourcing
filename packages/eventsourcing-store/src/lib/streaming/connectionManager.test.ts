@@ -9,24 +9,26 @@ import {
   makeConnectionManager,
 } from './connectionManager';
 
+const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
+  pipe(
+    manager.getApiPort(),
+    Effect.provide(LoggerLive),
+    Effect.tap((apiPort) => Effect.sync(() => expect(typeof apiPort).toBe('number')))
+  );
+
+const verifyManagerAndApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
+  pipe(
+    Effect.sync(() => expect(manager).toBeDefined()),
+    Effect.flatMap(() => verifyApiPort(manager))
+  );
+
 describe('ConnectionManager', () => {
   // Single minimal test to ensure the module loads
   it.effect('should create a connection manager', () =>
     pipe(
       makeConnectionManager(DefaultConnectionConfig),
       Effect.provide(LoggerLive),
-      Effect.flatMap((manager: ReadonlyDeep<ConnectionManagerService>) =>
-        pipe(
-          Effect.sync(() => expect(manager).toBeDefined()),
-          Effect.flatMap(() =>
-            pipe(
-              manager.getApiPort(),
-              Effect.provide(LoggerLive),
-              Effect.tap((apiPort) => Effect.sync(() => expect(typeof apiPort).toBe('number')))
-            )
-          )
-        )
-      )
+      Effect.flatMap(verifyManagerAndApiPort)
     )
   );
 });
