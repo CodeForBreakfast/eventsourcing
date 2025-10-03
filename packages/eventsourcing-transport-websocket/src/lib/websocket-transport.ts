@@ -234,18 +234,10 @@ const distributeMessageToSubscribers = (
 
 const parseIncomingData = (
   data: Readonly<Uint8Array>
-): Effect.Effect<
-  { readonly _tag: 'success'; readonly message: TransportMessage } | { readonly _tag: 'error' },
-  never,
-  never
-> =>
-  Effect.sync(() => {
-    try {
-      const text = new TextDecoder().decode(data);
-      return { _tag: 'success' as const, message: JSON.parse(text) as TransportMessage };
-    } catch {
-      return { _tag: 'error' as const };
-    }
+): Effect.Effect<TransportMessage, unknown, never> =>
+  Effect.try(() => {
+    const text = new TextDecoder().decode(data);
+    return JSON.parse(text) as TransportMessage;
   });
 
 const handleIncomingMessage = (
@@ -255,11 +247,8 @@ const handleIncomingMessage = (
   pipe(
     data,
     parseIncomingData,
-    Effect.flatMap((result) =>
-      result._tag === 'error'
-        ? Effect.void
-        : distributeMessageToSubscribers(stateRef, result.message)
-    )
+    Effect.flatMap((message) => distributeMessageToSubscribers(stateRef, message)),
+    Effect.catchAll(() => Effect.void)
   );
 
 const createWebSocketConnection = (
