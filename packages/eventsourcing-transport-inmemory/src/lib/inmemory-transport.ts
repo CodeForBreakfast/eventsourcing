@@ -79,6 +79,17 @@ const disconnectAllClients = (
 // Client Implementation
 // =============================================================================
 
+const buildConnectionStateStream = (
+  queue: ReadonlyDeep<Queue.Dequeue<ConnectionState>>,
+  clientState: ReadonlyDeep<InMemoryClientState>
+) =>
+  pipe(
+    Ref.get(clientState.connectionState),
+    Effect.map((currentState: ReadonlyDeep<ConnectionState>) =>
+      Stream.concat(Stream.succeed(currentState), Stream.fromQueue(queue))
+    )
+  );
+
 const createConnectionStateStream = (
   clientState: ReadonlyDeep<InMemoryClientState>
 ): ReadonlyDeep<Stream.Stream<ConnectionState>> =>
@@ -86,12 +97,7 @@ const createConnectionStateStream = (
     pipe(
       PubSub.subscribe(clientState.connectionStatePubSub),
       Effect.flatMap((queue: ReadonlyDeep<Queue.Dequeue<ConnectionState>>) =>
-        pipe(
-          Ref.get(clientState.connectionState),
-          Effect.map((currentState: ReadonlyDeep<ConnectionState>) =>
-            Stream.concat(Stream.succeed(currentState), Stream.fromQueue(queue))
-          )
-        )
+        buildConnectionStateStream(queue, clientState)
       )
     )
   );
@@ -341,6 +347,16 @@ const registerClientConnection = (
 ): Effect.Effect<void> =>
   Ref.update(serverState.clientConnections, HashMap.set(clientId, clientConnection));
 
+const disconnectAndRemoveClient = (
+  serverState: ReadonlyDeep<InMemoryServerState>,
+  clientId: ReadonlyDeep<string>,
+  clientState: ReadonlyDeep<InMemoryClientState>
+) =>
+  pipe(
+    disconnectClient(clientState),
+    Effect.zipRight(Ref.update(serverState.clientConnections, HashMap.remove(clientId)))
+  );
+
 const unregisterClientConnection = (
   serverState: ReadonlyDeep<InMemoryServerState>,
   clientId: ReadonlyDeep<string>
@@ -351,10 +367,7 @@ const unregisterClientConnection = (
       Option.match(HashMap.get(connections, clientId), {
         onNone: () => Effect.void,
         onSome: ({ clientState }: ReadonlyDeep<InMemoryClientConnection>) =>
-          pipe(
-            disconnectClient(clientState),
-            Effect.zipRight(Ref.update(serverState.clientConnections, HashMap.remove(clientId)))
-          ),
+          disconnectAndRemoveClient(serverState, clientId, clientState),
       })
     )
   );
@@ -385,6 +398,12 @@ const setupClientConnection = (
   );
 };
 
+const addCleanupFinalizer = (transport: Client.Transport, cleanup: () => Effect.Effect<void>) =>
+  pipe(
+    Effect.addFinalizer(() => cleanup()),
+    Effect.as(transport)
+  );
+
 const connectClientToServer =
   (
     serverState: ReadonlyDeep<InMemoryServerState>,
@@ -409,14 +428,27 @@ const connectClientToServer =
         connectionStatePubSub,
         clientId
       ),
-      Effect.flatMap(({ transport, cleanup }) =>
-        pipe(
-          Effect.addFinalizer(() => cleanup()),
-          Effect.as(transport)
-        )
-      )
+      Effect.flatMap(({ transport, cleanup }) => addCleanupFinalizer(transport, cleanup))
     );
   };
+
+const buildClientStateAndConnect = (
+  serverState: ReadonlyDeep<InMemoryServerState>,
+  connectionStatePubSub: ReadonlyDeep<PubSub.PubSub<ConnectionState>>,
+  clientToServerQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
+  serverToClientQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>
+) =>
+  pipe(
+    createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
+    Effect.flatMap(
+      connectClientToServer(
+        serverState,
+        connectionStatePubSub,
+        clientToServerQueue,
+        serverToClientQueue
+      )
+    )
+  );
 
 const createConnectorForServer =
   (serverState: ReadonlyDeep<InMemoryServerState>): InMemoryConnector =>
@@ -433,19 +465,38 @@ const createConnectorForServer =
           readonly clientToServerQueue: Queue.Queue<TransportMessage>;
           readonly serverToClientQueue: Queue.Queue<TransportMessage>;
         }>) =>
-          pipe(
-            createClientState(clientToServerQueue, serverToClientQueue, connectionStatePubSub),
-            Effect.flatMap(
-              connectClientToServer(
-                serverState,
-                connectionStatePubSub,
-                clientToServerQueue,
-                serverToClientQueue
-              )
-            )
+          buildClientStateAndConnect(
+            serverState,
+            connectionStatePubSub,
+            clientToServerQueue,
+            serverToClientQueue
           )
       )
     );
+
+const buildServerTransportWithFinalizer = (
+  serverState: ReadonlyDeep<InMemoryServerState>,
+  connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>
+) =>
+  pipe(
+    Effect.addFinalizer(() => disconnectAllClients(serverState)),
+    Effect.as({
+      connections: Stream.fromQueue(connectionsQueue),
+      broadcast: (message: ReadonlyDeep<TransportMessage>) =>
+        broadcastToClients(serverState, message),
+      connector: createConnectorForServer(serverState),
+    })
+  );
+
+const buildServerStateAndTransport = (
+  connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>
+) =>
+  pipe(
+    createServerState(connectionsQueue),
+    Effect.flatMap((serverState: ReadonlyDeep<InMemoryServerState>) =>
+      buildServerTransportWithFinalizer(serverState, connectionsQueue)
+    )
+  );
 
 const createInMemoryServerTransport = (): Effect.Effect<
   {
@@ -459,20 +510,7 @@ const createInMemoryServerTransport = (): Effect.Effect<
   pipe(
     Queue.unbounded<Server.ClientConnection>(),
     Effect.flatMap((connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>) =>
-      pipe(
-        createServerState(connectionsQueue),
-        Effect.flatMap((serverState: ReadonlyDeep<InMemoryServerState>) =>
-          pipe(
-            Effect.addFinalizer(() => disconnectAllClients(serverState)),
-            Effect.as({
-              connections: Stream.fromQueue(connectionsQueue),
-              broadcast: (message: ReadonlyDeep<TransportMessage>) =>
-                broadcastToClients(serverState, message),
-              connector: createConnectorForServer(serverState),
-            })
-          )
-        )
-      )
+      buildServerStateAndTransport(connectionsQueue)
     )
   );
 
