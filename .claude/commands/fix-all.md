@@ -42,7 +42,7 @@ These rules are to ensure we have readable, functional code. Use function names 
 
 ### Verification
 
-- Run `turbo all` repeatedly until YOUR file is no longer the source of errors
+- Run `turbo all` repeatedly until YOUR file is no longer the source of errors (typecheck, lint, or test failures)
 - The next file may fail - that's expected and will be handled by the next agent
 - Ensure your fixes don't break other files (watch for import changes, type changes, etc.)
 
