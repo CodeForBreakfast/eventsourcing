@@ -1,4 +1,4 @@
-import { Effect, ParseResult, Schema, Sink, Stream } from 'effect';
+import { Effect, ParseResult, pipe, Schema, Sink, Stream } from 'effect';
 import { EventStreamId, EventNumber, EventStreamPosition, beginning } from './streamTypes';
 import type { EventStore } from './services';
 import { EventStoreError, ConcurrencyConflictError } from './errors';
@@ -61,23 +61,30 @@ export const currentEnd =
  * @throws {ParseResult.ParseError} If the values cannot be parsed into valid position
  */
 export const positionFromEventNumber = (streamId: EventStreamId, eventNumber: EventNumber) =>
-  Schema.decode(EventStreamPosition)({
-    streamId,
-    eventNumber,
-  });
+  pipe(
+    {
+      streamId,
+      eventNumber,
+    },
+    Schema.decode(EventStreamPosition)
+  );
 
 // Re-export service definitions
 export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 
-const decodeEvent = <A, I>(schema: Schema.Schema<A, I>, event: I) => Schema.decode(schema)(event);
+const decodeEvent = <A, I>(schema: Schema.Schema<A, I>, event: I) =>
+  pipe(event, Schema.decode(schema));
 
 const decodeStreamEvents = <A, I>(
   schema: Schema.Schema<A, I>,
   stream: Stream.Stream<I, ParseResult.ParseError | EventStoreError>
 ): Stream.Stream<A, ParseResult.ParseError | EventStoreError> =>
-  Stream.flatMap((event: I) => decodeEvent(schema, event))(stream);
+  pipe(
+    stream,
+    Stream.flatMap((event: I) => decodeEvent(schema, event))
+  );
 
 const readAndDecodeEvents = <A, I>(
   schema: Schema.Schema<A, I>,
@@ -102,7 +109,7 @@ const createEncodingSink = <A, I>(
 ) => {
   type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
   return Sink.mapInputEffect(originalSink, (a: A) =>
-    Schema.encode(schema)(a)
+    pipe(a, Schema.encode(schema))
   ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
 };
 
