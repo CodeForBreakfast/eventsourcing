@@ -566,7 +566,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
             Effect.flatMap(verifyDisconnectedState)
           );
 
-        const closeScopeAndVerify = (clientScope: Scope.Scope, connection: ServerConnection) =>
+        const closeScopeAndVerify = (clientScope: Scope.CloseableScope, connection: ServerConnection) =>
           pipe(
             Scope.close(clientScope, Exit.void),
             Effect.flatMap(() => Effect.sleep(100)),
@@ -574,14 +574,14 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           );
 
         const handleServerConnection =
-          (clientScope: Scope.Scope) => (serverConnection: Option.Option<ServerConnection>) => {
+          (clientScope: Scope.CloseableScope) => (serverConnection: Option.Option<ServerConnection>) => {
             if (!Option.isSome(serverConnection)) {
               return Effect.fail(new Error('Expected server connection to be available'));
             }
             return closeScopeAndVerify(clientScope, serverConnection.value);
           };
 
-        const getConnectionAndDisconnect = (server: ServerTransport, clientScope: Scope.Scope) =>
+        const getConnectionAndDisconnect = (server: ServerTransport, clientScope: Scope.CloseableScope) =>
           pipe(
             server.connections,
             Stream.take(1),
@@ -592,7 +592,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
         const waitAndDisconnect = (
           client: ClientTransport,
           server: ServerTransport,
-          clientScope: Scope.Scope
+          clientScope: Scope.CloseableScope
         ) =>
           pipe(
             context.waitForConnectionState(client, 'connected'),
@@ -600,7 +600,7 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           );
 
         const createClientAndDisconnect = (
-          clientScope: Scope.Scope,
+          clientScope: Scope.CloseableScope,
           server: ServerTransport,
           pair: TransportPair
         ) =>
@@ -653,25 +653,25 @@ export const runClientServerContractTests: ClientServerTestRunner = (
             Effect.flatMap(verifyDisconnectedState)
           );
 
-        const closeServerAndVerify = (serverScope: Scope.Scope, client: ClientTransport) =>
+        const closeServerAndVerify = (serverScope: Scope.CloseableScope, client: ClientTransport) =>
           pipe(
             Scope.close(serverScope, Exit.void),
             Effect.flatMap(() => waitForDisconnection(client))
           );
 
-        const waitAndCloseServer = (client: ClientTransport, serverScope: Scope.Scope) =>
+        const waitAndCloseServer = (client: ClientTransport, serverScope: Scope.CloseableScope) =>
           pipe(
             context.waitForConnectionState(client, 'connected'),
             Effect.flatMap(() => closeServerAndVerify(serverScope, client))
           );
 
-        const createClientAndTest = (serverScope: Scope.Scope, pair: TransportPair) =>
+        const createClientAndTest = (serverScope: Scope.CloseableScope, pair: TransportPair) =>
           pipe(
             pair.makeClient(),
             Effect.flatMap((client) => waitAndCloseServer(client, serverScope))
           );
 
-        const setupServerAndClient = (serverScope: Scope.Scope, pair: TransportPair) =>
+        const setupServerAndClient = (serverScope: Scope.CloseableScope, pair: TransportPair) =>
           pipe(
             Scope.extend(pair.makeServer(), serverScope),
             Effect.flatMap(() => Effect.sleep(100)),

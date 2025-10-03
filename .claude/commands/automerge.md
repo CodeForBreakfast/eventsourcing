@@ -11,7 +11,7 @@ This command automates the entire process of getting changes merged into main:
 2. **Handle uncommitted changes** (if any):
    - Check if already on a feature branch, if not create one
 3. **Run checks**
-   - Run `bun run all` to ensure all tests and checks pass before proceeding
+   - Run `turbo all` to ensure all tests and checks pass before proceeding
    - Fix any issues if checks fail
    - Assume all failures are due to your changes, not external factors
 4. **Create a changeset file**
