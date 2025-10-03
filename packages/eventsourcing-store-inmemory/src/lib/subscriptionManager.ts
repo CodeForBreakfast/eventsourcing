@@ -48,16 +48,19 @@ export class InMemorySubscriptionManager extends Effect.Tag('InMemorySubscriptio
   InMemorySubscriptionManagerService
 >() {}
 
+const addSubscriptionDataToMap = <T>(
+  subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
+  streamId: EventStreamId,
+  pubsub: PubSub.PubSub<T>
+) => pipe(subs, HashMap.set(streamId, { pubsub, subscribers: 0 }));
+
 const createPubSubAndAddToMap = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
   streamId: EventStreamId
 ) =>
   pipe(
     PubSub.bounded<T>(512),
-    Effect.map((pubsub) => {
-      const data = { pubsub, subscribers: 0 };
-      return pipe(subs, HashMap.set(streamId, data));
-    }),
+    Effect.map((pubsub) => addSubscriptionDataToMap(subs, streamId, pubsub)),
     Effect.runSync
   );
 
