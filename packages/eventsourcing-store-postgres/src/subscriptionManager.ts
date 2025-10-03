@@ -65,7 +65,7 @@ const createPubSubAndUpdateHashMap = <T>(
     createPubSub,
     Effect.map((pubsub) => {
       const data = { pubsub };
-      return pipe(subs, HashMap.set(streamId, data));
+      return HashMap.set(subs, streamId, data);
     }),
     Effect.runSync
   );

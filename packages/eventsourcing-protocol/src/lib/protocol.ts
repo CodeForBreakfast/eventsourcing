@@ -404,6 +404,16 @@ const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, stre
     Effect.flatten
   );
 
+const createSubscriptionStream = (
+  stateRef: Ref.Ref<ProtocolState>,
+  streamId: string,
+  queue: Queue.Queue<Event>
+) =>
+  pipe(
+    Stream.acquireRelease(Effect.succeed(queue), () => cleanupSubscription(stateRef, streamId)),
+    Stream.flatMap(Stream.fromQueue)
+  );
+
 const registerSubscriptionAndPublish = (
   stateRef: Ref.Ref<ProtocolState>,
   transport: ReadonlyDeep<Client.Transport>,
@@ -416,12 +426,7 @@ const registerSubscriptionAndPublish = (
       subscriptions: HashMap.set(state.subscriptions, streamId, queue),
     })),
     Effect.flatMap(() => publishSubscribeMessage(transport, streamId)),
-    Effect.as(
-      pipe(
-        Stream.acquireRelease(Effect.succeed(queue), () => cleanupSubscription(stateRef, streamId)),
-        Stream.flatMap(Stream.fromQueue)
-      )
-    )
+    Effect.as(createSubscriptionStream(stateRef, streamId, queue))
   );
 
 const createSubscriber =

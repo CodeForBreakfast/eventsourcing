@@ -262,6 +262,113 @@ const startNotificationBridge = (
     Effect.flatMap(() => startNotificationListener(notificationListener, subscriptionManager))
   );
 
+const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
+  pipe(
+    eventRows.selectAllEventsInStream(from.streamId),
+    Effect.map((events: readonly EventRow[]) => {
+      const filteredEvents = events
+        // eslint-disable-next-line functional/prefer-immutable-types
+        .filter((event: EventRow) => event.event_number >= from.eventNumber)
+        // eslint-disable-next-line functional/prefer-immutable-types
+        .map((event: EventRow) => event.event_payload);
+      return Stream.fromIterable(filteredEvents);
+    }),
+    Effect.map((stream) =>
+      Stream.mapError(stream, (error) =>
+        eventStoreError.read(
+          from.streamId,
+          `Failed to read historical events: ${String(error)}`,
+          error
+        )
+      )
+    ),
+    Effect.mapError((error) =>
+      eventStoreError.read(
+        from.streamId,
+        `Failed to read historical events: ${String(error)}`,
+        error
+      )
+    )
+  );
+
+const subscribeToStreamWithHistory = (
+  eventRows: EventRowServiceInterface,
+  subscriptionManager: SubscriptionManagerService,
+  notificationListener: Readonly<{
+    readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+  }>,
+  from: EventStreamPosition
+) =>
+  pipe(
+    notificationListener.listen(from.streamId),
+    Effect.flatMap(() => subscriptionManager.subscribeToStream(from.streamId)),
+    Effect.flatMap((liveStream) =>
+      getHistoricalEventsAndConcatWithLive(eventRows, from, liveStream)
+    ),
+    Effect.map((stream) =>
+      Stream.mapError(stream, (error) =>
+        eventStoreError.read(
+          from.streamId,
+          `Failed to subscribe to stream: ${String(error)}`,
+          error
+        )
+      )
+    ),
+    Effect.mapError((error) =>
+      eventStoreError.read(from.streamId, `Failed to subscribe to stream: ${String(error)}`, error)
+    )
+  );
+
+const appendEventToStream = (
+  eventRows: EventRowServiceInterface,
+  subscriptionManager: SubscriptionManagerService,
+  end: EventStreamPosition,
+  payload: string
+) =>
+  pipe(
+    eventRows.selectAllEventsInStream(end.streamId),
+    Effect.map((events: readonly EventRow[]) => {
+      if (events.length === 0) {
+        return -1;
+      }
+      const lastEvent = events[events.length - 1];
+      return lastEvent?.event_number;
+    }),
+    Effect.flatMap((last) => {
+      return (end.eventNumber === 0 && last === -1) ||
+        (last !== undefined && last === end.eventNumber - 1)
+        ? Effect.succeed(end)
+        : Effect.fail(
+            new ConcurrencyConflictError({
+              expectedVersion: end.eventNumber,
+              actualVersion: (last ?? -1) + 1,
+              streamId: end.streamId,
+            })
+          );
+    }),
+    Effect.flatMap((end: EventStreamPosition) =>
+      eventRows.insert({
+        event_number: end.eventNumber,
+        stream_id: end.streamId,
+        event_payload: payload,
+      })
+    ),
+    // eslint-disable-next-line functional/prefer-immutable-types
+    Effect.map((row: EventRow) => ({
+      streamId: row.stream_id,
+      eventNumber: row.event_number + 1,
+    })),
+    Effect.tap(() => notifySubscribers(subscriptionManager, end.streamId, payload)),
+    Effect.tapError((error) => Effect.logError('Error writing to event store', { error })),
+    Effect.mapError((error) => {
+      if (error instanceof ConcurrencyConflictError) {
+        return error;
+      }
+      return eventStoreError.write(end.streamId, `Failed to append event: ${String(error)}`, error);
+    }),
+    Effect.flatMap(Schema.decode(EventStreamPosition))
+  );
+
 /**
  * Create a SQL-based EventStore with subscription support and PostgreSQL LISTEN/NOTIFY
  */
@@ -291,124 +398,6 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       startNotificationBridge(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
-      const readHistoricalEvents = (
-        eventRows: EventRowServiceInterface,
-        from: EventStreamPosition
-      ) =>
-        pipe(
-          eventRows.selectAllEventsInStream(from.streamId),
-          Effect.map((events: readonly EventRow[]) => {
-            const filteredEvents = events
-              // eslint-disable-next-line functional/prefer-immutable-types
-              .filter((event: EventRow) => event.event_number >= from.eventNumber)
-              // eslint-disable-next-line functional/prefer-immutable-types
-              .map((event: EventRow) => event.event_payload);
-            return Stream.fromIterable(filteredEvents);
-          }),
-          Effect.map((stream) =>
-            Stream.mapError(stream, (error) =>
-              eventStoreError.read(
-                from.streamId,
-                `Failed to read historical events: ${String(error)}`,
-                error
-              )
-            )
-          ),
-          Effect.mapError((error) =>
-            eventStoreError.read(
-              from.streamId,
-              `Failed to read historical events: ${String(error)}`,
-              error
-            )
-          )
-        );
-
-      const subscribeToStreamWithHistory = (
-        eventRows: EventRowServiceInterface,
-        subscriptionManager: SubscriptionManagerService,
-        notificationListener: Readonly<{
-          readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
-        }>,
-        from: EventStreamPosition
-      ) =>
-        pipe(
-          notificationListener.listen(from.streamId),
-          Effect.flatMap(() => subscriptionManager.subscribeToStream(from.streamId)),
-          Effect.flatMap((liveStream) =>
-            getHistoricalEventsAndConcatWithLive(eventRows, from, liveStream)
-          ),
-          Effect.map((stream) =>
-            Stream.mapError(stream, (error) =>
-              eventStoreError.read(
-                from.streamId,
-                `Failed to subscribe to stream: ${String(error)}`,
-                error
-              )
-            )
-          ),
-          Effect.mapError((error) =>
-            eventStoreError.read(
-              from.streamId,
-              `Failed to subscribe to stream: ${String(error)}`,
-              error
-            )
-          )
-        );
-
-      const appendEventToStream = (
-        eventRows: EventRowServiceInterface,
-        subscriptionManager: SubscriptionManagerService,
-        end: EventStreamPosition,
-        payload: string
-      ) =>
-        pipe(
-          eventRows.selectAllEventsInStream(end.streamId),
-          Effect.map((events: readonly EventRow[]) => {
-            if (events.length === 0) {
-              return -1;
-            }
-            const lastEvent = events[events.length - 1];
-            return lastEvent?.event_number;
-          }),
-          Effect.flatMap((last) => {
-            return (end.eventNumber === 0 && last === -1) ||
-              (last !== undefined && last === end.eventNumber - 1)
-              ? Effect.succeed(end)
-              : Effect.fail(
-                  new ConcurrencyConflictError({
-                    expectedVersion: end.eventNumber,
-                    actualVersion: (last ?? -1) + 1,
-                    streamId: end.streamId,
-                  })
-                );
-          }),
-          Effect.flatMap((end: EventStreamPosition) =>
-            eventRows.insert({
-              event_number: end.eventNumber,
-              stream_id: end.streamId,
-              event_payload: payload,
-            })
-          ),
-          // eslint-disable-next-line functional/prefer-immutable-types
-          Effect.map((row: EventRow) => ({
-            streamId: row.stream_id,
-            eventNumber: row.event_number + 1,
-          })),
-          Effect.tap(() => notifySubscribers(subscriptionManager, end.streamId, payload)),
-          Effect.tapError((error) => Effect.logError('Error writing to event store', { error })),
-          Effect.mapError((error) => {
-            if (error instanceof ConcurrencyConflictError) {
-              return error;
-            }
-            return eventStoreError.write(
-              end.streamId,
-              `Failed to append event: ${String(error)}`,
-              error
-            );
-          }),
-          Effect.flatMap(Schema.decode(EventStreamPosition))
-        );
-
       const eventStore: EventStore<string> = {
         append: (to: EventStreamPosition) => {
           const sink = Sink.foldEffect(
