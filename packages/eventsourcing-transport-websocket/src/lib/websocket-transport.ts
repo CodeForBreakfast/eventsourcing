@@ -18,6 +18,7 @@ import {
   HashSet,
   Fiber,
   pipe,
+  Schema,
 } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
@@ -26,6 +27,7 @@ import {
   type TransportMessage,
   type ConnectionState,
   Client,
+  TransportMessageSchema,
 } from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
@@ -232,13 +234,14 @@ const distributeMessageToSubscribers = (
     Effect.asVoid
   );
 
-const parseIncomingData = (
-  data: Readonly<Uint8Array>
-): Effect.Effect<TransportMessage, unknown, never> =>
-  Effect.try(() => {
-    const text = new TextDecoder().decode(data);
-    return JSON.parse(text) as TransportMessage;
-  });
+const parseIncomingData = (data: Readonly<Uint8Array>) =>
+  pipe(
+    Effect.try(() => {
+      const text = new TextDecoder().decode(data);
+      return JSON.parse(text);
+    }),
+    Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema))
+  );
 
 const handleIncomingMessage = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,

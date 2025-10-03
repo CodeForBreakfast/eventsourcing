@@ -18,6 +18,7 @@ export {
   TransportId as makeTransportId,
   MessageId as makeMessageId,
   makeTransportMessage,
+  TransportMessage as TransportMessageSchema,
 } from './lib/shared';
 
 export { TransportError, ConnectionError, MessageParseError } from './lib/shared';

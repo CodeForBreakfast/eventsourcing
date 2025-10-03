@@ -5,13 +5,14 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
-import { Context, Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe } from 'effect';
+import { Context, Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe, Schema } from 'effect';
 import {
-  TransportMessage,
+  type TransportMessage,
   ConnectionState,
   TransportError,
   Server,
   Client,
+  TransportMessageSchema,
 } from '@codeforbreakfast/eventsourcing-transport';
 import type { ReadonlyDeep } from 'type-fest';
 
@@ -173,10 +174,11 @@ const distributeMessageToSubscribers = (
     Effect.asVoid
   );
 
-const parseClientMessageData = (
-  data: ReadonlyDeep<string>
-): Effect.Effect<TransportMessage, unknown, never> =>
-  Effect.try(() => JSON.parse(data) as TransportMessage);
+const parseClientMessageData = (data: ReadonlyDeep<string>) =>
+  pipe(
+    Effect.try(() => JSON.parse(data)),
+    Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema))
+  );
 
 const handleClientMessage = (
   clientState: ReadonlyDeep<ClientState>,
