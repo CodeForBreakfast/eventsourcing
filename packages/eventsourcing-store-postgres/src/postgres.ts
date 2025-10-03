@@ -5,7 +5,7 @@ import { loader } from './migrations';
 // PgConfiguration service interface
 export interface PgConfigurationInterface {
   readonly username: string;
-  readonly password: Redacted.Redacted<string>;
+  readonly password: Redacted.Redacted;
   readonly database: string;
   readonly host: string;
   readonly port: number;
@@ -22,7 +22,7 @@ export const PgLive = pipe(
     // Extract the properties from the configuration value
     const { username, password, database, host, port } = config as unknown as {
       readonly username: string;
-      readonly password: Redacted.Redacted<string>;
+      readonly password: Redacted.Redacted;
       readonly database: string;
       readonly host: string;
       readonly port: number;
@@ -65,9 +65,12 @@ export const makePgConfigurationLive = (prefix: string) =>
 
 export const PgConfigurationLive = makePgConfigurationLive('PG');
 
-const MigratorLive = PgMigrator.layer({
-  loader,
-  table: 'eventstore_migrations',
-}).pipe(Layer.provide(PgLive));
+const MigratorLive = pipe(
+  PgMigrator.layer({
+    loader,
+    table: 'eventstore_migrations',
+  }),
+  Layer.provide(PgLive)
+);
 
 export const PostgresLive = pipe(MigratorLive, Layer.provideMerge(PgLive));
