@@ -125,6 +125,12 @@ const simplePipeSyntaxRestrictions = [
     message:
       'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
   },
+  {
+    selector:
+      'CallExpression[callee.name="pipe"][arguments.0.type="CallExpression"][arguments.0.arguments.length=1]',
+    message:
+      'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
+  },
 ];
 
 // Common functional immutability rules
