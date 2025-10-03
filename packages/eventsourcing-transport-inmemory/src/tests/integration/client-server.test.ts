@@ -31,6 +31,74 @@ import { InMemoryAcceptor, type InMemoryServer } from '../../lib/inmemory-transp
 // In-Memory Test Context Implementation
 // =============================================================================
 
+const wrapPublish =
+  (transport: { readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown> }) =>
+  (msg: TransportMessage) =>
+    pipe(
+      transport.publish(msg),
+      Effect.mapError(() => new Error('Failed to publish message'))
+    );
+
+const wrapSubscribe =
+  (transport: {
+    readonly subscribe: (
+      filter?: (msg: TransportMessage) => boolean
+    ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+  }) =>
+  (filter?: (msg: TransportMessage) => boolean) =>
+    pipe(
+      transport.subscribe(filter),
+      Effect.mapError(() => new Error('Failed to subscribe'))
+    );
+
+const wrapBroadcast =
+  (transport: {
+    readonly broadcast: (message: TransportMessage) => Effect.Effect<void, unknown>;
+  }) =>
+  (message: TransportMessage) =>
+    pipe(
+      transport.broadcast(message),
+      Effect.mapError(() => new Error('Failed to broadcast'))
+    );
+
+const mapServerConnection = (conn: {
+  readonly clientId: string;
+  readonly transport: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+    readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+    readonly subscribe: (
+      filter?: (msg: TransportMessage) => boolean
+    ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+  };
+}) => ({
+  id: String(conn.clientId),
+  transport: {
+    connectionState: conn.transport.connectionState,
+    publish: wrapPublish(conn.transport),
+    subscribe: wrapSubscribe(conn.transport),
+  } satisfies ClientTransport,
+});
+
+const mapServerConnections = (transport: InMemoryServer) =>
+  pipe(transport.connections, Stream.map(mapServerConnection));
+
+const createServerTransport = (transport: InMemoryServer): ServerTransport => ({
+  connections: mapServerConnections(transport),
+  broadcast: wrapBroadcast(transport),
+});
+
+const createClientTransport = (transport: {
+  readonly connectionState: Stream.Stream<ConnectionState>;
+  readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+  readonly subscribe: (
+    filter?: (msg: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+}): ClientTransport => ({
+  connectionState: transport.connectionState,
+  publish: wrapPublish(transport),
+  subscribe: wrapSubscribe(transport),
+});
+
 const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
   Effect.succeed({
     makeTransportPair: (): TransportPair => {
@@ -49,31 +117,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
                 serverInstance = server;
               })
             ),
-            Effect.map(
-              (transport): ServerTransport => ({
-                connections: pipe(
-                  transport.connections,
-                  Stream.map((conn) => ({
-                    id: String(conn.clientId),
-                    transport: {
-                      connectionState: conn.transport.connectionState,
-                      publish: (msg: TransportMessage) =>
-                        conn.transport
-                          .publish(msg)
-                          .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                      subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                        conn.transport
-                          .subscribe(filter)
-                          .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-                    } satisfies ClientTransport,
-                  }))
-                ),
-                broadcast: (message: TransportMessage) =>
-                  transport
-                    .broadcast(message)
-                    .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
-              })
-            )
+            Effect.map(createServerTransport)
           ),
 
         makeClient: () =>
@@ -85,19 +129,7 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
               return serverInstance;
             }),
             Effect.flatMap((server) => server.connector()),
-            Effect.map(
-              (transport): ClientTransport => ({
-                connectionState: transport.connectionState,
-                publish: (msg: TransportMessage) =>
-                  transport
-                    .publish(msg)
-                    .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                  transport
-                    .subscribe(filter)
-                    .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-              })
-            ),
+            Effect.map(createClientTransport),
             Effect.mapError(() => new Error('Failed to connect to server'))
           ),
       };
@@ -131,25 +163,28 @@ runClientServerContractTests('InMemory', createInMemoryTestContext);
 describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
+  const verifyClientConnectionState = (client: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+  }) =>
+    pipe(
+      client.connectionState,
+      Stream.take(1),
+      Stream.runHead,
+      Effect.tap((state) => {
+        expect(state._tag).toBe('Some');
+        if (state._tag === 'Some') {
+          expect(state.value).toBe('connected');
+        }
+        return Effect.void;
+      })
+    );
+
   it.effect('in-memory server should accept connections', () =>
     pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) => server.connector()),
-      Effect.flatMap((client) =>
-        pipe(
-          client.connectionState,
-          Stream.take(1),
-          Stream.runHead,
-          Effect.tap((state) => {
-            expect(state._tag).toBe('Some');
-            if (state._tag === 'Some') {
-              expect(state.value).toBe('connected');
-            }
-            return Effect.void;
-          })
-        )
-      ),
+      Effect.flatMap(verifyClientConnectionState),
       Effect.scoped
     )
   );
@@ -159,65 +194,131 @@ describe('In-Memory Client-Server Specific Tests', () => {
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((server) => server.connector()),
-      Effect.flatMap((client) =>
-        pipe(
-          client.connectionState,
-          Stream.take(1),
-          Stream.runHead,
-          Effect.tap((state) => {
-            expect(state._tag).toBe('Some');
-            if (state._tag === 'Some') {
-              expect(state.value).toBe('connected');
-            }
-            return Effect.void;
-          })
-        )
-      ),
+      Effect.flatMap(verifyClientConnectionState),
       Effect.scoped
     )
   );
+
+  const getClientConnectionState = (client: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+  }) => pipe(client.connectionState, Stream.take(1), Stream.runHead);
+
+  const collectServerConnections = (server: InMemoryServer) =>
+    pipe(
+      server.connections,
+      Stream.take(2),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk))
+    );
+
+  const verifyMultipleClientStates = (
+    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    connections: ReadonlyArray<{ readonly clientId: string }>
+  ) =>
+    Effect.sync(() => {
+      expect(state1._tag).toBe('Some');
+      expect(state2._tag).toBe('Some');
+      if (state1._tag === 'Some' && state2._tag === 'Some') {
+        expect(state1.value).toBe('connected');
+        expect(state2.value).toBe('connected');
+      }
+      expect(connections).toHaveLength(2);
+      expect(connections[0]!.clientId).toBeDefined();
+      expect(connections[1]!.clientId).toBeDefined();
+      expect(connections[0]!.clientId).not.toBe(connections[1]!.clientId);
+    });
+
+  const verifyConnectionsAfterStates = (
+    server: InMemoryServer,
+    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' }
+  ) =>
+    pipe(
+      collectServerConnections(server),
+      Effect.flatMap((connections) => verifyMultipleClientStates(state1, state2, connections))
+    );
+
+  const verifyTwoClientsConnected = (
+    server: InMemoryServer,
+    client1: { readonly connectionState: Stream.Stream<ConnectionState> },
+    client2: { readonly connectionState: Stream.Stream<ConnectionState> }
+  ) =>
+    pipe(
+      Effect.all([getClientConnectionState(client1), getClientConnectionState(client2)]),
+      Effect.flatMap(([state1, state2]) => verifyConnectionsAfterStates(server, state1, state2))
+    );
+
+  const connectTwoClients = (server: InMemoryServer) =>
+    pipe(
+      Effect.all([server.connector(), server.connector()]),
+      Effect.flatMap(([client1, client2]) => verifyTwoClientsConnected(server, client1, client2))
+    );
 
   it.effect('multiple clients should be able to connect to the same in-memory server', () =>
     pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
-      Effect.flatMap((server) =>
-        pipe(
-          Effect.all([server.connector(), server.connector()]),
-          Effect.flatMap(([client1, client2]) =>
-            pipe(
-              Effect.all([
-                pipe(client1.connectionState, Stream.take(1), Stream.runHead),
-                pipe(client2.connectionState, Stream.take(1), Stream.runHead),
-              ]),
-              Effect.flatMap(([state1, state2]) =>
-                pipe(
-                  server.connections,
-                  Stream.take(2),
-                  Stream.runCollect,
-                  Effect.map((chunk) => Array.from(chunk)),
-                  Effect.tap((connections) => {
-                    expect(state1._tag).toBe('Some');
-                    expect(state2._tag).toBe('Some');
-                    if (state1._tag === 'Some' && state2._tag === 'Some') {
-                      expect(state1.value).toBe('connected');
-                      expect(state2.value).toBe('connected');
-                    }
-                    expect(connections).toHaveLength(2);
-                    expect(connections[0]!.clientId).toBeDefined();
-                    expect(connections[1]!.clientId).toBeDefined();
-                    expect(connections[0]!.clientId).not.toBe(connections[1]!.clientId);
-                    return Effect.void;
-                  })
-                )
-              )
-            )
-          )
-        )
-      ),
+      Effect.flatMap(connectTwoClients),
       Effect.scoped
     )
   );
+
+  const waitForConnected = (client: { readonly connectionState: Stream.Stream<ConnectionState> }) =>
+    pipe(
+      client.connectionState,
+      Stream.filter((state) => state === 'connected'),
+      Stream.take(1),
+      Stream.runDrain
+    );
+
+  const collectFirstMessage = (messageStream: Stream.Stream<TransportMessage>) =>
+    pipe(
+      messageStream,
+      Stream.take(1),
+      Stream.runCollect,
+      Effect.map((chunk) => Array.from(chunk)),
+      Effect.timeout(100)
+    );
+
+  const verifyTestMessage =
+    (testMessage: TransportMessage) => (messages: ReadonlyArray<TransportMessage>) =>
+      Effect.sync(() => {
+        expect(messages).toHaveLength(1);
+        expect(messages[0]!.id).toEqual(testMessage.id);
+        expect(messages[0]!.type).toBe(testMessage.type);
+      });
+
+  const broadcastAndCollect = (
+    server: InMemoryServer,
+    testMessage: TransportMessage,
+    messageStream: Stream.Stream<TransportMessage>
+  ) =>
+    pipe(
+      server.broadcast(testMessage),
+      Effect.flatMap(() => collectFirstMessage(messageStream)),
+      Effect.flatMap(verifyTestMessage(testMessage))
+    );
+
+  const subscribeAndTest = (
+    server: InMemoryServer,
+    client: {
+      readonly connectionState: Stream.Stream<ConnectionState>;
+      readonly subscribe: () => Effect.Effect<Stream.Stream<TransportMessage>, Error>;
+    },
+    testMessage: TransportMessage
+  ) =>
+    pipe(
+      waitForConnected(client),
+      Effect.flatMap(() => client.subscribe()),
+      Effect.flatMap((messageStream) => broadcastAndCollect(server, testMessage, messageStream))
+    );
+
+  const testInstantMessageDelivery = (server: InMemoryServer, testMessage: TransportMessage) =>
+    pipe(
+      server.connector(),
+      Effect.flatMap((client) => subscribeAndTest(server, client, testMessage))
+    );
 
   it.effect('in-memory transport should support instant message delivery', () => {
     const testMessage = makeTransportMessage(
@@ -229,43 +330,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     return pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
-      Effect.flatMap((server) =>
-        pipe(
-          server.connector(),
-          Effect.flatMap((client) =>
-            pipe(
-              // Wait for connection
-              client.connectionState,
-              Stream.filter((state) => state === 'connected'),
-              Stream.take(1),
-              Stream.runDrain,
-              Effect.flatMap(() => client.subscribe()),
-              Effect.flatMap((messageStream) =>
-                pipe(
-                  // Send message via broadcast (should be instant for in-memory)
-                  server.broadcast(testMessage),
-                  Effect.flatMap(() =>
-                    // Collect the message (should arrive immediately)
-                    pipe(
-                      messageStream,
-                      Stream.take(1),
-                      Stream.runCollect,
-                      Effect.map((chunk) => Array.from(chunk)),
-                      Effect.timeout(100), // Very short timeout since it should be instant
-                      Effect.tap((messages) => {
-                        expect(messages).toHaveLength(1);
-                        expect(messages[0]!.id).toEqual(testMessage.id);
-                        expect(messages[0]!.type).toBe(testMessage.type);
-                        return Effect.void;
-                      })
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      ),
+      Effect.flatMap((server) => testInstantMessageDelivery(server, testMessage)),
       Effect.scoped
     );
   });

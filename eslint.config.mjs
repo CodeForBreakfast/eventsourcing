@@ -245,14 +245,7 @@ export default [
   {
     name: 'simple-pipes',
     files: ['packages/**/*.ts', 'packages/**/*.tsx'],
-    ignores: [
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      '**/*.spec.ts',
-      '**/*.spec.tsx',
-      '**/buntest/**',
-      '**/eventsourcing-testing-contracts/**',
-    ],
+    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
     languageOptions: commonLanguageOptions,
     plugins: {
       '@typescript-eslint': typescript,

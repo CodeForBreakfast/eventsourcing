@@ -14,6 +14,7 @@ import {
   TransportMessage,
   ConnectionState,
   makeTransportMessage,
+  Server,
 } from '@codeforbreakfast/eventsourcing-transport';
 import {
   runClientServerContractTests,
@@ -33,6 +34,52 @@ import { WebSocketAcceptor } from '../../lib/websocket-server';
 // WebSocket Test Context Implementation
 // =============================================================================
 
+const mapConnectionForContract = (conn: Server.ClientConnection) => ({
+  id: String(conn.clientId),
+  transport: {
+    connectionState: conn.transport.connectionState,
+    publish: (msg: TransportMessage) =>
+      pipe(
+        conn.transport.publish(msg),
+        Effect.mapError(() => new Error('Failed to publish message'))
+      ),
+    subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+      pipe(
+        conn.transport.subscribe(filter),
+        Effect.mapError(() => new Error('Failed to subscribe'))
+      ),
+  } satisfies ClientTransport,
+});
+
+const mapServerTransportForContract = (transport: Server.Transport): ServerTransport => ({
+  connections: pipe(transport.connections, Stream.map(mapConnectionForContract)),
+  broadcast: (message: TransportMessage) =>
+    pipe(
+      transport.broadcast(message),
+      Effect.mapError(() => new Error('Failed to broadcast'))
+    ),
+});
+
+const mapClientTransportForContract = (transport: {
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+  readonly publish: (msg: TransportMessage) => Effect.Effect<void, Error, never>;
+  readonly subscribe: (
+    filter?: (msg: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never>;
+}): ClientTransport => ({
+  connectionState: transport.connectionState,
+  publish: (msg: TransportMessage) =>
+    pipe(
+      transport.publish(msg),
+      Effect.mapError(() => new Error('Failed to publish message'))
+    ),
+  subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+    pipe(
+      transport.subscribe(filter),
+      Effect.mapError(() => new Error('Failed to subscribe'))
+    ),
+});
+
 const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
   Effect.succeed({
     makeTransportPair: (): TransportPair => {
@@ -46,49 +93,13 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, ne
           pipe(
             WebSocketAcceptor.make({ port, host }),
             Effect.flatMap((acceptor) => acceptor.start()),
-            Effect.map(
-              (transport): ServerTransport => ({
-                connections: pipe(
-                  transport.connections,
-                  Stream.map((conn) => ({
-                    id: String(conn.clientId),
-                    transport: {
-                      connectionState: conn.transport.connectionState,
-                      publish: (msg: TransportMessage) =>
-                        conn.transport
-                          .publish(msg)
-                          .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                      subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                        conn.transport
-                          .subscribe(filter)
-                          .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-                    } satisfies ClientTransport,
-                  }))
-                ),
-                broadcast: (message: TransportMessage) =>
-                  transport
-                    .broadcast(message)
-                    .pipe(Effect.mapError(() => new Error('Failed to broadcast'))),
-              })
-            )
+            Effect.map(mapServerTransportForContract)
           ),
 
         makeClient: () =>
           pipe(
             WebSocketConnector.connect(url),
-            Effect.map(
-              (transport): ClientTransport => ({
-                connectionState: transport.connectionState,
-                publish: (msg: TransportMessage) =>
-                  transport
-                    .publish(msg)
-                    .pipe(Effect.mapError(() => new Error('Failed to publish message'))),
-                subscribe: (filter?: (msg: TransportMessage) => boolean) =>
-                  transport
-                    .subscribe(filter)
-                    .pipe(Effect.mapError(() => new Error('Failed to subscribe'))),
-              })
-            ),
+            Effect.map(mapClientTransportForContract),
             Effect.mapError(() => new Error('Failed to connect to server'))
           ),
       };
@@ -119,6 +130,25 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 // WebSocket-Specific Tests
 // =============================================================================
 
+const checkConnectionState = (client: {
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+}) =>
+  pipe(
+    client.connectionState,
+    Stream.take(1),
+    Stream.runHead,
+    Effect.tap((state) => {
+      expect(state._tag).toBe('Some');
+      if (state._tag === 'Some') {
+        expect(state.value).toBe('connected');
+      }
+      return Effect.void;
+    })
+  );
+
+const connectAndVerify = (host: string, port: number) =>
+  pipe(WebSocketConnector.connect(`ws://${host}:${port}`), Effect.flatMap(checkConnectionState));
+
 describe('WebSocket Client-Server Specific Tests', () => {
   // WebSocket-specific tests that directly test the WebSocket implementation
 
@@ -129,25 +159,7 @@ describe('WebSocket Client-Server Specific Tests', () => {
     return pipe(
       WebSocketAcceptor.make({ port, host }),
       Effect.flatMap((acceptor) => acceptor.start()),
-      Effect.flatMap((_server) =>
-        pipe(
-          WebSocketConnector.connect(`ws://${host}:${port}`),
-          Effect.flatMap((client) =>
-            pipe(
-              client.connectionState,
-              Stream.take(1),
-              Stream.runHead,
-              Effect.tap((state) => {
-                expect(state._tag).toBe('Some');
-                if (state._tag === 'Some') {
-                  expect(state.value).toBe('connected');
-                }
-                return Effect.void;
-              })
-            )
-          )
-        )
-      )
+      Effect.flatMap((_server) => connectAndVerify(host, port))
     );
   });
 
