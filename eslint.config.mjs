@@ -348,6 +348,15 @@ export default [
     },
   },
   {
+    name: 'eslint-test-rules-exceptions',
+    files: ['**/eslint-test-rules/**/*.ts', '**/eslint-test-rules/**/*.tsx'],
+    languageOptions: commonLanguageOptions,
+    plugins: typescriptPlugin,
+    rules: {
+      '@typescript-eslint/no-unused-vars': 'off',
+    },
+  },
+  {
     name: 'ignore-patterns',
     ignores: [
       '**/node_modules/**',

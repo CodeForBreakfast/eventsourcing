@@ -109,8 +109,8 @@ const identityMap = pipe(
 // FIRST ARG IN PIPE IS FUNCTION CALL (should fail)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing first arg function call ban
 const firstArgFnCall = pipe(
+  // eslint-disable-next-line no-restricted-syntax -- Testing first arg function call ban
   Effect.succeed(42),
   Effect.map((x) => x + 1)
 );

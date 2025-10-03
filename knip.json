@@ -11,6 +11,10 @@
   ],
   "ignoreBinaries": ["publish"],
   "workspaces": {
+    "packages/eslint-test-rules": {
+      "entry": ["src/**/*.ts"],
+      "project": ["src/**/*.ts"]
+    },
     "packages/*": {
       "entry": ["src/index.{ts,js,mjs}"],
       "project": ["src/**/*.{ts,js,mjs}!"]
