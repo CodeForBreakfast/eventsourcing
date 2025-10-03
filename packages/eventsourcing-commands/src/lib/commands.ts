@@ -1,4 +1,4 @@
-import { Schema, Data, pipe, Effect } from 'effect';
+import { Schema, Data, Effect } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 

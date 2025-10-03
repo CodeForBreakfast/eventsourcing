@@ -1,4 +1,4 @@
-import { Schema, Context, Effect, pipe, Layer, Match } from 'effect';
+import { Schema, Context, Effect, Layer, Match } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,

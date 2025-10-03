@@ -242,6 +242,17 @@ export default [
       'no-restricted-syntax': [
         'error',
         {
+          selector: 'CallExpression[callee.type="MemberExpression"][callee.property.name="pipe"]',
+          message:
+            'Method-based .pipe() is forbidden. Use the standalone pipe() function instead for consistency.',
+        },
+        {
+          selector:
+            'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"]',
+          message:
+            'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
+        },
+        {
           selector:
             'CallExpression[callee.type="Identifier"][callee.name="pipe"] CallExpression[callee.type="Identifier"][callee.name="pipe"]',
           message:
