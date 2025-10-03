@@ -15,7 +15,7 @@
  * - Pure functional design with no global state
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, HashMap, HashSet, Option, pipe } from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, PubSub, HashMap, HashSet, Option } from 'effect';
 import {
   TransportError,
   ConnectionError,
