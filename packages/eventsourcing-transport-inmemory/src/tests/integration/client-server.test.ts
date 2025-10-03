@@ -32,7 +32,7 @@ import { InMemoryAcceptor, type InMemoryServer } from '../../lib/inmemory-transp
 // =============================================================================
 
 const wrapPublish =
-  (transport: { publish: (msg: TransportMessage) => Effect.Effect<void, unknown> }) =>
+  (transport: { readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown> }) =>
   (msg: TransportMessage) =>
     pipe(
       transport.publish(msg),
@@ -41,7 +41,7 @@ const wrapPublish =
 
 const wrapSubscribe =
   (transport: {
-    subscribe: (
+    readonly subscribe: (
       filter?: (msg: TransportMessage) => boolean
     ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
   }) =>
@@ -52,7 +52,9 @@ const wrapSubscribe =
     );
 
 const wrapBroadcast =
-  (transport: { broadcast: (message: TransportMessage) => Effect.Effect<void, unknown> }) =>
+  (transport: {
+    readonly broadcast: (message: TransportMessage) => Effect.Effect<void, unknown>;
+  }) =>
   (message: TransportMessage) =>
     pipe(
       transport.broadcast(message),
@@ -60,11 +62,11 @@ const wrapBroadcast =
     );
 
 const mapServerConnection = (conn: {
-  clientId: string;
-  transport: {
-    connectionState: Stream.Stream<ConnectionState>;
-    publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
-    subscribe: (
+  readonly clientId: string;
+  readonly transport: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+    readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+    readonly subscribe: (
       filter?: (msg: TransportMessage) => boolean
     ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
   };
@@ -86,9 +88,9 @@ const createServerTransport = (transport: InMemoryServer): ServerTransport => ({
 });
 
 const createClientTransport = (transport: {
-  connectionState: Stream.Stream<ConnectionState>;
-  publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
-  subscribe: (
+  readonly connectionState: Stream.Stream<ConnectionState>;
+  readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+  readonly subscribe: (
     filter?: (msg: TransportMessage) => boolean
   ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
 }): ClientTransport => ({
@@ -162,7 +164,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
   const verifyClientConnectionState = (client: {
-    connectionState: Stream.Stream<ConnectionState>;
+    readonly connectionState: Stream.Stream<ConnectionState>;
   }) =>
     pipe(
       client.connectionState,
@@ -197,8 +199,9 @@ describe('In-Memory Client-Server Specific Tests', () => {
     )
   );
 
-  const getClientConnectionState = (client: { connectionState: Stream.Stream<ConnectionState> }) =>
-    pipe(client.connectionState, Stream.take(1), Stream.runHead);
+  const getClientConnectionState = (client: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+  }) => pipe(client.connectionState, Stream.take(1), Stream.runHead);
 
   const collectServerConnections = (server: InMemoryServer) =>
     pipe(
@@ -209,9 +212,9 @@ describe('In-Memory Client-Server Specific Tests', () => {
     );
 
   const verifyMultipleClientStates = (
-    state1: { _tag: 'Some'; value: ConnectionState } | { _tag: 'None' },
-    state2: { _tag: 'Some'; value: ConnectionState } | { _tag: 'None' },
-    connections: Array<{ clientId: string }>
+    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    connections: ReadonlyArray<{ readonly clientId: string }>
   ) =>
     Effect.sync(() => {
       expect(state1._tag).toBe('Some');
@@ -228,8 +231,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   const verifyConnectionsAfterStates = (
     server: InMemoryServer,
-    state1: { _tag: 'Some'; value: ConnectionState } | { _tag: 'None' },
-    state2: { _tag: 'Some'; value: ConnectionState } | { _tag: 'None' }
+    state1: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' },
+    state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' }
   ) =>
     pipe(
       collectServerConnections(server),
@@ -238,8 +241,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
 
   const verifyTwoClientsConnected = (
     server: InMemoryServer,
-    client1: { connectionState: Stream.Stream<ConnectionState> },
-    client2: { connectionState: Stream.Stream<ConnectionState> }
+    client1: { readonly connectionState: Stream.Stream<ConnectionState> },
+    client2: { readonly connectionState: Stream.Stream<ConnectionState> }
   ) =>
     pipe(
       Effect.all([getClientConnectionState(client1), getClientConnectionState(client2)]),
@@ -261,7 +264,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     )
   );
 
-  const waitForConnected = (client: { connectionState: Stream.Stream<ConnectionState> }) =>
+  const waitForConnected = (client: { readonly connectionState: Stream.Stream<ConnectionState> }) =>
     pipe(
       client.connectionState,
       Stream.filter((state) => state === 'connected'),
@@ -279,7 +282,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     );
 
   const verifyTestMessage =
-    (testMessage: TransportMessage) => (messages: Array<TransportMessage>) =>
+    (testMessage: TransportMessage) => (messages: ReadonlyArray<TransportMessage>) =>
       Effect.sync(() => {
         expect(messages).toHaveLength(1);
         expect(messages[0]!.id).toEqual(testMessage.id);
@@ -300,8 +303,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
   const subscribeAndTest = (
     server: InMemoryServer,
     client: {
-      connectionState: Stream.Stream<ConnectionState>;
-      subscribe: () => Effect.Effect<Stream.Stream<TransportMessage>, Error>;
+      readonly connectionState: Stream.Stream<ConnectionState>;
+      readonly subscribe: () => Effect.Effect<Stream.Stream<TransportMessage>, Error>;
     },
     testMessage: TransportMessage
   ) =>
