@@ -54,7 +54,7 @@ const waitForConnectedState = (
 const asServerAndClient =
   (server: ReadonlyDeep<InMemoryServer>) =>
   (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
-    pipe(waitForConnectedState(clientTransport), Effect.as({ server, clientTransport }));
+    pipe(clientTransport, waitForConnectedState, Effect.as({ server, clientTransport }));
 
 const connectClientToServer = (server: ReadonlyDeep<InMemoryServer>) =>
   pipe(server.connector(), Effect.flatMap(asServerAndClient(server)));
@@ -170,7 +170,8 @@ const parseAndHandleMessage = (
   message: ReadonlyDeep<TransportMessage>
 ) =>
   pipe(
-    Effect.try(() => JSON.parse(message.payload as string)),
+    message.payload as string,
+    (payload) => Effect.try(() => JSON.parse(payload)),
     Effect.flatMap((parsedMessage: ParsedMessage) =>
       handleParsedMessage(server, commandHandler, subscriptionHandler, parsedMessage)
     ),
@@ -260,7 +261,8 @@ const sendCommandWithVerification = (
   verify: (result: CommandResult) => Effect.Effect<void>
 ) =>
   pipe(
-    sendWireCommand(command),
+    command,
+    sendWireCommand,
     Effect.tap(verify),
     Effect.provide(ProtocolLive(clientTransport)),
     Effect.asVoid
@@ -287,7 +289,7 @@ const verifyMultipleResults =
 const sendCommandAsEither = (
   command: ReadonlyDeep<WireCommand>,
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-) => pipe(sendWireCommand(command), Effect.either, Effect.provide(ProtocolLive(clientTransport)));
+) => pipe(command, sendWireCommand, Effect.either, Effect.provide(ProtocolLive(clientTransport)));
 
 const raceCommandWithTimeout = (
   command: ReadonlyDeep<WireCommand>,
@@ -331,7 +333,8 @@ const subscribeAndDrain = (
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
 ) =>
   pipe(
-    subscribe(streamId),
+    streamId,
+    subscribe,
     Effect.flatMap(drainEventStream),
     Effect.provide(ProtocolLive(clientTransport))
   );
@@ -342,7 +345,8 @@ const subscribeAndCollect = (
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
 ) =>
   pipe(
-    subscribe(streamId),
+    streamId,
+    subscribe,
     Effect.flatMap(collectEventStream(count)),
     Effect.provide(ProtocolLive(clientTransport))
   );
@@ -491,7 +495,8 @@ const sendTestCommandWithProtocol = (
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
 ) =>
   pipe(
-    sendWireCommand(createWireCommand('user-123', 'TestWireCommand', { data: 'test' })),
+    createWireCommand('user-123', 'TestWireCommand', { data: 'test' }),
+    sendWireCommand,
     Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
     Effect.provide(ProtocolLive(clientTransport))
   );
@@ -575,7 +580,12 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should timeout commands after 10 seconds', () =>
       pipe(
-        runTest(({ clientTransport }) => runSlowCommandTimeoutTest(clientTransport)),
+        ({
+          clientTransport,
+        }: {
+          readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
+        }) => runSlowCommandTimeoutTest(clientTransport),
+        runTest,
         Effect.provide(TestContext.TestContext)
       )
     );
@@ -584,7 +594,8 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        sendWireCommand(createWireCommand('user-123', 'FastWireCommand', { data: 'test' })),
+        createWireCommand('user-123', 'FastWireCommand', { data: 'test' }),
+        sendWireCommand,
         Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
         Effect.provide(ProtocolLive(clientTransport))
       );
@@ -707,16 +718,21 @@ describe('Protocol Behavior Tests', () => {
     );
 
     const subscribeToUserStream = pipe(
-      subscribe('user-stream'),
+      'user-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(2))
     );
 
+    const createUserAliceCommand = createWireCommand('user-1', 'CreateUser', { name: 'Alice' });
+    const updateUserBobCommand = createWireCommand('user-2', 'UpdateUser', { name: 'Bob' });
+    const sendUserAliceCommand = pipe(createUserAliceCommand, sendWireCommand);
+    const sendUpdateUserBobCommand = pipe(updateUserBobCommand, sendWireCommand);
+
     const sendConcurrentUserCommands = Effect.all(
-      [
-        sendWireCommand(createWireCommand('user-1', 'CreateUser', { name: 'Alice' })),
-        sendWireCommand(createWireCommand('user-2', 'UpdateUser', { name: 'Bob' })),
-      ],
-      { concurrency: 'unbounded' }
+      [sendUserAliceCommand, sendUpdateUserBobCommand],
+      {
+        concurrency: 'unbounded',
+      }
     );
 
     const verifyConcurrentEventsAndCommands = (
@@ -800,7 +816,8 @@ describe('Protocol Behavior Tests', () => {
       client1Transport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        subscribe('shared-stream'),
+        'shared-stream',
+        subscribe,
         Effect.flatMap(collectEventStream(3)),
         Effect.map((events) => ({
           clientId: 'client1',
@@ -813,7 +830,8 @@ describe('Protocol Behavior Tests', () => {
       client2Transport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        subscribe('shared-stream'),
+        'shared-stream',
+        subscribe,
         Effect.flatMap(collectEventStream(3)),
         Effect.map((events) => ({
           clientId: 'client2',
@@ -884,19 +902,22 @@ describe('Protocol Behavior Tests', () => {
     );
 
     const subscribeToUserStreamForMultipleTest = pipe(
-      subscribe('user-stream'),
+      'user-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(2)),
       Effect.map((events) => ({ streamType: 'user', events: Array.from(events) }))
     );
 
     const subscribeToOrderStream = pipe(
-      subscribe('order-stream'),
+      'order-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(1)),
       Effect.map((events) => ({ streamType: 'order', events: Array.from(events) }))
     );
 
     const subscribeToProductStream = pipe(
-      subscribe('product-stream'),
+      'product-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(3)),
       Effect.map((events) => ({ streamType: 'product', events: Array.from(events) }))
     );
@@ -991,7 +1012,8 @@ describe('Protocol Behavior Tests', () => {
     );
 
     const collectFirstBatch = pipe(
-      subscribe('persistent-stream'),
+      'persistent-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(2)),
       Effect.map(collectEventsAsArray)
     );
@@ -1005,7 +1027,8 @@ describe('Protocol Behavior Tests', () => {
 
     const collectResubscribeBatch = (firstBatch: readonly Event[]) =>
       pipe(
-        subscribe('persistent-stream'),
+        'persistent-stream',
+        subscribe,
         Effect.flatMap(collectEventStream(4)),
         Effect.map((events) => ({ firstBatch, resubscribeBatch: Array.from(events) }))
       );
@@ -1025,7 +1048,8 @@ describe('Protocol Behavior Tests', () => {
 
     const verifyFirstBatchAndResubscribe = (firstBatch: readonly Event[]) =>
       pipe(
-        verifyFirstBatch(firstBatch),
+        firstBatch,
+        verifyFirstBatch,
         Effect.flatMap(() => collectResubscribeBatch(firstBatch))
       );
 
@@ -1033,7 +1057,8 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        Effect.scoped(collectFirstBatch),
+        collectFirstBatch,
+        Effect.scoped,
         Effect.flatMap(verifyFirstBatchAndResubscribe),
         Effect.tap(verifyResubscribeBatch),
         Effect.provide(ProtocolLive(clientTransport))
@@ -1111,20 +1136,19 @@ describe('Protocol Behavior Tests', () => {
     const sendMalformedSuccessWithoutPosition = (
       server: ReadonlyDeep<InMemoryServer>,
       commandId: string
-    ) =>
-      pipe(
-        Effect.sleep(Duration.millis(50)),
-        Effect.flatMap(() =>
-          sendMalformedMessage(
-            server,
-            JSON.stringify({
-              type: 'command_result',
-              commandId: commandId,
-              success: true,
-            })
-          )
-        )
+    ) => {
+      const malformedMessage = JSON.stringify({
+        type: 'command_result',
+        commandId: commandId,
+        success: true,
+      });
+      const sleepDuration = Duration.millis(50);
+      return pipe(
+        sleepDuration,
+        Effect.sleep,
+        Effect.flatMap(() => sendMalformedMessage(server, malformedMessage))
       );
+    };
 
     const runMalformedSuccessTest = ({
       server,
@@ -1149,26 +1173,25 @@ describe('Protocol Behavior Tests', () => {
     };
 
     it.effect('should handle malformed command result - success without position', () =>
-      pipe(runTest(runMalformedSuccessTest), Effect.provide(TestContext.TestContext))
+      pipe(runMalformedSuccessTest, runTest, Effect.provide(TestContext.TestContext))
     );
 
     const sendMalformedFailureWithoutError = (
       server: ReadonlyDeep<InMemoryServer>,
       commandId: string
-    ) =>
-      pipe(
-        Effect.sleep(Duration.millis(50)),
-        Effect.flatMap(() =>
-          sendMalformedMessage(
-            server,
-            JSON.stringify({
-              type: 'command_result',
-              commandId: commandId,
-              success: false,
-            })
-          )
-        )
+    ) => {
+      const malformedMessage = JSON.stringify({
+        type: 'command_result',
+        commandId: commandId,
+        success: false,
+      });
+      const sleepDuration = Duration.millis(50);
+      return pipe(
+        sleepDuration,
+        Effect.sleep,
+        Effect.flatMap(() => sendMalformedMessage(server, malformedMessage))
       );
+    };
 
     const runMalformedFailureTest = ({
       server,
@@ -1193,7 +1216,7 @@ describe('Protocol Behavior Tests', () => {
     };
 
     it.effect('should handle malformed command result - failure without error message', () =>
-      pipe(runTest(runMalformedFailureTest), Effect.provide(TestContext.TestContext))
+      pipe(runMalformedFailureTest, runTest, Effect.provide(TestContext.TestContext))
     );
   });
 
@@ -1226,7 +1249,12 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should clean up pending commands when transport disconnects', () =>
       pipe(
-        runTest(({ clientTransport }) => runDisconnectTimeoutTest(clientTransport)),
+        ({
+          clientTransport,
+        }: {
+          readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
+        }) => runDisconnectTimeoutTest(clientTransport),
+        runTest,
         Effect.provide(TestContext.TestContext)
       )
     );
@@ -1247,13 +1275,15 @@ describe('Protocol Behavior Tests', () => {
       });
 
     const subscribeAndVerifyFirstConnection = pipe(
-      subscribe('test-stream'),
+      'test-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(1)),
       Effect.tap(verifyTestEventBeforeDisconnect)
     );
 
     const subscribeAndVerifyAfterReconnection = pipe(
-      subscribe('test-stream'),
+      'test-stream',
+      subscribe,
       Effect.flatMap(collectEventStream(1)),
       Effect.tap(verifyTestEventAfterReconnect)
     );
@@ -1262,7 +1292,8 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        Effect.scoped(subscribeAndVerifyFirstConnection),
+        subscribeAndVerifyFirstConnection,
+        Effect.scoped,
         Effect.flatMap(() => subscribeAndVerifyAfterReconnection),
         Effect.provide(ProtocolLive(clientTransport))
       );
@@ -1285,9 +1316,8 @@ describe('Protocol Behavior Tests', () => {
 
     const sendFirstCommand = (firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
       pipe(
-        sendWireCommand(
-          createWireCommand('first-connection', 'TestWireCommand', { data: 'first' })
-        ),
+        createWireCommand('first-connection', 'TestWireCommand', { data: 'first' }),
+        sendWireCommand,
         Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
         Effect.provide(ProtocolLive(firstTransport))
       );
@@ -1337,16 +1367,19 @@ describe('Protocol Behavior Tests', () => {
       command: ReadonlyDeep<WireCommand>,
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
-      pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport)), Effect.either);
+      pipe(command, sendWireCommand, Effect.provide(ProtocolLive(clientTransport)), Effect.either);
 
     const sendCommandAsEitherAfterDelay = (
       command: ReadonlyDeep<WireCommand>,
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-    ) =>
-      pipe(
-        Effect.sleep(Duration.millis(50)),
+    ) => {
+      const sleepDuration = Duration.millis(50);
+      return pipe(
+        sleepDuration,
+        Effect.sleep,
         Effect.flatMap(() => sendCommandWithProtocol(command, clientTransport))
       );
+    };
 
     const verifyCommandReceivedAndTimedOut =
       (command: ReadonlyDeep<WireCommand>) =>
@@ -1423,7 +1456,7 @@ describe('Protocol Behavior Tests', () => {
     const sendCommandViaProtocol = (
       command: ReadonlyDeep<WireCommand>,
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-    ) => pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport)));
+    ) => pipe(command, sendWireCommand, Effect.provide(ProtocolLive(clientTransport)));
 
     const verifyReceivedCommandMatches = (
       command: ReadonlyDeep<WireCommand>,
@@ -1556,7 +1589,8 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        subscribe('product-789'),
+        'product-789',
+        subscribe,
         Effect.flatMap(collectProductEvents),
         Effect.tap(verifyProductEvent),
         Effect.provide(ProtocolLive(clientTransport))
@@ -1675,7 +1709,7 @@ describe('Protocol Behavior Tests', () => {
       });
 
     const sendLargeCommand = (command: ReadonlyDeep<WireCommand>) =>
-      pipe(sendWireCommand(command), Effect.tap(verifyLargeCommandResult));
+      pipe(command, sendWireCommand, Effect.tap(verifyLargeCommandResult));
 
     const verifyLargeEventData = (collectedEvents: ReadonlyDeep<Iterable<Event>>) =>
       Effect.sync(() => {
@@ -1723,7 +1757,8 @@ describe('Protocol Behavior Tests', () => {
       pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.tap(verifyLargeEventData));
 
     const subscribeToBulkStreamAndVerify = pipe(
-      subscribe('bulk-stream'),
+      'bulk-stream',
+      subscribe,
       Effect.flatMap(collectAndVerifyLargeEvents)
     );
 
@@ -1830,13 +1865,16 @@ describe('Protocol Behavior Tests', () => {
       );
 
     const subscribeAndCollectCycleEvent = (cycleNumber: number) =>
-      pipe(subscribe(`cycle-stream-${cycleNumber}`), Effect.flatMap(collectCycleEvent));
+      pipe(`cycle-stream-${cycleNumber}`, subscribe, Effect.flatMap(collectCycleEvent));
 
-    const performSubscriptionCycle = (cycleNumber: number) =>
-      pipe(
-        Effect.scoped(subscribeAndCollectCycleEvent(cycleNumber)),
+    const performSubscriptionCycle = (cycleNumber: number) => {
+      const subscription = subscribeAndCollectCycleEvent(cycleNumber);
+      const scopedSubscription = pipe(subscription, Effect.scoped);
+      return pipe(
+        scopedSubscription,
         Effect.map((result) => ({ ...result, cycleNumber }))
       );
+    };
 
     const verifyCycleResults = (
       results: readonly {
@@ -1922,18 +1960,21 @@ describe('Protocol Behavior Tests', () => {
       pipe(eventStream, Stream.take(0), Stream.runDrain);
 
     const subscribeAndDrainUser123 = pipe(
-      subscribe('user-123'),
+      'user-123',
+      subscribe,
       Effect.flatMap(drainEventStreamPipe)
     );
 
     const subscribeAndDrainUser456 = pipe(
-      subscribe('user-456'),
+      'user-456',
+      subscribe,
       Effect.flatMap(drainEventStreamPipe)
     );
 
     const runCleanupTest = (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
       pipe(
-        Effect.scoped(subscribeAndDrainUser123),
+        subscribeAndDrainUser123,
+        Effect.scoped,
         Effect.flatMap(() => subscribeAndDrainUser456),
         Effect.provide(ProtocolLive(clientTransport))
       );

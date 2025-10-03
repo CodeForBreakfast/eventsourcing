@@ -106,7 +106,8 @@ describe('Command Processing Service', () => {
     const router = createMockRouter();
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.map((service) => {
         expect(typeof service.processCommand).toBe('function');
       }),
@@ -119,7 +120,8 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Success');
@@ -143,7 +145,8 @@ describe('Command Processing Service', () => {
       eventStore: EventStore<TestEvent>
     ) =>
       pipe(
-        eventStore.read(startPosition),
+        startPosition,
+        eventStore.read,
         Stream.runCollect,
         Effect.map((eventArray) => {
           expect(eventArray).toHaveLength(1);
@@ -152,7 +155,8 @@ describe('Command Processing Service', () => {
 
     const readEventsFromStore = (eventStore: EventStore<TestEvent>) =>
       pipe(
-        toStreamId('user'),
+        'user',
+        toStreamId,
         Effect.flatMap(beginning),
         Effect.flatMap((startPosition) => collectEventsFromStream(startPosition, eventStore))
       );
@@ -166,7 +170,8 @@ describe('Command Processing Service', () => {
       }
     ) =>
       pipe(
-        service.processCommand(testCommand),
+        testCommand,
+        service.processCommand,
         Effect.flatMap(() => readEventsFromStore(eventStore))
       );
 
@@ -181,7 +186,8 @@ describe('Command Processing Service', () => {
       );
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap(processCommandAndVerify),
       Effect.provide(testLayer)
     );
@@ -191,7 +197,8 @@ describe('Command Processing Service', () => {
     const router = createMockRouter();
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
@@ -211,7 +218,8 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         expect(result._tag).toBe('Failure');
@@ -239,7 +247,8 @@ describe('Command Processing Service', () => {
     const router = createMockRouter(handlers);
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map(() => {
         expect(handlerCalled).toBe(true);
@@ -288,7 +297,8 @@ describe('Command Processing Service', () => {
     }) => Effect.all(testCommands.map((cmd) => service.processCommand(cmd)));
 
     return pipe(
-      createCommandProcessingService(TestEventStore)(router),
+      router,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap(processAllCommands),
       Effect.map(([userResult, orderResult, updateResult]) => {
         expect(userResult!._tag).toBe('Success');
@@ -305,7 +315,7 @@ describe('Command Processing Service', () => {
 
     const ServiceLayer = Layer.effect(
       CommandProcessingService,
-      createCommandProcessingService(TestEventStore)(router)
+      pipe(router, createCommandProcessingService(TestEventStore))
     );
 
     return pipe(
