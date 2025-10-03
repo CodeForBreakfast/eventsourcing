@@ -119,6 +119,12 @@ const simplePipeSyntaxRestrictions = [
     message:
       'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
   },
+  {
+    selector:
+      'CallExpression[callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
+    message:
+      'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
+  },
 ];
 
 // Common functional immutability rules

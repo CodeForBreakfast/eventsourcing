@@ -285,11 +285,7 @@ describe('Command Processing Service', () => {
       readonly processCommand: (
         command: Readonly<WireCommand>
       ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
-    }) =>
-      pipe(
-        Effect.all(testCommands.map((cmd) => service.processCommand(cmd))),
-        Effect.map((results) => results)
-      );
+    }) => Effect.all(testCommands.map((cmd) => service.processCommand(cmd)));
 
     return pipe(
       createCommandProcessingService(TestEventStore)(router),
