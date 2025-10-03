@@ -13,10 +13,10 @@ import {
   Ref,
   Queue,
   PubSub,
-  pipe,
   Layer,
   Deferred,
   HashSet,
+  Fiber,
 } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import {
@@ -259,8 +259,9 @@ const handleSocketError =
     );
 
 const monitorSocketFiber =
-  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) => (fiber: unknown) =>
-    fiber.await.pipe(
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
+  (fiber: Fiber.RuntimeFiber<void, never>) =>
+    Fiber.await(fiber).pipe(
       Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
       Effect.forkScoped
     );
@@ -343,7 +344,8 @@ const connectWebSocket = (
     Effect.tap(({ stateRef }) => updateConnectionState(stateRef, 'connecting')),
     Effect.flatMap(({ stateRef, writerRef, connectedDeferred }) =>
       acquireWebSocketConnection(url, stateRef, writerRef, connectedDeferred)
-    )
+    ),
+    Effect.map((transport): Client.Transport => transport)
   );
 
 // =============================================================================
