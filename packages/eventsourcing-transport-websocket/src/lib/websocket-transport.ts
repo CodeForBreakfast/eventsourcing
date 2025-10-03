@@ -402,8 +402,7 @@ const connectWebSocket = (
     Effect.tap(({ stateRef }) => updateConnectionState(stateRef, 'connecting')),
     Effect.flatMap(({ stateRef, writerRef, connectedDeferred }) =>
       acquireWebSocketConnection(url, stateRef, writerRef, connectedDeferred)
-    ),
-    Effect.map((transport): Client.Transport => transport)
+    )
   );
 
 // =============================================================================
