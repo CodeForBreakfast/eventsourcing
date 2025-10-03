@@ -36,6 +36,16 @@ const effectSyntaxRestrictions = [
     message:
       'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
   },
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+    message:
+      'Effect.runSync is forbidden in production code. Effects should be composed and run at the application boundary.',
+  },
+  {
+    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+    message:
+      'Effect.runPromise is forbidden in production code. Effects should be composed and run at the application boundary.',
+  },
 ];
 
 // Test-specific syntax restrictions
