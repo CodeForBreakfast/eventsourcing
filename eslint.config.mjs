@@ -219,6 +219,8 @@ export default [
       'functional/immutable-data': 'off',
       // Enforce readonly arrays/tuples in tests
       'functional/prefer-readonly-type': 'error',
+      // Enforce functional patterns - no loops in tests either
+      'functional/no-loop-statements': 'error',
     },
   },
   {
