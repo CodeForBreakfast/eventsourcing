@@ -171,7 +171,7 @@ const handleClientMessage = (
 
 const createClientStateResources = (
   clientId: Server.ClientId,
-  connectedAt: Date,
+  connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
 ): Effect.Effect<ClientState, never, never> =>
   pipe(
