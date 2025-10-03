@@ -161,23 +161,25 @@ const createTestSocketLayer = (config: TestSocketConfig = {}) =>
 // Mock WebSocket Factory Tests
 // =============================================================================
 
+const waitForConnectedState = (transport: {
+  readonly connectionState: Stream.Stream<string, never, never>;
+}) =>
+  pipe(
+    transport.connectionState,
+    Stream.filter((state) => state === 'connected'),
+    Stream.take(1),
+    Stream.runDrain,
+    Effect.map(() => {
+      expect(true).toBe(true);
+    })
+  );
+
 describe('WebSocket Transport - Mock Factory', () => {
   it.scoped('should create mock WebSocket with proper state transitions', () =>
     pipe(
       WebSocketConnector.connect('ws://test.example.com'),
       Effect.provide(createTestSocketLayer({ openDelay: 100 })),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.connectionState,
-          Stream.filter((state) => state === 'connected'),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.map(() => {
-            // Mock factory properly simulates WebSocket state transitions
-            expect(true).toBe(true);
-          })
-        )
-      )
+      Effect.flatMap(waitForConnectedState)
     )
   );
 });
@@ -226,19 +228,8 @@ describe('WebSocket Transport - Error Scenarios', () => {
   it.scoped('should handle connection with very long delay', () =>
     pipe(
       WebSocketConnector.connect('ws://test.example.com'),
-      Effect.provide(createTestSocketLayer({ openDelay: 2000 })), // Long but not longer than timeout
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.connectionState,
-          Stream.filter((state) => state === 'connected'),
-          Stream.take(1),
-          Stream.runDrain,
-          Effect.map(() => {
-            // Connection eventually succeeds even with long delay
-            expect(true).toBe(true);
-          })
-        )
-      )
+      Effect.provide(createTestSocketLayer({ openDelay: 2000 })),
+      Effect.flatMap(waitForConnectedState)
     )
   );
 });
@@ -247,6 +238,23 @@ describe('WebSocket Transport - Error Scenarios', () => {
 // WebSocket-Specific Message Handling Tests
 // =============================================================================
 
+const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
+  pipe(
+    subscription,
+    Stream.take(1),
+    Stream.runHead,
+    Effect.map((message) => {
+      expect(Option.isSome(message)).toBe(true);
+      if (Option.isSome(message)) {
+        expect((message.value as { readonly id: string }).id).toBe('valid-id');
+      }
+    })
+  );
+
+const subscribeAndTakeFirst = <E, R>(transport: {
+  readonly subscribe: () => Effect.Effect<Stream.Stream<unknown, never, never>, E, R>;
+}) => pipe(transport.subscribe(), Effect.flatMap(takeFirstMessage));
+
 describe('WebSocket Transport - WebSocket-Specific Behavior', () => {
   it.scoped('should handle malformed JSON messages (WebSocket binary data)', () =>
     pipe(
@@ -254,32 +262,14 @@ describe('WebSocket Transport - WebSocket-Specific Behavior', () => {
       Effect.provide(
         createTestSocketLayer({
           preloadedMessages: [
-            new TextEncoder().encode('invalid json'), // WebSocket-specific: binary data that's not valid JSON
+            new TextEncoder().encode('invalid json'),
             new TextEncoder().encode(
               JSON.stringify(makeTransportMessage('valid-id', 'test-type', '{"data":"test"}'))
             ),
           ],
         })
       ),
-      Effect.flatMap((transport) =>
-        pipe(
-          transport.subscribe(),
-          Effect.flatMap((subscription) =>
-            pipe(
-              subscription,
-              Stream.take(1),
-              Stream.runHead,
-              Effect.map((message) => {
-                expect(Option.isSome(message)).toBe(true);
-                if (Option.isSome(message)) {
-                  // Should receive the valid message after dropping invalid JSON
-                  expect(message.value.id as string).toBe('valid-id');
-                }
-              })
-            )
-          )
-        )
-      )
+      Effect.flatMap(subscribeAndTakeFirst)
     )
   );
 });
