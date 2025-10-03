@@ -120,7 +120,7 @@ const removeStreamFromHashMap = <T>(
   streamId: EventStreamId,
   subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
 ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
-  pipe(subscriptions, HashMap.remove(streamId));
+  pipe(streamId, (id) => HashMap.remove(subscriptions, id));
 
 /**
  * Remove a subscription for a stream ID
@@ -172,6 +172,12 @@ const publishToSubscriptionIfExists = <T>(
 /**
  * Publish an event to subscribers of a stream
  */
+const getSubscriptions = <T>(
+  ref: ReadonlyDeep<
+    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
+  >
+) => pipe(ref, SynchronizedRef.get);
+
 const publishToStream = <T>(
   ref: ReadonlyDeep<
     SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
@@ -180,7 +186,8 @@ const publishToStream = <T>(
   event: T
 ): Effect.Effect<void, never, never> =>
   pipe(
-    SynchronizedRef.get(ref),
+    ref,
+    getSubscriptions,
     Effect.flatMap((subscriptions) => publishToSubscriptionIfExists(streamId, event, subscriptions))
   );
 
@@ -193,7 +200,11 @@ const createRetrySchedule = (): Schedule.Schedule<Duration.Duration, unknown, ne
 const createStreamFromPubSub = (
   pubsub: ReadonlyDeep<SubscriptionData<string>>
 ): Stream.Stream<string, never> =>
-  pipe(Stream.fromPubSub(pubsub.pubsub), Stream.retry(createRetrySchedule()));
+  pipe(
+    pubsub.pubsub,
+    (p) => Stream.fromPubSub(p as PubSub.PubSub<string>),
+    Stream.retry(createRetrySchedule())
+  );
 
 const createSubscriptionStream = (
   streamId: EventStreamId,
@@ -250,7 +261,8 @@ const publishEventWithErrorHandling = (
 export const SubscriptionManagerLive = Layer.effect(
   SubscriptionManager,
   pipe(
-    SynchronizedRef.make<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>(HashMap.empty()),
+    HashMap.empty(),
+    SynchronizedRef.make<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>,
     Effect.map((ref) => ({
       subscribeToStream: (
         streamId: EventStreamId

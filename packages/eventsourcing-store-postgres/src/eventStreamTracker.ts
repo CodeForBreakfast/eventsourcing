@@ -75,9 +75,8 @@ export const EventStreamTrackerLive = () =>
   Layer.effect(
     EventStreamTracker,
     pipe(
-      SynchronizedRef.make<HashMap.HashMap<EventStreamId, number>>(
-        HashMap.empty<EventStreamId, number>()
-      ),
+      HashMap.empty<EventStreamId, number>(),
+      SynchronizedRef.make<HashMap.HashMap<EventStreamId, number>>,
       Effect.map(
         (
           lastEventNumbers: ReadonlyDeep<

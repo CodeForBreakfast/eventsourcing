@@ -66,10 +66,11 @@ export const makePgConfigurationLive = (prefix: string) =>
 export const PgConfigurationLive = makePgConfigurationLive('PG');
 
 const MigratorLive = pipe(
-  PgMigrator.layer({
+  {
     loader,
     table: 'eventstore_migrations',
-  }),
+  },
+  PgMigrator.layer,
   Layer.provide(PgLive)
 );
 
