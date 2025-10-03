@@ -23,7 +23,7 @@ const createUpdatedEventStream = <V>(
   eventStream: EventStream<V>,
   newEvents: Chunk.Chunk<V>
 ): EventStream<V> => ({
-  events: Chunk.appendAll(newEvents)(eventStream.events),
+  events: pipe(eventStream.events, Chunk.appendAll(newEvents)),
   pubsub: eventStream.pubsub,
 });
 
@@ -80,8 +80,9 @@ const createUpdatedValue = <V>(
 ): Value<V> => ({
   eventStreamsById,
   allEventsStream: {
-    events: Chunk.appendAll(tagEventsWithStreamId(newEvents, streamEnd.streamId))(
-      allEventsStream.events
+    events: pipe(
+      allEventsStream.events,
+      Chunk.appendAll(tagEventsWithStreamId(newEvents, streamEnd.streamId))
     ),
     pubsub: allEventsStream.pubsub,
   },
