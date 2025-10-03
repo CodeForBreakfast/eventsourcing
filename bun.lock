@@ -40,6 +40,17 @@
         "effect": "3.17.14",
       },
     },
+    "packages/eslint-test-rules": {
+      "name": "@codeforbreakfast/eslint-test-rules",
+      "version": "0.0.1",
+      "devDependencies": {
+        "@typescript-eslint/eslint-plugin": "8.44.1",
+        "@typescript-eslint/parser": "8.44.1",
+        "effect": "3.17.14",
+        "eslint": "9.36.0",
+        "typescript": "5.9.2",
+      },
+    },
     "packages/eventsourcing-aggregates": {
       "name": "@codeforbreakfast/eventsourcing-aggregates",
       "version": "0.6.5",
@@ -315,6 +326,8 @@
     "@changesets/write": ["@changesets/write@0.4.0", "", { "dependencies": { "@changesets/types": "^6.1.0", "fs-extra": "^7.0.1", "human-id": "^4.1.1", "prettier": "^2.7.1" } }, "sha512-CdTLvIOPiCNuH71pyDu3rA+Q0n65cmAbXnwWH84rKGiFumFzkmHNT8KHTMEchcxN+Kl8I54xGUhJ7l3E7X396Q=="],
 
     "@codeforbreakfast/buntest": ["@codeforbreakfast/buntest@workspace:packages/buntest"],
+
+    "@codeforbreakfast/eslint-test-rules": ["@codeforbreakfast/eslint-test-rules@workspace:packages/eslint-test-rules"],
 
     "@codeforbreakfast/eventsourcing-aggregates": ["@codeforbreakfast/eventsourcing-aggregates@workspace:packages/eventsourcing-aggregates"],
 

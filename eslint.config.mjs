@@ -44,37 +44,36 @@ const functionalPluginOnly = {
 // Common Effect-related syntax restrictions
 const effectSyntaxRestrictions = [
   {
-    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="gen"]',
-    message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
-  },
-  {
-    selector: 'MemberExpression[object.name="Effect"][property.name="gen"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="gen"]',
     message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
   },
   {
     selector:
-      'ClassDeclaration:not(:has(CallExpression[callee.object.name="Data"][callee.property.name="TaggedError"])):not(:has(CallExpression[callee.object.name="Effect"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="Tag"])):not(:has(CallExpression[callee.object.name="Context"][callee.property.name="GenericTag"])):not(:has(CallExpression[callee.object.name="Schema"][callee.property.name="Class"]))',
+      'ClassDeclaration:not(:has(CallExpression > MemberExpression.callee[object.type="Identifier"][object.name=/^(Data|Effect|Context|Schema)$/][property.type="Identifier"][property.name=/^(TaggedError|Tag|GenericTag|Class)$/]))',
     message:
       'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
   },
   {
-    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runSync"]',
     message:
       'Effect.runSync is forbidden in production code. Effects should be composed and run at the application boundary.',
   },
   {
-    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runPromise"]',
     message:
       'Effect.runPromise is forbidden in production code. Effects should be composed and run at the application boundary.',
   },
   {
-    selector:
-      'BinaryExpression[operator=/^(==|===|!=|!==)$/]:has(MemberExpression[property.name="_tag"])',
+    selector: 'MemberExpression[computed=false][property.type="Identifier"][property.name="_tag"]',
     message:
-      "Direct _tag comparisons are forbidden. Use Effect's type guards instead: Either.isLeft/isRight, Option.isSome/isNone, Exit.isSuccess/isFailure, or match() functions.",
+      "Direct _tag access is forbidden. Use Effect's type guards instead: Either.isLeft/isRight, Option.isSome/isNone, Exit.isSuccess/isFailure, or match() functions.",
   },
   {
-    selector: 'SwitchStatement > MemberExpression.discriminant[property.name="_tag"]',
+    selector:
+      'SwitchStatement > MemberExpression.discriminant[property.type="Identifier"][property.name="_tag"]',
     message:
       "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
   },
@@ -83,12 +82,14 @@ const effectSyntaxRestrictions = [
 // Test-specific syntax restrictions
 const testSyntaxRestrictions = [
   {
-    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runPromise"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runPromise"]',
     message:
       'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runPromise() in tests.',
   },
   {
-    selector: 'CallExpression[callee.object.name="Effect"][callee.property.name="runSync"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runSync"]',
     message: 'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
   },
 ];
@@ -96,13 +97,14 @@ const testSyntaxRestrictions = [
 // Simple pipe syntax restrictions
 const simplePipeSyntaxRestrictions = [
   {
-    selector: 'CallExpression[callee.type="MemberExpression"][callee.property.name="pipe"]',
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name="pipe"]',
     message:
       'Method-based .pipe() is forbidden. Use the standalone pipe() function instead for consistency.',
   },
   {
     selector:
-      'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"]:not([callee.callee.object.name="Context"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Context"][callee.callee.property.name="GenericTag"]):not([callee.callee.object.name="Effect"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Data"][callee.callee.property.name="TaggedError"]):not([callee.callee.object.name="Schema"][callee.callee.property.name="Class"])',
+      'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"][callee.callee.object.type="Identifier"][callee.callee.property.type="Identifier"]:not([callee.callee.object.name="Context"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Context"][callee.callee.property.name="GenericTag"]):not([callee.callee.object.name="Effect"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Data"][callee.callee.property.name="TaggedError"]):not([callee.callee.object.name="Schema"][callee.callee.property.name="Class"])',
     message:
       'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
   },
@@ -132,13 +134,13 @@ const simplePipeSyntaxRestrictions = [
   },
   {
     selector:
-      'CallExpression[callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
+      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
     message:
       'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
   },
   {
     selector:
-      'CallExpression[callee.name="pipe"][arguments.0.type="CallExpression"][arguments.0.arguments.length=1]',
+      'CallExpression[callee.type="Identifier"][callee.name="pipe"] > .arguments:first-child[type="CallExpression"][arguments.length=1]',
     message:
       'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
   },
@@ -338,7 +340,11 @@ export default [
     languageOptions: commonLanguageOptions,
     plugins: typescriptPlugin,
     rules: {
-      'no-restricted-syntax': ['error', ...simplePipeSyntaxRestrictions],
+      'no-restricted-syntax': [
+        'error',
+        ...effectSyntaxRestrictions,
+        ...simplePipeSyntaxRestrictions,
+      ],
     },
   },
   {
