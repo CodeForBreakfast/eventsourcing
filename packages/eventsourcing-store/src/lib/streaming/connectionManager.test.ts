@@ -18,7 +18,8 @@ const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
 
 const verifyManagerAndApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
   pipe(
-    Effect.sync(() => expect(manager).toBeDefined()),
+    () => expect(manager).toBeDefined(),
+    Effect.sync,
     Effect.flatMap(() => verifyApiPort(manager))
   );
 
@@ -26,7 +27,8 @@ describe('ConnectionManager', () => {
   // Single minimal test to ensure the module loads
   it.effect('should create a connection manager', () =>
     pipe(
-      makeConnectionManager(DefaultConnectionConfig),
+      DefaultConnectionConfig,
+      makeConnectionManager,
       Effect.provide(LoggerLive),
       Effect.flatMap(verifyManagerAndApiPort)
     )
