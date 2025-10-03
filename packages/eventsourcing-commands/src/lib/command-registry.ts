@@ -62,7 +62,8 @@ export const makeCommandRegistry = <
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
     pipe(
-      matcher(command),
+      command,
+      matcher,
       Effect.exit,
       Effect.map((matcherResult) =>
         matcherResult._tag === 'Failure'

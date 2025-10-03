@@ -109,7 +109,7 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = await pipe(validateCommand(UserPayload)(wireCommand), Effect.runPromise);
+      const result = await pipe(wireCommand, validateCommand(UserPayload), Effect.runPromise);
 
       expect(result.id).toBe('cmd-123');
       expect(result.target).toBe('user-456');
@@ -132,7 +132,8 @@ describe('Wire Commands', () => {
       };
 
       const result = await pipe(
-        validateCommand(UserPayload)(wireCommand),
+        wireCommand,
+        validateCommand(UserPayload),
         Effect.either,
         Effect.runPromise
       );

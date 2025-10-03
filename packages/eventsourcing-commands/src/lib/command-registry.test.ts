@@ -19,7 +19,8 @@ describe('Command Registry', () => {
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       pipe(
-        Match.value(command),
+        command,
+        Match.value,
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -44,7 +45,8 @@ describe('Command Registry', () => {
 
     // Dispatch the command
     return pipe(
-      registry.dispatch(wireCommand),
+      wireCommand,
+      registry.dispatch,
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result._tag).toBe('Success');
@@ -64,7 +66,8 @@ describe('Command Registry', () => {
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       pipe(
-        Match.value(command),
+        command,
+        Match.value,
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -87,7 +90,8 @@ describe('Command Registry', () => {
     };
 
     return pipe(
-      registry.dispatch(invalidCommand),
+      invalidCommand,
+      registry.dispatch,
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result._tag).toBe('Failure');
@@ -112,7 +116,8 @@ describe('Command Registry', () => {
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       pipe(
-        Match.value(command),
+        command,
+        Match.value,
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -132,7 +137,8 @@ describe('Command Registry', () => {
     };
 
     return pipe(
-      registry.dispatch(unknownCommand),
+      unknownCommand,
+      registry.dispatch,
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result._tag).toBe('Failure');
@@ -156,7 +162,8 @@ describe('Command Registry', () => {
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       pipe(
-        Match.value(command),
+        command,
+        Match.value,
         Match.when({ name: 'CreateUser' }, () => Effect.die(new Error('Something went wrong'))),
         Match.exhaustive
       );
@@ -174,7 +181,8 @@ describe('Command Registry', () => {
     };
 
     return pipe(
-      registry.dispatch(wireCommand),
+      wireCommand,
+      registry.dispatch,
       Effect.tap((result) =>
         Effect.sync(() => {
           expect(result._tag).toBe('Failure');
@@ -199,7 +207,8 @@ describe('Command Registry', () => {
 
     const commandMatcher = (command: ReadonlyDeep<Commands>) =>
       pipe(
-        Match.value(command),
+        command,
+        Match.value,
         Match.when({ name: 'CreateUser' }, () =>
           Effect.succeed({
             _tag: 'Success' as const,
@@ -233,7 +242,8 @@ describe('Command Registry', () => {
     };
 
     return pipe(
-      Effect.all([registry.dispatch(createCommand), registry.dispatch(updateCommand)]),
+      [registry.dispatch(createCommand), registry.dispatch(updateCommand)] as const,
+      Effect.all,
       Effect.tap((results) =>
         Effect.sync(() => {
           expect(results[0]._tag).toBe('Success');
