@@ -2,18 +2,18 @@ import { PgClient, PgMigrator } from '@effect/sql-pg';
 import { Config, Effect, Layer, pipe, Redacted } from 'effect';
 import { loader } from './migrations';
 
-// PgConfiguration service interface
-export interface PgConfigurationInterface {
+// PgConfiguration service configuration
+export type PgConfigurationService = {
   readonly username: string;
   readonly password: Redacted.Redacted;
   readonly database: string;
   readonly host: string;
   readonly port: number;
-}
+};
 
 export class PgConfiguration extends Effect.Tag('PgConfiguration')<
   PgConfiguration,
-  PgConfigurationInterface
+  PgConfigurationService
 >() {}
 
 export const PgLive = pipe(
