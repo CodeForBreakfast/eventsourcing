@@ -243,7 +243,7 @@ export default [
         'error',
         {
           selector:
-            ':function:not(VariableDeclarator[parent.kind="const"] > *) CallExpression[callee.type="Identifier"][callee.name="pipe"]:has(CallExpression[callee.type="Identifier"][callee.name="pipe"])',
+            'CallExpression[callee.type="Identifier"][callee.name="pipe"] CallExpression[callee.type="Identifier"][callee.name="pipe"]',
           message:
             'Nested pipe() calls are forbidden. Extract the inner pipe to a separate named function that returns an Effect.',
         },

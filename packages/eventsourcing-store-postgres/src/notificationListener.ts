@@ -1,5 +1,5 @@
 import { PgClient } from '@effect/sql-pg';
-import { Effect, Layer, pipe, Stream, Ref, Queue, Schema, HashSet } from 'effect';
+import { Effect, Layer, Stream, Ref, Queue, Schema, HashSet } from 'effect';
 import {
   EventStreamId,
   EventStoreError,
