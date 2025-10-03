@@ -146,7 +146,8 @@ const parseTransportPayload = (message: ReadonlyDeep<TransportMessage>) =>
 
 const validateIncomingMessage = (rawPayload: unknown) =>
   pipe(
-    Schema.decodeUnknown(IncomingMessage)(rawPayload),
+    rawPayload,
+    Schema.decodeUnknown(IncomingMessage),
     Effect.mapError(
       (cause) =>
         new ProtocolValidationError({
@@ -416,9 +417,10 @@ const registerSubscriptionAndPublish = (
     })),
     Effect.flatMap(() => publishSubscribeMessage(transport, streamId)),
     Effect.as(
-      Stream.acquireRelease(Effect.succeed(queue), () =>
-        cleanupSubscription(stateRef, streamId)
-      ).pipe(Stream.flatMap(Stream.fromQueue))
+      pipe(
+        Stream.acquireRelease(Effect.succeed(queue), () => cleanupSubscription(stateRef, streamId)),
+        Stream.flatMap(Stream.fromQueue)
+      )
     )
   );
 
