@@ -67,6 +67,17 @@ const effectSyntaxRestrictions = [
     message:
       'Effect.runPromise is forbidden in production code. Effects should be composed and run at the application boundary.',
   },
+  {
+    selector:
+      'BinaryExpression[operator=/^(==|===|!=|!==)$/]:has(MemberExpression[property.name="_tag"])',
+    message:
+      "Direct _tag comparisons are forbidden. Use Effect's type guards instead: Either.isLeft/isRight, Option.isSome/isNone, Exit.isSuccess/isFailure, or match() functions.",
+  },
+  {
+    selector: 'SwitchStatement > MemberExpression.discriminant[property.name="_tag"]',
+    message:
+      "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
+  },
 ];
 
 // Test-specific syntax restrictions
