@@ -1,5 +1,15 @@
 import { describe, expect, it } from '@codeforbreakfast/buntest';
-import { Effect, Stream, Duration, pipe, TestClock, TestContext, Either, Schema } from 'effect';
+import {
+  Effect,
+  Stream,
+  Duration,
+  pipe,
+  TestClock,
+  TestContext,
+  Either,
+  Schema,
+  Context,
+} from 'effect';
 import {
   ProtocolLive,
   sendWireCommand,
@@ -381,7 +391,7 @@ const createTestEvent = (
   eventNumber: number,
   type: string,
   data: unknown,
-  timestamp: Date
+  timestamp: ReadonlyDeep<Date>
 ): Event => ({
   position: { streamId: unsafeCreateStreamId(streamId), eventNumber },
   type,
@@ -477,6 +487,15 @@ const waitForConnection = (transport: ReadonlyDeep<Server.ClientConnection['tran
 const sendMalformedMessage = (server: ReadonlyDeep<InMemoryServer>, payload: string) =>
   server.broadcast(makeTransportMessage(crypto.randomUUID(), 'command_result', payload));
 
+const sendTestCommandWithProtocol = (
+  clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+) =>
+  pipe(
+    sendWireCommand(createWireCommand('user-123', 'TestWireCommand', { data: 'test' })),
+    Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+    Effect.provide(ProtocolLive(clientTransport))
+  );
+
 const sendAndVerifyCommandAfterNoise = (
   server: ReadonlyDeep<InMemoryServer>,
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
@@ -485,13 +504,7 @@ const sendAndVerifyCommandAfterNoise = (
   pipe(
     noisyEffect,
     Effect.flatMap(() => createTestServerProtocol(server, defaultSuccessHandler('user-123', 1))),
-    Effect.flatMap(() =>
-      pipe(
-        sendWireCommand(createWireCommand('user-123', 'TestWireCommand', { data: 'test' })),
-        Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
-        Effect.provide(ProtocolLive(clientTransport))
-      )
-    )
+    Effect.flatMap(() => sendTestCommandWithProtocol(clientTransport))
   );
 
 describe('Protocol Behavior Tests', () => {
@@ -550,27 +563,34 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('WireCommand Timeout Behavior', () => {
+    const runSlowCommandTimeoutTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const command = createWireCommand('user-123', 'SlowWireCommand', { data: 'test' });
+      return pipe(
+        raceCommandWithTimeout(command, clientTransport, 11),
+        Effect.tap(verifyTimeoutError(command.id))
+      );
+    };
+
     it.effect('should timeout commands after 10 seconds', () =>
       pipe(
-        runTest(({ clientTransport }) => {
-          const command = createWireCommand('user-123', 'SlowWireCommand', { data: 'test' });
-          return pipe(
-            raceCommandWithTimeout(command, clientTransport, 11),
-            Effect.tap(verifyTimeoutError(command.id))
-          );
-        }),
+        runTest(({ clientTransport }) => runSlowCommandTimeoutTest(clientTransport)),
         Effect.provide(TestContext.TestContext)
       )
     );
 
+    const sendFastCommandAndVerify = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        sendWireCommand(createWireCommand('user-123', 'FastWireCommand', { data: 'test' })),
+        Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+
     it.effect('should not timeout when response arrives before deadline', () =>
-      runTestWithProtocol(defaultSuccessHandler('user-123', 1), (clientTransport) =>
-        pipe(
-          sendWireCommand(createWireCommand('user-123', 'FastWireCommand', { data: 'test' })),
-          Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
-          Effect.provide(ProtocolLive(clientTransport))
-        )
-      )
+      runTestWithProtocol(defaultSuccessHandler('user-123', 1), sendFastCommandAndVerify)
     );
   });
 
@@ -686,6 +706,44 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
+    const subscribeToUserStream = pipe(
+      subscribe('user-stream'),
+      Effect.flatMap(collectEventStream(2))
+    );
+
+    const sendConcurrentUserCommands = Effect.all(
+      [
+        sendWireCommand(createWireCommand('user-1', 'CreateUser', { name: 'Alice' })),
+        sendWireCommand(createWireCommand('user-2', 'UpdateUser', { name: 'Bob' })),
+      ],
+      { concurrency: 'unbounded' }
+    );
+
+    const verifyConcurrentEventsAndCommands = (
+      results: readonly [ReadonlyDeep<Iterable<Event>>, readonly CommandResult[]]
+    ) =>
+      Effect.sync(() => {
+        const [events, commandResults] = results;
+        const collectedEvents = Array.from(events);
+        expect(collectedEvents).toHaveLength(2);
+        expect(collectedEvents[0]!.type).toBe('UserCreated');
+        expect(collectedEvents[1]!.type).toBe('UserUpdated');
+        expect(commandResults).toHaveLength(2);
+        expect(commandResults[0]!._tag).toBe('Success');
+        expect(commandResults[1]!._tag).toBe('Success');
+      });
+
+    const runConcurrentEventsAndCommands = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.all([subscribeToUserStream, sendConcurrentUserCommands], {
+          concurrency: 'unbounded',
+        }),
+        Effect.tap(verifyConcurrentEventsAndCommands),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+
     it.effect('should handle receiving events while processing commands concurrently', () =>
       runTestWithFullProtocol(
         (command) => ({
@@ -708,127 +766,172 @@ describe('Protocol Behavior Tests', () => {
             new Date('2024-01-01T10:01:00Z')
           ),
         ],
-        (clientTransport) =>
-          pipe(
-            Effect.all(
-              [
-                pipe(subscribe('user-stream'), Effect.flatMap(collectEventStream(2))),
-                Effect.all(
-                  [
-                    sendWireCommand(createWireCommand('user-1', 'CreateUser', { name: 'Alice' })),
-                    sendWireCommand(createWireCommand('user-2', 'UpdateUser', { name: 'Bob' })),
-                  ],
-                  { concurrency: 'unbounded' }
-                ),
-              ],
-              { concurrency: 'unbounded' }
-            ),
-            Effect.tap(([events, commandResults]) =>
-              Effect.sync(() => {
-                const collectedEvents = Array.from(events);
-                expect(collectedEvents).toHaveLength(2);
-                expect(collectedEvents[0]!.type).toBe('UserCreated');
-                expect(collectedEvents[1]!.type).toBe('UserUpdated');
-                expect(commandResults).toHaveLength(2);
-                expect(commandResults[0]!._tag).toBe('Success');
-                expect(commandResults[1]!._tag).toBe('Success');
-              })
-            ),
-            Effect.provide(ProtocolLive(clientTransport))
-          )
+        runConcurrentEventsAndCommands
       )
     );
   });
 
   describe('Multiple Subscriptions', () => {
+    const sharedStreamEvents = [
+      createTestEvent(
+        'shared-stream',
+        1,
+        'SharedEvent1',
+        { message: 'First shared event', clientId: 'all' },
+        new Date('2024-01-01T10:00:00Z')
+      ),
+      createTestEvent(
+        'shared-stream',
+        2,
+        'SharedEvent2',
+        { message: 'Second shared event', value: 42 },
+        new Date('2024-01-01T10:01:00Z')
+      ),
+      createTestEvent(
+        'shared-stream',
+        3,
+        'SharedEvent3',
+        { message: 'Third shared event', status: 'completed' },
+        new Date('2024-01-01T10:02:00Z')
+      ),
+    ];
+
+    const subscribeClient1ToSharedStream = (
+      client1Transport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        subscribe('shared-stream'),
+        Effect.flatMap(collectEventStream(3)),
+        Effect.map((events) => ({
+          clientId: 'client1',
+          events: Array.from(events),
+        })),
+        Effect.provide(ProtocolLive(client1Transport))
+      );
+
+    const subscribeClient2ToSharedStream = (
+      client2Transport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        subscribe('shared-stream'),
+        Effect.flatMap(collectEventStream(3)),
+        Effect.map((events) => ({
+          clientId: 'client2',
+          events: Array.from(events),
+        })),
+        Effect.provide(ProtocolLive(client2Transport))
+      );
+
+    const verifySharedStreamResults = (
+      clientResults: readonly {
+        readonly clientId: string;
+        readonly events: readonly Event[];
+      }[]
+    ) =>
+      Effect.sync(() => {
+        const client1Results = clientResults.find((r) => r.clientId === 'client1')!;
+        const client2Results = clientResults.find((r) => r.clientId === 'client2')!;
+        expect(client1Results.events).toHaveLength(3);
+        expect(client2Results.events).toHaveLength(3);
+        [0, 1, 2].forEach((i) => {
+          expect(client1Results.events[i]!.type).toBe(client2Results.events[i]!.type);
+          expect(client1Results.events[i]!.data).toEqual(client2Results.events[i]!.data);
+          expect(client1Results.events[i]!.position.eventNumber).toBe(
+            client2Results.events[i]!.position.eventNumber
+          );
+          expect(client1Results.events[i]!.timestamp).toEqual(client2Results.events[i]!.timestamp);
+        });
+      });
+
+    const runBothClientsSubscription = (
+      client1Transport: ReadonlyDeep<Server.ClientConnection['transport']>,
+      client2Transport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.all(
+          [
+            subscribeClient1ToSharedStream(client1Transport),
+            subscribeClient2ToSharedStream(client2Transport),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.tap(verifySharedStreamResults)
+      );
+
+    const setupServerAndRunBothClients =
+      (
+        server: ReadonlyDeep<InMemoryServer>,
+        client1Transport: ReadonlyDeep<Server.ClientConnection['transport']>
+      ) =>
+      (client2Transport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+        pipe(
+          createTestServerProtocol(
+            server,
+            defaultSuccessHandler('test', 1),
+            makeEventsByStreamId({ 'shared-stream': sharedStreamEvents })
+          ),
+          Effect.flatMap(() => runBothClientsSubscription(client1Transport, client2Transport))
+        );
+
     it.effect('should handle multiple clients subscribing to the same stream', () =>
       runTest(({ server, clientTransport: client1Transport }) =>
         pipe(
           server.connector(),
           Effect.flatMap(waitForConnection),
-          Effect.flatMap((client2Transport) =>
-            pipe(
-              createTestServerProtocol(
-                server,
-                defaultSuccessHandler('test', 1),
-                makeEventsByStreamId({
-                  'shared-stream': [
-                    createTestEvent(
-                      'shared-stream',
-                      1,
-                      'SharedEvent1',
-                      { message: 'First shared event', clientId: 'all' },
-                      new Date('2024-01-01T10:00:00Z')
-                    ),
-                    createTestEvent(
-                      'shared-stream',
-                      2,
-                      'SharedEvent2',
-                      { message: 'Second shared event', value: 42 },
-                      new Date('2024-01-01T10:01:00Z')
-                    ),
-                    createTestEvent(
-                      'shared-stream',
-                      3,
-                      'SharedEvent3',
-                      { message: 'Third shared event', status: 'completed' },
-                      new Date('2024-01-01T10:02:00Z')
-                    ),
-                  ],
-                })
-              ),
-              Effect.flatMap(() =>
-                pipe(
-                  Effect.all(
-                    [
-                      pipe(
-                        subscribe('shared-stream'),
-                        Effect.flatMap(collectEventStream(3)),
-                        Effect.map((events) => ({
-                          clientId: 'client1',
-                          events: Array.from(events),
-                        })),
-                        Effect.provide(ProtocolLive(client1Transport))
-                      ),
-                      pipe(
-                        subscribe('shared-stream'),
-                        Effect.flatMap(collectEventStream(3)),
-                        Effect.map((events) => ({
-                          clientId: 'client2',
-                          events: Array.from(events),
-                        })),
-                        Effect.provide(ProtocolLive(client2Transport))
-                      ),
-                    ],
-                    { concurrency: 'unbounded' }
-                  ),
-                  Effect.tap((clientResults) =>
-                    Effect.sync(() => {
-                      const client1Results = clientResults.find((r) => r.clientId === 'client1')!;
-                      const client2Results = clientResults.find((r) => r.clientId === 'client2')!;
-                      expect(client1Results.events).toHaveLength(3);
-                      expect(client2Results.events).toHaveLength(3);
-                      [0, 1, 2].forEach((i) => {
-                        expect(client1Results.events[i]!.type).toBe(client2Results.events[i]!.type);
-                        expect(client1Results.events[i]!.data).toEqual(
-                          client2Results.events[i]!.data
-                        );
-                        expect(client1Results.events[i]!.position.eventNumber).toBe(
-                          client2Results.events[i]!.position.eventNumber
-                        );
-                        expect(client1Results.events[i]!.timestamp).toEqual(
-                          client2Results.events[i]!.timestamp
-                        );
-                      });
-                    })
-                  )
-                )
-              )
-            )
-          )
+          Effect.flatMap(setupServerAndRunBothClients(server, client1Transport))
         )
       )
     );
+
+    const subscribeToUserStreamForMultipleTest = pipe(
+      subscribe('user-stream'),
+      Effect.flatMap(collectEventStream(2)),
+      Effect.map((events) => ({ streamType: 'user', events: Array.from(events) }))
+    );
+
+    const subscribeToOrderStream = pipe(
+      subscribe('order-stream'),
+      Effect.flatMap(collectEventStream(1)),
+      Effect.map((events) => ({ streamType: 'order', events: Array.from(events) }))
+    );
+
+    const subscribeToProductStream = pipe(
+      subscribe('product-stream'),
+      Effect.flatMap(collectEventStream(3)),
+      Effect.map((events) => ({ streamType: 'product', events: Array.from(events) }))
+    );
+
+    const verifyMultipleStreamResults = (
+      streamResults: readonly {
+        readonly streamType: string;
+        readonly events: readonly Event[];
+      }[]
+    ) =>
+      Effect.sync(() => {
+        const userResults = streamResults.find((r) => r.streamType === 'user')!;
+        const orderResults = streamResults.find((r) => r.streamType === 'order')!;
+        const productResults = streamResults.find((r) => r.streamType === 'product')!;
+        expect(userResults.events).toHaveLength(2);
+        expect(userResults.events[0]!.type).toBe('UserCreated');
+        expect(orderResults.events).toHaveLength(1);
+        expect(orderResults.events[0]!.type).toBe('OrderCreated');
+        expect(productResults.events).toHaveLength(3);
+        expect(productResults.events[0]!.type).toBe('ProductAdded');
+        expect(userResults.events.some((e) => e.type.startsWith('Order'))).toBe(false);
+        expect(userResults.events.some((e) => e.type.startsWith('Product'))).toBe(false);
+      });
+
+    const runMultipleStreamSubscriptions = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.all(
+          [subscribeToUserStreamForMultipleTest, subscribeToOrderStream, subscribeToProductStream],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.tap(verifyMultipleStreamResults),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
 
     it.effect('should handle single client subscribing to multiple different streams', () =>
       runTestWithFullProtocol(
@@ -883,47 +986,58 @@ describe('Protocol Behavior Tests', () => {
             ),
           ],
         }),
-        (clientTransport) =>
-          pipe(
-            Effect.all(
-              [
-                pipe(
-                  subscribe('user-stream'),
-                  Effect.flatMap(collectEventStream(2)),
-                  Effect.map((events) => ({ streamType: 'user', events: Array.from(events) }))
-                ),
-                pipe(
-                  subscribe('order-stream'),
-                  Effect.flatMap(collectEventStream(1)),
-                  Effect.map((events) => ({ streamType: 'order', events: Array.from(events) }))
-                ),
-                pipe(
-                  subscribe('product-stream'),
-                  Effect.flatMap(collectEventStream(3)),
-                  Effect.map((events) => ({ streamType: 'product', events: Array.from(events) }))
-                ),
-              ],
-              { concurrency: 'unbounded' }
-            ),
-            Effect.tap((streamResults) =>
-              Effect.sync(() => {
-                const userResults = streamResults.find((r) => r.streamType === 'user')!;
-                const orderResults = streamResults.find((r) => r.streamType === 'order')!;
-                const productResults = streamResults.find((r) => r.streamType === 'product')!;
-                expect(userResults.events).toHaveLength(2);
-                expect(userResults.events[0]!.type).toBe('UserCreated');
-                expect(orderResults.events).toHaveLength(1);
-                expect(orderResults.events[0]!.type).toBe('OrderCreated');
-                expect(productResults.events).toHaveLength(3);
-                expect(productResults.events[0]!.type).toBe('ProductAdded');
-                expect(userResults.events.some((e) => e.type.startsWith('Order'))).toBe(false);
-                expect(userResults.events.some((e) => e.type.startsWith('Product'))).toBe(false);
-              })
-            ),
-            Effect.provide(ProtocolLive(clientTransport))
-          )
+        runMultipleStreamSubscriptions
       )
     );
+
+    const collectFirstBatch = pipe(
+      subscribe('persistent-stream'),
+      Effect.flatMap(collectEventStream(2)),
+      Effect.map(collectEventsAsArray)
+    );
+
+    const verifyFirstBatch = (firstBatch: readonly Event[]) =>
+      Effect.sync(() => {
+        expect(firstBatch).toHaveLength(2);
+        expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
+        expect(firstBatch[1]!.type).toBe('EventBeforeResubscribe2');
+      });
+
+    const collectResubscribeBatch = (firstBatch: readonly Event[]) =>
+      pipe(
+        subscribe('persistent-stream'),
+        Effect.flatMap(collectEventStream(4)),
+        Effect.map((events) => ({ firstBatch, resubscribeBatch: Array.from(events) }))
+      );
+
+    const verifyResubscribeBatch = ({
+      resubscribeBatch,
+    }: {
+      readonly resubscribeBatch: readonly Event[];
+    }) =>
+      Effect.sync(() => {
+        expect(resubscribeBatch).toHaveLength(4);
+        expect(resubscribeBatch[0]!.type).toBe('EventBeforeResubscribe1');
+        expect(resubscribeBatch[2]!.type).toBe('EventAfterResubscribe1');
+        expect(resubscribeBatch[0]!.position.eventNumber).toBe(1);
+        expect(resubscribeBatch[3]!.position.eventNumber).toBe(4);
+      });
+
+    const verifyFirstBatchAndResubscribe = (firstBatch: readonly Event[]) =>
+      pipe(
+        verifyFirstBatch(firstBatch),
+        Effect.flatMap(() => collectResubscribeBatch(firstBatch))
+      );
+
+    const runResubscriptionTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.scoped(collectFirstBatch),
+        Effect.flatMap(verifyFirstBatchAndResubscribe),
+        Effect.tap(verifyResubscribeBatch),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
 
     it.effect('should continue receiving events after re-subscribing to a stream', () =>
       runTestWithFullProtocol(
@@ -960,42 +1074,7 @@ describe('Protocol Behavior Tests', () => {
             ),
           ],
         }),
-        (clientTransport) =>
-          pipe(
-            Effect.scoped(
-              pipe(
-                subscribe('persistent-stream'),
-                Effect.flatMap(collectEventStream(2)),
-                Effect.map(collectEventsAsArray)
-              )
-            ),
-            Effect.flatMap((firstBatch) =>
-              pipe(
-                Effect.sync(() => {
-                  expect(firstBatch).toHaveLength(2);
-                  expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
-                  expect(firstBatch[1]!.type).toBe('EventBeforeResubscribe2');
-                }),
-                Effect.flatMap(() =>
-                  pipe(
-                    subscribe('persistent-stream'),
-                    Effect.flatMap(collectEventStream(4)),
-                    Effect.map((events) => ({ firstBatch, resubscribeBatch: Array.from(events) }))
-                  )
-                )
-              )
-            ),
-            Effect.tap(({ resubscribeBatch }) =>
-              Effect.sync(() => {
-                expect(resubscribeBatch).toHaveLength(4);
-                expect(resubscribeBatch[0]!.type).toBe('EventBeforeResubscribe1');
-                expect(resubscribeBatch[2]!.type).toBe('EventAfterResubscribe1');
-                expect(resubscribeBatch[0]!.position.eventNumber).toBe(1);
-                expect(resubscribeBatch[3]!.position.eventNumber).toBe(4);
-              })
-            ),
-            Effect.provide(ProtocolLive(clientTransport))
-          )
+        runResubscriptionTest
       )
     );
   });
@@ -1029,102 +1108,164 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
-    it.effect('should handle malformed command result - success without position', () =>
+    const sendMalformedSuccessWithoutPosition = (
+      server: ReadonlyDeep<InMemoryServer>,
+      commandId: string
+    ) =>
       pipe(
-        runTest(({ server, clientTransport }) => {
-          const command = createWireCommand('user-123', 'TestWireCommand', { data: 'test' });
-          return pipe(
-            Effect.all(
-              [
-                sendCommandAsEither(command, clientTransport),
-                pipe(
-                  Effect.sleep(Duration.millis(50)),
-                  Effect.flatMap(() =>
-                    sendMalformedMessage(
-                      server,
-                      JSON.stringify({
-                        type: 'command_result',
-                        commandId: command.id,
-                        success: true,
-                      })
-                    )
-                  )
-                ),
-                TestClock.adjust(Duration.seconds(11)),
-              ],
-              { concurrency: 'unbounded' }
-            ),
-            Effect.map(([result, _, __]) => result),
-            Effect.tap(verifyTimeoutError(command.id))
-          );
-        }),
-        Effect.provide(TestContext.TestContext)
-      )
+        Effect.sleep(Duration.millis(50)),
+        Effect.flatMap(() =>
+          sendMalformedMessage(
+            server,
+            JSON.stringify({
+              type: 'command_result',
+              commandId: commandId,
+              success: true,
+            })
+          )
+        )
+      );
+
+    const runMalformedSuccessTest = ({
+      server,
+      clientTransport,
+    }: {
+      readonly server: ReadonlyDeep<InMemoryServer>;
+      readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
+    }) => {
+      const command = createWireCommand('user-123', 'TestWireCommand', { data: 'test' });
+      return pipe(
+        Effect.all(
+          [
+            sendCommandAsEither(command, clientTransport),
+            sendMalformedSuccessWithoutPosition(server, command.id),
+            TestClock.adjust(Duration.seconds(11)),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.map(([result, _, __]) => result),
+        Effect.tap(verifyTimeoutError(command.id))
+      );
+    };
+
+    it.effect('should handle malformed command result - success without position', () =>
+      pipe(runTest(runMalformedSuccessTest), Effect.provide(TestContext.TestContext))
     );
 
-    it.effect('should handle malformed command result - failure without error message', () =>
+    const sendMalformedFailureWithoutError = (
+      server: ReadonlyDeep<InMemoryServer>,
+      commandId: string
+    ) =>
       pipe(
-        runTest(({ server, clientTransport }) => {
-          const command = createWireCommand('user-123', 'TestWireCommand', { data: 'test' });
-          return pipe(
-            Effect.all(
-              [
-                sendCommandAsEither(command, clientTransport),
-                pipe(
-                  Effect.sleep(Duration.millis(50)),
-                  Effect.flatMap(() =>
-                    sendMalformedMessage(
-                      server,
-                      JSON.stringify({
-                        type: 'command_result',
-                        commandId: command.id,
-                        success: false,
-                      })
-                    )
-                  )
-                ),
-                TestClock.adjust(Duration.seconds(11)),
-              ],
-              { concurrency: 'unbounded' }
-            ),
-            Effect.map(([result, _, __]) => result),
-            Effect.tap(verifyTimeoutError(command.id))
-          );
-        }),
-        Effect.provide(TestContext.TestContext)
-      )
+        Effect.sleep(Duration.millis(50)),
+        Effect.flatMap(() =>
+          sendMalformedMessage(
+            server,
+            JSON.stringify({
+              type: 'command_result',
+              commandId: commandId,
+              success: false,
+            })
+          )
+        )
+      );
+
+    const runMalformedFailureTest = ({
+      server,
+      clientTransport,
+    }: {
+      readonly server: ReadonlyDeep<InMemoryServer>;
+      readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
+    }) => {
+      const command = createWireCommand('user-123', 'TestWireCommand', { data: 'test' });
+      return pipe(
+        Effect.all(
+          [
+            sendCommandAsEither(command, clientTransport),
+            sendMalformedFailureWithoutError(server, command.id),
+            TestClock.adjust(Duration.seconds(11)),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.map(([result, _, __]) => result),
+        Effect.tap(verifyTimeoutError(command.id))
+      );
+    };
+
+    it.effect('should handle malformed command result - failure without error message', () =>
+      pipe(runTest(runMalformedFailureTest), Effect.provide(TestContext.TestContext))
     );
   });
 
   describe('Transport Failure & Recovery', () => {
+    const verifyCommandTimeout = (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) =>
+      Effect.sync(() => {
+        expect(Either.isLeft(result)).toBe(true);
+        if (Either.isLeft(result)) {
+          expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
+        }
+      });
+
+    const runDisconnectTimeoutTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.all(
+          [
+            sendCommandAsEither(
+              createWireCommand('user-123', 'SlowWireCommand', { data: 'test' }),
+              clientTransport
+            ),
+            TestClock.adjust(Duration.seconds(11)),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.map(([result]) => result),
+        Effect.tap(verifyCommandTimeout)
+      );
+
     it.effect('should clean up pending commands when transport disconnects', () =>
       pipe(
-        runTest(({ clientTransport }) =>
-          pipe(
-            Effect.all(
-              [
-                sendCommandAsEither(
-                  createWireCommand('user-123', 'SlowWireCommand', { data: 'test' }),
-                  clientTransport
-                ),
-                TestClock.adjust(Duration.seconds(11)),
-              ],
-              { concurrency: 'unbounded' }
-            ),
-            Effect.map(([result, _]) => result),
-            Effect.tap((result) =>
-              Effect.sync(() => {
-                expect(Either.isLeft(result)).toBe(true);
-                if (Either.isLeft(result)) {
-                  expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
-                }
-              })
-            )
-          )
-        ),
+        runTest(({ clientTransport }) => runDisconnectTimeoutTest(clientTransport)),
         Effect.provide(TestContext.TestContext)
       )
     );
+
+    const verifyTestEventBeforeDisconnect = (events: ReadonlyDeep<Iterable<Event>>) =>
+      Effect.sync(() => {
+        const eventArray = Array.from(events);
+        expect(eventArray).toHaveLength(1);
+        expect(eventArray[0]!.type).toBe('TestEvent');
+        expect(eventArray[0]!.data).toEqual({ message: 'before disconnect' });
+      });
+
+    const verifyTestEventAfterReconnect = (events: ReadonlyDeep<Iterable<Event>>) =>
+      Effect.sync(() => {
+        const eventArray = Array.from(events);
+        expect(eventArray).toHaveLength(1);
+        expect(eventArray[0]!.type).toBe('TestEvent');
+      });
+
+    const subscribeAndVerifyFirstConnection = pipe(
+      subscribe('test-stream'),
+      Effect.flatMap(collectEventStream(1)),
+      Effect.tap(verifyTestEventBeforeDisconnect)
+    );
+
+    const subscribeAndVerifyAfterReconnection = pipe(
+      subscribe('test-stream'),
+      Effect.flatMap(collectEventStream(1)),
+      Effect.tap(verifyTestEventAfterReconnect)
+    );
+
+    const runSubscriptionCleanupTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.scoped(subscribeAndVerifyFirstConnection),
+        Effect.flatMap(() => subscribeAndVerifyAfterReconnection),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
 
     it.effect('should clean up subscriptions when transport fails', () =>
       runTestWithFullProtocol(
@@ -1138,277 +1279,325 @@ describe('Protocol Behavior Tests', () => {
             new Date('2024-01-01T10:00:00Z')
           ),
         ],
-        (clientTransport) =>
-          pipe(
-            Effect.scoped(
-              pipe(
-                subscribe('test-stream'),
-                Effect.flatMap(collectEventStream(1)),
-                Effect.tap((events) =>
-                  Effect.sync(() => {
-                    const eventArray = Array.from(events);
-                    expect(eventArray).toHaveLength(1);
-                    expect(eventArray[0]!.type).toBe('TestEvent');
-                    expect(eventArray[0]!.data).toEqual({ message: 'before disconnect' });
-                  })
-                )
-              )
-            ),
-            Effect.flatMap(() =>
-              pipe(
-                subscribe('test-stream'),
-                Effect.flatMap(collectEventStream(1)),
-                Effect.tap((events) =>
-                  Effect.sync(() => {
-                    const eventArray = Array.from(events);
-                    expect(eventArray).toHaveLength(1);
-                    expect(eventArray[0]!.type).toBe('TestEvent');
-                  })
-                )
-              )
-            ),
-            Effect.provide(ProtocolLive(clientTransport))
-          )
+        runSubscriptionCleanupTest
       )
     );
 
+    const sendFirstCommand = (firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+      pipe(
+        sendWireCommand(
+          createWireCommand('first-connection', 'TestWireCommand', { data: 'first' })
+        ),
+        Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+        Effect.provide(ProtocolLive(firstTransport))
+      );
+
+    const verifyNewTransport = (newTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+      Effect.sync(() => {
+        expect(newTransport).toBeDefined();
+        expect(typeof newTransport.publish).toBe('function');
+        expect(typeof newTransport.subscribe).toBe('function');
+      });
+
+    const connectNewClientAndVerify = (server: ReadonlyDeep<InMemoryServer>) =>
+      pipe(server.connector(), Effect.flatMap(waitForConnection), Effect.tap(verifyNewTransport));
+
+    const runReconnectionTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        createTestServerProtocol(server, (cmd) => ({
+          _tag: 'Success',
+          position: { streamId: unsafeCreateStreamId(cmd.target), eventNumber: 1 },
+        })),
+        Effect.flatMap(() => sendFirstCommand(firstTransport)),
+        Effect.flatMap(() => connectNewClientAndVerify(server))
+      );
+
     it.effect('should handle transport reconnection gracefully', () =>
       runTest(({ server, clientTransport: firstTransport }) =>
-        pipe(
-          createTestServerProtocol(server, (cmd) => ({
-            _tag: 'Success',
-            position: { streamId: unsafeCreateStreamId(cmd.target), eventNumber: 1 },
-          })),
-          Effect.flatMap(() =>
-            pipe(
-              sendWireCommand(
-                createWireCommand('first-connection', 'TestWireCommand', { data: 'first' })
-              ),
-              Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
-              Effect.provide(ProtocolLive(firstTransport))
-            )
-          ),
-          Effect.flatMap(() =>
-            pipe(
-              server.connector(),
-              Effect.flatMap(waitForConnection),
-              Effect.tap((newTransport) =>
-                Effect.sync(() => {
-                  expect(newTransport).toBeDefined();
-                  expect(typeof newTransport.publish).toBe('function');
-                  expect(typeof newTransport.subscribe).toBe('function');
-                })
-              )
-            )
-          )
-        )
+        runReconnectionTest(server, firstTransport)
       )
     );
   });
 
   describe('Server Protocol Integration', () => {
+    const listenForWireCommand = (
+      serverProtocol: Context.Tag.Service<ServerProtocol>
+    ): Effect.Effect<readonly WireCommand[]> =>
+      pipe(
+        serverProtocol.onWireCommand,
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.map((commands) => Array.from(commands))
+      );
+
+    const sendCommandWithProtocol = (
+      command: ReadonlyDeep<WireCommand>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport)), Effect.either);
+
+    const sendCommandAsEitherAfterDelay = (
+      command: ReadonlyDeep<WireCommand>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        Effect.sleep(Duration.millis(50)),
+        Effect.flatMap(() => sendCommandWithProtocol(command, clientTransport))
+      );
+
+    const verifyCommandReceivedAndTimedOut =
+      (command: ReadonlyDeep<WireCommand>) =>
+      (
+        results: readonly [
+          readonly WireCommand[],
+          ReadonlyDeep<Either.Either<CommandResult, unknown>>,
+          unknown,
+        ]
+      ) =>
+        Effect.sync(() => {
+          const [receivedWireCommands, commandResult] = results;
+          expect(receivedWireCommands).toHaveLength(1);
+
+          const receivedWireCommand = receivedWireCommands[0]!;
+          expect(receivedWireCommand.id).toBe(command.id);
+          expect(receivedWireCommand.target).toBe(command.target);
+          expect(receivedWireCommand.name).toBe(command.name);
+          expect(receivedWireCommand.payload).toEqual(command.payload);
+
+          expect(Either.isLeft(commandResult)).toBe(true);
+          if (Either.isLeft(commandResult)) {
+            expect(commandResult.left).toBeInstanceOf(WireCommandTimeoutError);
+          }
+        });
+
+    const runServerProtocolCommandTest = (
+      serverProtocol: Context.Tag.Service<ServerProtocol>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const command: WireCommand = {
+        id: crypto.randomUUID(),
+        target: 'user-123',
+        name: 'CreateUser',
+        payload: { name: 'Alice', email: 'alice@example.com' },
+      };
+
+      return pipe(
+        Effect.all(
+          [
+            listenForWireCommand(serverProtocol),
+            sendCommandAsEitherAfterDelay(command, clientTransport),
+            TestClock.adjust(Duration.seconds(11)),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.tap(verifyCommandReceivedAndTimedOut(command))
+      );
+    };
+
+    const runServerProtocolTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        ServerProtocol,
+        Effect.flatMap((serverProtocol) =>
+          runServerProtocolCommandTest(serverProtocol, clientTransport)
+        ),
+        Effect.provide(ServerProtocolLive(server))
+      );
+
     it.effect('should emit commands through server protocol onWireCommand stream', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) => {
-              const command: WireCommand = {
-                id: crypto.randomUUID(),
-                target: 'user-123',
-                name: 'CreateUser',
-                payload: { name: 'Alice', email: 'alice@example.com' },
-              };
-
-              return pipe(
-                Effect.all(
-                  [
-                    // Listen for commands on the server protocol's onWireCommand stream
-                    pipe(
-                      serverProtocol.onWireCommand,
-                      Stream.take(1),
-                      Stream.runCollect,
-                      Effect.map((commands) => Array.from(commands))
-                    ),
-                    // Send a command from the client after a small delay
-                    pipe(
-                      Effect.sleep(Duration.millis(50)),
-                      Effect.flatMap(() =>
-                        pipe(
-                          sendWireCommand(command),
-                          Effect.provide(ProtocolLive(clientTransport)),
-                          Effect.either
-                        )
-                      )
-                    ),
-                    // Advance the test clock to trigger command timeout
-                    TestClock.adjust(Duration.seconds(11)),
-                  ],
-                  { concurrency: 'unbounded' }
-                ),
-                Effect.tap(([receivedWireCommands, commandResult, _]) =>
-                  Effect.sync(() => {
-                    // Verify the command was received by the server protocol
-                    expect(receivedWireCommands).toHaveLength(1);
-
-                    const receivedWireCommand = receivedWireCommands[0]!;
-                    expect(receivedWireCommand.id).toBe(command.id);
-                    expect(receivedWireCommand.target).toBe(command.target);
-                    expect(receivedWireCommand.name).toBe(command.name);
-                    expect(receivedWireCommand.payload).toEqual(command.payload);
-
-                    // The command should timeout on the client side since we're not responding
-                    expect(Either.isLeft(commandResult)).toBe(true);
-                    if (Either.isLeft(commandResult)) {
-                      expect(commandResult.left).toBeInstanceOf(WireCommandTimeoutError);
-                    }
-                  })
-                )
-              );
-            }),
-            Effect.provide(ServerProtocolLive(server))
-          )
+          runServerProtocolTest(server, clientTransport)
         ),
         Effect.scoped,
         Effect.provide(TestContext.TestContext)
       )
     );
 
+    const sendCommandViaProtocol = (
+      command: ReadonlyDeep<WireCommand>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport)));
+
+    const verifyReceivedCommandMatches = (
+      command: ReadonlyDeep<WireCommand>,
+      receivedWireCommand: WireCommand
+    ) =>
+      Effect.sync(() => {
+        expect(receivedWireCommand.id).toBe(command.id);
+        expect(receivedWireCommand.target).toBe(command.target);
+        expect(receivedWireCommand.name).toBe(command.name);
+      });
+
+    const verifyCommandAndSendResult = (
+      serverProtocol: Context.Tag.Service<ServerProtocol>,
+      command: ReadonlyDeep<WireCommand>,
+      receivedWireCommand: WireCommand,
+      successResult: ReadonlyDeep<CommandResult>
+    ) =>
+      pipe(
+        verifyReceivedCommandMatches(command, receivedWireCommand),
+        Effect.flatMap(() => serverProtocol.sendResult(receivedWireCommand.id, successResult))
+      );
+
+    const processCommandAndSendResult = (
+      serverProtocol: Context.Tag.Service<ServerProtocol>,
+      command: ReadonlyDeep<WireCommand>,
+      successResult: ReadonlyDeep<CommandResult>
+    ) =>
+      pipe(
+        serverProtocol.onWireCommand,
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.flatMap((commands) => {
+          const receivedWireCommand = Array.from(commands)[0]!;
+          return verifyCommandAndSendResult(
+            serverProtocol,
+            command,
+            receivedWireCommand,
+            successResult
+          );
+        })
+      );
+
+    const verifyClientResult = (results: readonly [CommandResult, void]) =>
+      Effect.sync(() => {
+        const [clientResult] = results;
+        expect(clientResult._tag).toBe('Success');
+        if (clientResult._tag === 'Success') {
+          expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
+          expect(clientResult.position.eventNumber).toBe(99);
+        }
+      });
+
+    const runSendResultTest = (
+      serverProtocol: Context.Tag.Service<ServerProtocol>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const command: WireCommand = {
+        id: crypto.randomUUID(),
+        target: 'user-456',
+        name: 'UpdateProfile',
+        payload: { name: 'Bob', email: 'bob@example.com' },
+      };
+
+      const successResult: CommandResult = {
+        _tag: 'Success',
+        position: {
+          streamId: unsafeCreateStreamId('user-456'),
+          eventNumber: 99,
+        },
+      };
+
+      return pipe(
+        Effect.all(
+          [
+            sendCommandViaProtocol(command, clientTransport),
+            processCommandAndSendResult(serverProtocol, command, successResult),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.tap(verifyClientResult)
+      );
+    };
+
+    const runServerSendResultTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        ServerProtocol,
+        Effect.flatMap((serverProtocol) => runSendResultTest(serverProtocol, clientTransport)),
+        Effect.provide(ServerProtocolLive(server))
+      );
+
     it.effect('should deliver command results via server protocol sendResult', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            ServerProtocol,
-            Effect.flatMap((serverProtocol) => {
-              const command: WireCommand = {
-                id: crypto.randomUUID(),
-                target: 'user-456',
-                name: 'UpdateProfile',
-                payload: { name: 'Bob', email: 'bob@example.com' },
-              };
-
-              const successResult: CommandResult = {
-                _tag: 'Success',
-                position: {
-                  streamId: unsafeCreateStreamId('user-456'),
-                  eventNumber: 99,
-                },
-              };
-
-              return pipe(
-                Effect.all(
-                  [
-                    // Send command from client
-                    pipe(sendWireCommand(command), Effect.provide(ProtocolLive(clientTransport))),
-                    // Server processes the command and sends result
-                    pipe(
-                      serverProtocol.onWireCommand,
-                      Stream.take(1),
-                      Stream.runCollect,
-                      Effect.flatMap((commands) => {
-                        const receivedWireCommand = Array.from(commands)[0]!;
-                        // Verify we got the command, then send a result
-                        return pipe(
-                          Effect.sync(() => {
-                            expect(receivedWireCommand.id).toBe(command.id);
-                            expect(receivedWireCommand.target).toBe(command.target);
-                            expect(receivedWireCommand.name).toBe(command.name);
-                          }),
-                          Effect.flatMap(() =>
-                            serverProtocol.sendResult(receivedWireCommand.id, successResult)
-                          )
-                        );
-                      })
-                    ),
-                  ],
-                  { concurrency: 'unbounded' }
-                ),
-                Effect.tap(([clientResult, _]) =>
-                  Effect.sync(() => {
-                    // Verify the client received the correct result
-                    expect(clientResult._tag).toBe('Success');
-                    if (clientResult._tag === 'Success') {
-                      expect(clientResult.position.streamId).toEqual(
-                        unsafeCreateStreamId('user-456')
-                      );
-                      expect(clientResult.position.eventNumber).toBe(99);
-                    }
-                  })
-                )
-              );
-            }),
-            Effect.provide(ServerProtocolLive(server))
-          )
+          runServerSendResultTest(server, clientTransport)
         ),
         Effect.scoped
       )
     );
 
+    const collectProductEvents = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
+      pipe(
+        eventStream,
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.map((events) => Array.from(events))
+      );
+
+    const verifyProductEvent = (receivedEvents: readonly Event[]) =>
+      Effect.sync(() => {
+        expect(receivedEvents).toHaveLength(1);
+
+        const receivedEvent = receivedEvents[0]!;
+        expect(receivedEvent.type).toBe('ProductCreated');
+        expect(receivedEvent.position.streamId).toEqual(unsafeCreateStreamId('product-789'));
+        expect(receivedEvent.position.eventNumber).toBe(42);
+        expect(receivedEvent.data).toEqual({
+          id: 'product-789',
+          name: 'Super Widget',
+          price: 99.99,
+          category: 'electronics',
+        });
+        expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
+      });
+
+    const subscribeAndVerifyProductEvents = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        subscribe('product-789'),
+        Effect.flatMap(collectProductEvents),
+        Effect.tap(verifyProductEvent),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+
+    const productStreamHandler = (streamId: string) => {
+      if (streamId === 'product-789') {
+        return [
+          {
+            position: {
+              streamId: unsafeCreateStreamId('product-789'),
+              eventNumber: 42,
+            },
+            type: 'ProductCreated',
+            data: {
+              id: 'product-789',
+              name: 'Super Widget',
+              price: 99.99,
+              category: 'electronics',
+            },
+            timestamp: new Date('2024-01-15T14:30:00Z'),
+          },
+        ];
+      }
+      return [];
+    };
+
+    const runPublishEventTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        createTestServerProtocol(server, undefined, productStreamHandler),
+        Effect.flatMap(() => subscribeAndVerifyProductEvents(clientTransport))
+      );
+
     it.effect('should publish events via server protocol publishEvent', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            createTestServerProtocol(server, undefined, (streamId) => {
-              // Return event when client subscribes to 'product-789'
-              if (streamId === 'product-789') {
-                return [
-                  {
-                    position: {
-                      streamId: unsafeCreateStreamId('product-789'),
-                      eventNumber: 42,
-                    },
-                    type: 'ProductCreated',
-                    data: {
-                      id: 'product-789',
-                      name: 'Super Widget',
-                      price: 99.99,
-                      category: 'electronics',
-                    },
-                    timestamp: new Date('2024-01-15T14:30:00Z'),
-                  },
-                ];
-              }
-              return [];
-            }),
-            Effect.flatMap(() =>
-              pipe(
-                // Client subscribes to the stream and waits for events
-                subscribe('product-789'),
-                Effect.flatMap((eventStream) =>
-                  pipe(
-                    eventStream,
-                    Stream.take(1),
-                    Stream.runCollect,
-                    Effect.map((events) => Array.from(events))
-                  )
-                ),
-                Effect.tap((receivedEvents) =>
-                  Effect.sync(() => {
-                    // Verify the client received the published event
-                    expect(receivedEvents).toHaveLength(1);
-
-                    const receivedEvent = receivedEvents[0]!;
-                    expect(receivedEvent.type).toBe('ProductCreated');
-                    expect(receivedEvent.position.streamId).toEqual(
-                      unsafeCreateStreamId('product-789')
-                    );
-                    expect(receivedEvent.position.eventNumber).toBe(42);
-                    expect(receivedEvent.data).toEqual({
-                      id: 'product-789',
-                      name: 'Super Widget',
-                      price: 99.99,
-                      category: 'electronics',
-                    });
-                    expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
-                  })
-                ),
-                Effect.provide(ProtocolLive(clientTransport))
-              )
-            )
-          )
+          runPublishEventTest(server, clientTransport)
         ),
         Effect.scoped
       )
@@ -1416,6 +1605,53 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Edge Cases', () => {
+    const verifyDuplicateCommandResults = (
+      results: readonly [
+        ReadonlyDeep<Either.Either<CommandResult, unknown>>,
+        ReadonlyDeep<Either.Either<CommandResult, unknown>>,
+      ]
+    ) =>
+      Effect.sync(() => {
+        const [result1, result2] = results;
+        expect(Either.isRight(result1!)).toBe(true);
+        expect(Either.isRight(result2!)).toBe(true);
+        if (Either.isRight(result1!) && Either.isRight(result2!)) {
+          expect(result1!.right._tag).toBe('Success');
+          expect(result2!.right._tag).toBe('Success');
+          if (result1!.right._tag === 'Success' && result2!.right._tag === 'Success') {
+            expect(result1!.right.position.eventNumber).toBe(42);
+            expect(result2!.right.position.eventNumber).toBe(42);
+            expect(result1!.right.position.streamId).toEqual(result2!.right.position.streamId);
+          }
+        }
+      });
+
+    const runDuplicateCommandTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const duplicateId = crypto.randomUUID();
+      const command1 = {
+        ...createWireCommand('user-123', 'CreateUser', { name: 'Alice' }),
+        id: duplicateId,
+      };
+      const command2 = {
+        ...createWireCommand('user-456', 'CreateUser', { name: 'Bob' }),
+        id: duplicateId,
+      };
+      return pipe(
+        Effect.all(
+          [
+            sendCommandAsEither(command1, clientTransport),
+            sendCommandAsEither(command2, clientTransport),
+            TestClock.adjust(Duration.millis(100)),
+          ],
+          { concurrency: 'unbounded' }
+        ),
+        Effect.map(([result1, result2, _]) => [result1, result2] as const),
+        Effect.tap(verifyDuplicateCommandResults)
+      );
+    };
+
     it.effect('should handle duplicate command IDs appropriately', () =>
       pipe(
         runTestWithProtocol(
@@ -1423,289 +1659,258 @@ describe('Protocol Behavior Tests', () => {
             _tag: 'Success',
             position: { streamId: unsafeCreateStreamId(command.target), eventNumber: 42 },
           }),
-          (clientTransport) => {
-            const duplicateId = crypto.randomUUID();
-            const command1 = {
-              ...createWireCommand('user-123', 'CreateUser', { name: 'Alice' }),
-              id: duplicateId,
-            };
-            const command2 = {
-              ...createWireCommand('user-456', 'CreateUser', { name: 'Bob' }),
-              id: duplicateId,
-            };
-            return pipe(
-              Effect.all(
-                [
-                  sendCommandAsEither(command1, clientTransport),
-                  sendCommandAsEither(command2, clientTransport),
-                  TestClock.adjust(Duration.millis(100)),
-                ],
-                { concurrency: 'unbounded' }
-              ),
-              Effect.map(([result1, result2, _]) => [result1, result2]),
-              Effect.tap(([result1, result2]) =>
-                Effect.sync(() => {
-                  expect(Either.isRight(result1!)).toBe(true);
-                  expect(Either.isRight(result2!)).toBe(true);
-                  if (Either.isRight(result1!) && Either.isRight(result2!)) {
-                    expect(result1!.right._tag).toBe('Success');
-                    expect(result2!.right._tag).toBe('Success');
-                    if (result1!.right._tag === 'Success' && result2!.right._tag === 'Success') {
-                      expect(result1!.right.position.eventNumber).toBe(42);
-                      expect(result2!.right.position.eventNumber).toBe(42);
-                      expect(result1!.right.position.streamId).toEqual(
-                        result2!.right.position.streamId
-                      );
-                    }
-                  }
-                })
-              )
-            );
-          }
+          runDuplicateCommandTest
         ),
         Effect.provide(TestContext.TestContext)
       )
     );
 
+    const verifyLargeCommandResult = (result: ReadonlyDeep<CommandResult>) =>
+      Effect.sync(() => {
+        expect(result._tag).toBe('Success');
+        if (result._tag === 'Success') {
+          expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
+          expect(result.position.eventNumber).toBe(1);
+        }
+      });
+
+    const sendLargeCommand = (command: ReadonlyDeep<WireCommand>) =>
+      pipe(sendWireCommand(command), Effect.tap(verifyLargeCommandResult));
+
+    const verifyLargeEventData = (collectedEvents: ReadonlyDeep<Iterable<Event>>) =>
+      Effect.sync(() => {
+        const events = Array.from(collectedEvents);
+        expect(events).toHaveLength(1);
+
+        const event = events[0]!;
+        expect(event.type).toBe('LargeDataEvent');
+        expect(event.position.eventNumber).toBe(1);
+
+        const data = event.data as {
+          readonly description: string;
+          readonly metadata: {
+            readonly tags: readonly string[];
+            readonly attributes: Readonly<Record<string, string>>;
+          };
+          readonly content: ReadonlyArray<{
+            readonly id: number;
+            readonly name: string;
+            readonly data: string;
+          }>;
+        };
+        expect(data.description).toHaveLength(10000);
+        expect(data.description).toBe('A'.repeat(10000));
+        expect(data.metadata.tags).toHaveLength(100);
+        expect(data.metadata.tags[0]).toBe('tag-0');
+        expect(data.metadata.tags[99]).toBe('tag-99');
+        expect(data.content).toHaveLength(1000);
+        expect(data.content[0]).toEqual({
+          id: 0,
+          name: 'Item 0',
+          data: `${'x'.repeat(50)}-0`,
+        });
+        expect(data.content[999]).toEqual({
+          id: 999,
+          name: 'Item 999',
+          data: `${'x'.repeat(50)}-999`,
+        });
+
+        expect(Object.keys(data.metadata.attributes)).toHaveLength(50);
+        expect(data.metadata.attributes['attr-0']).toBe('value-0'.repeat(20));
+      });
+
+    const collectAndVerifyLargeEvents = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
+      pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.tap(verifyLargeEventData));
+
+    const subscribeToBulkStreamAndVerify = pipe(
+      subscribe('bulk-stream'),
+      Effect.flatMap(collectAndVerifyLargeEvents)
+    );
+
+    const runLargePayloadTest = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const largePayload = {
+        bulkData: Array.from({ length: 500 }, (_, i) => ({
+          id: `bulk-item-${i}`,
+          name: `Bulk Item ${i}`,
+          description: `This is a description for bulk item ${i}. `.repeat(20),
+          properties: Object.fromEntries(
+            Array.from({ length: 10 }, (_, j) => [`prop-${j}`, `value-${j}-for-item-${i}`])
+          ),
+        })),
+        metadata: {
+          timestamp: new Date().toISOString(),
+          version: '1.0.0',
+          source: 'bulk-import-system',
+          correlationId: crypto.randomUUID(),
+        },
+      };
+
+      const command: WireCommand = {
+        id: crypto.randomUUID(),
+        target: 'bulk-stream',
+        name: 'BulkImportWireCommand',
+        payload: largePayload,
+      };
+
+      return pipe(
+        Effect.all([sendLargeCommand(command), subscribeToBulkStreamAndVerify], {
+          concurrency: 'unbounded',
+        }),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+    };
+
+    const largeEventStreamHandler = (streamId: string) => {
+      const largeData = {
+        description: 'A'.repeat(10000),
+        metadata: {
+          tags: Array.from({ length: 100 }, (_, i) => `tag-${i}`),
+          attributes: Object.fromEntries(
+            Array.from({ length: 50 }, (_, i) => [`attr-${i}`, `value-${i}`.repeat(20)])
+          ),
+        },
+        content: Array.from({ length: 1000 }, (_, i) => ({
+          id: i,
+          name: `Item ${i}`,
+          data: `${'x'.repeat(50)}-${i}`,
+        })),
+      };
+
+      return [
+        {
+          position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+          type: 'LargeDataEvent',
+          data: largeData,
+          timestamp: new Date('2024-01-01T10:00:00Z'),
+        },
+      ];
+    };
+
+    const setupLargePayloadServer = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        createTestServerProtocol(
+          server,
+          (command) => ({
+            _tag: 'Success',
+            position: {
+              streamId: unsafeCreateStreamId(command.target),
+              eventNumber: 1,
+            },
+          }),
+          largeEventStreamHandler
+        ),
+        Effect.flatMap(() => runLargePayloadTest(clientTransport))
+      );
+
     it.effect('should handle very large payloads in commands and events', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            createTestServerProtocol(
-              server,
-              (command) => ({
-                _tag: 'Success',
-                position: {
-                  streamId: unsafeCreateStreamId(command.target),
-                  eventNumber: 1,
-                },
-              }),
-              (streamId) => {
-                // Create a large event payload
-                const largeData = {
-                  description: 'A'.repeat(10000), // 10KB string
-                  metadata: {
-                    tags: Array.from({ length: 100 }, (_, i) => `tag-${i}`),
-                    attributes: Object.fromEntries(
-                      Array.from({ length: 50 }, (_, i) => [`attr-${i}`, `value-${i}`.repeat(20)])
-                    ),
-                  },
-                  content: Array.from({ length: 1000 }, (_, i) => ({
-                    id: i,
-                    name: `Item ${i}`,
-                    data: `${'x'.repeat(50)}-${i}`,
-                  })),
-                };
-
-                return [
-                  {
-                    position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
-                    type: 'LargeDataEvent',
-                    data: largeData,
-                    timestamp: new Date('2024-01-01T10:00:00Z'),
-                  },
-                ];
-              }
-            ),
-            Effect.flatMap(() => {
-              // Create a large command payload
-              const largePayload = {
-                bulkData: Array.from({ length: 500 }, (_, i) => ({
-                  id: `bulk-item-${i}`,
-                  name: `Bulk Item ${i}`,
-                  description: `This is a description for bulk item ${i}. `.repeat(20),
-                  properties: Object.fromEntries(
-                    Array.from({ length: 10 }, (_, j) => [`prop-${j}`, `value-${j}-for-item-${i}`])
-                  ),
-                })),
-                metadata: {
-                  timestamp: new Date().toISOString(),
-                  version: '1.0.0',
-                  source: 'bulk-import-system',
-                  correlationId: crypto.randomUUID(),
-                },
-              };
-
-              const command: WireCommand = {
-                id: crypto.randomUUID(),
-                target: 'bulk-stream',
-                name: 'BulkImportWireCommand',
-                payload: largePayload,
-              };
-
-              return pipe(
-                Effect.all(
-                  [
-                    // Send the large command and verify it succeeds
-                    pipe(
-                      sendWireCommand(command),
-                      Effect.tap((result) =>
-                        Effect.sync(() => {
-                          expect(result._tag).toBe('Success');
-                          if (result._tag === 'Success') {
-                            expect(result.position.streamId).toEqual(
-                              unsafeCreateStreamId('bulk-stream')
-                            );
-                            expect(result.position.eventNumber).toBe(1);
-                          }
-                        })
-                      )
-                    ),
-                    // Subscribe to the stream and verify we receive the large event
-                    pipe(
-                      subscribe('bulk-stream'),
-                      Effect.flatMap((eventStream) =>
-                        pipe(
-                          eventStream,
-                          Stream.take(1),
-                          Stream.runCollect,
-                          Effect.tap((collectedEvents) =>
-                            Effect.sync(() => {
-                              const events = Array.from(collectedEvents);
-                              expect(events).toHaveLength(1);
-
-                              const event = events[0]!;
-                              expect(event.type).toBe('LargeDataEvent');
-                              expect(event.position.eventNumber).toBe(1);
-
-                              // Verify the large data structure is preserved
-                              const data = event.data as {
-                                readonly description: string;
-                                readonly metadata: {
-                                  readonly tags: readonly string[];
-                                  readonly attributes: Readonly<Record<string, string>>;
-                                };
-                                readonly content: ReadonlyArray<{
-                                  readonly id: number;
-                                  readonly name: string;
-                                  readonly data: string;
-                                }>;
-                              };
-                              expect(data.description).toHaveLength(10000);
-                              expect(data.description).toBe('A'.repeat(10000));
-                              expect(data.metadata.tags).toHaveLength(100);
-                              expect(data.metadata.tags[0]).toBe('tag-0');
-                              expect(data.metadata.tags[99]).toBe('tag-99');
-                              expect(data.content).toHaveLength(1000);
-                              expect(data.content[0]).toEqual({
-                                id: 0,
-                                name: 'Item 0',
-                                data: `${'x'.repeat(50)}-0`,
-                              });
-                              expect(data.content[999]).toEqual({
-                                id: 999,
-                                name: 'Item 999',
-                                data: `${'x'.repeat(50)}-999`,
-                              });
-
-                              // Verify nested object structure
-                              expect(Object.keys(data.metadata.attributes)).toHaveLength(50);
-                              expect(data.metadata.attributes['attr-0']).toBe('value-0'.repeat(20));
-                            })
-                          )
-                        )
-                      )
-                    ),
-                  ],
-                  { concurrency: 'unbounded' }
-                ),
-                Effect.provide(ProtocolLive(clientTransport))
-              );
-            })
-          )
+          setupLargePayloadServer(server, clientTransport)
         ),
         Effect.scoped
       )
     );
 
+    const collectCycleEvent = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
+      pipe(
+        eventStream,
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.map((events) => ({
+          cycleNumber: -1,
+          eventCount: Array.from(events).length,
+          firstEvent: Array.from(events)[0],
+        }))
+      );
+
+    const subscribeAndCollectCycleEvent = (cycleNumber: number) =>
+      pipe(subscribe(`cycle-stream-${cycleNumber}`), Effect.flatMap(collectCycleEvent));
+
+    const performSubscriptionCycle = (cycleNumber: number) =>
+      pipe(
+        Effect.scoped(subscribeAndCollectCycleEvent(cycleNumber)),
+        Effect.map((result) => ({ ...result, cycleNumber }))
+      );
+
+    const verifyCycleResults = (
+      results: readonly {
+        readonly cycleNumber: number;
+        readonly eventCount: number;
+        readonly firstEvent: Event | undefined;
+      }[]
+    ) =>
+      Effect.sync(() => {
+        expect(results).toHaveLength(10);
+
+        results.forEach((result, index) => {
+          expect(result.cycleNumber).toBe(index);
+          expect(result.eventCount).toBe(1);
+          expect(result.firstEvent?.type).toBe('CycleTestEvent');
+          expect(result.firstEvent?.data).toEqual({
+            streamId: `cycle-stream-${index}`,
+            cycle: true,
+          });
+          expect(result.firstEvent?.position.eventNumber).toBe(1);
+        });
+
+        const uniqueStreamIds = new Set(
+          results.map((r) => (r.firstEvent?.data as { readonly streamId?: string })?.streamId)
+        );
+        expect(uniqueStreamIds.size).toBe(10);
+
+        Array.from({ length: 10 }, (_, i) => i).forEach((i) => {
+          expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
+        });
+      });
+
+    const runRapidCycles = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const cycles = Array.from({ length: 10 }, (_, i) => performSubscriptionCycle(i));
+
+      return pipe(
+        Effect.all(cycles, { concurrency: 'unbounded' }),
+        Effect.tap(verifyCycleResults),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+    };
+
+    const cycleEventHandler = (streamId: string) => [
+      {
+        position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
+        type: 'CycleTestEvent',
+        data: { streamId, cycle: true },
+        timestamp: new Date('2024-01-01T10:00:00Z'),
+      },
+    ];
+
+    const setupRapidCycleTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        createTestServerProtocol(
+          server,
+          () => ({
+            _tag: 'Success',
+            position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+          }),
+          cycleEventHandler
+        ),
+        Effect.flatMap(() => runRapidCycles(clientTransport))
+      );
+
     it.effect('should handle rapid subscription/unsubscription cycles', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            createTestServerProtocol(
-              server,
-              () => ({
-                _tag: 'Success',
-                position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
-              }),
-              (streamId) => {
-                // Return a simple event for any subscription
-                return [
-                  {
-                    position: { streamId: unsafeCreateStreamId(streamId), eventNumber: 1 },
-                    type: 'CycleTestEvent',
-                    data: { streamId, cycle: true },
-                    timestamp: new Date('2024-01-01T10:00:00Z'),
-                  },
-                ];
-              }
-            ),
-            Effect.flatMap(() => {
-              // Perform rapid subscription/unsubscription cycles
-              const performCycle = (cycleNumber: number) =>
-                pipe(
-                  Effect.scoped(
-                    pipe(
-                      subscribe(`cycle-stream-${cycleNumber}`),
-                      Effect.flatMap((eventStream) =>
-                        pipe(
-                          // Take just 1 event then let scope end (unsubscribe)
-                          eventStream,
-                          Stream.take(1),
-                          Stream.runCollect,
-                          Effect.map((events) => ({
-                            cycleNumber,
-                            eventCount: Array.from(events).length,
-                            firstEvent: Array.from(events)[0],
-                          }))
-                        )
-                      )
-                    )
-                  )
-                );
-
-              // Perform 10 rapid cycles
-              const cycles = Array.from({ length: 10 }, (_, i) => performCycle(i));
-
-              return pipe(
-                Effect.all(cycles, { concurrency: 'unbounded' }),
-                Effect.tap((results) =>
-                  Effect.sync(() => {
-                    // Verify all cycles completed successfully
-                    expect(results).toHaveLength(10);
-
-                    // Each cycle should have received exactly 1 event
-                    results.forEach((result, index) => {
-                      expect(result.cycleNumber).toBe(index);
-                      expect(result.eventCount).toBe(1);
-                      expect(result.firstEvent?.type).toBe('CycleTestEvent');
-                      expect(result.firstEvent?.data).toEqual({
-                        streamId: `cycle-stream-${index}`,
-                        cycle: true,
-                      });
-                      expect(result.firstEvent?.position.eventNumber).toBe(1);
-                    });
-
-                    // Verify we got events for all the different streams
-                    const uniqueStreamIds = new Set(
-                      results.map(
-                        (r) => (r.firstEvent?.data as { readonly streamId?: string })?.streamId
-                      )
-                    );
-                    expect(uniqueStreamIds.size).toBe(10);
-
-                    // Verify stream names are correct
-                    Array.from({ length: 10 }, (_, i) => i).forEach((i) => {
-                      expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
-                    });
-                  })
-                ),
-                Effect.provide(ProtocolLive(clientTransport))
-              );
-            })
-          )
+          setupRapidCycleTest(server, clientTransport)
         ),
         Effect.scoped
       )
@@ -1713,82 +1918,85 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Basic Cleanup', () => {
+    const drainEventStreamPipe = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
+      pipe(eventStream, Stream.take(0), Stream.runDrain);
+
+    const subscribeAndDrainUser123 = pipe(
+      subscribe('user-123'),
+      Effect.flatMap(drainEventStreamPipe)
+    );
+
+    const subscribeAndDrainUser456 = pipe(
+      subscribe('user-456'),
+      Effect.flatMap(drainEventStreamPipe)
+    );
+
+    const runCleanupTest = (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+      pipe(
+        Effect.scoped(subscribeAndDrainUser123),
+        Effect.flatMap(() => subscribeAndDrainUser456),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+
     it.effect('should clean up subscriptions when stream scope ends', () =>
       pipe(
         setupTestEnvironment,
-        Effect.flatMap(({ clientTransport }) =>
-          pipe(
-            Effect.scoped(
-              pipe(
-                subscribe('user-123'),
-                Effect.flatMap((eventStream) => pipe(eventStream, Stream.take(0), Stream.runDrain))
-              )
-            ),
-            Effect.flatMap(() =>
-              pipe(
-                subscribe('user-456'),
-                Effect.flatMap((newEventStream) =>
-                  pipe(newEventStream, Stream.take(0), Stream.runDrain)
-                )
-              )
-            ),
-            Effect.provide(ProtocolLive(clientTransport))
-          )
-        ),
+        Effect.flatMap(({ clientTransport }) => runCleanupTest(clientTransport)),
         Effect.scoped
       )
     );
+
+    const verifySequentialResults = (results: ReadonlyDeep<Iterable<CommandResult>>) =>
+      Effect.sync(() => {
+        const resultsArray = Array.from(results);
+        expect(resultsArray).toHaveLength(5);
+        resultsArray.forEach((result, index) => {
+          expect(result._tag).toBe('Success');
+          if (result._tag === 'Success') {
+            expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
+            expect(result.position.eventNumber).toBeGreaterThan(0);
+            expect(result.position.eventNumber).toBeLessThanOrEqual(100);
+          }
+        });
+      });
+
+    const sendSequentialCommands = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      const commands: readonly WireCommand[] = Array.from({ length: 5 }, (_, i) => ({
+        id: crypto.randomUUID(),
+        target: `user-${i + 1}`,
+        name: 'SequentialWireCommand',
+        payload: { sequence: i + 1, data: `test-data-${i + 1}` },
+      }));
+
+      return pipe(
+        Effect.forEach(commands, sendWireCommand, { concurrency: 1 }),
+        Effect.tap(verifySequentialResults),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
+    };
+
+    const runSequentialCommandsTest = (
+      server: ReadonlyDeep<InMemoryServer>,
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        createTestServerProtocol(server, (command) => ({
+          _tag: 'Success',
+          position: {
+            streamId: unsafeCreateStreamId(command.target),
+            eventNumber: Math.floor(Math.random() * 100) + 1,
+          },
+        })),
+        Effect.flatMap(() => sendSequentialCommands(clientTransport))
+      );
 
     it.effect('should handle multiple sequential commands after cleanup', () =>
       pipe(
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
-          pipe(
-            createTestServerProtocol(server, (command) => ({
-              _tag: 'Success',
-              position: {
-                streamId: unsafeCreateStreamId(command.target),
-                eventNumber: Math.floor(Math.random() * 100) + 1,
-              },
-            })),
-            Effect.flatMap(() => {
-              // Create multiple commands to send sequentially
-              const commands: readonly WireCommand[] = Array.from({ length: 5 }, (_, i) => ({
-                id: crypto.randomUUID(),
-                target: `user-${i + 1}`,
-                name: 'SequentialWireCommand',
-                payload: { sequence: i + 1, data: `test-data-${i + 1}` },
-              }));
-
-              // Send commands sequentially (not concurrently) to test cleanup between commands
-              const sendSequentially = (cmds: ReadonlyDeep<readonly WireCommand[]>) =>
-                Effect.forEach(cmds, sendWireCommand, {
-                  concurrency: 1,
-                });
-
-              return pipe(
-                sendSequentially(commands),
-                Effect.tap((results) =>
-                  Effect.sync(() => {
-                    // All commands should have succeeded
-                    const resultsArray = Array.from(results);
-                    expect(resultsArray).toHaveLength(5);
-                    resultsArray.forEach((result, index) => {
-                      expect(result._tag).toBe('Success');
-                      if (result._tag === 'Success') {
-                        expect(result.position.streamId).toEqual(
-                          unsafeCreateStreamId(`user-${index + 1}`)
-                        );
-                        expect(result.position.eventNumber).toBeGreaterThan(0);
-                        expect(result.position.eventNumber).toBeLessThanOrEqual(100);
-                      }
-                    });
-                  })
-                ),
-                Effect.provide(ProtocolLive(clientTransport))
-              );
-            })
-          )
+          runSequentialCommandsTest(server, clientTransport)
         ),
         Effect.scoped
       )
