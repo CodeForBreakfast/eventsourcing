@@ -248,7 +248,7 @@ export default [
         },
         {
           selector:
-            'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"]',
+            'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"]:not([callee.callee.object.name="Context"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Context"][callee.callee.property.name="GenericTag"]):not([callee.callee.object.name="Effect"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Data"][callee.callee.property.name="TaggedError"]):not([callee.callee.object.name="Schema"][callee.callee.property.name="Class"])',
           message:
             'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
         },

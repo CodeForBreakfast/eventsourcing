@@ -5,7 +5,7 @@
  * Contains purely functional definitions with no side effects.
  */
 
-import { Data, Brand, Schema } from 'effect';
+import { Data, Brand, Schema, pipe } from 'effect';
 
 // ============================================================================
 // Branded Types
@@ -56,7 +56,7 @@ export type TransportMetadata = typeof TransportMetadata.Type;
  * Payload is always a serialized JSON string - transport doesn't care what's inside
  */
 export const TransportMessage = Schema.Struct({
-  id: Schema.String.pipe(Schema.brand('MessageId')),
+  id: pipe(Schema.String, Schema.brand('MessageId')),
   type: Schema.String,
   payload: Schema.String, // Always a JSON string - transport doesn't parse it
   metadata: Schema.optionalWith(TransportMetadata, { default: () => ({}) }),
