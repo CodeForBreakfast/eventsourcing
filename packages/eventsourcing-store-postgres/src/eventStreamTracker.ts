@@ -20,6 +20,22 @@ export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
   }>
 >() {}
 
+const getCurrentLastEvent = (
+  lastEvents: HashMap.HashMap<EventStreamId, number>,
+  streamId: EventStreamId
+): number =>
+  pipe(
+    lastEvents,
+    HashMap.get(streamId),
+    Option.getOrElse(() => -1)
+  );
+
+const updateLastEvents = (
+  lastEvents: HashMap.HashMap<EventStreamId, number>,
+  streamId: EventStreamId,
+  eventNumber: number
+): HashMap.HashMap<EventStreamId, number> => pipe(lastEvents, HashMap.set(streamId, eventNumber));
+
 /**
  * Implementation of EventStreamTracker service
  */
@@ -41,17 +57,13 @@ export const EventStreamTrackerLive = () =>
               SynchronizedRef.modify(
                 lastEventNumbers,
                 (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
-                  const currentLastEvent = pipe(
-                    lastEvents,
-                    HashMap.get(streamId),
-                    Option.getOrElse(() => -1)
-                  );
+                  const currentLastEvent = getCurrentLastEvent(lastEvents, streamId);
 
                   // Check if this is a new event we haven't seen
                   if (eventNumber > currentLastEvent) {
                     return [
                       Option.some(event), // Return the event
-                      pipe(lastEvents, HashMap.set(streamId, eventNumber)),
+                      updateLastEvents(lastEvents, streamId, eventNumber),
                     ];
                   }
 
