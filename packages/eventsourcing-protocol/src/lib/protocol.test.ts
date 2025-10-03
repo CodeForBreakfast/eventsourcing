@@ -9,6 +9,7 @@ import {
   Either,
   Schema,
   Context,
+  Match,
 } from 'effect';
 import {
   ProtocolLive,
@@ -17,7 +18,12 @@ import {
   WireCommandTimeoutError,
   Event,
 } from './protocol';
-import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import {
+  WireCommand,
+  CommandResult,
+  isCommandSuccess,
+  isCommandFailure,
+} from '@codeforbreakfast/eventsourcing-commands';
 import { ServerProtocolLive, ServerProtocol } from './server-protocol';
 import {
   InMemoryAcceptor,
@@ -104,8 +110,8 @@ const handleCommandMessage = (
       JSON.stringify({
         type: 'command_result',
         commandId: command.id,
-        success: result._tag === 'Success',
-        ...(result._tag === 'Success'
+        success: isCommandSuccess(result),
+        ...(isCommandSuccess(result)
           ? { position: result.position }
           : { error: JSON.stringify(result.error) }),
       })
@@ -232,8 +238,8 @@ const createTestServerProtocol = (
 
 const verifySuccessResult = (streamId: string, eventNumber: number) => (result: CommandResult) =>
   Effect.sync(() => {
-    expect(result._tag).toBe('Success');
-    if (result._tag === 'Success') {
+    expect(isCommandSuccess(result)).toBe(true);
+    if (isCommandSuccess(result)) {
       expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
       expect(result.position.eventNumber).toBe(eventNumber);
     }
@@ -242,16 +248,26 @@ const verifySuccessResult = (streamId: string, eventNumber: number) => (result: 
 const verifyFailureResult =
   (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) =>
     Effect.sync(() => {
-      expect(result._tag).toBe('Failure');
-      if (result._tag === 'Failure') {
-        expect(result.error._tag).toBe('UnknownError');
-        if (result.error._tag === 'UnknownError') {
-          const parsedError = JSON.parse(result.error.message);
-          expect(parsedError._tag).toBe(expectedErrorTag);
-          if (expectedErrors) {
-            expect(parsedError.validationErrors).toEqual(expectedErrors);
-          }
-        }
+      expect(isCommandFailure(result)).toBe(true);
+      if (isCommandFailure(result)) {
+        pipe(
+          result.error,
+          Match.value,
+          Match.tag('UnknownError', (error) => {
+            const parsedError = JSON.parse(error.message) as {
+              readonly _tag: string;
+              readonly validationErrors?: readonly string[];
+            };
+            // eslint-disable-next-line no-restricted-syntax
+            expect(parsedError._tag).toBe(expectedErrorTag);
+            if (expectedErrors) {
+              expect(parsedError.validationErrors).toEqual(expectedErrors);
+            }
+          }),
+          Match.orElse(() => {
+            throw new Error('Expected UnknownError');
+          })
+        );
       }
     });
 
@@ -282,7 +298,8 @@ const verifyMultipleResults =
     Effect.sync(() => {
       expect(results).toHaveLength(expectedTags.length);
       expectedTags.forEach((expectedTag, index) => {
-        expect(results[index]!._tag).toBe(expectedTag);
+        const checkFn = expectedTag === 'Success' ? isCommandSuccess : isCommandFailure;
+        expect(checkFn(results[index]!)).toBe(true);
       });
     });
 
@@ -497,7 +514,7 @@ const sendTestCommandWithProtocol = (
   pipe(
     createWireCommand('user-123', 'TestWireCommand', { data: 'test' }),
     sendWireCommand,
-    Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+    Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
     Effect.provide(ProtocolLive(clientTransport))
   );
 
@@ -596,7 +613,7 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         createWireCommand('user-123', 'FastWireCommand', { data: 'test' }),
         sendWireCommand,
-        Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+        Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -745,8 +762,8 @@ describe('Protocol Behavior Tests', () => {
         expect(collectedEvents[0]!.type).toBe('UserCreated');
         expect(collectedEvents[1]!.type).toBe('UserUpdated');
         expect(commandResults).toHaveLength(2);
-        expect(commandResults[0]!._tag).toBe('Success');
-        expect(commandResults[1]!._tag).toBe('Success');
+        expect(isCommandSuccess(commandResults[0]!)).toBe(true);
+        expect(isCommandSuccess(commandResults[1]!)).toBe(true);
       });
 
     const runConcurrentEventsAndCommands = (
@@ -1318,7 +1335,7 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         createWireCommand('first-connection', 'TestWireCommand', { data: 'first' }),
         sendWireCommand,
-        Effect.tap((result) => Effect.sync(() => expect(result._tag).toBe('Success'))),
+        Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
         Effect.provide(ProtocolLive(firstTransport))
       );
 
@@ -1502,8 +1519,8 @@ describe('Protocol Behavior Tests', () => {
     const verifyClientResult = (results: readonly [CommandResult, void]) =>
       Effect.sync(() => {
         const [clientResult] = results;
-        expect(clientResult._tag).toBe('Success');
-        if (clientResult._tag === 'Success') {
+        expect(isCommandSuccess(clientResult)).toBe(true);
+        if (isCommandSuccess(clientResult)) {
           expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
           expect(clientResult.position.eventNumber).toBe(99);
         }
@@ -1650,9 +1667,9 @@ describe('Protocol Behavior Tests', () => {
         expect(Either.isRight(result1!)).toBe(true);
         expect(Either.isRight(result2!)).toBe(true);
         if (Either.isRight(result1!) && Either.isRight(result2!)) {
-          expect(result1!.right._tag).toBe('Success');
-          expect(result2!.right._tag).toBe('Success');
-          if (result1!.right._tag === 'Success' && result2!.right._tag === 'Success') {
+          expect(isCommandSuccess(result1!.right)).toBe(true);
+          expect(isCommandSuccess(result2!.right)).toBe(true);
+          if (isCommandSuccess(result1!.right) && isCommandSuccess(result2!.right)) {
             expect(result1!.right.position.eventNumber).toBe(42);
             expect(result2!.right.position.eventNumber).toBe(42);
             expect(result1!.right.position.streamId).toEqual(result2!.right.position.streamId);
@@ -1701,8 +1718,8 @@ describe('Protocol Behavior Tests', () => {
 
     const verifyLargeCommandResult = (result: ReadonlyDeep<CommandResult>) =>
       Effect.sync(() => {
-        expect(result._tag).toBe('Success');
-        if (result._tag === 'Success') {
+        expect(isCommandSuccess(result)).toBe(true);
+        if (isCommandSuccess(result)) {
           expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
           expect(result.position.eventNumber).toBe(1);
         }
@@ -1992,8 +2009,8 @@ describe('Protocol Behavior Tests', () => {
         const resultsArray = Array.from(results);
         expect(resultsArray).toHaveLength(5);
         resultsArray.forEach((result, index) => {
-          expect(result._tag).toBe('Success');
-          if (result._tag === 'Success') {
+          expect(isCommandSuccess(result)).toBe(true);
+          if (isCommandSuccess(result)) {
             expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
             expect(result.position.eventNumber).toBeGreaterThan(0);
             expect(result.position.eventNumber).toBeLessThanOrEqual(100);

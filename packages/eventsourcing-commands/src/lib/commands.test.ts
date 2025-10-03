@@ -1,5 +1,5 @@
 import { describe, test, expect } from '@codeforbreakfast/buntest';
-import { Schema, Effect, pipe } from 'effect';
+import { Schema, Effect, pipe, Either } from 'effect';
 import { WireCommand, CommandResult, validateCommand, CommandValidationError } from './commands';
 
 describe('Wire Commands', () => {
@@ -13,7 +13,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(validCommand, Schema.decodeUnknownEither(WireCommand));
-      expect(result._tag).toBe('Right');
+      expect(Either.isRight(result)).toBe(true);
     });
 
     test('should reject invalid wire command', () => {
@@ -25,7 +25,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(invalidCommand, Schema.decodeUnknownEither(WireCommand));
-      expect(result._tag).toBe('Left');
+      expect(Either.isLeft(result)).toBe(true);
     });
 
     test('should accept unknown payload types', () => {
@@ -41,7 +41,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(commandWithComplexPayload, Schema.decodeUnknownEither(WireCommand));
-      expect(result._tag).toBe('Right');
+      expect(Either.isRight(result)).toBe(true);
     });
   });
 
@@ -56,7 +56,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(successResult, Schema.decodeUnknownEither(CommandResult));
-      expect(result._tag).toBe('Right');
+      expect(Either.isRight(result)).toBe(true);
     });
 
     test('should validate validation error', () => {
@@ -71,7 +71,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
-      expect(result._tag).toBe('Right');
+      expect(Either.isRight(result)).toBe(true);
     });
 
     test('should validate handler not found error', () => {
@@ -86,7 +86,7 @@ describe('Wire Commands', () => {
       };
 
       const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
-      expect(result._tag).toBe('Right');
+      expect(Either.isRight(result)).toBe(true);
     });
   });
 
@@ -138,8 +138,8 @@ describe('Wire Commands', () => {
         Effect.runPromise
       );
 
-      expect(result._tag).toBe('Left');
-      if (result._tag === 'Left') {
+      expect(Either.isLeft(result)).toBe(true);
+      if (Either.isLeft(result)) {
         expect(result.left).toBeInstanceOf(CommandValidationError);
         const validationError = result.left as CommandValidationError;
         expect(validationError.commandId).toBe('cmd-123');

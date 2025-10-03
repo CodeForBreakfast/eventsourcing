@@ -174,11 +174,10 @@ const distributeMessageToSubscribers = (
     Effect.asVoid
   );
 
+const parseJsonString = (data: ReadonlyDeep<string>) => Effect.try(() => JSON.parse(data));
+
 const parseClientMessageData = (data: ReadonlyDeep<string>) =>
-  pipe(
-    Effect.try(() => JSON.parse(data)),
-    Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema))
-  );
+  pipe(data, parseJsonString, Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema)));
 
 const handleClientMessage = (
   clientState: ReadonlyDeep<ClientState>,

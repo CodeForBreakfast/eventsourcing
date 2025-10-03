@@ -234,14 +234,14 @@ const distributeMessageToSubscribers = (
     Effect.asVoid
   );
 
+const decodeAndParseJson = (data: Readonly<Uint8Array>) =>
+  Effect.try(() => {
+    const text = new TextDecoder().decode(data);
+    return JSON.parse(text);
+  });
+
 const parseIncomingData = (data: Readonly<Uint8Array>) =>
-  pipe(
-    Effect.try(() => {
-      const text = new TextDecoder().decode(data);
-      return JSON.parse(text);
-    }),
-    Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema))
-  );
+  pipe(data, decodeAndParseJson, Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema)));
 
 const handleIncomingMessage = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,

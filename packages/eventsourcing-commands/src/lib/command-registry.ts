@@ -1,4 +1,4 @@
-import { Schema, Context, Effect, Layer, Match, pipe } from 'effect';
+import { Schema, Context, Effect, Layer, Match, pipe, Either, Exit } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   WireCommand,
@@ -66,7 +66,7 @@ export const makeCommandRegistry = <
       matcher,
       Effect.exit,
       Effect.map((matcherResult) =>
-        matcherResult._tag === 'Failure'
+        Exit.isFailure(matcherResult)
           ? {
               _tag: 'Failure' as const,
               error: {
@@ -87,7 +87,7 @@ export const makeCommandRegistry = <
       Schema.decodeUnknown(commandSchema),
       Effect.either,
       Effect.flatMap((parseResult) => {
-        if (parseResult._tag === 'Left') {
+        if (Either.isLeft(parseResult)) {
           // Validation failed
           return Effect.succeed({
             _tag: 'Failure' as const,
