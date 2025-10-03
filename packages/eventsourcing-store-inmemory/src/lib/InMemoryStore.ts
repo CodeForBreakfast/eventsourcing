@@ -12,7 +12,8 @@ interface EventStream<V> {
 
 const emptyStream = <V>(): Effect.Effect<EventStream<V>, never, never> =>
   pipe(
-    PubSub.bounded<V>(2 ^ 8),
+    2 ^ 8,
+    PubSub.bounded<V>,
     Effect.map((pubsub) => ({
       events: Chunk.empty<V>(),
       pubsub,
