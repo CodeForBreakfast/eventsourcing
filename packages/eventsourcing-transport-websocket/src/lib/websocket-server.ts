@@ -50,7 +50,8 @@ const createClientConnectionStateStream = (
 ): Readonly<Stream.Stream<ConnectionState, never, never>> =>
   Stream.unwrapScoped(
     pipe(
-      Ref.get(clientState.connectionStateRef),
+      clientState.connectionStateRef,
+      Ref.get,
       Effect.map((connectionState) =>
         // Provide current state first, then future updates
         Stream.concat(
@@ -66,7 +67,8 @@ const publishMessageToClient =
   (clientState: ReadonlyDeep<ClientState>) =>
   (message: ReadonlyDeep<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
-      Ref.get(clientState.connectionStateRef),
+      clientState.connectionStateRef,
+      Ref.get,
       Effect.filterOrFail(
         (connectionState) => connectionState === 'connected',
         () =>
@@ -99,6 +101,14 @@ const applyFilterToMessage =
     }
   };
 
+const addQueueToClientSubscribers =
+  (clientState: ReadonlyDeep<ClientState>) =>
+  (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
+    pipe(
+      clientState.subscribersRef,
+      Ref.update((subscribers) => HashSet.add(subscribers, queue))
+    );
+
 const subscribeToClientMessages =
   (clientState: ReadonlyDeep<ClientState>) =>
   (
@@ -106,7 +116,7 @@ const subscribeToClientMessages =
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
-      Effect.tap((queue) => Ref.update(clientState.subscribersRef, HashSet.add(queue))),
+      Effect.tap(addQueueToClientSubscribers(clientState)),
       Effect.map((queue) => {
         const baseStream = Stream.fromQueue(queue);
 
@@ -124,41 +134,67 @@ const createClientTransport = (clientState: ReadonlyDeep<ClientState>): Client.T
 // Pure Functions for Client Connection Management
 // =============================================================================
 
+const setClientConnectionStateRef = (
+  clientState: ReadonlyDeep<ClientState>,
+  newState: ReadonlyDeep<ConnectionState>
+): Effect.Effect<void, never, never> => Ref.set(clientState.connectionStateRef, newState);
+
+const offerToClientConnectionStateQueue = (
+  clientState: ReadonlyDeep<ClientState>,
+  newState: ReadonlyDeep<ConnectionState>
+): Effect.Effect<void, never, never> => Queue.offer(clientState.connectionStateQueue, newState);
+
 const updateClientConnectionState = (
   clientState: ReadonlyDeep<ClientState>,
   newState: ReadonlyDeep<ConnectionState>
 ): Effect.Effect<void, never, never> =>
   pipe(
-    Ref.set(clientState.connectionStateRef, newState),
-    Effect.flatMap(() => Queue.offer(clientState.connectionStateQueue, newState))
+    setClientConnectionStateRef(clientState, newState),
+    Effect.flatMap(() => offerToClientConnectionStateQueue(clientState, newState))
   );
+
+const offerMessageToClientQueue =
+  (message: TransportMessage) =>
+  (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
+    Queue.offer(queue, message);
 
 const distributeMessageToSubscribers = (
   clientState: ReadonlyDeep<ClientState>,
   message: TransportMessage
 ): Effect.Effect<void, never, never> =>
   pipe(
-    Ref.get(clientState.subscribersRef),
+    clientState.subscribersRef,
+    Ref.get,
     Effect.flatMap((subscribers) =>
-      Effect.forEach(subscribers, (queue) => Queue.offer(queue, message), {
+      Effect.forEach(subscribers, offerMessageToClientQueue(message), {
         discard: true,
       })
     ),
     Effect.asVoid
   );
 
+const parseClientMessageData = (
+  data: ReadonlyDeep<string>
+): Effect.Effect<
+  { readonly _tag: 'success'; readonly message: TransportMessage } | { readonly _tag: 'error' },
+  never,
+  never
+> =>
+  Effect.sync(() => {
+    try {
+      return { _tag: 'success' as const, message: JSON.parse(data) as TransportMessage };
+    } catch {
+      return { _tag: 'error' as const };
+    }
+  });
+
 const handleClientMessage = (
   clientState: ReadonlyDeep<ClientState>,
   data: ReadonlyDeep<string>
 ): Effect.Effect<void, never, never> =>
   pipe(
-    Effect.sync(() => {
-      try {
-        return { _tag: 'success' as const, message: JSON.parse(data) as TransportMessage };
-      } catch {
-        return { _tag: 'error' as const };
-      }
-    }),
+    data,
+    parseClientMessageData,
     Effect.flatMap((result) =>
       result._tag === 'error'
         ? Effect.void
@@ -170,17 +206,34 @@ const handleClientMessage = (
 // WebSocket Server Implementation
 // =============================================================================
 
+const createEmptySubscribersRef = (): Effect.Effect<
+  Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>,
+  never,
+  never
+> => Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>());
+
+const createClientResources = (): Effect.Effect<
+  {
+    readonly connectionStateQueue: Queue.Queue<ConnectionState>;
+    readonly connectionStateRef: Ref.Ref<ConnectionState>;
+    readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
+  },
+  never,
+  never
+> =>
+  Effect.all({
+    connectionStateQueue: Queue.unbounded<ConnectionState>(),
+    connectionStateRef: Ref.make<ConnectionState>('connecting'),
+    subscribersRef: createEmptySubscribersRef(),
+  });
+
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
 ): Effect.Effect<ClientState, never, never> =>
   pipe(
-    Effect.all({
-      connectionStateQueue: Queue.unbounded<ConnectionState>(),
-      connectionStateRef: Ref.make<ConnectionState>('connecting'),
-      subscribersRef: Ref.make(HashSet.empty<Queue.Queue<TransportMessage>>()),
-    }),
+    createClientResources(),
     Effect.map(
       ({ connectionStateQueue, connectionStateRef, subscribersRef }) =>
         ({
@@ -194,6 +247,35 @@ const createClientStateResources = (
     )
   );
 
+const addClientToServerState = (
+  serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
+  clientState: ClientState
+): Effect.Effect<void, never, never> =>
+  pipe(
+    serverStateRef,
+    Ref.update((state) => ({
+      ...state,
+      clients: HashMap.set(state.clients, clientState.id, clientState),
+    }))
+  );
+
+const getServerState = (
+  serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>
+): Effect.Effect<ServerState, never, never> => pipe(serverStateRef, Ref.get);
+
+const offerNewConnection =
+  (clientState: ClientState) =>
+  (state: ServerState): Effect.Effect<void, never, never> =>
+    pipe(
+      state.newConnectionsQueue,
+      Queue.offer({
+        clientId: clientState.id,
+        transport: createClientTransport(clientState),
+        connectedAt: clientState.connectedAt,
+        metadata: {},
+      })
+    );
+
 const registerClientAndTransition =
   (
     serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
@@ -202,12 +284,7 @@ const registerClientAndTransition =
   (clientState: ClientState): Effect.Effect<void, never, never> =>
     pipe(
       updateClientConnectionState(clientState, 'connecting'),
-      Effect.flatMap(() =>
-        Ref.update(serverStateRef, (state) => ({
-          ...state,
-          clients: HashMap.set(state.clients, clientState.id, clientState),
-        }))
-      ),
+      Effect.flatMap(() => addClientToServerState(serverStateRef, clientState)),
       Effect.flatMap(() => {
         // eslint-disable-next-line functional/immutable-data
         (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
@@ -215,15 +292,8 @@ const registerClientAndTransition =
         };
         return updateClientConnectionState(clientState, 'connected');
       }),
-      Effect.flatMap(() => Ref.get(serverStateRef)),
-      Effect.flatMap((state) =>
-        Queue.offer(state.newConnectionsQueue, {
-          clientId: clientState.id,
-          transport: createClientTransport(clientState),
-          connectedAt: clientState.connectedAt,
-          metadata: {},
-        })
-      )
+      Effect.flatMap(() => getServerState(serverStateRef)),
+      Effect.flatMap(offerNewConnection(clientState))
     );
 
 const processClientMessage = (
@@ -232,10 +302,23 @@ const processClientMessage = (
   message: ReadonlyDeep<string>
 ): Effect.Effect<void, never, never> =>
   pipe(
-    HashMap.get(state.clients, clientId),
+    state.clients,
+    HashMap.get(clientId),
     Effect.map((clientState) => handleClientMessage(clientState, message)),
     Effect.flatten,
     Effect.orElse(() => Effect.void)
+  );
+
+const removeClientFromServerState = (
+  serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
+  clientId: Server.ClientId
+): Effect.Effect<void, never, never> =>
+  pipe(
+    serverStateRef,
+    Ref.update((s) => ({
+      ...s,
+      clients: HashMap.remove(s.clients, clientId),
+    }))
   );
 
 const disconnectClientAndCleanup =
@@ -243,12 +326,7 @@ const disconnectClientAndCleanup =
   (clientState: ClientState): Effect.Effect<void, never, never> =>
     pipe(
       updateClientConnectionState(clientState, 'disconnected'),
-      Effect.flatMap(() =>
-        Ref.update(serverStateRef, (s) => ({
-          ...s,
-          clients: HashMap.remove(s.clients, clientState.id),
-        }))
-      )
+      Effect.flatMap(() => removeClientFromServerState(serverStateRef, clientState.id))
     );
 
 const handleClientDisconnection = (
@@ -257,7 +335,8 @@ const handleClientDisconnection = (
   clientId: Server.ClientId
 ): Effect.Effect<void, never, never> =>
   pipe(
-    HashMap.get(state.clients, clientId),
+    state.clients,
+    HashMap.get(clientId),
     Effect.map(disconnectClientAndCleanup(serverStateRef)),
     Effect.flatten,
     Effect.orElse(() => Effect.void)
@@ -274,12 +353,19 @@ const createWebSocketServer = (
         hostname: config.host,
         websocket: {
           open: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
+            const createClientIdAndTimestamp = (): Effect.Effect<
+              { readonly clientId: Server.ClientId; readonly connectedAt: Date },
+              never,
+              never
+            > =>
+              Effect.sync(() => ({
+                clientId: Server.makeClientId(`client-${Date.now()}-${Math.random()}`),
+                connectedAt: new Date(),
+              }));
+
             Effect.runSync(
               pipe(
-                Effect.sync(() => ({
-                  clientId: Server.makeClientId(`client-${Date.now()}-${Math.random()}`),
-                  connectedAt: new Date(),
-                })),
+                createClientIdAndTimestamp(),
                 Effect.flatMap(({ clientId, connectedAt }) =>
                   createClientStateResources(clientId, connectedAt, ws)
                 ),
@@ -294,7 +380,8 @@ const createWebSocketServer = (
           ) => {
             Effect.runSync(
               pipe(
-                Ref.get(serverStateRef),
+                serverStateRef,
+                Ref.get,
                 Effect.flatMap((state) => {
                   const clientId = ws.data.clientId;
                   return processClientMessage(state, clientId, message);
@@ -306,7 +393,8 @@ const createWebSocketServer = (
           close: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
             Effect.runSync(
               pipe(
-                Ref.get(serverStateRef),
+                serverStateRef,
+                Ref.get,
                 Effect.flatMap((state) => {
                   const clientId = ws.data.clientId;
                   return handleClientDisconnection(serverStateRef, state, clientId);
@@ -342,7 +430,8 @@ const broadcastToSingleClient =
   (message: ReadonlyDeep<TransportMessage>) =>
   (clientState: ReadonlyDeep<ClientState>): Effect.Effect<void, never, never> =>
     pipe(
-      publishMessageToClient(clientState)(message),
+      message,
+      publishMessageToClient(clientState),
       Effect.catchAll(() => Effect.void)
     );
 
@@ -356,7 +445,8 @@ const createServerTransport = (
     message: ReadonlyDeep<TransportMessage>
   ): Effect.Effect<void, TransportError, never> =>
     pipe(
-      Ref.get(serverStateRef),
+      serverStateRef,
+      Ref.get,
       Effect.flatMap((state) =>
         Effect.forEach(HashMap.values(state.clients), broadcastToSingleClient(message), {
           discard: true,
@@ -406,7 +496,7 @@ const shutdownServerResources = (state: ServerState): Effect.Effect<void, never,
 const cleanupServer = (
   serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>
 ): Effect.Effect<void, never, never> =>
-  pipe(Ref.get(serverStateRef), Effect.flatMap(shutdownServerResources));
+  pipe(serverStateRef, Ref.get, Effect.flatMap(shutdownServerResources));
 
 const updateServerStateWithBunServer =
   (
@@ -415,7 +505,8 @@ const updateServerStateWithBunServer =
   ) =>
   (server: Bun.Server): Effect.Effect<Server.Transport, never, never> =>
     pipe(
-      Ref.update(serverStateRef, (state) => ({ ...state, server })),
+      serverStateRef,
+      Ref.update((state) => ({ ...state, server })),
       Effect.as(createServerTransport(serverStateRef, newConnectionsQueue))
     );
 
@@ -432,17 +523,23 @@ const startWebSocketServerWithState =
       Effect.flatMap(updateServerStateWithBunServer(serverStateRef, newConnectionsQueue))
     );
 
+const createServerStateRef = (
+  newConnectionsQueue: Queue.Queue<Server.ClientConnection>
+): Effect.Effect<Ref.Ref<ServerState>, never, never> =>
+  Ref.make<ServerState>({
+    server: null,
+    clients: HashMap.empty(),
+    newConnectionsQueue,
+  });
+
 const initializeServerStateAndStart =
   (config: ReadonlyDeep<WebSocketServerConfig>) =>
   (
     newConnectionsQueue: Queue.Queue<Server.ClientConnection>
   ): Effect.Effect<Server.Transport, Server.ServerStartError, never> =>
     pipe(
-      Ref.make<ServerState>({
-        server: null,
-        clients: HashMap.empty(),
-        newConnectionsQueue,
-      }),
+      newConnectionsQueue,
+      createServerStateRef,
       Effect.flatMap(startWebSocketServerWithState(config, newConnectionsQueue))
     );
 

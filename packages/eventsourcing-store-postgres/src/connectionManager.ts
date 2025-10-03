@@ -56,7 +56,8 @@ const createListenConnection = pipe(
 
 const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
   pipe(
-    Effect.succeed(listenConnection),
+    listenConnection,
+    Effect.succeed,
     Effect.flatMap((client) =>
       Effect.tryPromise({
         try: () => (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
@@ -75,7 +76,8 @@ const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
 
 const executeShutdown = (listenConnection: PgClient.PgClient) =>
   pipe(
-    Effect.succeed(listenConnection),
+    listenConnection,
+    Effect.succeed,
     Effect.flatMap((client) =>
       Effect.tryPromise({
         try: () => (client as PgClientWithQuery).end(),

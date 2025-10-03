@@ -34,7 +34,8 @@ describe('Event Sourcing Errors', () => {
 
     it.effect('should work with Effect error handling', () =>
       pipe(
-        Effect.fail(eventStoreError.read('stream-1', 'Stream not found')),
+        eventStoreError.read('stream-1', 'Stream not found'),
+        Effect.fail,
         Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`)),
         Effect.map((result) => {
           expect(result).toBe('Caught: Stream not found');

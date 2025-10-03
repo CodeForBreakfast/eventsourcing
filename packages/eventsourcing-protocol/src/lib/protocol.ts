@@ -132,17 +132,15 @@ export class Protocol extends Context.Tag('Protocol')<
 >() {}
 
 const parseTransportPayload = (message: ReadonlyDeep<TransportMessage>) =>
-  pipe(
-    Effect.try({
-      try: () => JSON.parse(message.payload),
-      catch: (cause) =>
-        new ProtocolValidationError({
-          message: 'Failed to parse transport payload as JSON',
-          rawData: message.payload,
-          cause,
-        }),
-    })
-  );
+  Effect.try({
+    try: () => JSON.parse(message.payload),
+    catch: (cause) =>
+      new ProtocolValidationError({
+        message: 'Failed to parse transport payload as JSON',
+        rawData: message.payload,
+        cause,
+      }),
+  });
 
 const validateIncomingMessage = (rawPayload: unknown) =>
   pipe(
@@ -162,7 +160,8 @@ const handleSuccessResult = (
   msg: ReadonlyDeep<CommandResultMessage & { readonly success: true }>
 ): Effect.Effect<CommandResult, ProtocolStateError> =>
   pipe(
-    Option.fromNullable(msg.position),
+    msg.position,
+    Option.fromNullable,
     Option.match({
       onNone: () =>
         Effect.fail(
@@ -179,7 +178,8 @@ const handleFailureResult = (
   msg: ReadonlyDeep<CommandResultMessage & { readonly success: false }>
 ): Effect.Effect<CommandResult, ProtocolStateError> =>
   pipe(
-    Option.fromNullable(msg.error),
+    msg.error,
+    Option.fromNullable,
     Option.match({
       onNone: () =>
         Effect.fail(
@@ -204,7 +204,8 @@ const createCommandResult = (
   message: ReadonlyDeep<CommandResultMessage>
 ): Effect.Effect<CommandResult, ProtocolStateError> =>
   pipe(
-    Match.value(message),
+    message,
+    Match.value,
     Match.when({ success: true }, handleSuccessResult),
     Match.when({ success: false }, handleFailureResult),
     Match.exhaustive
@@ -230,7 +231,8 @@ const processDeferredCommandResult = (
   deferred: Deferred.Deferred<CommandResult>
 ) =>
   pipe(
-    createCommandResult(message),
+    message,
+    createCommandResult,
     Effect.flatMap((result) =>
       updateStateAndCompleteDeferred(stateRef, message.commandId, deferred, result)
     ),
@@ -243,7 +245,8 @@ const matchPendingCommand = (
   state: ProtocolState
 ) =>
   pipe(
-    HashMap.get(state.pendingWireCommands, message.commandId),
+    state.pendingWireCommands,
+    (commands) => HashMap.get(commands, message.commandId),
     Option.match({
       onNone: () => Effect.void,
       onSome: (deferred) => processDeferredCommandResult(stateRef, message, deferred),
@@ -253,7 +256,8 @@ const matchPendingCommand = (
 const handleCommandResult =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<CommandResultMessage>) =>
     pipe(
-      Ref.get(stateRef),
+      stateRef,
+      Ref.get,
       Effect.flatMap((state) => matchPendingCommand(stateRef, message, state))
     );
 
@@ -274,14 +278,16 @@ const offerEventToQueue = (message: ReadonlyDeep<EventMessage>, state: ProtocolS
 
 const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<EventMessage>) =>
   pipe(
-    Ref.get(stateRef),
+    stateRef,
+    Ref.get,
     Effect.flatMap((state) => offerEventToQueue(message, state))
   );
 
 const handleMessage =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<TransportMessage>) =>
     pipe(
-      parseTransportPayload(message),
+      message,
+      parseTransportPayload,
       Effect.flatMap(validateIncomingMessage),
       Effect.flatMap((wireMessage) => {
         switch (wireMessage.type) {
@@ -345,7 +351,8 @@ const awaitCommandResultWithTimeout = (
   commandId: string
 ) =>
   pipe(
-    Deferred.await(deferred),
+    deferred,
+    Deferred.await,
     Effect.timeout(Duration.seconds(10)),
     Effect.catchTag('TimeoutException', () =>
       Effect.fail(
@@ -443,7 +450,7 @@ const createScopedWireCommandSender = (
   stateRef: Ref.Ref<ProtocolState>,
   transport: ReadonlyDeep<Client.Transport>,
   command: ReadonlyDeep<WireCommand>
-) => pipe(createWireCommandSender(stateRef, transport)(command), Effect.scoped);
+) => pipe(command, createWireCommandSender(stateRef, transport), Effect.scoped);
 
 const startMessageHandler = (
   stateRef: Ref.Ref<ProtocolState>,
@@ -451,7 +458,9 @@ const startMessageHandler = (
   stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>
 ) =>
   pipe(
-    Effect.forkScoped(Stream.runForEach(stream, handleMessage(stateRef))),
+    stream,
+    (s) => Stream.runForEach(s, handleMessage(stateRef)),
+    Effect.forkScoped,
     Effect.as({
       sendWireCommand: (command: ReadonlyDeep<WireCommand>) =>
         createScopedWireCommandSender(stateRef, transport, command),
@@ -472,10 +481,11 @@ const createProtocolService = (
   transport: ReadonlyDeep<Client.Transport>
 ): Effect.Effect<Context.Tag.Service<typeof Protocol>, TransportError, Scope.Scope> =>
   pipe(
-    Ref.make<ProtocolState>({
+    {
       pendingWireCommands: HashMap.empty(),
       subscriptions: HashMap.empty(),
-    }),
+    },
+    Ref.make<ProtocolState>,
     Effect.flatMap((stateRef) => initializeProtocol(stateRef, transport))
   );
 

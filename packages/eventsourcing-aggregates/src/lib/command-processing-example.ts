@@ -82,12 +82,13 @@ export const processUserCommand = (command: ReadonlyDeep<WireCommand>) =>
 
 // Example: Complete program with all dependencies
 export const exampleProgram = pipe(
-  processUserCommand({
+  {
     id: 'cmd-123',
     target: 'user',
     name: 'CreateUser',
     payload: { name: 'John Doe', email: 'john@example.com' },
-  }),
+  },
+  processUserCommand,
   Effect.map((result) => {
     if (result._tag === 'Success') {
       console.log('Command processed successfully:', result.position);

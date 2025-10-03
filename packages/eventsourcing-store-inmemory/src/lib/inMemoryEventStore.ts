@@ -39,7 +39,8 @@ const subscribeToStreamWithError = <T>(
   streamId: EventStreamPosition['streamId']
 ) =>
   pipe(
-    store.get(streamId),
+    streamId,
+    store.get,
     Effect.mapError((error) =>
       eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`, error)
     )
@@ -73,6 +74,7 @@ export const makeSubscribableInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<SubscribableEventStore<T>, never, never> =>
   pipe(
-    makeInMemoryEventStore(store),
+    store,
+    makeInMemoryEventStore,
     Effect.map((baseStore) => addSubscribeMethod(baseStore, store))
   );

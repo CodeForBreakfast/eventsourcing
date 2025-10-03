@@ -67,17 +67,15 @@ interface ServerState {
 }
 
 const parseTransportPayload = (message: ReadonlyDeep<TransportMessage>) =>
-  pipe(
-    Effect.try({
-      try: () => JSON.parse(message.payload),
-      catch: (cause) =>
-        new ProtocolValidationError({
-          message: 'Failed to parse transport payload as JSON',
-          rawData: message.payload,
-          cause,
-        }),
-    })
-  );
+  Effect.try({
+    try: () => JSON.parse(message.payload),
+    catch: (cause) =>
+      new ProtocolValidationError({
+        message: 'Failed to parse transport payload as JSON',
+        rawData: message.payload,
+        cause,
+      }),
+  });
 
 const currentTimestamp = () =>
   pipe(
@@ -117,7 +115,8 @@ const processIncomingMessage =
   (commandQueue: Queue.Queue<WireCommand>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
   (message: ReadonlyDeep<TransportMessage>) =>
     pipe(
-      parseTransportPayload(message),
+      message,
+      parseTransportPayload,
       Effect.flatMap((parsedMessage) => {
         if (parsedMessage.type === 'command') {
           return handleWireCommandMessage(commandQueue)(parsedMessage);
@@ -132,7 +131,8 @@ const processIncomingMessage =
 
 const buildResultMessage = (commandId: string, result: ReadonlyDeep<CommandResult>) =>
   pipe(
-    Match.value(result),
+    result,
+    Match.value,
     Match.when({ _tag: 'Success' }, (res) => ({
       type: 'command_result' as const,
       commandId,
@@ -209,7 +209,8 @@ const createEventPublisher =
   (server: ReadonlyDeep<Server.Transport>, stateRef: Ref.Ref<ServerState>) =>
   (event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>) =>
     pipe(
-      Ref.get(stateRef),
+      stateRef,
+      Ref.get,
       Effect.flatMap((state) => matchSubscribedConnections(server, event, state))
     );
 
@@ -260,18 +261,20 @@ const startConnectionHandler = (
 
 const createServerProtocolService = (
   server: ReadonlyDeep<Server.Transport>
-): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> =>
-  pipe(
-    Effect.all([
-      Queue.unbounded<WireCommand>(),
-      Ref.make<ServerState>({
-        subscriptions: HashMap.empty(),
-      }),
-    ]),
+): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> => {
+  const queueAndState = Effect.all([
+    Queue.unbounded<WireCommand>(),
+    Ref.make<ServerState>({
+      subscriptions: HashMap.empty(),
+    }),
+  ]);
+  return pipe(
+    queueAndState,
     Effect.flatMap(([commandQueue, stateRef]) =>
       startConnectionHandler(server, commandQueue, stateRef)
     )
   );
+};
 
 // ============================================================================
 // Live Implementation

@@ -49,7 +49,8 @@ interface InternalTransport extends Client.Transport {
 
 const subscribeToConnectionPubSub = (state: Readonly<WebSocketInternalState>) =>
   pipe(
-    PubSub.subscribe(state.connectionStatePubSub),
+    state.connectionStatePubSub,
+    PubSub.subscribe,
     Effect.map((queue) =>
       Stream.concat(Stream.succeed(state.connectionState), Stream.fromQueue(queue))
     )
@@ -59,14 +60,15 @@ const createConnectionStateStream = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
 ): Readonly<Stream.Stream<ConnectionState, never, never>> =>
   Stream.unwrapScoped(
-    pipe(Ref.get(stateRef), Effect.flatMap(subscribeToConnectionPubSub), Effect.orDie)
+    pipe(stateRef, Ref.get, Effect.flatMap(subscribeToConnectionPubSub), Effect.orDie)
   );
 
 const sendSerializedMessage =
   (writer: (data: string) => Effect.Effect<void, Socket.SocketError>) =>
   (serialized: Readonly<string>) =>
     pipe(
-      writer(serialized),
+      serialized,
+      writer,
       Effect.mapError(
         (error) =>
           new TransportError({
@@ -76,13 +78,45 @@ const sendSerializedMessage =
       )
     );
 
+const serializeMessage = (
+  message: Readonly<TransportMessage>
+): Effect.Effect<string, never, never> => Effect.sync(() => JSON.stringify(message));
+
 const serializeAndSend =
   (writer: (data: string) => Effect.Effect<void, Socket.SocketError>) =>
   (message: Readonly<TransportMessage>) =>
-    pipe(
-      Effect.sync(() => JSON.stringify(message)),
-      Effect.flatMap(sendSerializedMessage(writer))
-    );
+    pipe(message, serializeMessage, Effect.flatMap(sendSerializedMessage(writer)));
+
+const getWebSocketInternalState = (
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
+): Effect.Effect<WebSocketInternalState, never, never> => pipe(stateRef, Ref.get);
+
+const getWriter = (
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
+): Effect.Effect<
+  ((data: string) => Effect.Effect<void, Socket.SocketError>) | null,
+  never,
+  never
+> => pipe(writerRef, Ref.get);
+
+const getStateAndWriter = (
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
+): Effect.Effect<
+  readonly [
+    WebSocketInternalState,
+    ((data: string) => Effect.Effect<void, Socket.SocketError>) | null,
+  ],
+  never,
+  never
+> => Effect.all([getWebSocketInternalState(stateRef), getWriter(writerRef)]);
+
+const serializeMessageWithWriter =
+  (message: Readonly<TransportMessage>) =>
+  (
+    writer: (data: string) => Effect.Effect<void, Socket.SocketError>
+  ): Effect.Effect<void, TransportError, never> =>
+    pipe(message, serializeAndSend(writer));
 
 const publishMessage =
   (
@@ -91,7 +125,7 @@ const publishMessage =
   ) =>
   (message: Readonly<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
-      Effect.all([Ref.get(stateRef), Ref.get(writerRef)]),
+      getStateAndWriter(stateRef, writerRef),
       Effect.flatMap(([state, writer]) => {
         if (!writer || state.connectionState !== 'connected') {
           return Effect.fail(
@@ -101,16 +135,29 @@ const publishMessage =
           );
         }
 
-        return serializeAndSend(writer)(message);
+        return serializeMessageWithWriter(message)(writer);
       })
     );
 
 const applyFilterSafely =
-  (filter: (message: Readonly<TransportMessage>) => boolean) => (msg: Readonly<TransportMessage>) =>
+  (filter: (message: Readonly<TransportMessage>) => boolean) =>
+  (msg: Readonly<TransportMessage>) => {
+    try {
+      return filter(msg);
+    } catch {
+      return false;
+    }
+  };
+
+const addSubscriberToState =
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
+  (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
     pipe(
-      Effect.sync(() => filter(msg)),
-      Effect.catchAll(() => Effect.succeed(false)),
-      Effect.runSync
+      stateRef,
+      Ref.update((state) => ({
+        ...state,
+        subscribers: HashSet.add(state.subscribers, queue),
+      }))
     );
 
 const subscribeToMessages =
@@ -120,12 +167,7 @@ const subscribeToMessages =
   ): Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never> =>
     pipe(
       Queue.unbounded<TransportMessage>(),
-      Effect.tap((queue) =>
-        Ref.update(stateRef, (state) => ({
-          ...state,
-          subscribers: HashSet.add(state.subscribers, queue),
-        }))
-      ),
+      Effect.tap(addSubscriberToState(stateRef)),
       Effect.map((queue) => {
         const baseStream = Stream.fromQueue(queue);
 
@@ -147,46 +189,72 @@ const createConnectedTransport = (
 // Pure Functions for WebSocket Operations
 // =============================================================================
 
+const getStateRef = (
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
+): Effect.Effect<WebSocketInternalState, never, never> => pipe(stateRef, Ref.get);
+
+const publishToStatePubSub =
+  (newState: Readonly<ConnectionState>) =>
+  (state: Readonly<WebSocketInternalState>): Effect.Effect<void, never, never> =>
+    pipe(state.connectionStatePubSub, PubSub.publish(newState));
+
 const updateConnectionState = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
   newState: Readonly<ConnectionState>
 ): Effect.Effect<void, never, never> =>
   pipe(
-    Ref.update(stateRef, (state) => ({
+    stateRef,
+    Ref.update((state) => ({
       ...state,
       connectionState: newState,
     })),
-    Effect.flatMap(() => Ref.get(stateRef)),
-    Effect.flatMap((state) => PubSub.publish(state.connectionStatePubSub, newState))
+    Effect.flatMap(() => getStateRef(stateRef)),
+    Effect.flatMap(publishToStatePubSub(newState))
   );
+
+const offerMessageToQueue =
+  (message: TransportMessage) =>
+  (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
+    pipe(queue, Queue.offer(message));
 
 const distributeMessageToSubscribers = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
   message: TransportMessage
 ) =>
   pipe(
-    Ref.get(stateRef),
+    stateRef,
+    Ref.get,
     Effect.flatMap((state) =>
-      Effect.forEach(state.subscribers, (queue) => Queue.offer(queue, message), {
+      Effect.forEach(state.subscribers, offerMessageToQueue(message), {
         discard: true,
       })
     ),
     Effect.asVoid
   );
 
+const parseIncomingData = (
+  data: Readonly<Uint8Array>
+): Effect.Effect<
+  { readonly _tag: 'success'; readonly message: TransportMessage } | { readonly _tag: 'error' },
+  never,
+  never
+> =>
+  Effect.sync(() => {
+    try {
+      const text = new TextDecoder().decode(data);
+      return { _tag: 'success' as const, message: JSON.parse(text) as TransportMessage };
+    } catch {
+      return { _tag: 'error' as const };
+    }
+  });
+
 const handleIncomingMessage = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
   data: Readonly<Uint8Array>
 ): Effect.Effect<void, never, never> =>
   pipe(
-    Effect.sync(() => {
-      try {
-        const text = new TextDecoder().decode(data);
-        return { _tag: 'success' as const, message: JSON.parse(text) as TransportMessage };
-      } catch {
-        return { _tag: 'error' as const };
-      }
-    }),
+    data,
+    parseIncomingData,
     Effect.flatMap((result) =>
       result._tag === 'error'
         ? Effect.void
@@ -269,7 +337,8 @@ const handleSocketError =
   ) =>
   (error: Readonly<Socket.SocketError>) =>
     pipe(
-      Deferred.isDone(connectedDeferred),
+      connectedDeferred,
+      Deferred.isDone,
       Effect.flatMap((wasConnected) => {
         if (!wasConnected) {
           const connectionError = new ConnectionError({
@@ -290,7 +359,8 @@ const monitorSocketFiber =
   (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
   (fiber: Fiber.RuntimeFiber<void, never>) =>
     pipe(
-      Fiber.await(fiber),
+      fiber,
+      Fiber.await,
       Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
       Effect.forkScoped
     );
@@ -324,7 +394,8 @@ const awaitConnectionWithTimeout = (
   url: Readonly<string>
 ) =>
   pipe(
-    Deferred.await(connectedDeferred),
+    connectedDeferred,
+    Deferred.await,
     Effect.timeoutFail({
       duration: 3000,
       onTimeout: () =>
@@ -335,6 +406,21 @@ const awaitConnectionWithTimeout = (
     })
   );
 
+const runSocketFiberAndAwaitConnection = (
+  socket: Readonly<Socket.Socket>,
+  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
+  connectedDeferred: Readonly<Deferred.Deferred<void, ConnectionError>>,
+  url: Readonly<string>
+): Effect.Effect<
+  { readonly fiber: Fiber.RuntimeFiber<void, never>; readonly _: void },
+  ConnectionError,
+  Scope.Scope
+> =>
+  Effect.all({
+    fiber: runSocketWithErrorHandling(socket, stateRef, connectedDeferred, url),
+    _: awaitConnectionWithTimeout(connectedDeferred, url),
+  });
+
 const startSocketAndWaitForConnection = (
   socket: Readonly<Socket.Socket>,
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
@@ -343,10 +429,7 @@ const startSocketAndWaitForConnection = (
   url: Readonly<string>
 ) =>
   pipe(
-    Effect.all({
-      fiber: runSocketWithErrorHandling(socket, stateRef, connectedDeferred, url),
-      _: awaitConnectionWithTimeout(connectedDeferred, url),
-    }),
+    runSocketFiberAndAwaitConnection(socket, stateRef, connectedDeferred, url),
     Effect.map(() => createConnectedTransport(stateRef, writerRef))
   );
 
@@ -390,15 +473,26 @@ const acquireWebSocketConnection = (
     Effect.flatMap(setupSocketWriter(writerRef, stateRef, connectedDeferred, url))
   );
 
+const createConnectionResources = (): Effect.Effect<
+  {
+    readonly stateRef: Ref.Ref<WebSocketInternalState>;
+    readonly writerRef: Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>;
+    readonly connectedDeferred: Deferred.Deferred<void, ConnectionError>;
+  },
+  never,
+  never
+> =>
+  Effect.all({
+    stateRef: createInitialState(),
+    writerRef: Ref.make<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>(null),
+    connectedDeferred: Deferred.make<void, ConnectionError>(),
+  });
+
 const connectWebSocket = (
   url: Readonly<string>
 ): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope> =>
   pipe(
-    Effect.all({
-      stateRef: createInitialState(),
-      writerRef: Ref.make<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>(null),
-      connectedDeferred: Deferred.make<void, ConnectionError>(),
-    }),
+    createConnectionResources(),
     Effect.tap(({ stateRef }) => updateConnectionState(stateRef, 'connecting')),
     Effect.flatMap(({ stateRef, writerRef, connectedDeferred }) =>
       acquireWebSocketConnection(url, stateRef, writerRef, connectedDeferred)

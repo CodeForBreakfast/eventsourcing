@@ -40,12 +40,14 @@ const mapConnectionForContract = (conn: Server.ClientConnection) => ({
     connectionState: conn.transport.connectionState,
     publish: (msg: TransportMessage) =>
       pipe(
-        conn.transport.publish(msg),
+        msg,
+        conn.transport.publish,
         Effect.mapError(() => new Error('Failed to publish message'))
       ),
     subscribe: (filter?: (msg: TransportMessage) => boolean) =>
       pipe(
-        conn.transport.subscribe(filter),
+        filter,
+        conn.transport.subscribe,
         Effect.mapError(() => new Error('Failed to subscribe'))
       ),
   } satisfies ClientTransport,
@@ -55,7 +57,8 @@ const mapServerTransportForContract = (transport: Server.Transport): ServerTrans
   connections: pipe(transport.connections, Stream.map(mapConnectionForContract)),
   broadcast: (message: TransportMessage) =>
     pipe(
-      transport.broadcast(message),
+      message,
+      transport.broadcast,
       Effect.mapError(() => new Error('Failed to broadcast'))
     ),
 });
@@ -70,12 +73,14 @@ const mapClientTransportForContract = (transport: {
   connectionState: transport.connectionState,
   publish: (msg: TransportMessage) =>
     pipe(
-      transport.publish(msg),
+      msg,
+      transport.publish,
       Effect.mapError(() => new Error('Failed to publish message'))
     ),
   subscribe: (filter?: (msg: TransportMessage) => boolean) =>
     pipe(
-      transport.subscribe(filter),
+      filter,
+      transport.subscribe,
       Effect.mapError(() => new Error('Failed to subscribe'))
     ),
 });
@@ -91,14 +96,16 @@ const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, ne
       return {
         makeServer: () =>
           pipe(
-            WebSocketAcceptor.make({ port, host }),
+            { port, host },
+            WebSocketAcceptor.make,
             Effect.flatMap((acceptor) => acceptor.start()),
             Effect.map(mapServerTransportForContract)
           ),
 
         makeClient: () =>
           pipe(
-            WebSocketConnector.connect(url),
+            url,
+            WebSocketConnector.connect,
             Effect.map(mapClientTransportForContract),
             Effect.mapError(() => new Error('Failed to connect to server'))
           ),
@@ -147,7 +154,7 @@ const checkConnectionState = (client: {
   );
 
 const connectAndVerify = (host: string, port: number) =>
-  pipe(WebSocketConnector.connect(`ws://${host}:${port}`), Effect.flatMap(checkConnectionState));
+  pipe(`ws://${host}:${port}`, WebSocketConnector.connect, Effect.flatMap(checkConnectionState));
 
 describe('WebSocket Client-Server Specific Tests', () => {
   // WebSocket-specific tests that directly test the WebSocket implementation
@@ -157,7 +164,8 @@ describe('WebSocket Client-Server Specific Tests', () => {
     const host = 'localhost';
 
     return pipe(
-      WebSocketAcceptor.make({ port, host }),
+      { port, host },
+      WebSocketAcceptor.make,
       Effect.flatMap((acceptor) => acceptor.start()),
       Effect.flatMap((_server) => connectAndVerify(host, port))
     );
@@ -168,7 +176,8 @@ describe('WebSocket Client-Server Specific Tests', () => {
     const nonExistentPort = Math.floor(Math.random() * (65535 - 49152) + 49152);
 
     return pipe(
-      WebSocketConnector.connect(`ws://localhost:${nonExistentPort}`),
+      `ws://localhost:${nonExistentPort}`,
+      WebSocketConnector.connect,
       Effect.either,
       Effect.tap((result) => {
         expect(result._tag).toBe('Left');

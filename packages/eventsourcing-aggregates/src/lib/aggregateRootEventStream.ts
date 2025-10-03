@@ -182,7 +182,8 @@ const processEventStream = <TState, TEvent>(
   stream: Stream.Stream<TEvent, unknown>
 ) =>
   pipe(
-    Ref.make({ nextEventNumber: 0, data: Option.none<TState>() }),
+    { nextEventNumber: 0, data: Option.none<TState>() },
+    Ref.make,
     Effect.flatMap(foldEventsIntoState(apply, stream))
   );
 

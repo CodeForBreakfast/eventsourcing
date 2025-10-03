@@ -35,7 +35,8 @@ const wrapPublish =
   (transport: { readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown> }) =>
   (msg: TransportMessage) =>
     pipe(
-      transport.publish(msg),
+      msg,
+      transport.publish,
       Effect.mapError(() => new Error('Failed to publish message'))
     );
 
@@ -47,7 +48,8 @@ const wrapSubscribe =
   }) =>
   (filter?: (msg: TransportMessage) => boolean) =>
     pipe(
-      transport.subscribe(filter),
+      filter,
+      transport.subscribe,
       Effect.mapError(() => new Error('Failed to subscribe'))
     );
 
@@ -57,7 +59,8 @@ const wrapBroadcast =
   }) =>
   (message: TransportMessage) =>
     pipe(
-      transport.broadcast(message),
+      message,
+      transport.broadcast,
       Effect.mapError(() => new Error('Failed to broadcast'))
     );
 
@@ -122,12 +125,13 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
 
         makeClient: () =>
           pipe(
-            Effect.sync(() => {
+            () => {
               if (!serverInstance) {
                 throw new Error('Server must be created before client');
               }
               return serverInstance;
-            }),
+            },
+            Effect.sync,
             Effect.flatMap((server) => server.connector()),
             Effect.map(createClientTransport),
             Effect.mapError(() => new Error('Failed to connect to server'))
@@ -235,7 +239,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
     state2: { readonly _tag: 'Some'; readonly value: ConnectionState } | { readonly _tag: 'None' }
   ) =>
     pipe(
-      collectServerConnections(server),
+      server,
+      collectServerConnections,
       Effect.flatMap((connections) => verifyMultipleClientStates(state1, state2, connections))
     );
 
@@ -245,13 +250,15 @@ describe('In-Memory Client-Server Specific Tests', () => {
     client2: { readonly connectionState: Stream.Stream<ConnectionState> }
   ) =>
     pipe(
-      Effect.all([getClientConnectionState(client1), getClientConnectionState(client2)]),
+      [getClientConnectionState(client1), getClientConnectionState(client2)] as const,
+      Effect.all,
       Effect.flatMap(([state1, state2]) => verifyConnectionsAfterStates(server, state1, state2))
     );
 
   const connectTwoClients = (server: InMemoryServer) =>
     pipe(
-      Effect.all([server.connector(), server.connector()]),
+      [server.connector(), server.connector()] as const,
+      Effect.all,
       Effect.flatMap(([client1, client2]) => verifyTwoClientsConnected(server, client1, client2))
     );
 
@@ -295,7 +302,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
     messageStream: Stream.Stream<TransportMessage>
   ) =>
     pipe(
-      server.broadcast(testMessage),
+      testMessage,
+      server.broadcast,
       Effect.flatMap(() => collectFirstMessage(messageStream)),
       Effect.flatMap(verifyTestMessage(testMessage))
     );
@@ -309,7 +317,8 @@ describe('In-Memory Client-Server Specific Tests', () => {
     testMessage: TransportMessage
   ) =>
     pipe(
-      waitForConnected(client),
+      client,
+      waitForConnected,
       Effect.flatMap(() => client.subscribe()),
       Effect.flatMap((messageStream) => broadcastAndCollect(server, testMessage, messageStream))
     );

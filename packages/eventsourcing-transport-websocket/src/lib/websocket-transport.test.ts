@@ -177,7 +177,8 @@ const waitForConnectedState = (transport: {
 describe('WebSocket Transport - Mock Factory', () => {
   it.scoped('should create mock WebSocket with proper state transitions', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(createTestSocketLayer({ openDelay: 100 })),
       Effect.flatMap(waitForConnectedState)
     )
@@ -191,7 +192,8 @@ describe('WebSocket Transport - Mock Factory', () => {
 describe('WebSocket Transport - Error Scenarios', () => {
   it.scoped('should fail when WebSocket connection fails', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(createTestSocketLayer({ shouldFailConnection: true })),
       Effect.flip,
       Effect.map((error) => {
@@ -203,7 +205,8 @@ describe('WebSocket Transport - Error Scenarios', () => {
 
   it.scoped('should handle WebSocket error before open', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(createTestSocketLayer({ shouldFailBeforeOpen: true })),
       Effect.flip,
       Effect.map((error) => {
@@ -215,7 +218,8 @@ describe('WebSocket Transport - Error Scenarios', () => {
 
   it.scoped('should handle WebSocket close before open (connection refused)', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(createTestSocketLayer({ shouldCloseBeforeOpen: true })),
       Effect.flip,
       Effect.map((error) => {
@@ -227,7 +231,8 @@ describe('WebSocket Transport - Error Scenarios', () => {
 
   it.scoped('should handle connection with very long delay', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(createTestSocketLayer({ openDelay: 2000 })),
       Effect.flatMap(waitForConnectedState)
     )
@@ -253,12 +258,13 @@ const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
 
 const subscribeAndTakeFirst = <E, R>(transport: {
   readonly subscribe: () => Effect.Effect<Stream.Stream<unknown, never, never>, E, R>;
-}) => pipe(transport.subscribe(), Effect.flatMap(takeFirstMessage));
+}) => pipe(transport, (t) => t.subscribe(), Effect.flatMap(takeFirstMessage));
 
 describe('WebSocket Transport - WebSocket-Specific Behavior', () => {
   it.scoped('should handle malformed JSON messages (WebSocket binary data)', () =>
     pipe(
-      WebSocketConnector.connect('ws://test.example.com'),
+      'ws://test.example.com',
+      WebSocketConnector.connect,
       Effect.provide(
         createTestSocketLayer({
           preloadedMessages: [
@@ -282,7 +288,8 @@ describe('WebSocket Transport - Edge Cases', () => {
   it.scoped('should handle connection to non-existent server', () =>
     pipe(
       // Try to connect to a port that's very unlikely to be in use
-      WebSocketConnector.connect('ws://localhost:59999'),
+      'ws://localhost:59999',
+      WebSocketConnector.connect,
       Effect.map((transport) => {
         // With Socket abstraction, connection might succeed initially
         // but fail when actually trying to use the connection

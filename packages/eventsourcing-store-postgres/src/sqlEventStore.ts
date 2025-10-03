@@ -96,7 +96,8 @@ const buildEventRowServiceInterface = ({
 
 const mapResolversToService = (sql: SqlClient.SqlClient) =>
   pipe(
-    createEventRowResolvers(sql),
+    sql,
+    createEventRowResolvers,
     Effect.map(buildEventRowServiceInterface),
     Effect.mapError((error) =>
       eventStoreError.write(
@@ -179,7 +180,8 @@ const getHistoricalEventsAndConcatWithLive = (
   liveStream: Stream.Stream<string, EventStoreError, never>
 ) =>
   pipe(
-    eventRows.selectAllEventsInStream(from.streamId),
+    from.streamId,
+    eventRows.selectAllEventsInStream,
     Effect.map((events: readonly EventRow[]) => {
       const filteredEvents = events
         // eslint-disable-next-line functional/prefer-immutable-types
@@ -191,6 +193,12 @@ const getHistoricalEventsAndConcatWithLive = (
     Effect.map((historicalStream) => concatStreams(historicalStream, liveStream))
   );
 
+const publishPayloadToSubscribers = (
+  subscriptionManager: SubscriptionManagerService,
+  streamId: EventStreamId,
+  payload: NotificationPayload
+) => publishEventToSubscribers(subscriptionManager, streamId, payload.event_payload);
+
 const bridgeNotification = (
   subscriptionManager: SubscriptionManagerService,
   streamId: EventStreamId,
@@ -198,15 +206,21 @@ const bridgeNotification = (
 ) =>
   pipe(
     Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
-    Effect.flatMap(() =>
-      publishEventToSubscribers(subscriptionManager, streamId, payload.event_payload)
-    ),
+    Effect.flatMap(() => publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
         error,
       })
     )
   );
+
+const bridgeNotificationEvent = (
+  subscriptionManager: SubscriptionManagerService,
+  notification: {
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+  }
+) => bridgeNotification(subscriptionManager, notification.streamId, notification.payload);
 
 const consumeNotifications = (
   notificationListener: Readonly<{
@@ -220,9 +234,7 @@ const consumeNotifications = (
 ) =>
   pipe(
     notificationListener.notifications,
-    Stream.mapEffect(({ streamId, payload }) =>
-      bridgeNotification(subscriptionManager, streamId, payload)
-    ),
+    Stream.mapEffect((notification) => bridgeNotificationEvent(subscriptionManager, notification)),
     Stream.runDrain,
     Effect.fork,
     Effect.asVoid
@@ -244,6 +256,10 @@ const startNotificationListener = (
     Effect.flatMap(() => consumeNotifications(notificationListener, subscriptionManager))
   );
 
+const logBridgeStart = Effect.logInfo(
+  'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
+);
+
 const startNotificationBridge = (
   notificationListener: Readonly<{
     readonly start: Effect.Effect<void, EventStoreError, never>;
@@ -256,15 +272,14 @@ const startNotificationBridge = (
   subscriptionManager: SubscriptionManagerService
 ) =>
   pipe(
-    Effect.logInfo(
-      'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
-    ),
+    logBridgeStart,
     Effect.flatMap(() => startNotificationListener(notificationListener, subscriptionManager))
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
   pipe(
-    eventRows.selectAllEventsInStream(from.streamId),
+    from.streamId,
+    eventRows.selectAllEventsInStream,
     Effect.map((events: readonly EventRow[]) => {
       const filteredEvents = events
         // eslint-disable-next-line functional/prefer-immutable-types
@@ -291,6 +306,17 @@ const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventSt
     )
   );
 
+const subscribeToLiveStream = (
+  subscriptionManager: SubscriptionManagerService,
+  streamId: EventStreamId
+) => pipe(streamId, subscriptionManager.subscribeToStream);
+
+const combineHistoricalAndLiveStreams = (
+  eventRows: EventRowServiceInterface,
+  from: EventStreamPosition,
+  liveStream: Stream.Stream<string, EventStoreError, never>
+) => getHistoricalEventsAndConcatWithLive(eventRows, from, liveStream);
+
 const subscribeToStreamWithHistory = (
   eventRows: EventRowServiceInterface,
   subscriptionManager: SubscriptionManagerService,
@@ -300,11 +326,10 @@ const subscribeToStreamWithHistory = (
   from: EventStreamPosition
 ) =>
   pipe(
-    notificationListener.listen(from.streamId),
-    Effect.flatMap(() => subscriptionManager.subscribeToStream(from.streamId)),
-    Effect.flatMap((liveStream) =>
-      getHistoricalEventsAndConcatWithLive(eventRows, from, liveStream)
-    ),
+    from.streamId,
+    notificationListener.listen,
+    Effect.flatMap(() => subscribeToLiveStream(subscriptionManager, from.streamId)),
+    Effect.flatMap((liveStream) => combineHistoricalAndLiveStreams(eventRows, from, liveStream)),
     Effect.map((stream) =>
       Stream.mapError(stream, (error) =>
         eventStoreError.read(
@@ -326,7 +351,8 @@ const appendEventToStream = (
   payload: string
 ) =>
   pipe(
-    eventRows.selectAllEventsInStream(end.streamId),
+    end.streamId,
+    eventRows.selectAllEventsInStream,
     Effect.map((events: readonly EventRow[]) => {
       if (events.length === 0) {
         return -1;
@@ -444,12 +470,14 @@ export class SqlEventStore extends Effect.Tag('SqlEventStore')<
   EventStore<string>
 >() {}
 
+const getSqlEventStoreManagerDependencies = Effect.all({
+  subscriptionManager: SubscriptionManager,
+  notificationListener: NotificationListener,
+});
+
 const makeSqlEventStoreEffect = () =>
   pipe(
-    Effect.all({
-      subscriptionManager: SubscriptionManager,
-      notificationListener: NotificationListener,
-    }),
+    getSqlEventStoreManagerDependencies,
     Effect.flatMap(({ subscriptionManager, notificationListener }) =>
       makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
     )
@@ -458,11 +486,10 @@ const makeSqlEventStoreEffect = () =>
 const mergeEventStoreLayers = () =>
   Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive);
 
+const createSqlEventStoreEffect = Layer.effect(SqlEventStore, makeSqlEventStoreEffect());
+
 const createSqlEventStoreLayer = () =>
-  pipe(
-    Layer.effect(SqlEventStore, makeSqlEventStoreEffect()),
-    Layer.provide(mergeEventStoreLayers())
-  );
+  pipe(createSqlEventStoreEffect, Layer.provide(mergeEventStoreLayers()));
 
 /**
  * Main SQL EventStore layer with simplified dependency management
@@ -473,16 +500,18 @@ export const SqlEventStoreLive = createSqlEventStoreLayer();
 /**
  * Backward-compatible function - requires SubscriptionManager and NotificationListener in context
  */
+const getSqlEventStoreDependencies = Effect.all({
+  subscriptionManager: SubscriptionManager,
+  notificationListener: NotificationListener,
+});
+
 export const sqlEventStore = (): Effect.Effect<
   EventStore<string>,
   EventStoreError,
   EventRowService | SubscriptionManager | NotificationListener
 > =>
   pipe(
-    Effect.all({
-      subscriptionManager: SubscriptionManager,
-      notificationListener: NotificationListener,
-    }),
+    getSqlEventStoreDependencies,
     Effect.flatMap(({ subscriptionManager, notificationListener }) =>
       makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
     )

@@ -15,19 +15,34 @@ const appendEventsToStream =
       eventStore.append(eventsAndPosition.position)
     );
 
+const executeHandlerAndGetPosition = <TEvent>(
+  handler: {
+    readonly execute: (
+      command: Readonly<WireCommand>
+    ) => Effect.Effect<ReadonlyArray<TEvent>, unknown, never>;
+  },
+  streamId: Effect.Effect.Success<ReturnType<typeof toStreamId>>,
+  command: Readonly<WireCommand>
+) =>
+  pipe(
+    {
+      events: handler.execute(command),
+      position: beginning(streamId),
+    },
+    Effect.all
+  );
+
 const executeCommandAndPersistEvents =
   <TEvent>(router: ReadonlyDeep<CommandRouter<TEvent>>, eventStore: EventStore<TEvent>) =>
   (command: Readonly<WireCommand>) =>
     pipe(
-      Effect.all({
+      {
         handler: router.route(command),
         streamId: toStreamId(command.target),
-      }),
+      },
+      Effect.all,
       Effect.flatMap(({ handler, streamId }) =>
-        Effect.all({
-          events: handler.execute(command),
-          position: beginning(streamId),
-        })
+        executeHandlerAndGetPosition(handler, streamId, command)
       ),
       Effect.flatMap(appendEventsToStream(eventStore)),
       Effect.map(
