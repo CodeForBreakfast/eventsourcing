@@ -4,6 +4,8 @@
 
 This event sourcing library is built on a **4-layer architecture** that enforces clear separation of concerns between domain logic, serialization, protocol implementation, and transport mechanisms.
 
+**Key Concept**: **Aggregates are Layer 1 (Domain)** - the top of the architecture. The infrastructure layers below (Wire API, Protocol, Transport) are **optional** - only needed for protocol-based command dispatch (WebSocket, message queues). REST APIs work directly with aggregates, bypassing the infrastructure layers entirely.
+
 ## The 4 Layers
 
 ### Layer 1: Domain Layer
@@ -115,16 +117,75 @@ const ProtocolCommand = Schema.Struct({
 - `@codeforbreakfast/eventsourcing-transport-websocket` - WebSocket implementation
 - `@codeforbreakfast/eventsourcing-transport-inmemory` - In-memory implementation
 
+## How Aggregates Fit Into the Layers
+
+**Aggregates ARE Layer 1 (Domain)**. They contain pure business logic and are the top of the architecture.
+
+### Direct Usage (REST API)
+
+REST APIs work directly with aggregates, **bypassing the infrastructure layers**:
+
+```
+HTTP Request
+    ↓
+Validate payload against domain schema
+    ↓
+Layer 1: Aggregate (load → execute command → commit events)
+    ↓
+HTTP Response
+```
+
+The HTTP layer already provides:
+
+- Routing (URL paths)
+- Serialization (JSON body)
+- Protocol (HTTP verbs)
+
+So layers 2-4 are redundant - you work directly with domain aggregates.
+
+### Protocol-Based Usage (WebSocket/MessageQueue)
+
+Protocol-based systems use **all infrastructure layers** to route to aggregates:
+
+```
+WebSocket/MessageQueue
+    ↓
+Layer 4: Transport (generic message delivery)
+    ↓
+Layer 3: Protocol (message correlation, routing, subscriptions)
+    ↓
+Layer 2: Wire API (WireCommand validation)
+    ↓
+CommandHandler (adapter that wraps aggregate)
+    ↓
+Layer 1: Aggregate (load → execute command → commit events)
+```
+
+Here, `CommandHandler` is an **adapter** between infrastructure and domain. It:
+
+- Receives `WireCommand` from infrastructure
+- Validates payload against domain schema
+- Calls aggregate command functions
+- Returns domain events
+
+**Key Insight**: The infrastructure layers (2-4) are **optional**. They're only needed when you don't already have a protocol/routing mechanism (like HTTP).
+
 ## Layer Dependencies
 
 ```
-Domain Layer (Layer 1)
-    ↓ uses
-Wire API Layer (Layer 2) ← PUBLIC API
-    ↓ used by
-Protocol Layer (Layer 3) ← INTERNAL
-    ↓ uses
-Transport Layer (Layer 4)
+Layer 1: Domain (Aggregates)
+         ↑
+         | (optional - only for protocol-based systems)
+         |
+Layer 2: Wire API (WireCommand) ← PUBLIC API
+         ↑
+         | used by
+         |
+Layer 3: Protocol (Protocol* types) ← INTERNAL
+         ↑
+         | uses
+         |
+Layer 4: Transport (TransportMessage)
 ```
 
 **Important Rules**:
@@ -132,7 +193,8 @@ Transport Layer (Layer 4)
 - Layers can only depend on layers below them
 - Layer 2 (Wire API) MUST NOT depend on Layer 3 (Protocol)
 - Protocol types MUST NOT leak outside the protocol package
-- Domain layer uses Wire types from Layer 2, never Protocol types from Layer 3
+- Domain aggregates can be used directly OR through infrastructure layers
+- Infrastructure layers are optional - REST APIs bypass them entirely
 
 ## Naming Conventions
 
