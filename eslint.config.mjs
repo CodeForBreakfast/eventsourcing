@@ -433,6 +433,7 @@ export default [
       '**/*.js',
       '**/*.mjs',
       '**/build.ts',
+      '**/.turbo/**',
     ],
   },
 ];
