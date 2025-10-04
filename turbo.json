@@ -125,8 +125,14 @@
       "cache": true,
       "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
     },
+    "//#scripts:lint": {
+      "dependsOn": [],
+      "outputs": [],
+      "inputs": ["scripts/**/*.ts", "eslint.config.mjs", "package.json", "bun.lock"],
+      "cache": true
+    },
     "validate:docs": {
-      "dependsOn": ["^build"],
+      "dependsOn": ["^build", "//#scripts:lint"],
       "outputs": [],
       "inputs": [
         "**/*.md",
