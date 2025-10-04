@@ -15,7 +15,7 @@ import {
   ProtocolLive,
   sendWireCommand,
   subscribe,
-  WireCommandTimeoutError,
+  ProtocolCommandTimeoutError,
   Event,
 } from './protocol';
 import {
@@ -329,8 +329,8 @@ const verifyTimeoutError =
     Effect.sync(() => {
       expect(Either.isLeft(result)).toBe(true);
       if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
-        if (result.left instanceof WireCommandTimeoutError) {
+        expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
+        if (result.left instanceof ProtocolCommandTimeoutError) {
           expect(result.left.commandId).toBe(commandId);
           expect(result.left.timeoutMs).toBe(10000);
         }
@@ -1242,7 +1242,7 @@ describe('Protocol Behavior Tests', () => {
       Effect.sync(() => {
         expect(Either.isLeft(result)).toBe(true);
         if (Either.isLeft(result)) {
-          expect(result.left).toBeInstanceOf(WireCommandTimeoutError);
+          expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
         }
       });
 
@@ -1419,7 +1419,7 @@ describe('Protocol Behavior Tests', () => {
 
           expect(Either.isLeft(commandResult)).toBe(true);
           if (Either.isLeft(commandResult)) {
-            expect(commandResult.left).toBeInstanceOf(WireCommandTimeoutError);
+            expect(commandResult.left).toBeInstanceOf(ProtocolCommandTimeoutError);
           }
         });
 
