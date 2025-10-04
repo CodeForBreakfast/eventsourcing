@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
-    "effect": "3.17.14",
+    "effect": "3.18.1",
     "typescript": "5.9.3",
     "eslint": "9.36.0",
     "@typescript-eslint/eslint-plugin": "8.45.0"

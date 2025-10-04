@@ -62,20 +62,20 @@
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
     "effect": "^3.17.0",
-    "@effect/platform": "^0.90.0 || ^0.91.0"
+    "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0"
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
-    "@effect/experimental": "0.55.0",
-    "@effect/sql": "0.45.0",
-    "@effect/sql-pg": "0.46.0",
+    "@effect/experimental": "0.56.0",
+    "@effect/sql": "0.46.0",
+    "@effect/sql-pg": "0.47.0",
     "type-fest": "5.0.1"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
-    "@effect/platform-bun": "0.80.0",
+    "@effect/platform-bun": "0.81.0",
     "@types/node": "24.6.1",
-    "effect": "3.17.14",
+    "effect": "3.18.1",
     "eslint": "9.36.0",
     "typescript": "5.9.3"
   },
