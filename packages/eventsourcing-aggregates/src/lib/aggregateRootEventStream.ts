@@ -18,7 +18,7 @@ import {
   pipe,
 } from 'effect';
 
-import { CommandContext, CommandInitiatorId } from './commandInitiator';
+import { CommandContext, type CommandContextService } from './commandInitiator';
 
 /**
  * Represents the state of an aggregate at a particular point in time
@@ -230,6 +230,7 @@ const loadAggregateState =
  *
  * const UserAggregate = makeAggregateRoot(
  *   UserId,
+ *   PersonId,
  *   applyUserEvent,
  *   UserEventStoreTag,
  *   userCommands
@@ -252,6 +253,7 @@ const loadAggregateState =
  * ```
  *
  * @param _idSchema - Schema for the aggregate ID type (used for type inference only)
+ * @param _initiatorSchema - Schema for the command initiator type (used for type inference only)
  * @param apply - Function to apply events to state
  * @param tag - The event store service tag
  * @param commands - Command handlers for the aggregate
@@ -259,8 +261,9 @@ const loadAggregateState =
  * @throws {ParseResult.ParseError} If events cannot be parsed
  * @throws {EventStoreError} If the event store operations fail
  */
-export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands, TTag>(
+export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState, TCommands, TTag>(
   _idSchema: Schema.Schema<TId, string>,
+  _initiatorSchema: Schema.Schema<TInitiator>,
   apply: (
     state: Readonly<Option.Option<TState>>
   ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
@@ -276,27 +279,29 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
   commands,
 });
 
-export const EventOriginatorId = CommandInitiatorId;
-export type EventOriginatorId = typeof EventOriginatorId.Type;
-
-export const EventMetadata = Schema.Struct({
-  occurredAt: Schema.ValidDateFromSelf,
-  originator: Schema.OptionFromSelf(EventOriginatorId),
-});
-export type EventMetadata = typeof EventMetadata.Type;
-
-const createMetadataFromInitiator =
-  (currentTime: number) =>
-  (initiatorId: Readonly<Option.Option<CommandInitiatorId>>): EventMetadata => ({
-    occurredAt: new Date(currentTime),
-    originator: initiatorId,
+export const EventMetadata = <TOriginator>(originatorSchema: Schema.Schema<TOriginator>) =>
+  Schema.Struct({
+    occurredAt: Schema.ValidDateFromSelf,
+    originator: originatorSchema,
   });
 
-const getInitiatorId = (currentTime: number) => (commandContext: typeof CommandContext.Service) =>
-  pipe(commandContext.getInitiatorId, Effect.map(createMetadataFromInitiator(currentTime)));
+const createMetadataFromInitiator =
+  <TInitiator>(currentTime: number) =>
+  (initiator: Readonly<Option.Option<TInitiator>>) => ({
+    occurredAt: new Date(currentTime),
+    originator: initiator,
+  });
 
-const getMetadataFromContext = (currentTime: number) =>
-  pipe(CommandContext, Effect.flatMap(getInitiatorId(currentTime)));
+const getInitiator =
+  <TInitiator>(currentTime: number) =>
+  (commandContext: CommandContextService<TInitiator>) =>
+    pipe(
+      commandContext.getInitiator,
+      Effect.map(createMetadataFromInitiator<TInitiator>(currentTime))
+    );
+
+const getMetadataFromContext = <TInitiator>(currentTime: number) =>
+  pipe(CommandContext<TInitiator>(), Effect.flatMap(getInitiator<TInitiator>(currentTime)));
 
 /**
  * Creates event metadata with timestamp and originator information
@@ -312,8 +317,8 @@ const getMetadataFromContext = (currentTime: number) =>
  * @returns Effect that resolves to event metadata
  * @throws {NoSuchElementException} If CommandContext is not available
  */
-export const eventMetadata = () =>
-  pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext));
+export const eventMetadata = <TInitiator>() =>
+  pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext<TInitiator>));
 
 /**
  * Creates a schema for domain events with type, metadata, and data fields
@@ -321,7 +326,9 @@ export const eventMetadata = () =>
  * @since 0.4.0
  * @example
  * ```typescript
+ * // Required originator
  * const UserCreatedEvent = eventSchema(
+ *   PersonId,
  *   Schema.Literal('UserCreated'),
  *   {
  *     userId: Schema.String,
@@ -329,18 +336,27 @@ export const eventMetadata = () =>
  *     name: Schema.String
  *   }
  * );
+ *
+ * // Optional originator
+ * const SystemEvent = eventSchema(
+ *   Schema.OptionFromSelf(PersonId),
+ *   Schema.Literal('SystemSync'),
+ *   { timestamp: Schema.Number }
+ * );
  * ```
  *
+ * @param originatorSchema - Schema for the event originator (can be required or optional)
  * @param type - Schema for the event type discriminator
  * @param data - Schema fields for the event data
  * @returns A Schema.Struct with type, metadata, and data fields
  */
-export const eventSchema = <TType, F extends Schema.Struct.Fields, R>(
+export const eventSchema = <TOriginator, TType, F extends Schema.Struct.Fields, R>(
+  originatorSchema: Schema.Schema<TOriginator>,
   type: Schema.Schema<TType, R>,
   data: F
 ) =>
   Schema.Struct({
     type,
-    metadata: EventMetadata,
+    metadata: EventMetadata(originatorSchema),
     data: Schema.Struct(data),
   });
