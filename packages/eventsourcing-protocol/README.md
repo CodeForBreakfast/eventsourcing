@@ -1,35 +1,27 @@
 # Event Sourcing Protocol
 
-Protocol implementation for event sourcing over transport abstractions.
+**Transport-agnostic protocol** for event sourcing command/event communication.
 
-## Protocol Layer Responsibilities
+## Overview
 
-The protocol layer acts as a **generic RPC mechanism for event sourcing** - it's a dumb pipe that shuffles messages between client and server without knowing anything about your domain.
+This package provides the protocol layer that sits on top of any transport (WebSocket, HTTP, message queue). It handles:
 
-### What the protocol SHOULD know:
+- **Command/Result correlation** - Track which responses belong to which requests
+- **Event subscriptions** - Stream events from the server to clients
+- **Timeout handling** - Fail commands that take too long (10s default)
+- **Error propagation** - Pass structured errors back to clients
 
-1. **Message structure** - How to wrap messages in envelopes (IDs, timestamps, correlation)
-2. **Message types** - Basic routing types: "command", "event", "subscription"
-3. **Wire format** - How to serialize/deserialize for transport
-4. **Message correlation** - Matching responses to requests via IDs
-5. **Connection state** - Managing subscriptions and pending commands
+**Key principle**: Your application code should use this package's API. Transport choice (WebSocket, etc.) is a deployment detail configured when setting up your Effect layers.
 
-### What it SHOULDN'T know:
+## Architecture
 
-1. **Domain logic** - What an "UpdateProfile" command actually does
-2. **Event schemas** - The actual shape of your business events
-3. **Aggregate rules** - Validation, business invariants, etc.
-4. **Command handlers** - How commands get processed
+The protocol operates on public Wire API types:
 
-Think of it like HTTP - HTTP doesn't care what your JSON payload contains, it just delivers it. The protocol's `Command` and `Event` interfaces are just **transport containers** with metadata fields (id, aggregate, position) while the actual `payload` and `data` fields remain `unknown`.
+- `WireCommand` - Commands sent from client to server (from `@codeforbreakfast/eventsourcing-commands`)
+- `CommandResult` - Success/failure results (from `@codeforbreakfast/eventsourcing-commands`)
+- `Event` - Domain events streamed to clients (from `@codeforbreakfast/eventsourcing-store`)
 
-The protocol's core responsibilities:
-
-- **Message correlation** - Track which responses belong to which requests
-- **Subscription management** - Route events to the right subscribers
-- **Timeout handling** - Fail commands that take too long
-- **Error propagation** - Pass errors back from server to client
-- **Transport abstraction** - Hide WebSocket/HTTP/whatever details
+These types have `unknown` payloads because the protocol doesn't know your domain - it just routes messages. Validation happens in your domain layer
 
 ## Installation
 
@@ -37,69 +29,185 @@ The protocol's core responsibilities:
 bun add @codeforbreakfast/eventsourcing-protocol
 ```
 
-## Usage
+**Note**: You'll also need a transport package for layer setup. See `@codeforbreakfast/eventsourcing-websocket` for WebSocket transport.
+
+## Client API
+
+### Sending Commands
 
 ```typescript
-import { createProtocol } from '@codeforbreakfast/eventsourcing-protocol';
-import { createTransport } from '@codeforbreakfast/eventsourcing-transport-websocket';
+import { Effect } from 'effect';
+import { sendWireCommand } from '@codeforbreakfast/eventsourcing-protocol';
+import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
-// Create protocol with a transport
-const protocol = await Effect.runPromise(createTransport(url).pipe(Effect.flatMap(createProtocol)));
-
-// Send commands
-const result = await Effect.runPromise(
-  protocol.sendCommand({
+const program = Effect.gen(function* () {
+  const command: WireCommand = {
     id: crypto.randomUUID(),
     target: 'user-123',
     name: 'UpdateProfile',
-    payload: { name: 'John Doe' },
-  })
-);
+    payload: { name: 'John Doe', email: 'john@example.com' },
+  };
 
-// Subscribe to events
-const eventStream = await Effect.runPromise(protocol.subscribe('user-123'));
+  const result = yield* sendWireCommand(command);
 
-await Effect.runPromise(
-  Stream.runForEach(eventStream, (event) =>
-    Effect.log(`Event: ${event.type} at position ${event.position.eventNumber}`)
-  )
-);
+  if (result._tag === 'Success') {
+    console.log('Command succeeded at position:', result.position);
+  } else {
+    console.error('Command failed:', result.error);
+  }
+});
+
+// Provide transport layer when running (see eventsourcing-websocket for setup)
 ```
 
-## API
+### Subscribing to Events
 
-### `createProtocol(transport)`
+```typescript
+import { Effect, Stream } from 'effect';
+import { subscribe } from '@codeforbreakfast/eventsourcing-protocol';
 
-Creates a protocol instance from a transport connection.
+const program = Effect.gen(function* () {
+  // Subscribe to a stream
+  const eventStream = yield* subscribe('user-123');
+
+  // Process events
+  yield* Stream.runForEach(eventStream, (event) =>
+    Effect.sync(() => {
+      console.log(`Event: ${event.type}`);
+      console.log(`Position: ${event.position.eventNumber}`);
+      console.log(`Data:`, event.data);
+      console.log(`Timestamp:`, event.timestamp);
+    })
+  );
+});
+
+// Provide transport layer when running
+```
+
+### Complete Example
+
+```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { sendWireCommand, subscribe } from '@codeforbreakfast/eventsourcing-protocol';
+import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+
+const application = Effect.gen(function* () {
+  // Subscribe to events first
+  const events = yield* subscribe('user-123');
+
+  // Process events in background
+  yield* pipe(
+    events,
+    Stream.runForEach((event) => Effect.sync(() => console.log('Received event:', event.type))),
+    Effect.fork
+  );
+
+  // Send a command
+  const command: WireCommand = {
+    id: crypto.randomUUID(),
+    target: 'user-123',
+    name: 'CreateUser',
+    payload: { name: 'Alice', email: 'alice@example.com' },
+  };
+
+  const result = yield* sendWireCommand(command);
+  return result;
+});
+
+// Setup transport layer (see @codeforbreakfast/eventsourcing-websocket)
+// Then run: Effect.runPromise(application.pipe(Effect.provide(layer)))
+```
+
+## Server API
+
+### ServerProtocol Service
+
+The server-side protocol handles incoming commands and publishes events:
+
+```typescript
+import { Effect, Stream } from 'effect';
+import { ServerProtocol, ServerProtocolLive } from '@codeforbreakfast/eventsourcing-protocol';
+import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { Event } from '@codeforbreakfast/eventsourcing-store';
+
+const serverProgram = Effect.gen(function* () {
+  const protocol = yield* ServerProtocol;
+
+  // Listen for incoming commands
+  yield* pipe(
+    protocol.onWireCommand,
+    Stream.runForEach((command: WireCommand) =>
+      Effect.gen(function* () {
+        console.log('Received command:', command.name);
+
+        // Process command (your domain logic here)
+        const result: CommandResult = {
+          _tag: 'Success',
+          position: { streamId: command.target, eventNumber: 1 },
+        };
+
+        // Send result back to client
+        yield* protocol.sendResult(command.id, result);
+      })
+    )
+  );
+});
+
+// Provide ServerProtocolLive with a server transport
+// Effect.runPromise(serverProgram.pipe(Effect.provide(ServerProtocolLive(serverTransport))))
+```
+
+### Publishing Events
+
+```typescript
+import { Effect } from 'effect';
+import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
+import type { Event } from '@codeforbreakfast/eventsourcing-store';
+
+const publishEvent = (streamId: string, event: Event) =>
+  Effect.gen(function* () {
+    const protocol = yield* ServerProtocol;
+
+    yield* protocol.publishEvent({
+      ...event,
+      streamId,
+    });
+  });
+```
+
+## API Reference
+
+### Client Functions
+
+#### `sendWireCommand`
+
+```typescript
+const sendWireCommand: (
+  command: WireCommand
+) => Effect<CommandResult, TransportError | ProtocolCommandTimeoutError, Protocol>;
+```
+
+Sends a command and waits for the result. Automatically times out after 10 seconds.
 
 **Parameters:**
 
-- `transport: Client.Transport` - Connected transport instance
+- `command: WireCommand` - Command with `id`, `target`, `name`, `payload`
 
-**Returns:** `Effect<Protocol, TransportError, never>`
+**Returns:**
 
-### `Protocol.sendCommand(command)`
+- `Success`: Command executed successfully with event stream position
+- `Failure`: Command failed with structured error details
 
-Sends a command and waits for the result.
+**Errors:**
 
-**Parameters:**
+- `ProtocolCommandTimeoutError` - Command timed out (10 seconds)
+- `TransportError` - Network/connection error
 
-- `command: Command` - Command to send
-  - `id: string` - Unique command identifier
-  - `target: string` - Target aggregate or service
-  - `name: string` - Command name
-  - `payload: unknown` - Command data
+#### `subscribe`
 
-**Returns:** `Effect<CommandResult, TransportError, never>`
-
-Result is a tagged union:
-
-- `Success`: `{ _tag: 'Success'; position: EventStreamPosition }`
-- `Failure`: `{ _tag: 'Failure'; error: string }`
-
-Commands automatically timeout after 10 seconds.
-
-### `Protocol.subscribe(streamId)`
+```typescript
+const subscribe: (streamId: string) => Effect<Stream<Event>, TransportError, Scope | Protocol>;
+```
 
 Subscribes to events from a specific stream.
 
@@ -107,109 +215,73 @@ Subscribes to events from a specific stream.
 
 - `streamId: string` - Stream identifier to subscribe to
 
-**Returns:** `Effect<Stream<Event>, TransportError, never>`
+**Returns:** Stream of events with `position`, `type`, `data`, `timestamp`
 
-Each event contains:
+### Server Service
 
-- `position: EventStreamPosition` - Event position in stream
-- `type: string` - Event type name
-- `data: unknown` - Event payload
-- `timestamp: Date` - When event occurred
+#### `ServerProtocol`
 
-## Message Format
-
-The protocol exchanges JSON messages over the transport.
-
-### Command Message
-
-```json
-{
-  "type": "command",
-  "id": "cmd-123",
-  "aggregate": "user-456",
-  "name": "UpdateProfile",
-  "payload": { "name": "John" }
-}
-```
-
-### Command Result Message
-
-```json
-{
-  "type": "command_result",
-  "commandId": "cmd-123",
-  "success": true,
-  "position": { "streamId": "user-456", "eventNumber": 42 }
-}
-```
-
-### Subscribe Message
-
-```json
-{
-  "type": "subscribe",
-  "streamId": "user-456"
-}
-```
-
-### Event Message
-
-```json
-{
-  "type": "event",
-  "streamId": "user-456",
-  "position": { "streamId": "user-456", "eventNumber": 42 },
-  "eventType": "ProfileUpdated",
-  "data": { "name": "John" },
-  "timestamp": "2024-01-01T00:00:00Z"
+```typescript
+interface ServerProtocol {
+  readonly onWireCommand: Stream<WireCommand>;
+  readonly sendResult: (commandId: string, result: CommandResult) => Effect<void>;
+  readonly publishEvent: (event: Event & { streamId: string }) => Effect<void>;
 }
 ```
 
 ## Error Handling
 
-All operations return Effects that handle:
+```typescript
+import { Effect } from 'effect';
+import {
+  sendWireCommand,
+  ProtocolCommandTimeoutError,
+} from '@codeforbreakfast/eventsourcing-protocol';
+import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
 
-- Transport errors (connection failures, network issues)
-- Timeout errors (commands timing out after 10 seconds)
-- Parsing errors (gracefully caught and logged)
+const program = Effect.gen(function* () {
+  const result = yield* sendWireCommand(command);
+  return result;
+}).pipe(
+  Effect.catchTags({
+    ProtocolCommandTimeoutError: (error) =>
+      Effect.sync(() => console.error('Command timed out:', error.commandId)),
+    TransportError: (error) => Effect.sync(() => console.error('Transport error:', error.message)),
+  })
+);
+```
 
-## Types
+## Wire API Types
 
-The protocol works with types defined in other packages:
-
-- **Commands and Results**: Import from `@codeforbreakfast/eventsourcing-commands`
-- **Events**: Import from `@codeforbreakfast/eventsourcing-store`
+This package works with types from other packages:
 
 ```typescript
-import { Command, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
-import { Event } from '@codeforbreakfast/eventsourcing-store';
+import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { Event } from '@codeforbreakfast/eventsourcing-store';
 
-// Command schema
-interface Command {
-  readonly id: string;
-  readonly target: string; // Target aggregate or service
-  readonly name: string;
-  readonly payload: unknown;
+// WireCommand structure
+interface WireCommand {
+  readonly id: string; // Unique command ID
+  readonly target: string; // Target aggregate/stream
+  readonly name: string; // Command name
+  readonly payload: unknown; // Command data (unvalidated)
 }
 
-// Event schema
-interface Event {
-  readonly position: EventStreamPosition;
-  readonly type: string;
-  readonly data: unknown;
-  readonly timestamp: Date;
-}
-
-// CommandResult is a tagged union
+// CommandResult tagged union
 type CommandResult =
   | { _tag: 'Success'; position: EventStreamPosition }
-  | { _tag: 'Failure'; error: string };
+  | { _tag: 'Failure'; error: CommandError };
 
-interface Protocol {
-  readonly sendCommand: (command: Command) => Effect<CommandResult, TransportError, never>;
-  readonly subscribe: (streamId: string) => Effect<Stream<Event>, TransportError, never>;
+// Event structure
+interface Event {
+  readonly position: EventStreamPosition;
+  readonly type: string; // Event type
+  readonly data: unknown; // Event data
+  readonly timestamp: Date;
 }
 ```
+
+See the respective packages for full type definitions and validation schemas.
 
 ## License
 
