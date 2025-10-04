@@ -5,7 +5,7 @@
       "dependsOn": ["ci"]
     },
     "ci": {
-      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check"]
+      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check", "validate:docs"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
@@ -123,6 +123,17 @@
       "inputs": [".changeset/**/*.md", ".changeset/config.json", "packages/**/package.json"],
       "cache": true,
       "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
+    },
+    "validate:docs": {
+      "dependsOn": ["^build"],
+      "outputs": [],
+      "inputs": [
+        "**/*.md",
+        "src/**/*.ts",
+        "tsconfig*.json",
+        "$TURBO_ROOT$/scripts/validate-markdown-examples.ts"
+      ],
+      "cache": true
     }
   }
 }
