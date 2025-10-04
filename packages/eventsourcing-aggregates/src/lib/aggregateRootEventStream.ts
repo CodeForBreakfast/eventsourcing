@@ -236,8 +236,8 @@ const loadAggregateState =
  *   userCommands
  * );
  *
- * // Load an existing aggregate
- * const user = await Effect.runPromise(UserAggregate.load('user-123'));
+ * // Load an existing aggregate - type-safe with branded ID
+ * const user = await Effect.runPromise(UserAggregate.load('user-123' as UserId));
  *
  * // Create a new aggregate
  * const newUser = UserAggregate.new();
@@ -252,7 +252,7 @@ const loadAggregateState =
  * );
  * ```
  *
- * @param idSchema - Schema for the aggregate ID type
+ * @param _idSchema - Schema for the aggregate ID type (used for type inference only)
  * @param apply - Function to apply events to state
  * @param tag - The event store service tag
  * @param commands - Command handlers for the aggregate
@@ -272,7 +272,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
     nextEventNumber: 0,
     data: Option.none(),
   }),
-  load: (id: string) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
+  load: (id: TId) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
   commit: commit<TEvent, TTag>(tag),
   commands,
 });
