@@ -149,7 +149,7 @@ const processDirectoryEntry =
       return processDirectory(fullPath, files);
     }
 
-    if (entry.isFile() && entry.name.endsWith('.md')) {
+    if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
       return Effect.succeed([...files, fullPath]);
     }
 
