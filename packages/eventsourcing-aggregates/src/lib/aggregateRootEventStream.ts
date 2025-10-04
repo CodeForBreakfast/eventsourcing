@@ -34,7 +34,7 @@ export interface AggregateState<TData> {
  * Options for committing events to an aggregate
  * @since 0.4.0
  */
-export interface CommitOptions<TId extends string = string> {
+export interface CommitOptions<TId extends string> {
   readonly id: TId;
   readonly eventNumber: EventNumber;
   readonly events: Chunk.Chunk<unknown>;
