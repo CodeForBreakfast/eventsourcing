@@ -287,7 +287,7 @@ export const EventMetadata = <TOriginator>(originatorSchema: Schema.Schema<TOrig
 
 const createMetadataFromInitiator =
   <TInitiator>(currentTime: number) =>
-  (initiator: Readonly<Option.Option<TInitiator>>) => ({
+  (initiator: TInitiator) => ({
     occurredAt: new Date(currentTime),
     originator: initiator,
   });
@@ -311,7 +311,7 @@ const getMetadataFromContext = <TInitiator>(currentTime: number) =>
  * ```typescript
  * const metadata = await Effect.runPromise(eventMetadata());
  * console.log(metadata.occurredAt); // Current timestamp
- * console.log(metadata.originator); // User ID from context
+ * console.log(metadata.originator); // Originator from context
  * ```
  *
  * @returns Effect that resolves to event metadata
