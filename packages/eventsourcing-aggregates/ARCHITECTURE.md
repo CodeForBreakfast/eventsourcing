@@ -331,21 +331,67 @@ const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) =
 
 ## Testing Aggregates
 
-Aggregate testing focuses on command → events:
+There are two levels of aggregate testing:
+
+### 1. Testing the Full Registry (Integration)
+
+Test the complete flow including command validation:
 
 ```typescript
 import { describe, it, expect } from 'bun:test';
+import { makeCommandRegistry } from '@codeforbreakfast/eventsourcing-commands';
 
-describe('UserAggregate', () => {
-  it('creates user on CreateUser command', async () => {
-    const command: WireCommand = {
+describe('UserCommandRegistry', () => {
+  it('handles CreateUser command', async () => {
+    const registry = makeCommandRegistry(userCommands, userMatcher);
+
+    const wireCommand: WireCommand = {
       id: 'cmd-123',
       target: 'user-456',
       name: 'CreateUser',
       payload: { name: 'John', email: 'john@example.com' },
     };
 
-    const events = await Effect.runPromise(createUserHandler.execute(command));
+    const result = await Effect.runPromise(registry.dispatch(wireCommand));
+
+    expect(result._tag).toBe('Success');
+  });
+
+  it('rejects invalid command payload', async () => {
+    const registry = makeCommandRegistry(userCommands, userMatcher);
+
+    const wireCommand: WireCommand = {
+      id: 'cmd-123',
+      target: 'user-456',
+      name: 'CreateUser',
+      payload: { name: 'John', email: 'not-an-email' }, // Invalid email
+    };
+
+    const result = await Effect.runPromise(registry.dispatch(wireCommand));
+
+    expect(result._tag).toBe('Failure');
+    expect(result.error._tag).toBe('ValidationError');
+  });
+});
+```
+
+### 2. Testing Handler Logic in Isolation (Unit)
+
+Test just the business logic with type-safe domain commands:
+
+```typescript
+import { DomainCommand } from '@codeforbreakfast/eventsourcing-commands';
+
+describe('CreateUserHandler', () => {
+  it('produces UserCreated event', async () => {
+    const command: DomainCommand<CreateUserPayload> = {
+      id: 'cmd-123',
+      target: 'user-456',
+      name: 'CreateUser',
+      payload: { name: 'John', email: 'john@example.com' }, // Typed!
+    };
+
+    const events = await Effect.runPromise(createUserHandler.execute(command as WireCommand));
 
     expect(events).toEqual([
       {
@@ -355,20 +401,33 @@ describe('UserAggregate', () => {
     ]);
   });
 
-  it('rejects CreateUser with invalid email', async () => {
-    const command: WireCommand = {
+  it('rejects user creation when aggregate already exists', async () => {
+    const existingState: Option.Option<UserState> = Option.some({
+      name: 'Existing User',
+      email: 'existing@example.com',
+    });
+
+    const command: DomainCommand<CreateUserPayload> = {
       id: 'cmd-123',
       target: 'user-456',
       name: 'CreateUser',
-      payload: { name: 'John', email: 'not-an-email' },
+      payload: { name: 'John', email: 'john@example.com' },
     };
 
-    const result = await Effect.runPromise(Effect.either(createUserHandler.execute(command)));
+    const result = await Effect.runPromise(
+      Effect.either(createUserHandlerWithState(existingState, command as WireCommand))
+    );
 
     expect(result._tag).toBe('Left');
   });
 });
 ```
+
+**Testing Guidelines**:
+
+- **Use registry tests** for validation, routing, and end-to-end flow
+- **Use handler tests** for business logic with typed domain commands
+- **Don't manually create WireCommands** in application code - that's for infrastructure boundaries only
 
 ## Comparison: Aggregates vs Raw Streams
 
