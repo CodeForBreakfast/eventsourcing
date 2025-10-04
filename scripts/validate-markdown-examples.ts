@@ -221,29 +221,41 @@ interface PaddedBlock {
   readonly endLine: number;
 }
 
-const wrapCodeBlocks = (
-  blocks: readonly CodeBlock[],
-  headerLines: number
-): readonly PaddedBlock[] => {
-  let currentLine = headerLines;
+const createPaddedBlock = (currentLine: number) => (block: CodeBlock) => {
+  const codeLines = block.code.split('\n');
+  const padding = '\n'.repeat(Math.max(0, block.line - currentLine - 1));
+  const paddedCode = padding + block.code;
+  const blockStart = block.line - 1;
+  const blockEnd = blockStart + codeLines.length;
 
-  return blocks.map((block) => {
-    const codeLines = block.code.split('\n');
-    const padding = '\n'.repeat(Math.max(0, block.line - currentLine - 1));
-    const paddedCode = padding + block.code;
-    const blockStart = block.line - 1;
-    const blockEnd = blockStart + codeLines.length;
-
-    currentLine = blockEnd;
-
-    return {
+  return {
+    paddedBlock: {
       code: paddedCode,
       block,
       startLine: blockStart,
       endLine: blockEnd,
-    };
-  });
+    },
+    nextLine: blockEnd,
+  };
 };
+
+const wrapCodeBlocks = (
+  blocks: readonly CodeBlock[],
+  headerLines: number
+): readonly PaddedBlock[] =>
+  pipe(
+    blocks,
+    EffectArray.reduce(
+      { paddedBlocks: [] as readonly PaddedBlock[], currentLine: headerLines },
+      (acc, block) => {
+        const result = createPaddedBlock(acc.currentLine)(block);
+        return {
+          paddedBlocks: [...acc.paddedBlocks, result.paddedBlock],
+          currentLine: result.nextLine,
+        };
+      }
+    )
+  ).paddedBlocks;
 
 const writeAllTempFiles = (filepath: string, content: string, tempDir: string) => {
   const writeFilesEffect = Effect.all([
@@ -290,7 +302,11 @@ const generateTempFileContent = (
   blocks: readonly CodeBlock[],
   tempDir: string
 ): Effect.Effect<
-  { filepath: string; paddedBlocks: readonly PaddedBlock[]; headerLines: number },
+  {
+    readonly filepath: string;
+    readonly paddedBlocks: readonly PaddedBlock[];
+    readonly headerLines: number;
+  },
   Error,
   never
 > => {
@@ -320,7 +336,11 @@ const createCombinedTempFile = (
   tempDir: string,
   packageDir: string
 ): Effect.Effect<
-  { filepath: string; paddedBlocks: readonly PaddedBlock[]; headerLines: number },
+  {
+    readonly filepath: string;
+    readonly paddedBlocks: readonly PaddedBlock[];
+    readonly headerLines: number;
+  },
   Error,
   never
 > => {
@@ -359,25 +379,74 @@ const typeCheckFile = (filepath: string, tempDir: string) => {
   return pipe(spawnEffect, Effect.flatMap(waitForTypeCheck));
 };
 
-const findBlockForLine = (
+const createBlockInfo = (index: number, pb: PaddedBlock, lineNumber: number) => ({
+  block: pb.block,
+  offsetInBlock: lineNumber - pb.startLine,
+  index,
+});
+
+const mapPaddedBlockToInfo = (
   lineNumber: number,
+  index: number,
   paddedBlocks: readonly PaddedBlock[]
-): Option.Option<{ block: CodeBlock; offsetInBlock: number; index: number }> =>
+) =>
+  pipe(
+    paddedBlocks[index],
+    Option.fromNullable,
+    Option.map((pb) => createBlockInfo(index, pb, lineNumber))
+  );
+
+const findBlockForLine = (lineNumber: number, paddedBlocks: readonly PaddedBlock[]) =>
   pipe(
     paddedBlocks,
     EffectArray.findFirstIndex((pb) => lineNumber >= pb.startLine && lineNumber < pb.endLine),
-    Option.flatMap((index) =>
-      pipe(
-        paddedBlocks[index],
-        Option.fromNullable,
-        Option.map((pb) => ({
-          block: pb.block,
-          offsetInBlock: lineNumber - pb.startLine,
-          index,
-        }))
-      )
-    )
+    Option.flatMap((index) => mapPaddedBlockToInfo(lineNumber, index, paddedBlocks))
   );
+
+const createValidationError = (
+  block: CodeBlock,
+  offsetInBlock: number,
+  index: number,
+  errorCode: string,
+  errorMessage: string
+): ValidationError => ({
+  file: block.file,
+  line: block.line + offsetInBlock,
+  index,
+  error: `TS${errorCode}: ${errorMessage}`,
+});
+
+const processErrorLine = (
+  line: string,
+  paddedBlocks: readonly PaddedBlock[],
+  headerLines: number
+): readonly ValidationError[] => {
+  const errorMatch = line.match(/all-examples\.ts\((\d+),(\d+)\): error TS(\d+): (.+)/);
+  if (!errorMatch) return [];
+
+  const errorLine = parseInt(errorMatch[1]!, 10);
+  const errorCode = errorMatch[3]!;
+  const errorMessage = errorMatch[4]!;
+
+  if (errorLine < headerLines) {
+    return [];
+  }
+
+  return pipe(
+    findBlockForLine(errorLine, paddedBlocks),
+    Option.match({
+      onNone: () => {
+        console.warn(
+          `⚠️  Could not map error at line ${errorLine} to any code block. This might indicate a problem with the validation script.`
+        );
+        return [];
+      },
+      onSome: ({ block, offsetInBlock, index }) => [
+        createValidationError(block, offsetInBlock, index, errorCode, errorMessage),
+      ],
+    })
+  );
+};
 
 const parseTypeErrors = (
   stdout: string,
@@ -385,41 +454,10 @@ const parseTypeErrors = (
   headerLines: number
 ): readonly ValidationError[] => {
   const lines = stdout.split('\n');
-  const errors: ValidationError[] = [];
-
-  for (const line of lines) {
-    const errorMatch = line.match(/all-examples\.ts\((\d+),(\d+)\): error TS(\d+): (.+)/);
-    if (!errorMatch) continue;
-
-    const errorLine = parseInt(errorMatch[1]!, 10);
-    const errorCode = errorMatch[3]!;
-    const errorMessage = errorMatch[4]!;
-
-    if (errorLine < headerLines) {
-      continue;
-    }
-
-    pipe(
-      findBlockForLine(errorLine, paddedBlocks),
-      Option.match({
-        onNone: () => {
-          console.warn(
-            `⚠️  Could not map error at line ${errorLine} to any code block. This might indicate a problem with the validation script.`
-          );
-        },
-        onSome: ({ block, offsetInBlock, index }) => {
-          errors.push({
-            file: block.file,
-            line: block.line + offsetInBlock,
-            index,
-            error: `TS${errorCode}: ${errorMessage}`,
-          });
-        },
-      })
-    );
-  }
-
-  return errors;
+  return pipe(
+    lines,
+    EffectArray.flatMap((line) => processErrorLine(line, paddedBlocks, headerLines))
+  );
 };
 
 const cleanupTempDir = (tempDir: string) => {
