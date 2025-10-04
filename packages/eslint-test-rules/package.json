@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eslint-test-rules",
-  "version": "0.0.1",
+  "version": "0.0.2",
   "private": true,
   "description": "Test files to verify ESLint rules are working correctly",
   "type": "module",
