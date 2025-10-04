@@ -16,11 +16,11 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
 
 interface ChangesetStatus {
-  releases: Array<{ name: string; type: string }>;
-  changesets: Array<unknown>;
+  readonly releases: ReadonlyArray<{ readonly name: string; readonly type: string }>;
+  readonly changesets: ReadonlyArray<unknown>;
 }
 
-function getPackagesToValidate(): string[] {
+function getPackagesToValidate(): readonly string[] {
   console.log('🔍 Discovering packages that need validation...\n');
 
   // Check if this is a changeset release branch - skip validation

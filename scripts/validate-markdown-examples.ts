@@ -562,6 +562,7 @@ const logErrorAndFail = (error: Readonly<Error>) => {
 
 const program = pipe(validateMarkdownExamples, Effect.catchAll(logErrorAndFail));
 
+// eslint-disable-next-line no-restricted-syntax -- Script entry point: runPromise is acceptable at application boundary
 Effect.runPromise(program)
   .then(() => process.exit(0))
   .catch(() => process.exit(1));
