@@ -214,16 +214,36 @@ const processDirectory = (
 
 const findMarkdownFiles = (dir: string) => processDirectory(dir, []);
 
-const wrapCodeBlocks = (blocks: readonly CodeBlock[]) =>
-  pipe(
-    blocks,
-    EffectArray.map(
-      (block, idx) => `
-// ===== Example ${idx}: ${block.file}:${block.line} =====
-${block.code}
-`
-    )
-  );
+interface PaddedBlock {
+  readonly code: string;
+  readonly block: CodeBlock;
+  readonly startLine: number;
+  readonly endLine: number;
+}
+
+const wrapCodeBlocks = (
+  blocks: readonly CodeBlock[],
+  headerLines: number
+): readonly PaddedBlock[] => {
+  let currentLine = headerLines;
+
+  return blocks.map((block) => {
+    const codeLines = block.code.split('\n');
+    const padding = '\n'.repeat(Math.max(0, block.line - currentLine - 1));
+    const paddedCode = padding + block.code;
+    const blockStart = block.line - 1;
+    const blockEnd = blockStart + codeLines.length;
+
+    currentLine = blockEnd;
+
+    return {
+      code: paddedCode,
+      block,
+      startLine: blockStart,
+      endLine: blockEnd,
+    };
+  });
+};
 
 const writeAllTempFiles = (filepath: string, content: string, tempDir: string) => {
   const writeFilesEffect = Effect.all([
@@ -269,7 +289,11 @@ const generateTempFileContent = (
   packageName: string,
   blocks: readonly CodeBlock[],
   tempDir: string
-) => {
+): Effect.Effect<
+  { filepath: string; paddedBlocks: readonly PaddedBlock[]; headerLines: number },
+  Error,
+  never
+> => {
   const header = `// Auto-generated file for type checking all examples
 // Import everything the user would import
 import * as PackageExports from '${packageName}';
@@ -280,18 +304,26 @@ const {} = PackageExports;
 
 `;
 
-  const wrappedBlocks = wrapCodeBlocks(blocks);
-  const content = header + wrappedBlocks.join('\n');
+  const headerLines = header.split('\n').length;
+  const paddedBlocks = wrapCodeBlocks(blocks, headerLines);
+  const content = header + paddedBlocks.map((pb) => pb.code).join('\n');
   const filepath = join(tempDir, 'all-examples.ts');
 
-  return writeAllTempFiles(filepath, content, tempDir);
+  return pipe(
+    writeAllTempFiles(filepath, content, tempDir),
+    Effect.map((fp) => ({ filepath: fp, paddedBlocks, headerLines }))
+  );
 };
 
 const createCombinedTempFile = (
   blocks: readonly CodeBlock[],
   tempDir: string,
   packageDir: string
-) => {
+): Effect.Effect<
+  { filepath: string; paddedBlocks: readonly PaddedBlock[]; headerLines: number },
+  Error,
+  never
+> => {
   const readPackageJsonEffect = Effect.tryPromise({
     try: () => readFile(join(packageDir, 'package.json'), 'utf-8'),
     catch: (error) => new Error(`Failed to read package.json: ${error}`),
@@ -310,7 +342,7 @@ const handleTypeCheckResult = ([exitCode, stdoutText]: readonly [number, string]
 const waitForTypeCheck = (proc: ReturnType<typeof Bun.spawn>) => {
   const exitAndOutputEffect = Effect.all([
     Effect.promise(() => proc.exited),
-    Effect.promise(() => new Response(proc.stdout).text()),
+    Effect.promise(() => new Response(proc.stdout as ReadableStream).text()),
   ]);
 
   return pipe(exitAndOutputEffect, Effect.flatMap(handleTypeCheckResult));
@@ -327,36 +359,67 @@ const typeCheckFile = (filepath: string, tempDir: string) => {
   return pipe(spawnEffect, Effect.flatMap(waitForTypeCheck));
 };
 
-const convertErrorLinesToValidationErrors = (
-  errorLines: readonly string[],
-  blocks: readonly CodeBlock[]
-) =>
-  errorLines.length > 0 && blocks.length > 0
-    ? pipe(
-        blocks[0],
+const findBlockForLine = (
+  lineNumber: number,
+  paddedBlocks: readonly PaddedBlock[]
+): Option.Option<{ block: CodeBlock; offsetInBlock: number; index: number }> =>
+  pipe(
+    paddedBlocks,
+    EffectArray.findFirstIndex((pb) => lineNumber >= pb.startLine && lineNumber < pb.endLine),
+    Option.flatMap((index) =>
+      pipe(
+        paddedBlocks[index],
         Option.fromNullable,
-        Option.map((firstBlock) => [
-          {
-            file: firstBlock.file,
-            line: firstBlock.line,
-            index: 0,
-            error: errorLines.join('\n'),
-          },
-        ]),
-        Option.getOrElse(() => [] as readonly ValidationError[])
+        Option.map((pb) => ({
+          block: pb.block,
+          offsetInBlock: lineNumber - pb.startLine,
+          index,
+        }))
       )
-    : [];
+    )
+  );
 
 const parseTypeErrors = (
   stdout: string,
-  blocks: readonly CodeBlock[]
+  paddedBlocks: readonly PaddedBlock[],
+  headerLines: number
 ): readonly ValidationError[] => {
   const lines = stdout.split('\n');
-  return pipe(
-    lines,
-    EffectArray.filter((line) => line.includes('error TS')),
-    (errorLines) => convertErrorLinesToValidationErrors(errorLines, blocks)
-  );
+  const errors: ValidationError[] = [];
+
+  for (const line of lines) {
+    const errorMatch = line.match(/all-examples\.ts\((\d+),(\d+)\): error TS(\d+): (.+)/);
+    if (!errorMatch) continue;
+
+    const errorLine = parseInt(errorMatch[1]!, 10);
+    const errorCode = errorMatch[3]!;
+    const errorMessage = errorMatch[4]!;
+
+    if (errorLine < headerLines) {
+      continue;
+    }
+
+    pipe(
+      findBlockForLine(errorLine, paddedBlocks),
+      Option.match({
+        onNone: () => {
+          console.warn(
+            `⚠️  Could not map error at line ${errorLine} to any code block. This might indicate a problem with the validation script.`
+          );
+        },
+        onSome: ({ block, offsetInBlock, index }) => {
+          errors.push({
+            file: block.file,
+            line: block.line + offsetInBlock,
+            index,
+            error: `TS${errorCode}: ${errorMessage}`,
+          });
+        },
+      })
+    );
+  }
+
+  return errors;
 };
 
 const cleanupTempDir = (tempDir: string) => {
@@ -452,12 +515,15 @@ const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: stri
 const runTypeCheckAndParseErrors = (
   tempFile: string,
   tempDir: string,
-  allBlocks: readonly CodeBlock[]
+  paddedBlocks: readonly PaddedBlock[],
+  headerLines: number
 ) =>
   pipe(
     typeCheckFile(tempFile, tempDir),
     Effect.map(() => [] as readonly ValidationError[]),
-    Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, allBlocks)))
+    Effect.catchAll((stdout) =>
+      Effect.succeed(parseTypeErrors(stdout as string, paddedBlocks, headerLines))
+    )
   );
 
 const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
@@ -507,7 +573,9 @@ const typeCheckAndReportErrors = (
     Console.log,
     Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
     Effect.flatMap(() => createCombinedTempFile(allBlocks, tempDir, packageDir)),
-    Effect.flatMap((tempFile) => runTypeCheckAndParseErrors(tempFile, tempDir, allBlocks)),
+    Effect.flatMap(({ filepath, paddedBlocks, headerLines }) =>
+      runTypeCheckAndParseErrors(filepath, tempDir, paddedBlocks, headerLines)
+    ),
     Effect.flatMap((errors) => handleValidationErrors(errors, allBlocks))
   );
 };
