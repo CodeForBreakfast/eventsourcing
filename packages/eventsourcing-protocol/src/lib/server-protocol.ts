@@ -24,10 +24,10 @@ import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import {
   Event,
-  WireCommandMessage,
-  CommandResultMessage,
-  EventMessage,
-  SubscribeMessage,
+  ProtocolCommand,
+  ProtocolCommandResult,
+  ProtocolEvent,
+  ProtocolSubscribe,
   ProtocolValidationError,
 } from './protocol';
 
@@ -42,7 +42,7 @@ export class ServerProtocolError extends Data.TaggedError('ServerProtocolError')
 
 /**
  * Service tag for Server Protocol.
- * Handles wire commands, command results, and event publishing for server-side protocol operations.
+ * Handles commands, command results, and event publishing for server-side protocol operations.
  */
 export class ServerProtocol extends Context.Tag('ServerProtocol')<
   ServerProtocol,
@@ -83,8 +83,8 @@ const currentTimestamp = () =>
     Effect.map((millis) => new Date(millis))
   );
 
-const handleWireCommandMessage =
-  (commandQueue: Queue.Queue<WireCommand>) => (wireMessage: ReadonlyDeep<WireCommandMessage>) =>
+const handleProtocolCommand =
+  (commandQueue: Queue.Queue<WireCommand>) => (wireMessage: ReadonlyDeep<ProtocolCommand>) =>
     Queue.offer(commandQueue, {
       id: wireMessage.id,
       target: wireMessage.target,
@@ -101,9 +101,9 @@ const updateSubscriptions = (state: ServerState, streamId: string, connectionId:
     })
   );
 
-const handleSubscribeMessage =
+const handleProtocolSubscribe =
   (stateRef: Ref.Ref<ServerState>, connectionId: string) =>
-  (wireMessage: ReadonlyDeep<SubscribeMessage>) =>
+  (wireMessage: ReadonlyDeep<ProtocolSubscribe>) =>
     pipe(
       Ref.update(stateRef, (state) => ({
         ...state,
@@ -119,17 +119,20 @@ const processIncomingMessage =
       parseTransportPayload,
       Effect.flatMap((parsedMessage) => {
         if (parsedMessage.type === 'command') {
-          return handleWireCommandMessage(commandQueue)(parsedMessage);
+          return handleProtocolCommand(commandQueue)(parsedMessage);
         }
         if (parsedMessage.type === 'subscribe') {
-          return handleSubscribeMessage(stateRef, connectionId)(parsedMessage);
+          return handleProtocolSubscribe(stateRef, connectionId)(parsedMessage);
         }
         return Effect.void;
       }),
       Effect.catchAll(() => Effect.void)
     );
 
-const buildResultMessage = (commandId: string, result: ReadonlyDeep<CommandResult>) =>
+const buildResultMessage = (
+  commandId: string,
+  result: ReadonlyDeep<CommandResult>
+): ProtocolCommandResult =>
   pipe(
     result,
     Match.value,
@@ -158,7 +161,7 @@ const createResultSender =
     pipe(
       currentTimestamp(),
       Effect.flatMap((timestamp) => {
-        const resultMessage: CommandResultMessage = buildResultMessage(commandId, result);
+        const resultMessage: ProtocolCommandResult = buildResultMessage(commandId, result);
 
         return server.broadcast(
           makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
@@ -175,7 +178,7 @@ const broadcastEventMessage = (
   pipe(
     currentTimestamp(),
     Effect.flatMap((timestamp) => {
-      const eventMessage: EventMessage = {
+      const eventMessage: ProtocolEvent = {
         type: 'event',
         streamId: String(event.streamId),
         position: event.position,
