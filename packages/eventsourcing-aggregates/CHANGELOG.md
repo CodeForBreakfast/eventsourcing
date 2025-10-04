@@ -1,5 +1,103 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.7.0
+
+### Minor Changes
+
+- [#157](https://github.com/CodeForBreakfast/eventsourcing/pull/157) [`2b03f0f`](https://github.com/CodeForBreakfast/eventsourcing/commit/2b03f0faea585e54ac3488f6f5f9c97629eb1222) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove deprecated Command type export and clean up legacy code
+
+  **BREAKING CHANGE**: The deprecated `Command` type export has been removed from `@codeforbreakfast/eventsourcing-commands`. Use `WireCommand` instead for transport layer commands.
+  - Removed deprecated `Command` type export - use `WireCommand` for clarity about transport layer vs domain commands
+  - Updated all internal references from `Command` to `WireCommand`
+  - Removed migration guides and backward compatibility documentation
+  - Cleaned up legacy helper functions and test comments
+
+  To update your code:
+
+  ```typescript
+  // Before
+  import { Command } from '@codeforbreakfast/eventsourcing-commands';
+
+  // After
+  import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+  ```
+
+- [#170](https://github.com/CodeForBreakfast/eventsourcing/pull/170) [`4e9f8c9`](https://github.com/CodeForBreakfast/eventsourcing/commit/4e9f8c9711df00e01b0ab943dad67aa14d59df06) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce domain-specific event types throughout the command processing layer. Command handlers and routers are now generic over your domain event types, preventing accidental use of generic `Event` types with `unknown` data in domain code.
+
+  **Breaking Changes:**
+  - `CommandHandler` and `CommandRouter` are now generic interfaces that require a type parameter
+  - `createCommandProcessingService` now requires an event store tag parameter before the router parameter
+  - Factory functions with default type parameters have been removed from service tag creation
+
+  **Migration:**
+
+  Before:
+
+  ```typescript
+  const handler: CommandHandler = {
+    execute: () => Effect.succeed([{ type: 'Created', data: {...} } as Event])
+  };
+
+  const service = createCommandProcessingService(router);
+  ```
+
+  After:
+
+  ```typescript
+  // 1. Define domain events
+  const MyEvent = Schema.Union(Created, Updated);
+  type MyEvent = typeof MyEvent.Type;
+
+  // 2. Create domain-specific event store tag
+  const MyEventStore = Context.GenericTag<EventStore<MyEvent>, EventStore<MyEvent>>('MyEventStore');
+
+  // 3. Use typed handlers
+  const handler: CommandHandler<MyEvent> = {
+    execute: () => Effect.succeed([{ type: 'Created', data: {...} }])
+  };
+
+  // 4. Provide event store tag to factory
+  const service = createCommandProcessingService(MyEventStore)(router);
+  ```
+
+  The generic `Event` type remains available for serialization boundaries (storage implementations, wire protocol) but should not be used in domain logic.
+
+  See ARCHITECTURE.md for detailed design rationale and migration guidance.
+
+- [#195](https://github.com/CodeForBreakfast/eventsourcing/pull/195) [`11e726e`](https://github.com/CodeForBreakfast/eventsourcing/commit/11e726e73a7f36f3321f32e16d20eb578a1595d1) Thanks [@GraemeF](https://github.com/GraemeF)! - Make CommandContext and event metadata generic over initiator type. Command initiator is now supplied when creating aggregates and event schemas. The originator field optionality is configurable by the caller.
+
+### Patch Changes
+
+- [#175](https://github.com/CodeForBreakfast/eventsourcing/pull/175) [`8503302`](https://github.com/CodeForBreakfast/eventsourcing/commit/850330219126aac119ad10f0c9471dc8b89d773a) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce simplified pipe usage patterns
+
+  This update improves code maintainability and readability by enforcing consistent functional programming patterns. The codebase now exclusively uses the standalone `pipe()` function instead of method-based `.pipe()` calls, eliminates nested pipe compositions in favor of named helper functions, and removes curried function calls. These changes make the code easier to understand and debug while maintaining the same functionality.
+
+- [#196](https://github.com/CodeForBreakfast/eventsourcing/pull/196) [`d299e17`](https://github.com/CodeForBreakfast/eventsourcing/commit/d299e17bf5084b7785beca46d5b5b837a610792e) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix command initiator type handling. CommandContextService.getInitiator no longer wraps the initiator in Option - optionality is now controlled by the schema passed to CommandContext. Renamed CurrentUser to CommandContextError.
+
+- [#159](https://github.com/CodeForBreakfast/eventsourcing/pull/159) [`04e27b8`](https://github.com/CodeForBreakfast/eventsourcing/commit/04e27b86f885c7a7746580f83460de3be7bae1bb) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix turbo cache invalidation for lint tasks to ensure CI properly detects code changes
+  - Simplified lint task input patterns to prevent cache inconsistencies
+  - Added tracking for root package.json and bun.lock to invalidate cache when dependencies change
+  - Added missing TSX test file patterns to ensure all test files are tracked
+  - Removed duplicate and non-existent file patterns that were causing unreliable cache behavior
+
+  This ensures that lint errors are always caught in CI and prevents false-positive builds from stale cache.
+
+- [#169](https://github.com/CodeForBreakfast/eventsourcing/pull/169) [`abfb14d`](https://github.com/CodeForBreakfast/eventsourcing/commit/abfb14d261138b629a31a2b0f86bd17b77f56720) Thanks [@GraemeF](https://github.com/GraemeF)! - Modernized service definitions to use Effect-TS 2.3+ patterns. Services now use `Context.Tag` instead of `Effect.Tag` with inlined service shapes, providing better type inference and cleaner code. Generic services use the `Context.GenericTag` factory pattern for proper type parameter support.
+
+  For most users, these are internal improvements with no breaking changes. If you're directly referencing service types (like `CommandRegistryService`), use `Context.Tag.Service<typeof ServiceName>` to extract the service type instead.
+
+- [#179](https://github.com/CodeForBreakfast/eventsourcing/pull/179) [`02f67ff`](https://github.com/CodeForBreakfast/eventsourcing/commit/02f67ffe83a70fceebe5ee8d848e0a858529319b) Thanks [@GraemeF](https://github.com/GraemeF)! - Replace direct `_tag` property access with Effect type guards throughout the codebase. This change improves type safety and follows Effect's recommended patterns for working with discriminated unions. The transport packages now properly validate incoming messages using Schema validation instead of unsafe type casts.
+
+- [#173](https://github.com/CodeForBreakfast/eventsourcing/pull/173) [`5f5fff2`](https://github.com/CodeForBreakfast/eventsourcing/commit/5f5fff2cadd8109bf81adac0ab79e53cbeb8b7b2) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved readability of command processing by reducing nested pipe calls. The command processing factory now uses Effect.all to run independent effects in parallel with descriptive names, making the code flow clearer while maintaining identical behavior.
+
+- [#194](https://github.com/CodeForBreakfast/eventsourcing/pull/194) [`433331d`](https://github.com/CodeForBreakfast/eventsourcing/commit/433331d25e58b347954aa73ff8836c74bbe73660) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce strict branded ID types throughout aggregate root operations. The `load()` and `commit()` functions now require explicitly typed aggregate IDs instead of accepting plain strings. Event metadata schema now correctly includes the `originator` field with proper type safety. This prevents accidental use of unvalidated string IDs and ensures compile-time enforcement of branded types like `UserId` or `OrderId` throughout the aggregate lifecycle.
+
+- [#178](https://github.com/CodeForBreakfast/eventsourcing/pull/178) [`f4c06d6`](https://github.com/CodeForBreakfast/eventsourcing/commit/f4c06d6430f61976ec9c28af38faac39f88800d1) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactored pipe usage patterns to comply with simplified functional composition rules. All `pipe(fn(x), ...)` patterns have been converted to `pipe(x, fn, ...)` for better readability and consistency. This change also fixes Effect type signatures to properly use `never` instead of `unknown` in context parameters where appropriate.
+
+- Updated dependencies [[`2b03f0f`](https://github.com/CodeForBreakfast/eventsourcing/commit/2b03f0faea585e54ac3488f6f5f9c97629eb1222), [`e3a002a`](https://github.com/CodeForBreakfast/eventsourcing/commit/e3a002a8dabbc4a57c750d9d6aa760c7e5494caf), [`4e9f8c9`](https://github.com/CodeForBreakfast/eventsourcing/commit/4e9f8c9711df00e01b0ab943dad67aa14d59df06), [`ae77963`](https://github.com/CodeForBreakfast/eventsourcing/commit/ae7796342df299997ece012b7090f1ce9190b0a4), [`8503302`](https://github.com/CodeForBreakfast/eventsourcing/commit/850330219126aac119ad10f0c9471dc8b89d773a), [`04e27b8`](https://github.com/CodeForBreakfast/eventsourcing/commit/04e27b86f885c7a7746580f83460de3be7bae1bb), [`abfb14d`](https://github.com/CodeForBreakfast/eventsourcing/commit/abfb14d261138b629a31a2b0f86bd17b77f56720), [`02f67ff`](https://github.com/CodeForBreakfast/eventsourcing/commit/02f67ffe83a70fceebe5ee8d848e0a858529319b), [`b481714`](https://github.com/CodeForBreakfast/eventsourcing/commit/b4817141e319d830f10f1914b8a12935ed10fbf8)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.0
+  - @codeforbreakfast/eventsourcing-store@0.8.0
+
 ## 0.6.5
 
 ### Patch Changes
