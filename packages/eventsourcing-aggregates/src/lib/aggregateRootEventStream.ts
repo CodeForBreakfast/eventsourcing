@@ -18,10 +18,7 @@ import {
   pipe,
 } from 'effect';
 
-// Mock PersonId for now - replace with actual implementation
-const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
-type PersonId = typeof PersonId.Type;
-import { CommandContext } from './commandInitiator';
+import { CommandContext, CommandInitiatorId } from './commandInitiator';
 
 /**
  * Represents the state of an aggregate at a particular point in time
@@ -279,17 +276,21 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
   commands,
 });
 
-export const EventOriginatorId = Schema.Union(PersonId);
+export const EventOriginatorId = CommandInitiatorId;
+export type EventOriginatorId = typeof EventOriginatorId.Type;
 
 export const EventMetadata = Schema.Struct({
   occurredAt: Schema.ValidDateFromSelf,
+  originator: Schema.OptionFromSelf(EventOriginatorId),
 });
 export type EventMetadata = typeof EventMetadata.Type;
 
-const createMetadataFromInitiator = (currentTime: number) => (initiatorId: unknown) => ({
-  occurredAt: new Date(currentTime),
-  originator: initiatorId,
-});
+const createMetadataFromInitiator =
+  (currentTime: number) =>
+  (initiatorId: Readonly<Option.Option<CommandInitiatorId>>): EventMetadata => ({
+    occurredAt: new Date(currentTime),
+    originator: initiatorId,
+  });
 
 const getInitiatorId = (currentTime: number) => (commandContext: typeof CommandContext.Service) =>
   pipe(commandContext.getInitiatorId, Effect.map(createMetadataFromInitiator(currentTime)));
