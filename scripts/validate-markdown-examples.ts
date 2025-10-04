@@ -34,6 +34,13 @@ const initialParserState: ParserState = {
   blockIndex: 0,
 };
 
+const logMalformedCodeBlock = (filePath: string, lineIndex: number, state: ParserState) =>
+  pipe(
+    `Malformed code block at ${filePath}:${lineIndex + 1} - nested code fence`,
+    Console.error,
+    Effect.map(() => state)
+  );
+
 const processMarkdownLine =
   (filePath: string, lineIndex: number) =>
   (state: ParserState, line: string | undefined): Effect.Effect<ParserState, never, never> => {
@@ -41,12 +48,7 @@ const processMarkdownLine =
 
     if (trimmed.match(/^```(?:typescript|ts)$/)) {
       return state.inBlock
-        ? pipe(
-            Console.error(
-              `Malformed code block at ${filePath}:${lineIndex + 1} - nested code fence`
-            ),
-            Effect.map(() => state)
-          )
+        ? logMalformedCodeBlock(filePath, lineIndex, state)
         : Effect.succeed({
             ...state,
             inBlock: true,
@@ -83,6 +85,21 @@ const processMarkdownLine =
     return Effect.succeed(state);
   };
 
+const logUnclosedBlock = (filePath: string, state: ParserState) =>
+  pipe(
+    `Unclosed code block at ${filePath}:${state.blockStartLine} - treating as complete`,
+    Console.warn,
+    Effect.map(() => [
+      ...state.blocks,
+      {
+        code: state.currentBlock.join('\n'),
+        file: filePath,
+        line: state.blockStartLine,
+        index: state.blockIndex,
+      },
+    ])
+  );
+
 const finalizeParserState =
   (filePath: string) =>
   (state: ParserState): Effect.Effect<readonly CodeBlock[], never, never> => {
@@ -90,33 +107,27 @@ const finalizeParserState =
       return Effect.succeed(state.blocks);
     }
 
-    return pipe(
-      Console.warn(
-        `Unclosed code block at ${filePath}:${state.blockStartLine} - treating as complete`
-      ),
-      Effect.map(() => [
-        ...state.blocks,
-        {
-          code: state.currentBlock.join('\n'),
-          file: filePath,
-          line: state.blockStartLine,
-          index: state.blockIndex,
-        },
-      ])
-    );
+    return logUnclosedBlock(filePath, state);
   };
 
-const extractCodeBlocks = (content: string, filePath: string) =>
-  pipe(
-    content.split('\n'),
+const processLineInState =
+  (filePath: string, index: number, line: string) =>
+  (accEffect: Effect.Effect<ParserState, never, never>) =>
+    pipe(
+      accEffect,
+      Effect.flatMap((state) => processMarkdownLine(filePath, index)(state, line))
+    );
+
+const extractCodeBlocks = (content: string, filePath: string) => {
+  const lines = content.split('\n');
+  return pipe(
+    lines,
     EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
-      pipe(
-        accEffect,
-        Effect.flatMap((state) => processMarkdownLine(filePath, index)(state, line))
-      )
+      processLineInState(filePath, index, line)(accEffect)
     ),
     Effect.flatMap(finalizeParserState(filePath))
   );
+};
 
 const shouldSkipEntry = (name: string): boolean =>
   name === 'node_modules' || name === '.git' || name === 'dist';
@@ -145,47 +156,121 @@ const processDirectoryEntry =
     return Effect.succeed(files);
   };
 
+const processEntryWithFiles =
+  (
+    currentDir: string,
+    entry: {
+      readonly name: string;
+      readonly isDirectory: () => boolean;
+      readonly isFile: () => boolean;
+    }
+  ) =>
+  (acc: Effect.Effect<readonly string[], Error, never>) =>
+    pipe(
+      acc,
+      Effect.flatMap((currentFiles) => processDirectoryEntry(currentDir, currentFiles)(entry))
+    );
+
+const reduceDirectoryEntries = (
+  entries: readonly {
+    readonly name: string;
+    readonly isDirectory: () => boolean;
+    readonly isFile: () => boolean;
+  }[],
+  files: readonly string[],
+  currentDir: string
+) =>
+  pipe(
+    entries,
+    EffectArray.reduce(Effect.succeed(files), (acc, entry) =>
+      processEntryWithFiles(currentDir, entry)(acc)
+    )
+  );
+
 const processDirectory = (
   currentDir: string,
   files: readonly string[] = []
-): Effect.Effect<readonly string[], Error, never> =>
-  pipe(
-    Effect.tryPromise({
-      try: () => readdir(currentDir, { withFileTypes: true }),
-      catch: (error) => new Error(`Failed to read directory ${currentDir}: ${error}`),
-    }),
+): Effect.Effect<readonly string[], Error, never> => {
+  const readdirEffect = Effect.tryPromise({
+    try: () => readdir(currentDir, { withFileTypes: true }),
+    catch: (error) => new Error(`Failed to read directory ${currentDir}: ${error}`),
+  });
+
+  return pipe(
+    readdirEffect,
     Effect.flatMap((entries) =>
-      pipe(
+      reduceDirectoryEntries(
         entries as readonly {
           readonly name: string;
           readonly isDirectory: () => boolean;
           readonly isFile: () => boolean;
         }[],
-        EffectArray.reduce(Effect.succeed(files), (acc, entry) =>
-          pipe(
-            acc,
-            Effect.flatMap((currentFiles) => processDirectoryEntry(currentDir, currentFiles)(entry))
-          )
-        )
+        files,
+        currentDir
       )
     )
   );
+};
 
 const findMarkdownFiles = (dir: string) => processDirectory(dir, []);
 
-const createCombinedTempFile = (
-  blocks: readonly CodeBlock[],
-  tempDir: string,
-  packageDir: string
-) =>
+const wrapCodeBlocks = (blocks: readonly CodeBlock[]) =>
   pipe(
+    blocks,
+    EffectArray.map(
+      (block, idx) => `
+// ===== Example ${idx}: ${block.file}:${block.line} =====
+${block.code}
+`
+    )
+  );
+
+const writeAllTempFiles = (filepath: string, content: string, tempDir: string) => {
+  const writeFilesEffect = Effect.all([
     Effect.tryPromise({
-      try: () => readFile(join(packageDir, 'package.json'), 'utf-8'),
-      catch: (error) => new Error(`Failed to read package.json: ${error}`),
+      try: () => writeFile(filepath, content),
+      catch: (error) => new Error(`Failed to write temp file ${filepath}: ${error}`),
     }),
-    Effect.map((content) => JSON.parse(content).name as string),
-    Effect.flatMap((packageName) => {
-      const header = `// Auto-generated file for type checking all examples
+    Effect.tryPromise({
+      try: () =>
+        writeFile(
+          join(tempDir, 'tsconfig.json'),
+          JSON.stringify(
+            {
+              compilerOptions: {
+                target: 'ES2022',
+                module: 'ESNext',
+                moduleResolution: 'Bundler',
+                lib: ['ES2022'],
+                strict: true,
+                esModuleInterop: true,
+                skipLibCheck: true,
+                forceConsistentCasingInFileNames: true,
+                resolveJsonModule: true,
+                noEmit: true,
+              },
+              include: ['*.ts'],
+            },
+            null,
+            2
+          )
+        ),
+      catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
+    }),
+  ]);
+
+  return pipe(
+    writeFilesEffect,
+    Effect.map(() => filepath)
+  );
+};
+
+const generateTempFileContent = (
+  packageName: string,
+  blocks: readonly CodeBlock[],
+  tempDir: string
+) => {
+  const header = `// Auto-generated file for type checking all examples
 // Import everything the user would import
 import * as PackageExports from '${packageName}';
 import { Effect, Stream, Scope, pipe, Schema, Chunk, Option, Layer, Context, Match, Data } from 'effect';
@@ -195,241 +280,287 @@ const {} = PackageExports;
 
 `;
 
-      const wrappedBlocks = pipe(
-        blocks,
-        EffectArray.map(
-          (block, idx) => `
-// ===== Example ${idx}: ${block.file}:${block.line} =====
-${block.code}
-`
-        )
-      );
+  const wrappedBlocks = wrapCodeBlocks(blocks);
+  const content = header + wrappedBlocks.join('\n');
+  const filepath = join(tempDir, 'all-examples.ts');
 
-      const content = header + wrappedBlocks.join('\n');
-      const filepath = join(tempDir, 'all-examples.ts');
+  return writeAllTempFiles(filepath, content, tempDir);
+};
 
-      const tsconfigContent = {
-        compilerOptions: {
-          target: 'ES2022',
-          module: 'ESNext',
-          moduleResolution: 'Bundler',
-          lib: ['ES2022'],
-          strict: true,
-          esModuleInterop: true,
-          skipLibCheck: true,
-          forceConsistentCasingInFileNames: true,
-          resolveJsonModule: true,
-          noEmit: true,
-        },
-        include: ['*.ts'],
-      };
+const createCombinedTempFile = (
+  blocks: readonly CodeBlock[],
+  tempDir: string,
+  packageDir: string
+) => {
+  const readPackageJsonEffect = Effect.tryPromise({
+    try: () => readFile(join(packageDir, 'package.json'), 'utf-8'),
+    catch: (error) => new Error(`Failed to read package.json: ${error}`),
+  });
 
-      return pipe(
-        Effect.all([
-          Effect.tryPromise({
-            try: () => writeFile(filepath, content),
-            catch: (error) => new Error(`Failed to write temp file ${filepath}: ${error}`),
-          }),
-          Effect.tryPromise({
-            try: () =>
-              writeFile(join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfigContent, null, 2)),
-            catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
-          }),
-        ]),
-        Effect.map(() => filepath)
-      );
+  return pipe(
+    readPackageJsonEffect,
+    Effect.map((content) => JSON.parse(content).name as string),
+    Effect.flatMap((packageName) => generateTempFileContent(packageName, blocks, tempDir))
+  );
+};
+
+const handleTypeCheckResult = ([exitCode, stdoutText]: readonly [number, string]) =>
+  exitCode !== 0 ? Effect.fail(stdoutText) : Effect.void;
+
+const waitForTypeCheck = (proc: ReturnType<typeof Bun.spawn>) => {
+  const exitAndOutputEffect = Effect.all([
+    Effect.promise(() => proc.exited),
+    Effect.promise(() => new Response(proc.stdout).text()),
+  ]);
+
+  return pipe(exitAndOutputEffect, Effect.flatMap(handleTypeCheckResult));
+};
+
+const typeCheckFile = (filepath: string, tempDir: string) => {
+  const spawnEffect = Effect.sync(() =>
+    Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
+      stderr: 'pipe',
+      stdout: 'pipe',
     })
   );
 
-const typeCheckFile = (filepath: string, tempDir: string) =>
-  pipe(
-    Effect.sync(() =>
-      Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
-        stderr: 'pipe',
-        stdout: 'pipe',
-      })
-    ),
-    Effect.flatMap((proc) =>
-      pipe(
-        Effect.all([
-          Effect.promise(() => proc.exited),
-          Effect.promise(() => new Response(proc.stdout).text()),
+  return pipe(spawnEffect, Effect.flatMap(waitForTypeCheck));
+};
+
+const convertErrorLinesToValidationErrors = (
+  errorLines: readonly string[],
+  blocks: readonly CodeBlock[]
+) =>
+  errorLines.length > 0 && blocks.length > 0
+    ? pipe(
+        blocks[0],
+        Option.fromNullable,
+        Option.map((firstBlock) => [
+          {
+            file: firstBlock.file,
+            line: firstBlock.line,
+            index: 0,
+            error: errorLines.join('\n'),
+          },
         ]),
-        Effect.flatMap(([exitCode, stdoutText]) =>
-          exitCode !== 0 ? Effect.fail(stdoutText) : Effect.void
-        )
+        Option.getOrElse(() => [] as readonly ValidationError[])
       )
-    )
-  );
+    : [];
 
 const parseTypeErrors = (
   stdout: string,
   blocks: readonly CodeBlock[]
-): readonly ValidationError[] =>
-  pipe(
-    stdout.split('\n'),
+): readonly ValidationError[] => {
+  const lines = stdout.split('\n');
+  return pipe(
+    lines,
     EffectArray.filter((line) => line.includes('error TS')),
-    (errorLines) =>
-      errorLines.length > 0 && blocks.length > 0
-        ? pipe(
-            blocks[0],
-            Option.fromNullable,
-            Option.map((firstBlock) => [
-              {
-                file: firstBlock.file,
-                line: firstBlock.line,
-                index: 0,
-                error: errorLines.join('\n'),
-              },
-            ]),
-            Option.getOrElse(() => [] as readonly ValidationError[])
-          )
-        : []
+    (errorLines) => convertErrorLinesToValidationErrors(errorLines, blocks)
   );
+};
 
-const cleanupTempDir = (tempDir: string) =>
-  pipe(
-    Effect.tryPromise({
-      try: () => rm(tempDir, { recursive: true, force: true }),
-      catch: () => new Error(`Failed to cleanup temp dir ${tempDir}`),
-    }),
+const cleanupTempDir = (tempDir: string) => {
+  const rmEffect = Effect.tryPromise({
+    try: () => rm(tempDir, { recursive: true, force: true }),
+    catch: () => new Error(`Failed to cleanup temp dir ${tempDir}`),
+  });
+
+  return pipe(
+    rmEffect,
     Effect.orElseSucceed(() => undefined)
   );
+};
 
 const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
   !line.includes('example-') || line.includes('error TS')
     ? Console.error(`   ${line}`)
     : Effect.void;
 
-const formatError = (error: ValidationError) =>
+const formatErrorLineWithAcc = (line: string) => (acc: Effect.Effect<void, never, never>) =>
   pipe(
-    Console.error(`\n❌ ${error.file}:${error.line} (example #${error.index + 1})`),
+    acc,
+    Effect.flatMap(() => formatErrorLine(line))
+  );
+
+const formatErrorLines = (errorLines: readonly string[]) =>
+  pipe(
+    errorLines,
+    EffectArray.filter((line) => line.trim().length > 0),
+    EffectArray.reduce(Effect.void, (acc, line) => formatErrorLineWithAcc(line)(acc))
+  );
+
+const formatError = (error: ValidationError) => {
+  const errorHeader = `\n❌ ${error.file}:${error.line} (example #${error.index + 1})`;
+  return pipe(
+    errorHeader,
+    Console.error,
     Effect.flatMap(() => Console.error('   Type checking failed:')),
-    Effect.flatMap(() =>
-      pipe(
-        error.error.split('\n'),
-        EffectArray.filter((line) => line.trim().length > 0),
-        EffectArray.reduce(Effect.void, (acc, line) =>
-          pipe(
-            acc,
-            Effect.flatMap(() => formatErrorLine(line))
-          )
-        )
-      )
+    Effect.flatMap(() => formatErrorLines(error.error.split('\n')))
+  );
+};
+
+const cleanTempDirectory = (tempDir: string) => {
+  const rmEffect = Effect.tryPromise({
+    try: () => rm(tempDir, { recursive: true, force: true }),
+    catch: () => new Error(`Failed to clean temp dir`),
+  });
+
+  return pipe(
+    rmEffect,
+    Effect.orElseSucceed(() => undefined)
+  );
+};
+
+const createTempDirectory = (tempDir: string) =>
+  Effect.tryPromise({
+    try: () => mkdir(tempDir, { recursive: true }),
+    catch: (error) => new Error(`Failed to create temp dir: ${error}`),
+  });
+
+const readAndExtractCodeBlocks = (
+  file: string,
+  packageDir: string,
+  blocks: readonly CodeBlock[]
+) => {
+  const readFileEffect = Effect.tryPromise({
+    try: () => readFile(file, 'utf-8'),
+    catch: (error) => new Error(`Failed to read ${file}: ${error}`),
+  });
+
+  return pipe(
+    readFileEffect,
+    Effect.flatMap((content) => extractCodeBlocks(content, relative(packageDir, file))),
+    Effect.map((newBlocks) => [...blocks, ...newBlocks])
+  );
+};
+
+const processFileWithBlocks =
+  (packageDir: string, file: string) => (acc: Effect.Effect<readonly CodeBlock[], Error, never>) =>
+    pipe(
+      acc,
+      Effect.flatMap((blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
+    );
+
+const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: string) =>
+  pipe(
+    markdownFiles,
+    EffectArray.reduce(Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
+      processFileWithBlocks(packageDir, file)(acc)
     )
   );
 
+const runTypeCheckAndParseErrors = (
+  tempFile: string,
+  tempDir: string,
+  allBlocks: readonly CodeBlock[]
+) =>
+  pipe(
+    typeCheckFile(tempFile, tempDir),
+    Effect.map(() => [] as readonly ValidationError[]),
+    Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, allBlocks)))
+  );
+
+const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
+  pipe(
+    acc,
+    Effect.flatMap(() => formatError(error))
+  );
+
+const formatAllErrors = (errors: readonly ValidationError[]) =>
+  pipe(
+    errors,
+    EffectArray.reduce(Effect.void, (acc, error) => formatErrorWithAcc(error)(acc))
+  );
+
+const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
+  const errorCountMessage = `\n❌ Found ${errors.length} invalid example(s):\n`;
+  return pipe(
+    errorCountMessage,
+    Console.log,
+    Effect.flatMap(() => formatAllErrors(errors)),
+    Effect.flatMap(() => Console.log('\n💡 To fix these issues:')),
+    Effect.flatMap(() => Console.log('   1. Update the code examples to match current APIs')),
+    Effect.flatMap(() => Console.log('   2. Add missing imports or type annotations')),
+    Effect.flatMap(() =>
+      Console.log('   3. Verify examples compile with: bun run validate:docs\n')
+    ),
+    Effect.flatMap(() => Effect.fail(new Error('Validation failed')))
+  );
+};
+
+const handleValidationErrors = (
+  errors: readonly ValidationError[],
+  allBlocks: readonly CodeBlock[]
+) =>
+  errors.length > 0
+    ? displayErrorsAndFail(errors)
+    : Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`);
+
+const typeCheckAndReportErrors = (
+  allBlocks: readonly CodeBlock[],
+  tempDir: string,
+  packageDir: string
+) => {
+  const blockCountMessage = `📝 Found ${allBlocks.length} TypeScript code blocks\n`;
+  return pipe(
+    blockCountMessage,
+    Console.log,
+    Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
+    Effect.flatMap(() => createCombinedTempFile(allBlocks, tempDir, packageDir)),
+    Effect.flatMap((tempFile) => runTypeCheckAndParseErrors(tempFile, tempDir, allBlocks)),
+    Effect.flatMap((errors) => handleValidationErrors(errors, allBlocks))
+  );
+};
+
+const skipValidationIfNoBlocks = (tempDir: string) => {
+  const message = '✅ No TypeScript code blocks found - skipping validation';
+  return pipe(
+    message,
+    Console.log,
+    Effect.flatMap(() => cleanupTempDir(tempDir)),
+    Effect.asVoid
+  );
+};
+
+const processAllBlocks = (allBlocks: readonly CodeBlock[], tempDir: string, packageDir: string) =>
+  allBlocks.length === 0
+    ? skipValidationIfNoBlocks(tempDir)
+    : typeCheckAndReportErrors(allBlocks, tempDir, packageDir);
+
+const runValidation = (packageDir: string, tempDir: string) => {
+  const validationMessage = `🔍 Validating TypeScript examples in ${packageDir}...\n`;
+  return pipe(
+    validationMessage,
+    Console.log,
+    Effect.flatMap(() => cleanTempDirectory(tempDir)),
+    Effect.flatMap(() => createTempDirectory(tempDir)),
+    Effect.flatMap(() => findMarkdownFiles(packageDir)),
+    Effect.tap((files) => Console.log(`📄 Found ${files.length} markdown files`)),
+    Effect.flatMap((markdownFiles) => collectAllCodeBlocks(markdownFiles, packageDir)),
+    Effect.flatMap((allBlocks) => processAllBlocks(allBlocks, tempDir, packageDir))
+  );
+};
+
+const getValidationDirs = Effect.sync(() => ({
+  packageDir: process.cwd(),
+  tempDir: join(process.cwd(), '.turbo', 'validate-docs'),
+}));
+
 const validateMarkdownExamples = pipe(
-  Effect.sync(() => ({
-    packageDir: process.cwd(),
-    tempDir: join(process.cwd(), '.turbo', 'validate-docs'),
-  })),
-  Effect.flatMap(({ packageDir, tempDir }) =>
-    pipe(
-      Console.log(`🔍 Validating TypeScript examples in ${packageDir}...\n`),
-      Effect.flatMap(() =>
-        pipe(
-          Effect.tryPromise({
-            try: () => rm(tempDir, { recursive: true, force: true }),
-            catch: () => new Error(`Failed to clean temp dir`),
-          }),
-          Effect.orElseSucceed(() => undefined)
-        )
-      ),
-      Effect.flatMap(() =>
-        Effect.tryPromise({
-          try: () => mkdir(tempDir, { recursive: true }),
-          catch: (error) => new Error(`Failed to create temp dir: ${error}`),
-        })
-      ),
-      Effect.flatMap(() => findMarkdownFiles(packageDir)),
-      Effect.tap((files) => Console.log(`📄 Found ${files.length} markdown files`)),
-      Effect.flatMap((markdownFiles) =>
-        pipe(
-          markdownFiles,
-          EffectArray.reduce(Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
-            pipe(
-              acc,
-              Effect.flatMap((blocks) =>
-                pipe(
-                  Effect.tryPromise({
-                    try: () => readFile(file, 'utf-8'),
-                    catch: (error) => new Error(`Failed to read ${file}: ${error}`),
-                  }),
-                  Effect.flatMap((content) =>
-                    extractCodeBlocks(content, relative(packageDir, file))
-                  ),
-                  Effect.map((newBlocks) => [...blocks, ...newBlocks])
-                )
-              )
-            )
-          )
-        )
-      ),
-      Effect.flatMap((allBlocks) =>
-        allBlocks.length === 0
-          ? pipe(
-              Console.log('✅ No TypeScript code blocks found - skipping validation'),
-              Effect.flatMap(() => cleanupTempDir(tempDir)),
-              Effect.asVoid
-            )
-          : pipe(
-              Console.log(`📝 Found ${allBlocks.length} TypeScript code blocks\n`),
-              Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
-              Effect.flatMap(() => createCombinedTempFile(allBlocks, tempDir, packageDir)),
-              Effect.flatMap((tempFile) =>
-                pipe(
-                  typeCheckFile(tempFile, tempDir),
-                  Effect.map(() => [] as readonly ValidationError[]),
-                  Effect.catchAll((stdout) =>
-                    Effect.succeed(parseTypeErrors(stdout as string, allBlocks))
-                  )
-                )
-              ),
-              Effect.flatMap((errors) =>
-                errors.length > 0
-                  ? pipe(
-                      Console.log(`\n❌ Found ${errors.length} invalid example(s):\n`),
-                      Effect.flatMap(() =>
-                        pipe(
-                          errors,
-                          EffectArray.reduce(Effect.void, (acc, error) =>
-                            pipe(
-                              acc,
-                              Effect.flatMap(() => formatError(error))
-                            )
-                          )
-                        )
-                      ),
-                      Effect.flatMap(() => Console.log('\n💡 To fix these issues:')),
-                      Effect.flatMap(() =>
-                        Console.log('   1. Update the code examples to match current APIs')
-                      ),
-                      Effect.flatMap(() =>
-                        Console.log('   2. Add missing imports or type annotations')
-                      ),
-                      Effect.flatMap(() =>
-                        Console.log('   3. Verify examples compile with: bun run validate:docs\n')
-                      ),
-                      Effect.flatMap(() => Effect.fail(new Error('Validation failed')))
-                    )
-                  : Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`)
-              )
-            )
-      )
-    )
-  )
+  getValidationDirs,
+  Effect.flatMap(({ packageDir, tempDir }) => runValidation(packageDir, tempDir))
 );
 
-const program = pipe(
-  validateMarkdownExamples,
-  Effect.catchAll((error) =>
-    pipe(
-      Console.error(`\n💥 ${error.message}`),
-      Effect.flatMap(() => Effect.fail(error))
-    )
-  )
-);
+const logErrorAndFail = (error: Readonly<Error>) => {
+  const errorMessage = `\n💥 ${error.message}`;
+  return pipe(
+    errorMessage,
+    Console.error,
+    Effect.flatMap(() => Effect.fail(error))
+  );
+};
+
+const program = pipe(validateMarkdownExamples, Effect.catchAll(logErrorAndFail));
 
 Effect.runPromise(program)
   .then(() => process.exit(0))
