@@ -62,7 +62,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -80,7 +80,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -97,7 +97,7 @@
         "type-fest": "5.0.1",
       },
       "devDependencies": {
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -118,7 +118,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -135,7 +135,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -153,7 +153,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -176,7 +176,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@effect/platform-bun": "0.80.0",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -194,7 +194,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -210,7 +210,7 @@
         "type-fest": "5.0.1",
       },
       "devDependencies": {
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -229,7 +229,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -249,7 +249,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "bun-types": "1.2.23",
         "effect": "3.17.14",
         "eslint": "9.36.0",
@@ -268,7 +268,7 @@
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.5.2",
+        "@types/node": "24.6.1",
         "effect": "3.17.14",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -549,7 +549,7 @@
 
     "@types/json5": ["@types/json5@0.0.29", "", {}, "sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ=="],
 
-    "@types/node": ["@types/node@24.5.2", "", { "dependencies": { "undici-types": "~7.12.0" } }, "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ=="],
+    "@types/node": ["@types/node@24.6.1", "", { "dependencies": { "undici-types": "~7.13.0" } }, "sha512-ljvjjs3DNXummeIaooB4cLBKg2U6SPI6Hjra/9rRIy7CpM0HpLtG9HptkMKAb4HYWy5S7HUvJEuWgr/y0U8SHw=="],
 
     "@types/react": ["@types/react@19.1.13", "", { "dependencies": { "csstype": "^3.0.2" } }, "sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ=="],
 
@@ -1325,7 +1325,7 @@
 
     "unbox-primitive": ["unbox-primitive@1.1.0", "", { "dependencies": { "call-bound": "^1.0.3", "has-bigints": "^1.0.2", "has-symbols": "^1.1.0", "which-boxed-primitive": "^1.1.1" } }, "sha512-nWJ91DjeOkej/TA8pXQ3myruKpKEYgqvpw9lz4OPHj/NWFNluYrjbz9j01CJ8yKQd2g4jFoOkINCTW2I5LEEyw=="],
 
-    "undici-types": ["undici-types@7.12.0", "", {}, "sha512-goOacqME2GYyOZZfb5Lgtu+1IDmAlAEu5xnD3+xTzS10hT0vzpf0SPjkXwAw9Jm+4n/mQGDP3LO8CPbYROeBfQ=="],
+    "undici-types": ["undici-types@7.13.0", "", {}, "sha512-Ov2Rr9Sx+fRgagJ5AX0qvItZG/JKKoBRAVITs1zk7IqZGTJUwgUr7qoYBpWwakpWilTZFM98rG/AFRocu10iIQ=="],
 
     "unicorn-magic": ["unicorn-magic@0.1.0", "", {}, "sha512-lRfVq8fE8gz6QMBuDM6a+LO3IAzTi05H6gCVaUpir2E1Rwpo4ZUog45KpNXKC/Mn3Yb9UDuHumeFTo9iV/D9FQ=="],
 
@@ -1415,7 +1415,11 @@
 
     "@manypkg/get-packages/fs-extra": ["fs-extra@8.1.0", "", { "dependencies": { "graceful-fs": "^4.2.0", "jsonfile": "^4.0.0", "universalify": "^0.1.0" } }, "sha512-yhlQgA6mnOJUKOsRUFsgJdQCvkKhcz8tlZG5HBQfReYZy46OwLcY+Zia0mtdHsOo9y/hP+CxMN0TU9QxoOtG4g=="],
 
+    "@types/conventional-commits-parser/@types/node": ["@types/node@24.5.2", "", { "dependencies": { "undici-types": "~7.12.0" } }, "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ=="],
+
     "@typescript-eslint/typescript-estree/minimatch": ["minimatch@9.0.5", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow=="],
+
+    "bun-types/@types/node": ["@types/node@24.5.2", "", { "dependencies": { "undici-types": "~7.12.0" } }, "sha512-FYxk1I7wPv3K2XBaoyH2cTnocQEu8AOZ60hPbsyukMPLv5/5qr7V1i8PLHdl6Zf87I+xZXFvPCXYjiTFq+YSDQ=="],
 
     "cli-truncate/string-width": ["string-width@8.1.0", "", { "dependencies": { "get-east-asian-width": "^1.3.0", "strip-ansi": "^7.1.0" } }, "sha512-Kxl3KJGb/gxkaUMOjRsQ8IrXiGW75O4E3RPjFIINOVH8AMl2SQ/yWdTzWwF3FevIX9LcMAjJW+GRwAlAbTSXdg=="],
 
@@ -1845,7 +1849,11 @@
 
     "@manypkg/find-root/find-up/locate-path": ["locate-path@5.0.0", "", { "dependencies": { "p-locate": "^4.1.0" } }, "sha512-t7hw9pI+WvuwNJXwk5zVHpyhIqzg2qTlklJOf0mVxGSbe3Fp2VieZcduNYjaLDoy6p9uGpQEGWG87WpMKlNq8g=="],
 
+    "@types/conventional-commits-parser/@types/node/undici-types": ["undici-types@7.12.0", "", {}, "sha512-goOacqME2GYyOZZfb5Lgtu+1IDmAlAEu5xnD3+xTzS10hT0vzpf0SPjkXwAw9Jm+4n/mQGDP3LO8CPbYROeBfQ=="],
+
     "@typescript-eslint/typescript-estree/minimatch/brace-expansion": ["brace-expansion@2.0.2", "", { "dependencies": { "balanced-match": "^1.0.0" } }, "sha512-Jt0vHyM+jmUBqojB7E1NIYadt0vI0Qxjxd2TErW94wDz+E2LAm5vKMXXwg6ZZBTHPuUlDgQHKXvjGBdfcF1ZDQ=="],
+
+    "bun-types/@types/node/undici-types": ["undici-types@7.12.0", "", {}, "sha512-goOacqME2GYyOZZfb5Lgtu+1IDmAlAEu5xnD3+xTzS10hT0vzpf0SPjkXwAw9Jm+4n/mQGDP3LO8CPbYROeBfQ=="],
 
     "cli-truncate/string-width/strip-ansi": ["strip-ansi@7.1.2", "", { "dependencies": { "ansi-regex": "^6.0.1" } }, "sha512-gmBGslpoQJtgnMAvOVqGZpEz9dyoKTCzy2nfz/n8aIFhN/jCE/rCmcxabB6jOOHV+0WNnylOxaxBQPSvcWklhA=="],
 
