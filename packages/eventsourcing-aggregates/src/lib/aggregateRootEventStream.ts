@@ -37,8 +37,8 @@ export interface AggregateState<TData> {
  * Options for committing events to an aggregate
  * @since 0.4.0
  */
-export interface CommitOptions {
-  readonly id: string;
+export interface CommitOptions<TId extends string = string> {
+  readonly id: TId;
   readonly eventNumber: EventNumber;
   readonly events: Chunk.Chunk<unknown>;
 }
@@ -102,7 +102,7 @@ const writeEventsToPosition =
     pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
 
 const commitToEventStore =
-  <TEvent>(id: string, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
+  <TId extends string, TEvent>(id: TId, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
   (eventstore: EventStore<TEvent>) =>
     pipe(
       id,
@@ -112,8 +112,10 @@ const commitToEventStore =
     );
 
 const commit =
-  <TEvent, TTag>(eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>) =>
-  (options: CommitOptions) =>
+  <TId extends string, TEvent, TTag>(
+    eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>
+  ) =>
+  (options: CommitOptions<TId>) =>
     pipe(
       eventstoreTag,
       Effect.flatMap(
@@ -199,7 +201,7 @@ const decodeEventNumber = (
     )
   );
 
-const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
+const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(
     id,
     toStreamId,
@@ -208,8 +210,8 @@ const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
   );
 
 const loadAggregateState =
-  <TState, TEvent>(
-    id: string,
+  <TId extends string, TState, TEvent>(
+    id: TId,
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
@@ -273,7 +275,7 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
     data: Option.none(),
   }),
   load: (id: TId) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
-  commit: commit<TEvent, TTag>(tag),
+  commit: commit<TId, TEvent, TTag>(tag),
   commands,
 });
 
