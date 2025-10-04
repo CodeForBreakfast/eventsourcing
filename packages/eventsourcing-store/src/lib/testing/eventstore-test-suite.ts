@@ -1,4 +1,4 @@
-/* eslint-disable no-restricted-imports, no-restricted-syntax -- Test suite contract that must work with bun:test directly and may use restricted patterns for comprehensive EventStore testing */
+/* eslint-disable no-restricted-syntax -- Test suite contract that must work with bun:test directly and may use restricted patterns for comprehensive EventStore testing */
 import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
