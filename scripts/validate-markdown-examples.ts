@@ -1,10 +1,8 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe, Array as EffectArray, Chunk, Console } from 'effect';
+import { Effect, pipe, Array as EffectArray, Console, Option } from 'effect';
 import { readdir, readFile, writeFile, mkdir, rm } from 'fs/promises';
 import { join, relative } from 'path';
-import { tmpdir } from 'os';
-import { randomUUID } from 'crypto';
 
 interface CodeBlock {
   readonly code: string;
@@ -20,106 +18,174 @@ interface ValidationError {
   readonly error: string;
 }
 
-const extractCodeBlocks = (content: string, filePath: string) =>
-  Effect.gen(function* () {
-    const lines = content.split('\n');
-    const blocks: CodeBlock[] = [];
-    let inBlock = false;
-    let currentBlock: string[] = [];
-    let blockStartLine = 0;
-    let blockIndex = 0;
+interface ParserState {
+  readonly blocks: readonly CodeBlock[];
+  readonly inBlock: boolean;
+  readonly currentBlock: readonly string[];
+  readonly blockStartLine: number;
+  readonly blockIndex: number;
+}
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i];
+const initialParserState: ParserState = {
+  blocks: [],
+  inBlock: false,
+  currentBlock: [],
+  blockStartLine: 0,
+  blockIndex: 0,
+};
 
-      if (line?.trim().match(/^```(?:typescript|ts)$/)) {
-        if (inBlock) {
-          yield* Console.error(`Malformed code block at ${filePath}:${i + 1} - nested code fence`);
-        } else {
-          inBlock = true;
-          currentBlock = [];
-          blockStartLine = i + 1;
-        }
-      } else if (line?.trim() === '```' && inBlock) {
-        blocks.push({
-          code: currentBlock.join('\n'),
+const processMarkdownLine =
+  (filePath: string, lineIndex: number) =>
+  (state: ParserState, line: string | undefined): Effect.Effect<ParserState, never, never> => {
+    const trimmed = line?.trim() ?? '';
+
+    if (trimmed.match(/^```(?:typescript|ts)$/)) {
+      return state.inBlock
+        ? pipe(
+            Console.error(
+              `Malformed code block at ${filePath}:${lineIndex + 1} - nested code fence`
+            ),
+            Effect.map(() => state)
+          )
+        : Effect.succeed({
+            ...state,
+            inBlock: true,
+            currentBlock: [],
+            blockStartLine: lineIndex + 1,
+          });
+    }
+
+    if (trimmed === '```' && state.inBlock) {
+      return Effect.succeed({
+        ...state,
+        blocks: [
+          ...state.blocks,
+          {
+            code: state.currentBlock.join('\n'),
+            file: filePath,
+            line: state.blockStartLine,
+            index: state.blockIndex,
+          },
+        ],
+        inBlock: false,
+        currentBlock: [],
+        blockIndex: state.blockIndex + 1,
+      });
+    }
+
+    if (state.inBlock) {
+      return Effect.succeed({
+        ...state,
+        currentBlock: [...state.currentBlock, line ?? ''],
+      });
+    }
+
+    return Effect.succeed(state);
+  };
+
+const finalizeParserState =
+  (filePath: string) =>
+  (state: ParserState): Effect.Effect<readonly CodeBlock[], never, never> => {
+    if (!state.inBlock) {
+      return Effect.succeed(state.blocks);
+    }
+
+    return pipe(
+      Console.warn(
+        `Unclosed code block at ${filePath}:${state.blockStartLine} - treating as complete`
+      ),
+      Effect.map(() => [
+        ...state.blocks,
+        {
+          code: state.currentBlock.join('\n'),
           file: filePath,
-          line: blockStartLine,
-          index: blockIndex++,
-        });
-        inBlock = false;
-        currentBlock = [];
-      } else if (inBlock) {
-        currentBlock.push(line ?? '');
-      }
+          line: state.blockStartLine,
+          index: state.blockIndex,
+        },
+      ])
+    );
+  };
+
+const extractCodeBlocks = (content: string, filePath: string) =>
+  pipe(
+    content.split('\n'),
+    EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
+      pipe(
+        accEffect,
+        Effect.flatMap((state) => processMarkdownLine(filePath, index)(state, line))
+      )
+    ),
+    Effect.flatMap(finalizeParserState(filePath))
+  );
+
+const shouldSkipEntry = (name: string): boolean =>
+  name === 'node_modules' || name === '.git' || name === 'dist';
+
+const processDirectoryEntry =
+  (currentDir: string, files: readonly string[]) =>
+  (entry: {
+    readonly name: string;
+    readonly isDirectory: () => boolean;
+    readonly isFile: () => boolean;
+  }): Effect.Effect<readonly string[], Error, never> => {
+    if (shouldSkipEntry(entry.name)) {
+      return Effect.succeed(files);
     }
 
-    if (inBlock) {
-      yield* Console.warn(
-        `Unclosed code block at ${filePath}:${blockStartLine} - treating as complete`
-      );
-      blocks.push({
-        code: currentBlock.join('\n'),
-        file: filePath,
-        line: blockStartLine,
-        index: blockIndex,
-      });
+    const fullPath = join(currentDir, entry.name);
+
+    if (entry.isDirectory()) {
+      return processDirectory(fullPath, files);
     }
 
-    return blocks;
-  });
+    if (entry.isFile() && entry.name.endsWith('.md')) {
+      return Effect.succeed([...files, fullPath]);
+    }
 
-const findMarkdownFiles = (dir: string) =>
-  Effect.gen(function* () {
-    const files: string[] = [];
+    return Effect.succeed(files);
+  };
 
-    const processDirectory = (currentDir: string): Effect.Effect<void, Error> =>
-      Effect.gen(function* () {
-        const entries = yield* Effect.tryPromise({
-          try: () => readdir(currentDir, { withFileTypes: true }),
-          catch: (error) => new Error(`Failed to read directory ${currentDir}: ${error}`),
-        });
+const processDirectory = (
+  currentDir: string,
+  files: readonly string[] = []
+): Effect.Effect<readonly string[], Error, never> =>
+  pipe(
+    Effect.tryPromise({
+      try: () => readdir(currentDir, { withFileTypes: true }),
+      catch: (error) => new Error(`Failed to read directory ${currentDir}: ${error}`),
+    }),
+    Effect.flatMap((entries) =>
+      pipe(
+        entries as readonly {
+          readonly name: string;
+          readonly isDirectory: () => boolean;
+          readonly isFile: () => boolean;
+        }[],
+        EffectArray.reduce(Effect.succeed(files), (acc, entry) =>
+          pipe(
+            acc,
+            Effect.flatMap((currentFiles) => processDirectoryEntry(currentDir, currentFiles)(entry))
+          )
+        )
+      )
+    )
+  );
 
-        for (const entry of entries) {
-          const fullPath = join(currentDir, entry.name);
-
-          if (entry.name === 'node_modules' || entry.name === '.git' || entry.name === 'dist') {
-            continue;
-          }
-
-          if (entry.isDirectory()) {
-            yield* processDirectory(fullPath);
-          } else if (entry.isFile() && entry.name.endsWith('.md')) {
-            files.push(fullPath);
-          }
-        }
-      });
-
-    yield* processDirectory(dir);
-    return files;
-  });
+const findMarkdownFiles = (dir: string) => processDirectory(dir, []);
 
 const createCombinedTempFile = (
   blocks: readonly CodeBlock[],
   tempDir: string,
   packageDir: string
 ) =>
-  Effect.gen(function* () {
-    const filename = 'all-examples.ts';
-    const filepath = join(tempDir, filename);
-
-    // Read package.json to get package name
-    const packageJsonPath = join(packageDir, 'package.json');
-    const packageJsonContent = yield* Effect.tryPromise({
-      try: () => readFile(packageJsonPath, 'utf-8'),
+  pipe(
+    Effect.tryPromise({
+      try: () => readFile(join(packageDir, 'package.json'), 'utf-8'),
       catch: (error) => new Error(`Failed to read package.json: ${error}`),
-    });
-    const packageJson = JSON.parse(packageJsonContent);
-    const packageName = packageJson.name;
-
-    // Auto-import exports from the package and Effect
-    // This simulates what users would have available
-    const header = `// Auto-generated file for type checking all examples
+    }),
+    Effect.map((content) => JSON.parse(content).name as string),
+    Effect.flatMap((packageName) => {
+      const header = `// Auto-generated file for type checking all examples
 // Import everything the user would import
 import * as PackageExports from '${packageName}';
 import { Effect, Stream, Scope, pipe, Schema, Chunk, Option, Layer, Context, Match, Data } from 'effect';
@@ -129,195 +195,239 @@ const {} = PackageExports;
 
 `;
 
-    const wrappedBlocks = blocks.map(
-      (block, idx) => `
+      const wrappedBlocks = pipe(
+        blocks,
+        EffectArray.map(
+          (block, idx) => `
 // ===== Example ${idx}: ${block.file}:${block.line} =====
 ${block.code}
 `
-    );
+        )
+      );
 
-    const content = header + wrappedBlocks.join('\n');
+      const content = header + wrappedBlocks.join('\n');
+      const filepath = join(tempDir, 'all-examples.ts');
 
-    yield* Effect.tryPromise({
-      try: () => writeFile(filepath, content),
-      catch: (error) => new Error(`Failed to write temp file ${filepath}: ${error}`),
-    });
+      const tsconfigContent = {
+        compilerOptions: {
+          target: 'ES2022',
+          module: 'ESNext',
+          moduleResolution: 'Bundler',
+          lib: ['ES2022'],
+          strict: true,
+          esModuleInterop: true,
+          skipLibCheck: true,
+          forceConsistentCasingInFileNames: true,
+          resolveJsonModule: true,
+          noEmit: true,
+        },
+        include: ['*.ts'],
+      };
 
-    // Create a tsconfig.json for validation
-    const tsconfigPath = join(tempDir, 'tsconfig.json');
-    const tsconfigContent = {
-      compilerOptions: {
-        target: 'ES2022',
-        module: 'ESNext',
-        moduleResolution: 'Bundler',
-        lib: ['ES2022'],
-        strict: true,
-        esModuleInterop: true,
-        skipLibCheck: true,
-        forceConsistentCasingInFileNames: true,
-        resolveJsonModule: true,
-        noEmit: true,
-      },
-      include: ['*.ts'],
-    };
-
-    yield* Effect.tryPromise({
-      try: () => writeFile(tsconfigPath, JSON.stringify(tsconfigContent, null, 2)),
-      catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
-    });
-
-    return filepath;
-  });
+      return pipe(
+        Effect.all([
+          Effect.tryPromise({
+            try: () => writeFile(filepath, content),
+            catch: (error) => new Error(`Failed to write temp file ${filepath}: ${error}`),
+          }),
+          Effect.tryPromise({
+            try: () =>
+              writeFile(join(tempDir, 'tsconfig.json'), JSON.stringify(tsconfigContent, null, 2)),
+            catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
+          }),
+        ]),
+        Effect.map(() => filepath)
+      );
+    })
+  );
 
 const typeCheckFile = (filepath: string, tempDir: string) =>
-  Effect.gen(function* () {
-    // Run tsc with the project flag to use the tsconfig in tempDir
-    const proc = Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
-      stderr: 'pipe',
-      stdout: 'pipe',
-    });
-
-    const [exitCode, stdoutText] = yield* Effect.all([
-      Effect.promise(() => proc.exited),
-      Effect.promise(() => new Response(proc.stdout).text()),
-    ]);
-
-    if (exitCode !== 0) {
-      yield* Effect.fail(stdoutText);
-    }
-  });
-
-const parseTypeErrors = (stdout: string, blocks: readonly CodeBlock[]): ValidationError[] => {
-  const errors: ValidationError[] = [];
-  const lines = stdout.split('\n');
-
-  // Group all error lines for reporting
-  const errorLines: string[] = [];
-
-  for (const line of lines) {
-    if (line.includes('error TS')) {
-      errorLines.push(line);
-    }
-  }
-
-  // If we have any errors, just report them all for the first block
-  // (better than nothing - proper mapping would need line number tracking)
-  if (errorLines.length > 0 && blocks.length > 0) {
-    const firstBlock = blocks[0];
-    if (firstBlock) {
-      errors.push({
-        file: firstBlock.file,
-        line: firstBlock.line,
-        index: 0,
-        error: errorLines.join('\n'),
-      });
-    }
-  }
-
-  return errors;
-};
-
-const cleanupTempDir = (tempDir: string) =>
-  Effect.tryPromise({
-    try: () => rm(tempDir, { recursive: true, force: true }),
-    catch: () => new Error(`Failed to cleanup temp dir ${tempDir}`),
-  }).pipe(Effect.orElseSucceed(() => undefined));
-
-const formatError = (error: ValidationError) =>
-  Effect.gen(function* () {
-    yield* Console.error(`\n❌ ${error.file}:${error.line} (example #${error.index + 1})`);
-    yield* Console.error('   Type checking failed:');
-
-    const errorLines = error.error.split('\n').filter((line) => line.trim().length > 0);
-    for (const line of errorLines) {
-      if (!line.includes('example-') || line.includes('error TS')) {
-        yield* Console.error(`   ${line}`);
-      }
-    }
-  });
-
-const validateMarkdownExamples = Effect.gen(function* () {
-  const packageDir = process.cwd();
-  const tempDir = join(packageDir, '.turbo', 'validate-docs');
-
-  yield* Console.log(`🔍 Validating TypeScript examples in ${packageDir}...\n`);
-
-  yield* Effect.tryPromise({
-    try: () => rm(tempDir, { recursive: true, force: true }),
-    catch: () => new Error(`Failed to clean temp dir`),
-  }).pipe(Effect.orElseSucceed(() => undefined));
-
-  yield* Effect.tryPromise({
-    try: () => mkdir(tempDir, { recursive: true }),
-    catch: (error) => new Error(`Failed to create temp dir: ${error}`),
-  });
-
-  const markdownFiles = yield* findMarkdownFiles(packageDir);
-
-  yield* Console.log(`📄 Found ${markdownFiles.length} markdown files`);
-
-  const allBlocks: CodeBlock[] = [];
-
-  for (const file of markdownFiles) {
-    const content = yield* Effect.tryPromise({
-      try: () => readFile(file, 'utf-8'),
-      catch: (error) => new Error(`Failed to read ${file}: ${error}`),
-    });
-
-    const blocks = yield* extractCodeBlocks(content, relative(packageDir, file));
-    allBlocks.push(...blocks);
-  }
-
-  if (allBlocks.length === 0) {
-    yield* Console.log('✅ No TypeScript code blocks found - skipping validation');
-    yield* cleanupTempDir(tempDir);
-    return;
-  }
-
-  yield* Console.log(`📝 Found ${allBlocks.length} TypeScript code blocks\n`);
-
-  yield* Console.log('⚙️  Type checking examples...\n');
-
-  const tempFile = yield* createCombinedTempFile(allBlocks, tempDir, packageDir);
-
-  const errors = yield* pipe(
-    typeCheckFile(tempFile, tempDir),
-    Effect.map(() => []),
-    Effect.catchAll((stdout) =>
-      Effect.gen(function* () {
-        return parseTypeErrors(stdout as string, allBlocks);
+  pipe(
+    Effect.sync(() =>
+      Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
+        stderr: 'pipe',
+        stdout: 'pipe',
       })
+    ),
+    Effect.flatMap((proc) =>
+      pipe(
+        Effect.all([
+          Effect.promise(() => proc.exited),
+          Effect.promise(() => new Response(proc.stdout).text()),
+        ]),
+        Effect.flatMap(([exitCode, stdoutText]) =>
+          exitCode !== 0 ? Effect.fail(stdoutText) : Effect.void
+        )
+      )
     )
   );
 
-  // Keep temp dir for debugging, turbo will clean it up
-  // yield* cleanupTempDir(tempDir);
+const parseTypeErrors = (
+  stdout: string,
+  blocks: readonly CodeBlock[]
+): readonly ValidationError[] =>
+  pipe(
+    stdout.split('\n'),
+    EffectArray.filter((line) => line.includes('error TS')),
+    (errorLines) =>
+      errorLines.length > 0 && blocks.length > 0
+        ? pipe(
+            blocks[0],
+            Option.fromNullable,
+            Option.map((firstBlock) => [
+              {
+                file: firstBlock.file,
+                line: firstBlock.line,
+                index: 0,
+                error: errorLines.join('\n'),
+              },
+            ]),
+            Option.getOrElse(() => [] as readonly ValidationError[])
+          )
+        : []
+  );
 
-  if (errors.length > 0) {
-    yield* Console.log(`\n❌ Found ${errors.length} invalid example(s):\n`);
+const cleanupTempDir = (tempDir: string) =>
+  pipe(
+    Effect.tryPromise({
+      try: () => rm(tempDir, { recursive: true, force: true }),
+      catch: () => new Error(`Failed to cleanup temp dir ${tempDir}`),
+    }),
+    Effect.orElseSucceed(() => undefined)
+  );
 
-    for (const error of errors) {
-      yield* formatError(error);
-    }
+const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
+  !line.includes('example-') || line.includes('error TS')
+    ? Console.error(`   ${line}`)
+    : Effect.void;
 
-    yield* Console.log('\n💡 To fix these issues:');
-    yield* Console.log('   1. Update the code examples to match current APIs');
-    yield* Console.log('   2. Add missing imports or type annotations');
-    yield* Console.log('   3. Verify examples compile with: bun run validate:docs\n');
+const formatError = (error: ValidationError) =>
+  pipe(
+    Console.error(`\n❌ ${error.file}:${error.line} (example #${error.index + 1})`),
+    Effect.flatMap(() => Console.error('   Type checking failed:')),
+    Effect.flatMap(() =>
+      pipe(
+        error.error.split('\n'),
+        EffectArray.filter((line) => line.trim().length > 0),
+        EffectArray.reduce(Effect.void, (acc, line) =>
+          pipe(
+            acc,
+            Effect.flatMap(() => formatErrorLine(line))
+          )
+        )
+      )
+    )
+  );
 
-    return yield* Effect.fail(new Error('Validation failed'));
-  }
-
-  yield* Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`);
-});
+const validateMarkdownExamples = pipe(
+  Effect.sync(() => ({
+    packageDir: process.cwd(),
+    tempDir: join(process.cwd(), '.turbo', 'validate-docs'),
+  })),
+  Effect.flatMap(({ packageDir, tempDir }) =>
+    pipe(
+      Console.log(`🔍 Validating TypeScript examples in ${packageDir}...\n`),
+      Effect.flatMap(() =>
+        pipe(
+          Effect.tryPromise({
+            try: () => rm(tempDir, { recursive: true, force: true }),
+            catch: () => new Error(`Failed to clean temp dir`),
+          }),
+          Effect.orElseSucceed(() => undefined)
+        )
+      ),
+      Effect.flatMap(() =>
+        Effect.tryPromise({
+          try: () => mkdir(tempDir, { recursive: true }),
+          catch: (error) => new Error(`Failed to create temp dir: ${error}`),
+        })
+      ),
+      Effect.flatMap(() => findMarkdownFiles(packageDir)),
+      Effect.tap((files) => Console.log(`📄 Found ${files.length} markdown files`)),
+      Effect.flatMap((markdownFiles) =>
+        pipe(
+          markdownFiles,
+          EffectArray.reduce(Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
+            pipe(
+              acc,
+              Effect.flatMap((blocks) =>
+                pipe(
+                  Effect.tryPromise({
+                    try: () => readFile(file, 'utf-8'),
+                    catch: (error) => new Error(`Failed to read ${file}: ${error}`),
+                  }),
+                  Effect.flatMap((content) =>
+                    extractCodeBlocks(content, relative(packageDir, file))
+                  ),
+                  Effect.map((newBlocks) => [...blocks, ...newBlocks])
+                )
+              )
+            )
+          )
+        )
+      ),
+      Effect.flatMap((allBlocks) =>
+        allBlocks.length === 0
+          ? pipe(
+              Console.log('✅ No TypeScript code blocks found - skipping validation'),
+              Effect.flatMap(() => cleanupTempDir(tempDir)),
+              Effect.asVoid
+            )
+          : pipe(
+              Console.log(`📝 Found ${allBlocks.length} TypeScript code blocks\n`),
+              Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
+              Effect.flatMap(() => createCombinedTempFile(allBlocks, tempDir, packageDir)),
+              Effect.flatMap((tempFile) =>
+                pipe(
+                  typeCheckFile(tempFile, tempDir),
+                  Effect.map(() => [] as readonly ValidationError[]),
+                  Effect.catchAll((stdout) =>
+                    Effect.succeed(parseTypeErrors(stdout as string, allBlocks))
+                  )
+                )
+              ),
+              Effect.flatMap((errors) =>
+                errors.length > 0
+                  ? pipe(
+                      Console.log(`\n❌ Found ${errors.length} invalid example(s):\n`),
+                      Effect.flatMap(() =>
+                        pipe(
+                          errors,
+                          EffectArray.reduce(Effect.void, (acc, error) =>
+                            pipe(
+                              acc,
+                              Effect.flatMap(() => formatError(error))
+                            )
+                          )
+                        )
+                      ),
+                      Effect.flatMap(() => Console.log('\n💡 To fix these issues:')),
+                      Effect.flatMap(() =>
+                        Console.log('   1. Update the code examples to match current APIs')
+                      ),
+                      Effect.flatMap(() =>
+                        Console.log('   2. Add missing imports or type annotations')
+                      ),
+                      Effect.flatMap(() =>
+                        Console.log('   3. Verify examples compile with: bun run validate:docs\n')
+                      ),
+                      Effect.flatMap(() => Effect.fail(new Error('Validation failed')))
+                    )
+                  : Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`)
+              )
+            )
+      )
+    )
+  )
+);
 
 const program = pipe(
   validateMarkdownExamples,
   Effect.catchAll((error) =>
-    Effect.gen(function* () {
-      yield* Console.error(`\n💥 ${error.message}`);
-      return yield* Effect.fail(error);
-    })
+    pipe(
+      Console.error(`\n💥 ${error.message}`),
+      Effect.flatMap(() => Effect.fail(error))
+    )
   )
 );
 

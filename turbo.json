@@ -80,6 +80,7 @@
         "**/*.spec.tsx",
         "tsconfig*.json",
         "$TURBO_ROOT$/eslint.config.mjs",
+        "$TURBO_ROOT$/scripts/**/*.ts",
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/bun.lock",
         "package.json"
