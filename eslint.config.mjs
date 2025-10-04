@@ -360,6 +360,58 @@ export default [
     },
   },
   {
+    name: 'eventsourcing-layer-architecture',
+    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+    ignores: ['packages/eventsourcing-protocol/**'],
+    languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '**/eventsourcing-protocol/**/protocol',
+                '**/eventsourcing-protocol/**/server-protocol',
+              ],
+              message:
+                'Direct imports from protocol.ts or server-protocol.ts are forbidden outside the eventsourcing-protocol package. These files contain internal protocol implementation details (Protocol* types). Import from @codeforbreakfast/eventsourcing-protocol package index instead.',
+            },
+            {
+              group: ['@codeforbreakfast/eventsourcing-protocol/src/**'],
+              message:
+                'Direct imports from eventsourcing-protocol internals are forbidden. Import from @codeforbreakfast/eventsourcing-protocol package index instead to respect layer boundaries.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
+    name: 'eventsourcing-commands-layer-separation',
+    files: ['packages/eventsourcing-commands/**/*.ts', 'packages/eventsourcing-commands/**/*.tsx'],
+    languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
+    rules: {
+      'no-restricted-imports': [
+        'error',
+        {
+          patterns: [
+            {
+              group: [
+                '@codeforbreakfast/eventsourcing-protocol',
+                '@codeforbreakfast/eventsourcing-protocol/**',
+              ],
+              message:
+                'The eventsourcing-commands package (Wire API - Layer 2) must not depend on eventsourcing-protocol (Protocol - Layer 3). Keep clear layer separation: Domain → Wire API → Protocol → Transport.',
+            },
+          ],
+        },
+      ],
+    },
+  },
+  {
     name: 'ignore-patterns',
     ignores: [
       '**/node_modules/**',

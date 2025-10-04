@@ -201,6 +201,34 @@ module.exports = {
         dependencyTypes: ['npm-peer'],
       },
     },
+    {
+      name: 'protocol-internals-must-not-leak',
+      severity: 'error',
+      comment:
+        'The protocol.ts and server-protocol.ts files contain internal protocol implementation details ' +
+        'and should not be imported directly by code outside the eventsourcing-protocol package. ' +
+        'Only import from the package index (e.g., @codeforbreakfast/eventsourcing-protocol).',
+      from: {
+        pathNot: ['^packages/eventsourcing-protocol/'],
+      },
+      to: {
+        path: '^packages/eventsourcing-protocol/src/lib/(protocol|server-protocol)[.]ts$',
+      },
+    },
+    {
+      name: 'eventsourcing-commands-layer-separation',
+      severity: 'error',
+      comment:
+        'The eventsourcing-commands package defines the public Wire API layer (Layer 2). ' +
+        'It should not depend on eventsourcing-protocol (Layer 3 - internal protocol implementation). ' +
+        'Keep clear layer separation: Domain → Wire API → Protocol → Transport.',
+      from: {
+        path: '^packages/eventsourcing-commands/',
+      },
+      to: {
+        path: '^packages/eventsourcing-protocol/',
+      },
+    },
   ],
   options: {
     doNotFollow: {

@@ -1,105 +1,51 @@
-# Architecture: Command Processing and Type Safety
+# Aggregate Architecture
 
-## Design Philosophy
+## What Are Aggregates?
 
-This package enforces strong typing throughout the domain layer, with generic `Event` types only at serialization boundaries (storage, wire protocol). Domain events are always specific union types, never generic or `unknown`.
+Aggregates are **write-side domain entities** that enforce business invariants through command processing. They:
 
-## Type Safety Principles
+1. **Maintain consistency boundaries** - All changes within an aggregate are consistent
+2. **Enforce business rules** - Commands are validated against current state before producing events
+3. **Produce domain events** - Successful commands result in typed events that describe what happened
+4. **Are fully reconstitutable** - Rebuilt from their event stream on each command
 
-### 1. Domain Events Are Always Specific
+## When to Use Aggregates
 
-**Never use `Event` or `unknown` types in domain logic.**
+### ✅ Use Aggregates When:
 
-```typescript
-// ❌ WRONG - Generic Event with unknown data
-const EventStoreService = EventStoreTag<Event>();
-const handler: CommandHandler = {
-  execute: () => Effect.succeed([{ type: 'UserCreated', data: { name: 'John' } } as Event]),
-};
+- You need to **enforce business invariants** (e.g., "user email must be unique", "order can't be cancelled after shipping")
+- Commands need to be **validated against current state** (e.g., "can't overdraw account")
+- You have **complex domain logic** that benefits from encapsulation
+- You want **strong typing and compile-time safety** for event production
 
-// ✅ CORRECT - Domain-specific event union
-const UserEvent = Schema.Union(UserCreated, UserUpdated, UserDeleted);
-type UserEvent = typeof UserEvent.Type;
+### ❌ Use Raw Event Streams When:
 
-const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
-  'UserEventStore'
-);
+- You're doing **read-side projections** only (use `@codeforbreakfast/eventsourcing-projections`)
+- Commands are **simple transformations** without validation (e.g., logging, auditing)
+- You need **maximum performance** and can bypass aggregate reconstitution
+- You're implementing **process managers** that react to events without invariants
 
-const handler: CommandHandler<UserEvent> = {
-  execute: () =>
-    Effect.succeed([{ type: 'UserCreated', data: { name: 'John', email: 'john@example.com' } }]),
-};
-```
+## Core Aggregate APIs
 
-### 2. The `Event` Type is for Serialization Boundaries Only
+### 1. CommandHandler
 
-The `Event` type exists in `@codeforbreakfast/eventsourcing-store` with `data: Schema.Unknown`:
+Defines how a command is executed against aggregate state:
 
 ```typescript
-export const Event = Schema.Struct({
-  position: EventStreamPosition,
-  type: Schema.String,
-  data: Schema.Unknown, // Generic - for wire/storage only
-  timestamp: Schema.Date,
-});
-```
-
-This type serves two purposes:
-
-1. **Runtime validation** at storage/network boundaries
-2. **Wire protocol** for events crossing system boundaries
-
-It should **never** appear in domain logic, command handlers, or aggregate roots.
-
-### 3. EventStore Services Are Domain-Specific
-
-Each aggregate or bounded context creates its own event store tag with its specific event union:
-
-```typescript
-// In user/events.ts
-const UserCreated = Schema.Struct({
-  type: Schema.Literal('UserCreated'),
-  data: Schema.Struct({
-    name: Schema.String,
-    email: Schema.String,
-  }),
-});
-
-const UserUpdated = Schema.Struct({
-  type: Schema.Literal('UserUpdated'),
-  data: Schema.Struct({
-    name: Schema.String,
-  }),
-});
-
-const UserEvent = Schema.Union(UserCreated, UserUpdated);
-type UserEvent = typeof UserEvent.Type;
-
-// In user/services.ts
-const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
-  'UserEventStore'
-);
-```
-
-### 4. Command Handlers Are Generic Over Event Types
-
-The command processing layer is fully generic to support any domain's event types:
-
-```typescript
-export interface CommandHandler<TEvent> {
+interface CommandHandler<TEvent> {
   readonly execute: (
     command: Readonly<WireCommand>
   ) => Effect.Effect<readonly TEvent[], CommandProcessingError, never>;
 }
-
-export interface CommandRouter<TEvent> {
-  readonly route: (
-    command: Readonly<WireCommand>
-  ) => Effect.Effect<CommandHandler<TEvent>, CommandRoutingError, never>;
-}
 ```
 
-This allows each domain to have strongly-typed command handlers:
+**Key Points**:
+
+- Generic over `TEvent` - each aggregate has its own event type
+- Returns array of events (may produce multiple events from one command)
+- Strongly typed - handlers can only return events from the aggregate's event union
+
+**Example**:
 
 ```typescript
 const createUser: CommandHandler<UserEvent> = {
@@ -116,20 +62,109 @@ const createUser: CommandHandler<UserEvent> = {
 };
 ```
 
-## Command Processing Factory
+### 2. CommandRouter
 
-The `createCommandProcessingService` factory is generic and requires both:
-
-1. A domain-specific event store tag
-2. A domain-specific command router
+Routes commands to their appropriate handlers:
 
 ```typescript
-export const createCommandProcessingService = <TEvent>(
-  eventStoreTag: Readonly<Context.Tag<EventStore<TEvent>, EventStore<TEvent>>>
-) => (router: ReadonlyDeep<CommandRouter<TEvent>>) => // ...
+interface CommandRouter<TEvent> {
+  readonly route: (
+    command: Readonly<WireCommand>
+  ) => Effect.Effect<CommandHandler<TEvent>, CommandRoutingError, never>;
+}
 ```
 
-**Usage pattern:**
+**Key Points**:
+
+- Maps command names to handlers
+- Type-safe - all handlers must return the same `TEvent` type
+- Can use pattern matching for exhaustive command coverage
+
+**Example**:
+
+```typescript
+const userRouter: CommandRouter<UserEvent> = {
+  route: (command) =>
+    Match.value(command.name).pipe(
+      Match.when('CreateUser', () => Effect.succeed(createUserHandler)),
+      Match.when('UpdateUser', () => Effect.succeed(updateUserHandler)),
+      Match.exhaustive
+    ),
+};
+```
+
+### 3. makeAggregateRoot
+
+Factory for creating aggregate roots with typed command handling:
+
+```typescript
+const makeAggregateRoot = <TId, TEvent, TState, TCommands, TTag>(
+  idSchema: Schema.Schema<TId, string>,
+  apply: (state: Option<TState>) => (event: TEvent) => Effect<TState, ParseError>,
+  tag: Context.Tag<TTag, EventStore<TEvent>>,
+  commands: TCommands
+) => ({
+  new: () => AggregateState<TState>,
+  load: (id: string) => Effect<AggregateState<TState>>,
+  commit: (options: CommitOptions) => Effect<void>,
+  commands: TCommands,
+});
+```
+
+**Parameters**:
+
+- `idSchema` - Schema for aggregate ID validation
+- `apply` - Event application function (how events change state)
+- `tag` - Domain-specific EventStore tag
+- `commands` - Command handlers for this aggregate
+
+**Returns**:
+
+- `new()` - Creates empty aggregate state
+- `load(id)` - Loads aggregate from event stream
+- `commit(options)` - Commits events to stream
+- `commands` - The command handlers passed in
+
+**Example**:
+
+```typescript
+// Define aggregate state
+interface UserState {
+  readonly name: string;
+  readonly email: string;
+}
+
+// Define how events modify state
+const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) =>
+  Match.value(event).pipe(
+    Match.when({ type: 'UserCreated' }, (e) =>
+      Effect.succeed({ name: e.data.name, email: e.data.email })
+    ),
+    Match.when({ type: 'UserUpdated' }, (e) =>
+      Effect.map(state, (s) => ({ ...s, name: e.data.name }))
+    ),
+    Match.exhaustive
+  );
+
+// Create aggregate root
+const UserAggregate = makeAggregateRoot(UserId, applyUserEvent, UserEventStore, {
+  createUser,
+  updateUser,
+});
+```
+
+### 4. createCommandProcessingService
+
+Factory for creating command processing services that integrate aggregates with event storage:
+
+```typescript
+const createCommandProcessingService =
+  <TEvent>(eventStoreTag: Context.Tag<EventStore<TEvent>, EventStore<TEvent>>) =>
+  (router: CommandRouter<TEvent>) =>
+    Effect<CommandProcessingService>;
+```
+
+**Usage Pattern**:
 
 ```typescript
 // Define domain events
@@ -154,138 +189,218 @@ const OrderCommandProcessingService = Layer.effect(
 );
 ```
 
-## Why This Pattern?
+## Type Safety in Aggregates
 
-### Type Safety Guarantees
+Aggregates enforce type safety through **domain-specific event unions**:
 
-1. **Compile-time verification**: TypeScript ensures handlers can only produce events from the domain union
-2. **No accidental `unknown`**: Impossible to accidentally use generic events in domain logic
-3. **Refactoring safety**: Changing event schemas causes compile errors in all handlers
-4. **IDE autocomplete**: Full type information for event data in handlers and aggregates
+### Pattern 1: Domain-Specific Event Types
 
-### Separation of Concerns
-
-1. **Domain layer**: Works with typed domain events (`UserEvent`, `OrderEvent`)
-2. **Infrastructure layer**: Handles serialization with generic `Event` type
-3. **Clear boundaries**: The transition point between typed/untyped is explicit (event store implementation)
-
-### Storage Independence
-
-The event store implementation (Postgres, in-memory, etc.) uses the generic `Event` type for storage but transforms to/from domain events at the boundary:
+**Always** define a union of events specific to your aggregate:
 
 ```typescript
-// In postgres event store implementation
-export const makePostgresEventStore = <TEvent>(
-  schema: Schema.Schema<TEvent, unknown>
-): EventStore<TEvent> => ({
-  append: (position) =>
-    Sink.mapInputEffect((event: TEvent) =>
-      pipe(
-        // Encode domain event to storage Event
-        event,
-        Schema.encode(schema),
-        Effect.map((encoded) => ({
-          type: encoded.type,
-          data: encoded.data, // now unknown
-          timestamp: new Date(),
-          position,
-        }))
-      )
-    ),
-
-  read: (from) =>
-    Stream.flatMap((storageEvent: Event) =>
-      // Decode storage Event to domain event
-      Schema.decode(schema)(storageEvent)
-    ),
-});
+// ✅ CORRECT - Domain-specific event union
+const UserEvent = Schema.Union(UserCreated, UserUpdated, UserDeleted);
+type UserEvent = typeof UserEvent.Type;
 ```
 
-## Comparison to Original Design
-
-### What Changed
-
-**Before (over-engineered):**
-
-- Factory functions (`EventStore<TEvent>()`) that invited default type parameters
-- Generic `Event` type used throughout domain layer
-- Command handlers returned `Event[]` with `data: unknown`
-- Lost type safety at command boundary
-
-**After (domain-specific types):**
-
-- Direct tag creation per domain: `Context.GenericTag<EventStore<UserEvent>, ...>`
-- Domain-specific event unions (`UserEvent`, `OrderEvent`)
-- Generic command processing layer that works with any event type
-- Full type safety from command to storage
-
-### What Stayed the Same
-
-- `Event` type still exists for wire/storage boundaries
-- Event stores still use the same `EventStore<TEvent>` interface
-- Command processing architecture unchanged
-- Effect-based composition patterns
-
-## Guidelines for New Code
-
-### ✅ DO
-
-- Create domain-specific event unions for each aggregate
-- Create named event store tags per domain (`UserEventStore`, `OrderEventStore`)
-- Use `CommandHandler<YourEvent>` and `CommandRouter<YourEvent>`
-- Keep `Event` type at storage/network boundaries only
-
-### ❌ DON'T
-
-- Use `EventStore<Event>()` or `EventStore<unknown>()`
-- Use default type parameters on event store factories
-- Return generic `Event[]` from command handlers
-- Use `data: Schema.Unknown` in domain event schemas
-
-## Testing Strategy
-
-Tests should use domain-specific events:
+**Never** use generic `Event` type in aggregate logic:
 
 ```typescript
-// Define test domain events
-const TestEvent = Schema.Union(
-  Schema.Struct({
-    type: Schema.Literal('TestCreated'),
-    data: Schema.Struct({ id: Schema.String }),
-  }),
-  Schema.Struct({
-    type: Schema.Literal('TestUpdated'),
-    data: Schema.Struct({ value: Schema.Number }),
-  })
-);
-
-// Create test event store
-const TestEventStore = Context.GenericTag<
-  EventStore<typeof TestEvent.Type>,
-  EventStore<typeof TestEvent.Type>
->('TestEventStore');
-
-// Create handlers and routers with TestEvent
-const testHandler: CommandHandler<typeof TestEvent.Type> = {
-  execute: () => Effect.succeed([{ type: 'TestCreated', data: { id: 'test-123' } }]),
+// ❌ WRONG - Generic event with unknown data
+const handler: CommandHandler = {
+  execute: () => Effect.succeed([{ type: 'UserCreated', data: { name: 'John' } } as Event]),
 };
 ```
 
-## Migration Path
+### Pattern 2: Domain-Specific EventStore Tags
 
-To migrate existing code to this pattern:
+Each aggregate creates its own EventStore tag with its event type:
 
-1. **Define domain event union**: Create `Schema.Union` of all events for your aggregate
-2. **Create domain-specific tag**: Replace factory calls with direct `Context.GenericTag` creation
-3. **Update command handlers**: Add `<YourEvent>` type parameter to handlers and routers
-4. **Update factory usage**: Pass event store tag to `createCommandProcessingService`
-5. **Remove `Event` imports**: Delete any imports of generic `Event` from domain code
+```typescript
+const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(
+  'UserEventStore'
+);
+```
 
-## Related Patterns
+This ensures:
 
-This architecture supports and enables:
+- Handlers can only produce events from `UserEvent` union
+- TypeScript catches attempts to use wrong event types
+- Full autocomplete for event data in handlers
 
-- **Aggregate Root Pattern**: Each aggregate has its own event union and event store tag
-- **Bounded Contexts**: Different domains have different event types with no mixing
-- **CQRS**: Read models can subscribe to specific event types with full type information
-- **Event Upcasting**: Type-safe transformation from old event schemas to new ones
+### Pattern 3: Type-Safe Command Handlers
+
+Command handlers are generic over event types:
+
+```typescript
+const createUser: CommandHandler<UserEvent> = {
+  execute: (command) =>
+    Effect.succeed([
+      {
+        type: 'UserCreated' as const, // Must be from UserEvent union
+        data: {
+          name: command.payload.name,
+          email: command.payload.email,
+        },
+      },
+    ]),
+};
+```
+
+TypeScript ensures:
+
+- Event type must be from `UserEvent` union
+- Event data must match the schema for that event type
+- Refactoring event schemas updates all handlers
+
+## Aggregate Lifecycle
+
+### 1. Command Arrives
+
+```typescript
+const wireCommand: WireCommand = {
+  id: 'cmd-123',
+  target: 'user-456',
+  name: 'CreateUser',
+  payload: { name: 'John', email: 'john@example.com' },
+};
+```
+
+### 2. Load Aggregate State
+
+```typescript
+const aggregateState = await Effect.runPromise(UserAggregate.load('user-456'));
+// Replays all events from stream to rebuild current state
+```
+
+### 3. Execute Command
+
+```typescript
+const handler = await Effect.runPromise(userRouter.route(wireCommand));
+
+const events = await Effect.runPromise(handler.execute(wireCommand));
+// Validates command against current state
+// Returns new events if valid
+```
+
+### 4. Commit Events
+
+```typescript
+await Effect.runPromise(
+  UserAggregate.commit({
+    id: 'user-456',
+    eventNumber: aggregateState.nextEventNumber,
+    events: Chunk.fromIterable(events),
+  })
+);
+// Persists events to stream
+```
+
+## Event Application Pattern
+
+The `apply` function defines how events modify aggregate state:
+
+```typescript
+const applyUserEvent = (state: Option.Option<UserState>) => (event: UserEvent) =>
+  Match.value(event).pipe(
+    Match.when({ type: 'UserCreated' }, (e) =>
+      // First event - create state
+      Effect.succeed({ name: e.data.name, email: e.data.email })
+    ),
+    Match.when(
+      { type: 'UserUpdated' },
+      (e) =>
+        // Subsequent events - modify existing state
+        pipe(
+          state,
+          Option.map((s) => ({ ...s, name: e.data.name })),
+          Option.getOrElse(() => ({ name: e.data.name, email: '' }))
+        ),
+      Effect.succeed
+    ),
+    Match.exhaustive // Ensures all event types are handled
+  );
+```
+
+**Key Points**:
+
+- `state` is `Option.Option<TState>` (None for new aggregates)
+- Pattern match on event type for exhaustive handling
+- Return `Effect<TState>` to allow validation/transformation
+- Immutable updates - never mutate state
+
+## Testing Aggregates
+
+Aggregate testing focuses on command → events:
+
+```typescript
+import { describe, it, expect } from 'bun:test';
+
+describe('UserAggregate', () => {
+  it('creates user on CreateUser command', async () => {
+    const command: WireCommand = {
+      id: 'cmd-123',
+      target: 'user-456',
+      name: 'CreateUser',
+      payload: { name: 'John', email: 'john@example.com' },
+    };
+
+    const events = await Effect.runPromise(createUserHandler.execute(command));
+
+    expect(events).toEqual([
+      {
+        type: 'UserCreated',
+        data: { name: 'John', email: 'john@example.com' },
+      },
+    ]);
+  });
+
+  it('rejects CreateUser with invalid email', async () => {
+    const command: WireCommand = {
+      id: 'cmd-123',
+      target: 'user-456',
+      name: 'CreateUser',
+      payload: { name: 'John', email: 'not-an-email' },
+    };
+
+    const result = await Effect.runPromise(Effect.either(createUserHandler.execute(command)));
+
+    expect(result._tag).toBe('Left');
+  });
+});
+```
+
+## Comparison: Aggregates vs Raw Streams
+
+| Aspect             | Aggregates                     | Raw Event Streams              |
+| ------------------ | ------------------------------ | ------------------------------ |
+| **Type Safety**    | Full - events are union types  | Partial - events are `unknown` |
+| **Business Logic** | Encapsulated in handlers       | Scattered in application code  |
+| **Validation**     | Automatic via command handlers | Manual in application          |
+| **Performance**    | Reconstitutes from events      | Direct stream access           |
+| **Complexity**     | Higher - more structure        | Lower - more flexible          |
+| **Use Case**       | Write-side with invariants     | Read-side projections          |
+
+## Guidelines
+
+### ✅ DO
+
+- Create one aggregate per consistency boundary
+- Use domain-specific event unions (`UserEvent`, `OrderEvent`)
+- Keep aggregates small and focused
+- Use `CommandHandler<YourEvent>` for type safety
+- Test command logic in isolation
+
+### ❌ DON'T
+
+- Share event types across unrelated aggregates
+- Use generic `Event` type in aggregate logic
+- Create god aggregates with too many responsibilities
+- Return generic `Event[]` from handlers
+- Mix read and write concerns in aggregates
+
+## Related Documentation
+
+- **Architecture**: See `/docs/ARCHITECTURE.md` for the full 4-layer architecture and type safety principles
+- **Commands**: See `@codeforbreakfast/eventsourcing-commands` for command registry patterns
+- **Store**: See `@codeforbreakfast/eventsourcing-store` for event storage contracts
