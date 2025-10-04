@@ -18,10 +18,7 @@ import {
   pipe,
 } from 'effect';
 
-// Mock PersonId for now - replace with actual implementation
-const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
-type PersonId = typeof PersonId.Type;
-import { CommandContext } from './commandInitiator';
+import { CommandContext, CommandInitiatorId } from './commandInitiator';
 
 /**
  * Represents the state of an aggregate at a particular point in time
@@ -37,8 +34,8 @@ export interface AggregateState<TData> {
  * Options for committing events to an aggregate
  * @since 0.4.0
  */
-export interface CommitOptions {
-  readonly id: string;
+export interface CommitOptions<TId extends string> {
+  readonly id: TId;
   readonly eventNumber: EventNumber;
   readonly events: Chunk.Chunk<unknown>;
 }
@@ -102,7 +99,7 @@ const writeEventsToPosition =
     pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
 
 const commitToEventStore =
-  <TEvent>(id: string, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
+  <TId extends string, TEvent>(id: TId, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
   (eventstore: EventStore<TEvent>) =>
     pipe(
       id,
@@ -112,8 +109,10 @@ const commitToEventStore =
     );
 
 const commit =
-  <TEvent, TTag>(eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>) =>
-  (options: CommitOptions) =>
+  <TId extends string, TEvent, TTag>(
+    eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>
+  ) =>
+  (options: CommitOptions<TId>) =>
     pipe(
       eventstoreTag,
       Effect.flatMap(
@@ -199,7 +198,7 @@ const decodeEventNumber = (
     )
   );
 
-const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
+const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(
     id,
     toStreamId,
@@ -208,8 +207,8 @@ const loadStreamEvents = <TEvent>(eventStore: EventStore<TEvent>, id: string) =>
   );
 
 const loadAggregateState =
-  <TState, TEvent>(
-    id: string,
+  <TId extends string, TState, TEvent>(
+    id: TId,
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
@@ -236,8 +235,8 @@ const loadAggregateState =
  *   userCommands
  * );
  *
- * // Load an existing aggregate
- * const user = await Effect.runPromise(UserAggregate.load('user-123'));
+ * // Load an existing aggregate - type-safe with branded ID
+ * const user = await Effect.runPromise(UserAggregate.load('user-123' as UserId));
  *
  * // Create a new aggregate
  * const newUser = UserAggregate.new();
@@ -252,7 +251,7 @@ const loadAggregateState =
  * );
  * ```
  *
- * @param idSchema - Schema for the aggregate ID type
+ * @param _idSchema - Schema for the aggregate ID type (used for type inference only)
  * @param apply - Function to apply events to state
  * @param tag - The event store service tag
  * @param commands - Command handlers for the aggregate
@@ -272,22 +271,26 @@ export const makeAggregateRoot = <TId extends string, TEvent, TState, TCommands,
     nextEventNumber: 0,
     data: Option.none(),
   }),
-  load: (id: string) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
-  commit: commit<TEvent, TTag>(tag),
+  load: (id: TId) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
+  commit: commit<TId, TEvent, TTag>(tag),
   commands,
 });
 
-export const EventOriginatorId = Schema.Union(PersonId);
+export const EventOriginatorId = CommandInitiatorId;
+export type EventOriginatorId = typeof EventOriginatorId.Type;
 
 export const EventMetadata = Schema.Struct({
   occurredAt: Schema.ValidDateFromSelf,
+  originator: Schema.OptionFromSelf(EventOriginatorId),
 });
 export type EventMetadata = typeof EventMetadata.Type;
 
-const createMetadataFromInitiator = (currentTime: number) => (initiatorId: unknown) => ({
-  occurredAt: new Date(currentTime),
-  originator: initiatorId,
-});
+const createMetadataFromInitiator =
+  (currentTime: number) =>
+  (initiatorId: Readonly<Option.Option<CommandInitiatorId>>): EventMetadata => ({
+    occurredAt: new Date(currentTime),
+    originator: initiatorId,
+  });
 
 const getInitiatorId = (currentTime: number) => (commandContext: typeof CommandContext.Service) =>
   pipe(commandContext.getInitiatorId, Effect.map(createMetadataFromInitiator(currentTime)));
