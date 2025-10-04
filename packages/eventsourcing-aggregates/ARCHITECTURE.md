@@ -25,6 +25,83 @@ Aggregates are **write-side domain entities** that enforce business invariants t
 - You need **maximum performance** and can bypass aggregate reconstitution
 - You're implementing **process managers** that react to events without invariants
 
+## Usage Patterns
+
+### Pattern 1: REST API (Direct Aggregate Usage)
+
+In REST APIs, HTTP is your protocol, so **bypass the command layer** and work directly with aggregates:
+
+```typescript
+app.post('/users/:id', async (req, res) => {
+  const program = pipe(
+    req.body,
+    Schema.decodeUnknown(CreateUserPayload),
+    Effect.flatMap((payload) =>
+      pipe(
+        UserAggregate.load(req.params.id),
+        Effect.flatMap((aggregate) =>
+          pipe(
+            aggregate.commands.createUser(aggregate.data, payload),
+            Effect.flatMap((events) =>
+              UserAggregate.commit({
+                id: req.params.id,
+                eventNumber: aggregate.nextEventNumber,
+                events: Chunk.fromIterable(events),
+              })
+            )
+          )
+        )
+      )
+    )
+  );
+
+  await Effect.runPromise(program);
+  res.json({ success: true });
+});
+```
+
+**Flow**: Validate HTTP body → Load aggregate → Execute command function → Commit events
+
+### Pattern 2: Protocol-Based (WebSocket/Message Queue)
+
+For protocol-based systems, use **WireCommand + CommandHandler** for uniform routing:
+
+```typescript
+// Define handler that wraps aggregate command
+const createUserHandler: CommandHandler<UserEvent> = {
+  execute: (wireCommand) =>
+    pipe(
+      wireCommand.payload,
+      Schema.decodeUnknown(CreateUserPayload),
+      Effect.flatMap((payload) =>
+        pipe(
+          UserAggregate.load(wireCommand.target),
+          Effect.flatMap((aggregate) => aggregate.commands.createUser(aggregate.data, payload))
+        )
+      ),
+      Effect.mapError(
+        (error) => new CommandProcessingError({ commandId: wireCommand.id, cause: error })
+      )
+    ),
+};
+
+// Route commands to handlers
+const userRouter: CommandRouter<UserEvent> = {
+  route: (command) =>
+    Match.value(command.name).pipe(
+      Match.when('CreateUser', () => Effect.succeed(createUserHandler)),
+      Match.exhaustive
+    ),
+};
+```
+
+**Flow**: WireCommand arrives → Router selects handler → Handler validates, loads aggregate, executes command → Returns events
+
+**When to use each**:
+
+- **REST API**: HTTP already provides routing/serialization - work directly with aggregates
+- **WebSocket/MessageQueue**: Need generic command dispatch - use WireCommand/CommandHandler abstraction
+
 ## Core Aggregate APIs
 
 ### 1. CommandHandler
