@@ -258,7 +258,7 @@ const verifyFailureResult =
               readonly _tag: string;
               readonly validationErrors?: readonly string[];
             };
-            // eslint-disable-next-line no-restricted-syntax
+            // eslint-disable-next-line no-restricted-syntax -- Test needs to verify _tag in serialized error JSON
             expect(parsedError._tag).toBe(expectedErrorTag);
             if (expectedErrors) {
               expect(parsedError.validationErrors).toEqual(expectedErrors);

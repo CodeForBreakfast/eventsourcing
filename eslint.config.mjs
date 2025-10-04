@@ -4,6 +4,7 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
+import eslintComments from 'eslint-plugin-eslint-comments';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -26,6 +27,7 @@ const commonPlugins = {
   '@typescript-eslint': typescript,
   'unused-imports': unusedImports,
   import: importPlugin,
+  'eslint-comments': eslintComments,
 };
 
 const commonPluginsWithFunctional = {
@@ -249,6 +251,7 @@ const typescriptBaseRules = {
       tsx: 'never',
     },
   ],
+  'eslint-comments/require-description': ['error', { ignore: [] }],
 };
 
 // Test file imports restrictions

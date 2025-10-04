@@ -36,7 +36,7 @@ export const dispatchCommand = (
  * Helper to create a command matcher using Effect's pattern matching
  * Since our commands use 'name' instead of '_tag', this provides a convenient API
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept all command payload types
 export const createCommandMatcher = <TCommands extends DomainCommand<any>>() =>
   Match.type<TCommands>();
 
@@ -45,7 +45,7 @@ export const createCommandMatcher = <TCommands extends DomainCommand<any>>() =>
  * This ensures exhaustive command handling with compile-time safety
  */
 export const makeCommandRegistry = <
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept command definitions with any payload type
   const T extends readonly CommandDefinition<string, any>[],
 >(
   commands: ReadonlyDeep<T>,
@@ -118,7 +118,7 @@ export const makeCommandRegistry = <
  * Creates a Layer with the command registry
  */
 export const makeCommandRegistryLayer = <
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept command definitions with any payload type
   const T extends readonly CommandDefinition<string, any>[],
 >(
   commands: ReadonlyDeep<T>,

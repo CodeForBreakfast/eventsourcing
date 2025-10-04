@@ -24,7 +24,7 @@ import {
 
 // Define the EventRowService interface
 interface EventRowServiceInterface {
-  // eslint-disable-next-line functional/prefer-immutable-types
+  // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
   readonly insert: (row: EventRow) => Effect.Effect<EventRow, unknown, never>;
   readonly selectAllEventsInStream: (
     streamId: EventStreamId
@@ -184,9 +184,9 @@ const getHistoricalEventsAndConcatWithLive = (
     eventRows.selectAllEventsInStream,
     Effect.map((events: readonly EventRow[]) => {
       const filteredEvents = events
-        // eslint-disable-next-line functional/prefer-immutable-types
+        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
         .filter((event: EventRow) => event.event_number >= from.eventNumber)
-        // eslint-disable-next-line functional/prefer-immutable-types
+        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
         .map((event: EventRow) => event.event_payload);
       return Stream.fromIterable(filteredEvents);
     }),
@@ -282,9 +282,9 @@ const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventSt
     eventRows.selectAllEventsInStream,
     Effect.map((events: readonly EventRow[]) => {
       const filteredEvents = events
-        // eslint-disable-next-line functional/prefer-immutable-types
+        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
         .filter((event: EventRow) => event.event_number >= from.eventNumber)
-        // eslint-disable-next-line functional/prefer-immutable-types
+        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
         .map((event: EventRow) => event.event_payload);
       return Stream.fromIterable(filteredEvents);
     }),
@@ -379,7 +379,7 @@ const appendEventToStream = (
         event_payload: payload,
       })
     ),
-    // eslint-disable-next-line functional/prefer-immutable-types
+    // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
     Effect.map((row: EventRow) => ({
       streamId: row.stream_id,
       eventNumber: row.event_number + 1,

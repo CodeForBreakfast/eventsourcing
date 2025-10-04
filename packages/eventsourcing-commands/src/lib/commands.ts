@@ -139,7 +139,7 @@ export const isCommandFailure = Schema.is(CommandFailure);
  */
 export interface CommandDefinition<TName extends string, TPayload> {
   readonly name: TName;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Schema input type can be any, TypeScript will infer the correct type from schema definition
   readonly payloadSchema: Schema.Schema<TPayload, any>;
 }
 
@@ -157,7 +157,7 @@ export const defineCommand = <TName extends string, TPayload, TPayloadInput>(
 /**
  * Helper type to extract command union from command definitions
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept command definitions with any payload type
 export type CommandFromDefinitions<T extends readonly CommandDefinition<string, any>[]> = {
   readonly [K in keyof T]: T[K] extends CommandDefinition<infer Name, infer Payload>
     ? {
@@ -174,7 +174,7 @@ export type CommandFromDefinitions<T extends readonly CommandDefinition<string, 
  * This creates an exhaustive schema that can parse any registered command
  */
 export const buildCommandSchema = <
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept command definitions with any payload type
   const T extends readonly CommandDefinition<string, any>[],
 >(
   commands: ReadonlyDeep<T>
@@ -196,7 +196,7 @@ export const buildCommandSchema = <
   );
 
   if (schemas.length === 1) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema array
     return schemas[0]! as any;
   }
 
@@ -205,7 +205,7 @@ export const buildCommandSchema = <
   if (!first || !second) {
     throw new Error('Unexpected state: should have at least 2 schemas');
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
   return Schema.Union(first, second, ...rest) as any;
 };
 
@@ -244,7 +244,7 @@ export const validateCommand =
  * Command matcher function type
  * Uses Effect's pattern matching for exhaustive command handling
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept all command payload types
 export type CommandMatcher<TCommands extends DomainCommand<any>> = (
   command: ReadonlyDeep<TCommands>
 ) => Effect.Effect<CommandResult, never, never>;

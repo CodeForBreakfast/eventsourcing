@@ -274,7 +274,7 @@ const registerClientAndTransition =
       updateClientConnectionState(clientState, 'connecting'),
       Effect.flatMap(() => addClientToServerState(serverStateRef, clientState)),
       Effect.flatMap(() => {
-        // eslint-disable-next-line functional/immutable-data
+        // eslint-disable-next-line functional/immutable-data -- Bun WebSocket API requires mutating the data property to attach client metadata
         (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
           clientId: clientState.id,
         };
@@ -351,7 +351,7 @@ const createWebSocketServer = (
                 connectedAt: new Date(),
               }));
 
-            // eslint-disable-next-line no-restricted-syntax
+            // eslint-disable-next-line no-restricted-syntax -- WebSocket open handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 createClientIdAndTimestamp(),
@@ -367,7 +367,7 @@ const createWebSocketServer = (
             ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
             message: ReadonlyDeep<string>
           ) => {
-            // eslint-disable-next-line no-restricted-syntax
+            // eslint-disable-next-line no-restricted-syntax -- WebSocket message handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,
@@ -381,7 +381,7 @@ const createWebSocketServer = (
           },
 
           close: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
-            // eslint-disable-next-line no-restricted-syntax
+            // eslint-disable-next-line no-restricted-syntax -- WebSocket close handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,
