@@ -214,145 +214,77 @@ const processDirectory = (
 
 const findMarkdownFiles = (dir: string) => processDirectory(dir, []);
 
-interface PaddedBlock {
-  readonly code: string;
+interface BlockFile {
+  readonly filename: string;
   readonly block: CodeBlock;
-  readonly startLine: number;
-  readonly endLine: number;
+  readonly headerLines: number;
 }
 
-const createPaddedBlock = (currentLine: number) => (block: CodeBlock) => {
-  const codeLines = block.code.split('\n');
-  const padding = '\n'.repeat(Math.max(0, block.line - currentLine - 1));
-  const paddedCode = padding + block.code;
-  const blockStart = block.line - 1;
-  const blockEnd = blockStart + codeLines.length;
-
-  return {
-    paddedBlock: {
-      code: paddedCode,
-      block,
-      startLine: blockStart,
-      endLine: blockEnd,
-    },
-    nextLine: blockEnd,
-  };
-};
-
-const wrapCodeBlocks = (
-  blocks: readonly CodeBlock[],
-  headerLines: number
-): readonly PaddedBlock[] =>
-  pipe(
-    blocks,
-    EffectArray.reduce(
-      { paddedBlocks: [] as readonly PaddedBlock[], currentLine: headerLines },
-      (acc, block) => {
-        const result = createPaddedBlock(acc.currentLine)(block);
-        return {
-          paddedBlocks: [...acc.paddedBlocks, result.paddedBlock],
-          currentLine: result.nextLine,
-        };
-      }
-    )
-  ).paddedBlocks;
-
-const writeAllTempFiles = (filepath: string, content: string, tempDir: string) => {
-  const writeFilesEffect = Effect.all([
-    Effect.tryPromise({
-      try: () => writeFile(filepath, content),
-      catch: (error) => new Error(`Failed to write temp file ${filepath}: ${error}`),
-    }),
-    Effect.tryPromise({
-      try: () =>
-        writeFile(
-          join(tempDir, 'tsconfig.json'),
-          JSON.stringify(
-            {
-              compilerOptions: {
-                target: 'ES2022',
-                module: 'ESNext',
-                moduleResolution: 'Bundler',
-                lib: ['ES2022'],
-                strict: true,
-                esModuleInterop: true,
-                skipLibCheck: true,
-                forceConsistentCasingInFileNames: true,
-                resolveJsonModule: true,
-                noEmit: true,
-              },
-              include: ['*.ts'],
+const writeTsConfig = (tempDir: string) =>
+  Effect.tryPromise({
+    try: () =>
+      writeFile(
+        join(tempDir, 'tsconfig.json'),
+        JSON.stringify(
+          {
+            compilerOptions: {
+              target: 'ES2022',
+              module: 'ESNext',
+              moduleResolution: 'Bundler',
+              lib: ['ES2022'],
+              strict: true,
+              esModuleInterop: true,
+              skipLibCheck: true,
+              forceConsistentCasingInFileNames: true,
+              resolveJsonModule: true,
+              noEmit: true,
             },
-            null,
-            2
-          )
-        ),
-      catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
-    }),
-  ]);
+            include: ['*.ts'],
+          },
+          null,
+          2
+        )
+      ),
+    catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
+  });
 
-  return pipe(
-    writeFilesEffect,
-    Effect.map(() => filepath)
-  );
-};
-
-const generateTempFileContent = (
-  packageName: string,
-  blocks: readonly CodeBlock[],
+const writeBlockFile = (
+  block: CodeBlock,
+  index: number,
   tempDir: string
-): Effect.Effect<
-  {
-    readonly filepath: string;
-    readonly paddedBlocks: readonly PaddedBlock[];
-    readonly headerLines: number;
-  },
-  Error,
-  never
-> => {
-  const header = `// Auto-generated file for type checking all examples
-// Import everything the user would import
-import * as PackageExports from '${packageName}';
-import { Effect, Stream, Scope, pipe, Schema, Chunk, Option, Layer, Context, Match, Data } from 'effect';
+): Effect.Effect<BlockFile, Error, never> => {
+  const headerLines = 0;
+  const filename = `example-${index + 1}.ts`;
+  const filepath = join(tempDir, filename);
+  const content = block.code;
 
-// Destructure package exports so they're available directly
-const {} = PackageExports;
-
-`;
-
-  const headerLines = header.split('\n').length;
-  const paddedBlocks = wrapCodeBlocks(blocks, headerLines);
-  const content = header + paddedBlocks.map((pb) => pb.code).join('\n');
-  const filepath = join(tempDir, 'all-examples.ts');
-
-  return pipe(
-    writeAllTempFiles(filepath, content, tempDir),
-    Effect.map((fp) => ({ filepath: fp, paddedBlocks, headerLines }))
-  );
-};
-
-const createCombinedTempFile = (
-  blocks: readonly CodeBlock[],
-  tempDir: string,
-  packageDir: string
-): Effect.Effect<
-  {
-    readonly filepath: string;
-    readonly paddedBlocks: readonly PaddedBlock[];
-    readonly headerLines: number;
-  },
-  Error,
-  never
-> => {
-  const readPackageJsonEffect = Effect.tryPromise({
-    try: () => readFile(join(packageDir, 'package.json'), 'utf-8'),
-    catch: (error) => new Error(`Failed to read package.json: ${error}`),
+  const writeFileEffect = Effect.tryPromise({
+    try: () => writeFile(filepath, content),
+    catch: (error) => new Error(`Failed to write ${filename}: ${error}`),
   });
 
   return pipe(
-    readPackageJsonEffect,
-    Effect.map((content) => JSON.parse(content).name as string),
-    Effect.flatMap((packageName) => generateTempFileContent(packageName, blocks, tempDir))
+    writeFileEffect,
+    Effect.map(() => ({ filename, block, headerLines }))
+  );
+};
+
+const writeAllBlockFiles = (
+  blocks: readonly CodeBlock[],
+  tempDir: string
+): Effect.Effect<readonly BlockFile[], Error, never> => {
+  const writeEffects = blocks.map((block, index) => writeBlockFile(block, index, tempDir));
+  return Effect.all(writeEffects);
+};
+
+const createSeparateTempFiles = (
+  blocks: readonly CodeBlock[],
+  tempDir: string
+): Effect.Effect<readonly BlockFile[], Error, never> => {
+  const tsConfigEffect = writeTsConfig(tempDir);
+  return pipe(
+    tsConfigEffect,
+    Effect.flatMap(() => writeAllBlockFiles(blocks, tempDir))
   );
 };
 
@@ -368,7 +300,7 @@ const waitForTypeCheck = (proc: ReturnType<typeof Bun.spawn>) => {
   return pipe(exitAndOutputEffect, Effect.flatMap(handleTypeCheckResult));
 };
 
-const typeCheckFile = (filepath: string, tempDir: string) => {
+const typeCheckDirectory = (tempDir: string) => {
   const spawnEffect = Effect.sync(() =>
     Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
       stderr: 'pipe',
@@ -379,84 +311,67 @@ const typeCheckFile = (filepath: string, tempDir: string) => {
   return pipe(spawnEffect, Effect.flatMap(waitForTypeCheck));
 };
 
-const createBlockInfo = (index: number, pb: PaddedBlock, lineNumber: number) => ({
-  block: pb.block,
-  offsetInBlock: lineNumber - pb.startLine,
-  index,
-});
-
-const mapPaddedBlockToInfo = (
-  lineNumber: number,
-  index: number,
-  paddedBlocks: readonly PaddedBlock[]
-) =>
+const findBlockFileByFilename = (filename: string, blockFiles: readonly BlockFile[]) =>
   pipe(
-    paddedBlocks[index],
-    Option.fromNullable,
-    Option.map((pb) => createBlockInfo(index, pb, lineNumber))
-  );
-
-const findBlockForLine = (lineNumber: number, paddedBlocks: readonly PaddedBlock[]) =>
-  pipe(
-    paddedBlocks,
-    EffectArray.findFirstIndex((pb) => lineNumber >= pb.startLine && lineNumber < pb.endLine),
-    Option.flatMap((index) => mapPaddedBlockToInfo(lineNumber, index, paddedBlocks))
+    blockFiles,
+    EffectArray.findFirst((bf) => bf.filename === filename)
   );
 
 const createValidationError = (
-  block: CodeBlock,
-  offsetInBlock: number,
+  blockFile: BlockFile,
+  lineInFile: number,
   index: number,
   errorCode: string,
   errorMessage: string
-): ValidationError => ({
-  file: block.file,
-  line: block.line + offsetInBlock,
-  index,
-  error: `TS${errorCode}: ${errorMessage}`,
-});
+): ValidationError => {
+  const offsetInBlock = lineInFile - blockFile.headerLines;
+  return {
+    file: blockFile.block.file,
+    line: blockFile.block.line + offsetInBlock,
+    index,
+    error: `TS${errorCode}: ${errorMessage}`,
+  };
+};
 
 const processErrorLine = (
   line: string,
-  paddedBlocks: readonly PaddedBlock[],
-  headerLines: number
+  blockFiles: readonly BlockFile[]
 ): readonly ValidationError[] => {
-  const errorMatch = line.match(/all-examples\.ts\((\d+),(\d+)\): error TS(\d+): (.+)/);
+  const errorMatch = line.match(/(example-\d+)\.ts\((\d+),\d+\): error TS(\d+): (.+)/);
   if (!errorMatch) return [];
 
-  const errorLine = parseInt(errorMatch[1]!, 10);
+  const filename = `${errorMatch[1]!}.ts`;
+  const lineInFile = parseInt(errorMatch[2]!, 10);
   const errorCode = errorMatch[3]!;
   const errorMessage = errorMatch[4]!;
 
-  if (errorLine < headerLines) {
-    return [];
-  }
-
   return pipe(
-    findBlockForLine(errorLine, paddedBlocks),
+    findBlockFileByFilename(filename, blockFiles),
     Option.match({
       onNone: () => {
-        console.warn(
-          `⚠️  Could not map error at line ${errorLine} to any code block. This might indicate a problem with the validation script.`
-        );
+        console.warn(`⚠️  Could not find block file ${filename}`);
         return [];
       },
-      onSome: ({ block, offsetInBlock, index }) => [
-        createValidationError(block, offsetInBlock, index, errorCode, errorMessage),
-      ],
+      onSome: (blockFile) => {
+        if (lineInFile < blockFile.headerLines) {
+          return [];
+        }
+
+        const index = blockFiles.indexOf(blockFile);
+        return [createValidationError(blockFile, lineInFile, index, errorCode, errorMessage)];
+      },
     })
   );
 };
 
 const parseTypeErrors = (
   stdout: string,
-  paddedBlocks: readonly PaddedBlock[],
-  headerLines: number
+  blockFiles: readonly BlockFile[]
 ): readonly ValidationError[] => {
   const lines = stdout.split('\n');
   return pipe(
     lines,
-    EffectArray.flatMap((line) => processErrorLine(line, paddedBlocks, headerLines))
+    EffectArray.flatMap((line) => processErrorLine(line, blockFiles))
   );
 };
 
@@ -550,18 +465,11 @@ const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: stri
     )
   );
 
-const runTypeCheckAndParseErrors = (
-  tempFile: string,
-  tempDir: string,
-  paddedBlocks: readonly PaddedBlock[],
-  headerLines: number
-) =>
+const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockFile[]) =>
   pipe(
-    typeCheckFile(tempFile, tempDir),
+    typeCheckDirectory(tempDir),
     Effect.map(() => [] as readonly ValidationError[]),
-    Effect.catchAll((stdout) =>
-      Effect.succeed(parseTypeErrors(stdout as string, paddedBlocks, headerLines))
-    )
+    Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, blockFiles)))
   );
 
 const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
@@ -610,10 +518,8 @@ const typeCheckAndReportErrors = (
     blockCountMessage,
     Console.log,
     Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
-    Effect.flatMap(() => createCombinedTempFile(allBlocks, tempDir, packageDir)),
-    Effect.flatMap(({ filepath, paddedBlocks, headerLines }) =>
-      runTypeCheckAndParseErrors(filepath, tempDir, paddedBlocks, headerLines)
-    ),
+    Effect.flatMap(() => createSeparateTempFiles(allBlocks, tempDir)),
+    Effect.flatMap((blockFiles) => runTypeCheckAndParseErrors(tempDir, blockFiles)),
     Effect.flatMap((errors) => handleValidationErrors(errors, allBlocks))
   );
 };
