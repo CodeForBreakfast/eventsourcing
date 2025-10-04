@@ -62,7 +62,7 @@
   },
   "dependencies": {
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-    "@effect/platform": "0.91.1",
+    "@effect/platform": "0.92.1",
     "type-fest": "5.0.1"
   },
   "devDependencies": {
@@ -70,7 +70,7 @@
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@types/node": "24.6.1",
     "bun-types": "1.2.23",
-    "effect": "3.17.14",
+    "effect": "3.18.1",
     "eslint": "9.36.0",
     "typescript": "5.9.3"
   },
