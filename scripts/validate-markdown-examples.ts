@@ -41,52 +41,49 @@ const logMalformedCodeBlock = (filePath: string, lineIndex: number, state: Parse
     Effect.as(state)
   );
 
-const processMarkdownLine = (
-  filePath: string,
-  lineIndex: number,
-  state: ParserState,
-  line: string | undefined
-): Effect.Effect<ParserState, never, never> => {
-  const trimmed = line?.trim() ?? '';
+const processMarkdownLine =
+  (filePath: string, lineIndex: number) =>
+  (state: ParserState, line: string | undefined): Effect.Effect<ParserState, never, never> => {
+    const trimmed = line?.trim() ?? '';
 
-  if (trimmed.match(/^```(?:typescript|ts)$/)) {
-    return state.inBlock
-      ? logMalformedCodeBlock(filePath, lineIndex, state)
-      : Effect.succeed({
-          ...state,
-          inBlock: true,
-          currentBlock: [],
-          blockStartLine: lineIndex + 1,
-        });
-  }
+    if (trimmed.match(/^```(?:typescript|ts)$/)) {
+      return state.inBlock
+        ? logMalformedCodeBlock(filePath, lineIndex, state)
+        : Effect.succeed({
+            ...state,
+            inBlock: true,
+            currentBlock: [],
+            blockStartLine: lineIndex + 1,
+          });
+    }
 
-  if (trimmed === '```' && state.inBlock) {
-    return Effect.succeed({
-      ...state,
-      blocks: [
-        ...state.blocks,
-        {
-          code: state.currentBlock.join('\n'),
-          file: filePath,
-          line: state.blockStartLine,
-          index: state.blockIndex,
-        },
-      ],
-      inBlock: false,
-      currentBlock: [],
-      blockIndex: state.blockIndex + 1,
-    });
-  }
+    if (trimmed === '```' && state.inBlock) {
+      return Effect.succeed({
+        ...state,
+        blocks: [
+          ...state.blocks,
+          {
+            code: state.currentBlock.join('\n'),
+            file: filePath,
+            line: state.blockStartLine,
+            index: state.blockIndex,
+          },
+        ],
+        inBlock: false,
+        currentBlock: [],
+        blockIndex: state.blockIndex + 1,
+      });
+    }
 
-  if (state.inBlock) {
-    return Effect.succeed({
-      ...state,
-      currentBlock: [...state.currentBlock, line ?? ''],
-    });
-  }
+    if (state.inBlock) {
+      return Effect.succeed({
+        ...state,
+        currentBlock: [...state.currentBlock, line ?? ''],
+      });
+    }
 
-  return Effect.succeed(state);
-};
+    return Effect.succeed(state);
+  };
 
 const logUnclosedBlock = (filePath: string, state: ParserState) =>
   pipe(
@@ -113,12 +110,20 @@ const finalizeParserState =
     return logUnclosedBlock(filePath, state);
   };
 
+const processLineInState =
+  (filePath: string, index: number, line: string) =>
+  (accEffect: Effect.Effect<ParserState, never, never>) =>
+    pipe(
+      accEffect,
+      Effect.flatMap((state) => processMarkdownLine(filePath, index)(state, line))
+    );
+
 const extractCodeBlocks = (content: string, filePath: string) => {
   const lines = content.split('\n');
   return pipe(
     lines,
     EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
-      Effect.flatMap(accEffect, (state) => processMarkdownLine(filePath, index, state, line))
+      processLineInState(filePath, index, line)(accEffect)
     ),
     Effect.flatMap(finalizeParserState(filePath))
   );
@@ -127,31 +132,44 @@ const extractCodeBlocks = (content: string, filePath: string) => {
 const shouldSkipEntry = (name: string): boolean =>
   name === 'node_modules' || name === '.git' || name === 'dist';
 
-const processDirectoryEntry = (
-  currentDir: string,
-  files: readonly string[],
-  entry: {
+const processDirectoryEntry =
+  (currentDir: string, files: readonly string[]) =>
+  (entry: {
     readonly name: string;
     readonly isDirectory: () => boolean;
     readonly isFile: () => boolean;
-  }
-): Effect.Effect<readonly string[], Error, never> => {
-  if (shouldSkipEntry(entry.name)) {
+  }): Effect.Effect<readonly string[], Error, never> => {
+    if (shouldSkipEntry(entry.name)) {
+      return Effect.succeed(files);
+    }
+
+    const fullPath = join(currentDir, entry.name);
+
+    if (entry.isDirectory()) {
+      return processDirectory(fullPath, files);
+    }
+
+    if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
+      return Effect.succeed([...files, fullPath]);
+    }
+
     return Effect.succeed(files);
-  }
+  };
 
-  const fullPath = join(currentDir, entry.name);
-
-  if (entry.isDirectory()) {
-    return processDirectory(fullPath, files);
-  }
-
-  if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
-    return Effect.succeed([...files, fullPath]);
-  }
-
-  return Effect.succeed(files);
-};
+const processEntryWithFiles =
+  (
+    currentDir: string,
+    entry: {
+      readonly name: string;
+      readonly isDirectory: () => boolean;
+      readonly isFile: () => boolean;
+    }
+  ) =>
+  (acc: Effect.Effect<readonly string[], Error, never>) =>
+    pipe(
+      acc,
+      Effect.flatMap((currentFiles) => processDirectoryEntry(currentDir, currentFiles)(entry))
+    );
 
 const reduceDirectoryEntries = (
   entries: readonly {
@@ -161,11 +179,12 @@ const reduceDirectoryEntries = (
   }[],
   files: readonly string[],
   currentDir: string
-): Effect.Effect<readonly string[], Error, never> =>
-  EffectArray.reduce(
+) =>
+  pipe(
     entries,
-    Effect.succeed(files) as Effect.Effect<readonly string[], Error, never>,
-    (acc, entry) => Effect.flatMap(acc, (files) => processDirectoryEntry(currentDir, files, entry))
+    EffectArray.reduce(Effect.succeed(files), (acc, entry) =>
+      processEntryWithFiles(currentDir, entry)(acc)
+    )
   );
 
 const processDirectory = (
@@ -287,7 +306,10 @@ const typeCheckDirectory = (tempDir: string) => {
 };
 
 const findBlockFileByFilename = (filename: string, blockFiles: readonly BlockFile[]) =>
-  EffectArray.findFirst(blockFiles, (bf) => bf.filename === filename);
+  pipe(
+    blockFiles,
+    EffectArray.findFirst((bf) => bf.filename === filename)
+  );
 
 const createValidationError = (
   blockFile: BlockFile,
@@ -364,11 +386,14 @@ const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
     ? Console.error(`   ${line}`)
     : Effect.void;
 
+const formatErrorLineWithAcc = (line: string) => (acc: Effect.Effect<void, never, never>) =>
+  pipe(acc, Effect.andThen(formatErrorLine(line)));
+
 const formatErrorLines = (errorLines: readonly string[]) =>
   pipe(
     errorLines,
     EffectArray.filter((line) => line.trim().length > 0),
-    EffectArray.reduce(Effect.void, (acc, line) => Effect.andThen(acc, formatErrorLine(line)))
+    EffectArray.reduce(Effect.void, (acc, line) => formatErrorLineWithAcc(line)(acc))
   );
 
 const formatError = (error: ValidationError) => {
@@ -416,15 +441,19 @@ const readAndExtractCodeBlocks = (
   );
 };
 
-const collectAllCodeBlocks = (
-  markdownFiles: readonly string[],
-  packageDir: string
-): Effect.Effect<readonly CodeBlock[], Error, never> =>
-  EffectArray.reduce(
+const processFileWithBlocks =
+  (packageDir: string, file: string) => (acc: Effect.Effect<readonly CodeBlock[], Error, never>) =>
+    pipe(
+      acc,
+      Effect.flatMap((blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
+    );
+
+const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: string) =>
+  pipe(
     markdownFiles,
-    Effect.succeed([] as readonly CodeBlock[]) as Effect.Effect<readonly CodeBlock[], Error, never>,
-    (acc, file) =>
-      Effect.flatMap(acc, (blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
+    EffectArray.reduce(Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
+      processFileWithBlocks(packageDir, file)(acc)
+    )
   );
 
 const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockFile[]) =>
@@ -435,8 +464,14 @@ const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockF
     Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, blockFiles)))
   );
 
+const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
+  pipe(acc, Effect.andThen(formatError(error)));
+
 const formatAllErrors = (errors: readonly ValidationError[]) =>
-  EffectArray.reduce(errors, Effect.void, (acc, error) => Effect.andThen(acc, formatError(error)));
+  pipe(
+    errors,
+    EffectArray.reduce(Effect.void, (acc, error) => formatErrorWithAcc(error)(acc))
+  );
 
 const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
   const errorCountMessage = `\n❌ Found ${errors.length} invalid example(s):\n`;
