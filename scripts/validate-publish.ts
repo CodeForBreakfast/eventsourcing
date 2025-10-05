@@ -53,7 +53,7 @@ function getChangedPackageNames(): readonly string[] {
     // Identify which package directories have changes
     const changedDirectories = changedFiles.reduce((acc, file) => {
       const match = file.match(/^packages\/([^\/]+)\//);
-      if (match) {
+      if (match && match[1]) {
         return new Set([...acc, match[1]]);
       }
       return acc;

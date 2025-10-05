@@ -41,49 +41,52 @@ const logMalformedCodeBlock = (filePath: string, lineIndex: number, state: Parse
     Effect.as(state)
   );
 
-const processMarkdownLine =
-  (filePath: string, lineIndex: number) =>
-  (state: ParserState, line: string | undefined): Effect.Effect<ParserState, never, never> => {
-    const trimmed = line?.trim() ?? '';
+const processMarkdownLine = (
+  filePath: string,
+  lineIndex: number,
+  state: ParserState,
+  line: string | undefined
+): Effect.Effect<ParserState, never, never> => {
+  const trimmed = line?.trim() ?? '';
 
-    if (trimmed.match(/^```(?:typescript|ts)$/)) {
-      return state.inBlock
-        ? logMalformedCodeBlock(filePath, lineIndex, state)
-        : Effect.succeed({
-            ...state,
-            inBlock: true,
-            currentBlock: [],
-            blockStartLine: lineIndex + 1,
-          });
-    }
+  if (trimmed.match(/^```(?:typescript|ts)$/)) {
+    return state.inBlock
+      ? logMalformedCodeBlock(filePath, lineIndex, state)
+      : Effect.succeed({
+          ...state,
+          inBlock: true,
+          currentBlock: [],
+          blockStartLine: lineIndex + 1,
+        });
+  }
 
-    if (trimmed === '```' && state.inBlock) {
-      return Effect.succeed({
-        ...state,
-        blocks: [
-          ...state.blocks,
-          {
-            code: state.currentBlock.join('\n'),
-            file: filePath,
-            line: state.blockStartLine,
-            index: state.blockIndex,
-          },
-        ],
-        inBlock: false,
-        currentBlock: [],
-        blockIndex: state.blockIndex + 1,
-      });
-    }
+  if (trimmed === '```' && state.inBlock) {
+    return Effect.succeed({
+      ...state,
+      blocks: [
+        ...state.blocks,
+        {
+          code: state.currentBlock.join('\n'),
+          file: filePath,
+          line: state.blockStartLine,
+          index: state.blockIndex,
+        },
+      ],
+      inBlock: false,
+      currentBlock: [],
+      blockIndex: state.blockIndex + 1,
+    });
+  }
 
-    if (state.inBlock) {
-      return Effect.succeed({
-        ...state,
-        currentBlock: [...state.currentBlock, line ?? ''],
-      });
-    }
+  if (state.inBlock) {
+    return Effect.succeed({
+      ...state,
+      currentBlock: [...state.currentBlock, line ?? ''],
+    });
+  }
 
-    return Effect.succeed(state);
-  };
+  return Effect.succeed(state);
+};
 
 const logUnclosedBlock = (filePath: string, state: ParserState) =>
   pipe(
@@ -115,7 +118,7 @@ const extractCodeBlocks = (content: string, filePath: string) => {
   return pipe(
     lines,
     EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
-      Effect.flatMap(accEffect, processMarkdownLine(filePath, index))
+      Effect.flatMap(accEffect, (state) => processMarkdownLine(filePath, index, state, line))
     ),
     Effect.flatMap(finalizeParserState(filePath))
   );
@@ -158,9 +161,11 @@ const reduceDirectoryEntries = (
   }[],
   files: readonly string[],
   currentDir: string
-) =>
-  EffectArray.reduce(entries, Effect.succeed(files), (acc, entry) =>
-    Effect.flatMap(acc, (files) => processDirectoryEntry(currentDir, files, entry))
+): Effect.Effect<readonly string[], Error, never> =>
+  EffectArray.reduce(
+    entries,
+    Effect.succeed(files) as Effect.Effect<readonly string[], Error, never>,
+    (acc, entry) => Effect.flatMap(acc, (files) => processDirectoryEntry(currentDir, files, entry))
   );
 
 const processDirectory = (
@@ -411,9 +416,15 @@ const readAndExtractCodeBlocks = (
   );
 };
 
-const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: string) =>
-  EffectArray.reduce(markdownFiles, Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
-    Effect.flatMap(acc, (blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
+const collectAllCodeBlocks = (
+  markdownFiles: readonly string[],
+  packageDir: string
+): Effect.Effect<readonly CodeBlock[], Error, never> =>
+  EffectArray.reduce(
+    markdownFiles,
+    Effect.succeed([] as readonly CodeBlock[]) as Effect.Effect<readonly CodeBlock[], Error, never>,
+    (acc, file) =>
+      Effect.flatMap(acc, (blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
   );
 
 const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockFile[]) =>
