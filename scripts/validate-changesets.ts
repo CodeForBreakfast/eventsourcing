@@ -22,6 +22,7 @@ type PackageInternal = {
 };
 
 type ChangesetInfoInternal = {
+  readonly filename: string;
   readonly packages: ReadonlyArray<string>;
   readonly type: 'major' | 'minor' | 'patch';
 };
@@ -145,6 +146,7 @@ const getChangesets = (): readonly ChangesetInfoInternal[] => {
     return [
       ...changesets,
       {
+        filename: file,
         packages,
         type: changeType,
       },
@@ -246,13 +248,13 @@ const validateChangesetPackages = (
 
       if (pkgName === rootPackageJson.name) {
         return [
-          `❌ Changeset references the private monorepo root package: ${pkgName}`,
+          `❌ Changeset ${changeset.filename} references the private monorepo root package: ${pkgName}`,
           '   The monorepo root is private and cannot be published to npm.',
         ];
       }
 
       return [
-        `❌ Changeset references non-existent package: ${pkgName}`,
+        `❌ Changeset ${changeset.filename} references non-existent package: ${pkgName}`,
         '   This package does not exist in the workspace.',
       ];
     })
