@@ -19,14 +19,7 @@ export class PgConfiguration extends Effect.Tag('PgConfiguration')<
 export const PgLive = pipe(
   PgConfiguration,
   Effect.map((config) => {
-    // Extract the properties from the configuration value
-    const { username, password, database, host, port } = config as unknown as {
-      readonly username: string;
-      readonly password: Redacted.Redacted;
-      readonly database: string;
-      readonly host: string;
-      readonly port: number;
-    };
+    const { username, password, database, host, port } = config;
 
     return PgClient.layer({
       username,
