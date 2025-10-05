@@ -7,20 +7,20 @@ const option = Option.some(42);
 // _TAG ACCESS RULES (should fail)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing _tag comparison rule
+// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison rule
 if (either._tag === 'Right') {
   console.log('right');
 }
 
-// eslint-disable-next-line no-restricted-syntax -- Testing _tag comparison on Option
+// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison on Option
 if (option._tag === 'Some') {
   console.log('some');
 }
 
-// eslint-disable-next-line no-restricted-syntax -- Testing _tag in ternary
+// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag in ternary
 console.log(either._tag === 'Left' ? 'left' : 'right');
 
-// eslint-disable-next-line no-restricted-syntax -- Testing switch on _tag
+// eslint-disable-next-line effect/no-switch-on-tag, effect/no-direct-tag-access -- Testing switch on _tag
 switch (either._tag) {
   case 'Right':
     break;
@@ -28,7 +28,7 @@ switch (either._tag) {
     break;
 }
 
-// eslint-disable-next-line no-restricted-syntax -- Testing _tag comparison on right side
+// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison on right side
 if ('Right' === either._tag) {
   console.log('right');
 }
@@ -60,17 +60,17 @@ class MyClass {
 // EFFECT.RUNSYNC / RUNPROMISE (should fail in production)
 // ========================================
 
-// eslint-disable-next-line effect/no-runSync -- Testing Effect.runSync ban
+// eslint-disable-next-line effect/no-runSync, buntest/no-runSync-in-tests -- Testing Effect.runSync ban
 Effect.runSync(Effect.succeed(42));
 
-// eslint-disable-next-line effect/no-runPromise -- Testing Effect.runPromise ban
+// eslint-disable-next-line effect/no-runPromise, buntest/no-runPromise-in-tests -- Testing Effect.runPromise ban
 Effect.runPromise(Effect.succeed(42));
 
 // ========================================
 // METHOD-BASED PIPE (should fail)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing method-based pipe ban
+// eslint-disable-next-line effect/no-method-pipe -- Testing method-based pipe ban
 const methodPipe = Effect.succeed(42).pipe(Effect.map((x) => x + 1));
 
 // ========================================
@@ -79,7 +79,7 @@ const methodPipe = Effect.succeed(42).pipe(Effect.map((x) => x + 1));
 
 const MySchema = Schema.Struct({ value: Schema.Number });
 
-// eslint-disable-next-line no-restricted-syntax -- Testing curried function call ban
+// eslint-disable-next-line effect/no-curried-calls -- Testing curried function call ban
 const curriedCall = Schema.decodeUnknown(MySchema)({ value: 42 });
 
 // ========================================
@@ -88,7 +88,7 @@ const curriedCall = Schema.decodeUnknown(MySchema)({ value: 42 });
 
 const nestedPipe = pipe(
   42,
-  // eslint-disable-next-line no-restricted-syntax, effect/no-unnecessary-pipe-wrapper -- Testing nested pipe ban (also unnecessary wrapper)
+  // eslint-disable-next-line effect/no-nested-pipe, effect/no-unnecessary-pipe-wrapper -- Testing nested pipe ban (also unnecessary wrapper)
   (x) => pipe(x, (y) => y + 1)
 );
 
@@ -96,9 +96,9 @@ const nestedPipe = pipe(
 // MULTIPLE PIPES IN ONE FUNCTION (should fail)
 // ========================================
 
-// This should NOT fail - multiple pipes are only banned in same scope
 const multiplePipes = () => {
   const result1 = pipe(42, (x) => x + 1);
+  // eslint-disable-next-line effect/no-multiple-pipes -- Testing multiple pipes ban
   const result2 = pipe(result1, (x) => x * 2);
   return result2;
 };
@@ -108,9 +108,9 @@ const multiplePipes = () => {
 // ========================================
 
 const identityMap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg function call ban
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg function call ban
   Effect.succeed(42),
-  // eslint-disable-next-line no-restricted-syntax -- Testing identity function ban
+  // eslint-disable-next-line effect/no-identity-transform -- Testing identity function ban
   Effect.map((x) => x)
 );
 
@@ -119,7 +119,7 @@ const identityMap = pipe(
 // ========================================
 
 const firstArgFnCall = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg function call ban
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg function call ban
   Effect.succeed(42),
   Effect.map((x) => x + 1)
 );
@@ -133,7 +133,7 @@ const firstArgFnCall = pipe(
 const flatMapDirect = Effect.flatMap(() => Effect.succeed('hello'));
 
 const flatMapDiscarded = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed(42),
   // eslint-disable-next-line effect/prefer-andThen -- Testing flatMap with discarded input
   Effect.flatMap(() => Effect.succeed('hello'))
@@ -148,7 +148,7 @@ const flatMapDiscarded = pipe(
 const mapDirect = Effect.map(() => 'constant');
 
 const mapConstant = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed(42),
   // eslint-disable-next-line effect/prefer-as -- Testing map with constant value
   Effect.map(() => 'constant')
@@ -218,14 +218,14 @@ const handleMessage = (msg: MessageType) => Effect.succeed(msg);
 
 // Should fail - if statement in Effect.flatMap checking _tag discriminator
 const imperativeFlatMap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed<MessageType>({ _tag: 'Command', id: '123' }),
   Effect.flatMap((msg) => {
-    // eslint-disable-next-line effect/prefer-match-over-conditionals, no-restricted-syntax -- Testing imperative if in flatMap
+    // eslint-disable-next-line effect/prefer-match-over-conditionals, effect/no-direct-tag-access -- Testing imperative if in flatMap
     if (msg._tag === 'Command') {
       return handleMessage(msg);
     }
-    // eslint-disable-next-line effect/prefer-match-over-conditionals, no-restricted-syntax -- Testing imperative if in flatMap
+    // eslint-disable-next-line effect/prefer-match-over-conditionals, effect/no-direct-tag-access -- Testing imperative if in flatMap
     if (msg._tag === 'Subscribe') {
       return handleMessage(msg);
     }
@@ -235,10 +235,10 @@ const imperativeFlatMap = pipe(
 
 // Should fail - if statement in Effect.map checking _tag discriminator
 const imperativeMap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed(either),
   Effect.map((e) => {
-    // eslint-disable-next-line effect/prefer-match-over-conditionals, no-restricted-syntax -- Testing imperative if in map with _tag
+    // eslint-disable-next-line effect/prefer-match-over-conditionals, effect/no-direct-tag-access -- Testing imperative if in map with _tag
     if (e._tag === 'Right') {
       return e.right;
     }
@@ -248,10 +248,10 @@ const imperativeMap = pipe(
 
 // Should fail - reverse condition order (literal first)
 const imperativeReverse = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed<MessageType>({ _tag: 'Command', id: '123' }),
   Effect.flatMap((msg) => {
-    // eslint-disable-next-line effect/prefer-match-over-conditionals, no-restricted-syntax -- Testing imperative if with reverse condition
+    // eslint-disable-next-line effect/prefer-match-over-conditionals, effect/no-direct-tag-access -- Testing imperative if with reverse condition
     if ('Command' === msg._tag) {
       return handleMessage(msg);
     }
@@ -261,10 +261,10 @@ const imperativeReverse = pipe(
 
 // Should NOT fail - using Match.value pattern correctly
 const functionalMatch = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed<MessageType>({ _tag: 'Command', id: '123' }),
   Effect.flatMap((msg) =>
-    // eslint-disable-next-line no-restricted-syntax -- Nested pipe is allowed for Match pattern
+    // eslint-disable-next-line effect/no-nested-pipe -- Nested pipe is allowed for Match pattern
     pipe(
       msg,
       Match.value,
@@ -277,7 +277,7 @@ const functionalMatch = pipe(
 
 // Should NOT fail - if statement checking non-discriminator property
 const nonDiscriminatorCheck = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed({ name: 'test', value: 42 }),
   Effect.flatMap((obj) => {
     if (obj.value > 10) {
@@ -295,7 +295,7 @@ type ProtocolMessage = { readonly type: 'command'; readonly id: string };
 
 // Should fail - type assertion in Effect.flatMap
 const typeAssertionInFlatMap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed({ type: 'command', id: '123' }),
   Effect.flatMap((msg) => {
     // eslint-disable-next-line effect/prefer-schema-validation-over-assertions -- Testing type assertion in flatMap
@@ -306,7 +306,7 @@ const typeAssertionInFlatMap = pipe(
 
 // Should fail - type assertion in Effect.map
 const typeAssertionInMap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed({ type: 'command', id: '123' }),
   // eslint-disable-next-line effect/prefer-schema-validation-over-assertions -- Testing type assertion in map
   Effect.map((msg) => (msg as ProtocolMessage).id)
@@ -314,7 +314,7 @@ const typeAssertionInMap = pipe(
 
 // Should fail - type assertion in Effect.tap
 const typeAssertionInTap = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed({ type: 'command', id: '123' }),
   Effect.tap((msg) => {
     // eslint-disable-next-line effect/prefer-schema-validation-over-assertions -- Testing type assertion in tap
@@ -325,7 +325,7 @@ const typeAssertionInTap = pipe(
 
 // Should fail - double assertion (as unknown as T)
 const doubleAssertion = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed('some data'),
   Effect.flatMap((data) => {
     // eslint-disable-next-line effect/prefer-schema-validation-over-assertions -- Testing double type assertion
@@ -339,7 +339,7 @@ const typeAssertionOutside = { type: 'command', id: '123' } as ProtocolMessage;
 
 // Should NOT fail - no type assertion
 const noTypeAssertion = pipe(
-  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed<ProtocolMessage>({ type: 'command', id: '123' }),
   Effect.map((msg) => msg.id)
 );
