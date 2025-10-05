@@ -232,7 +232,7 @@ const processConnectionMessages = (
         )
       )
     ),
-    Effect.flatMap(() =>
+    Effect.andThen(
       Effect.addFinalizer(() =>
         Ref.update(stateRef, (state) => ({
           ...state,
