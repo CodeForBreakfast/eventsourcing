@@ -38,7 +38,7 @@ const logMalformedCodeBlock = (filePath: string, lineIndex: number, state: Parse
   pipe(
     `Malformed code block at ${filePath}:${lineIndex + 1} - nested code fence`,
     Console.error,
-    Effect.map(() => state)
+    Effect.as(state)
   );
 
 const processMarkdownLine =
@@ -89,7 +89,7 @@ const logUnclosedBlock = (filePath: string, state: ParserState) =>
   pipe(
     `Unclosed code block at ${filePath}:${state.blockStartLine} - treating as complete`,
     Console.warn,
-    Effect.map(() => [
+    Effect.as([
       ...state.blocks,
       {
         code: state.currentBlock.join('\n'),
@@ -263,10 +263,7 @@ const writeBlockFile = (
     catch: (error) => new Error(`Failed to write ${filename}: ${error}`),
   });
 
-  return pipe(
-    writeFileEffect,
-    Effect.map(() => ({ filename, block, headerLines }))
-  );
+  return pipe(writeFileEffect, Effect.as({ filename, block, headerLines }));
 };
 
 const writeAllBlockFiles = (
@@ -282,10 +279,7 @@ const createSeparateTempFiles = (
   tempDir: string
 ): Effect.Effect<readonly BlockFile[], Error, never> => {
   const tsConfigEffect = writeTsConfig(tempDir);
-  return pipe(
-    tsConfigEffect,
-    Effect.flatMap(() => writeAllBlockFiles(blocks, tempDir))
-  );
+  return pipe(tsConfigEffect, Effect.andThen(writeAllBlockFiles(blocks, tempDir)));
 };
 
 const handleTypeCheckResult = ([exitCode, stdoutText]: readonly [number, string]) =>
@@ -393,10 +387,7 @@ const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
     : Effect.void;
 
 const formatErrorLineWithAcc = (line: string) => (acc: Effect.Effect<void, never, never>) =>
-  pipe(
-    acc,
-    Effect.flatMap(() => formatErrorLine(line))
-  );
+  pipe(acc, Effect.andThen(formatErrorLine(line)));
 
 const formatErrorLines = (errorLines: readonly string[]) =>
   pipe(
@@ -410,8 +401,8 @@ const formatError = (error: ValidationError) => {
   return pipe(
     errorHeader,
     Console.error,
-    Effect.flatMap(() => Console.error('   Type checking failed:')),
-    Effect.flatMap(() => formatErrorLines(error.error.split('\n')))
+    Effect.andThen(Console.error('   Type checking failed:')),
+    Effect.andThen(formatErrorLines(error.error.split('\n')))
   );
 };
 
@@ -469,15 +460,12 @@ const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockF
   pipe(
     tempDir,
     typeCheckDirectory,
-    Effect.map(() => [] as readonly ValidationError[]),
+    Effect.as([] as readonly ValidationError[]),
     Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, blockFiles)))
   );
 
 const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
-  pipe(
-    acc,
-    Effect.flatMap(() => formatError(error))
-  );
+  pipe(acc, Effect.andThen(formatError(error)));
 
 const formatAllErrors = (errors: readonly ValidationError[]) =>
   pipe(
@@ -490,14 +478,12 @@ const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
   return pipe(
     errorCountMessage,
     Console.log,
-    Effect.flatMap(() => formatAllErrors(errors)),
-    Effect.flatMap(() => Console.log('\n💡 To fix these issues:')),
-    Effect.flatMap(() => Console.log('   1. Update the code examples to match current APIs')),
-    Effect.flatMap(() => Console.log('   2. Add missing imports or type annotations')),
-    Effect.flatMap(() =>
-      Console.log('   3. Verify examples compile with: bun run validate:docs\n')
-    ),
-    Effect.flatMap(() => Effect.fail(new Error('Validation failed')))
+    Effect.andThen(formatAllErrors(errors)),
+    Effect.andThen(Console.log('\n💡 To fix these issues:')),
+    Effect.andThen(Console.log('   1. Update the code examples to match current APIs')),
+    Effect.andThen(Console.log('   2. Add missing imports or type annotations')),
+    Effect.andThen(Console.log('   3. Verify examples compile with: bun run validate:docs\n')),
+    Effect.andThen(Effect.fail(new Error('Validation failed')))
   );
 };
 
@@ -514,8 +500,8 @@ const typeCheckAndReportErrors = (allBlocks: readonly CodeBlock[], tempDir: stri
   return pipe(
     blockCountMessage,
     Console.log,
-    Effect.flatMap(() => Console.log('⚙️  Type checking examples...\n')),
-    Effect.flatMap(() => createSeparateTempFiles(allBlocks, tempDir)),
+    Effect.andThen(Console.log('⚙️  Type checking examples...\n')),
+    Effect.andThen(createSeparateTempFiles(allBlocks, tempDir)),
     Effect.flatMap((blockFiles) => runTypeCheckAndParseErrors(tempDir, blockFiles)),
     Effect.flatMap((errors) => handleValidationErrors(errors, allBlocks))
   );
@@ -523,12 +509,7 @@ const typeCheckAndReportErrors = (allBlocks: readonly CodeBlock[], tempDir: stri
 
 const skipValidationIfNoBlocks = (tempDir: string) => {
   const message = '✅ No TypeScript code blocks found - skipping validation';
-  return pipe(
-    message,
-    Console.log,
-    Effect.flatMap(() => cleanupTempDir(tempDir)),
-    Effect.asVoid
-  );
+  return pipe(message, Console.log, Effect.andThen(cleanupTempDir(tempDir)), Effect.asVoid);
 };
 
 const processAllBlocks = (allBlocks: readonly CodeBlock[], tempDir: string, _packageDir: string) =>
@@ -541,9 +522,9 @@ const runValidation = (packageDir: string, tempDir: string) => {
   return pipe(
     validationMessage,
     Console.log,
-    Effect.flatMap(() => cleanTempDirectory(tempDir)),
-    Effect.flatMap(() => createTempDirectory(tempDir)),
-    Effect.flatMap(() => findMarkdownFiles(packageDir)),
+    Effect.andThen(cleanTempDirectory(tempDir)),
+    Effect.andThen(createTempDirectory(tempDir)),
+    Effect.andThen(findMarkdownFiles(packageDir)),
     Effect.tap((files) => Console.log(`📄 Found ${files.length} markdown files`)),
     Effect.flatMap((markdownFiles) => collectAllCodeBlocks(markdownFiles, packageDir)),
     Effect.flatMap((allBlocks) => processAllBlocks(allBlocks, tempDir, packageDir))
@@ -562,11 +543,7 @@ const validateMarkdownExamples = pipe(
 
 const logErrorAndFail = (error: Readonly<Error>) => {
   const errorMessage = `\n💥 ${error.message}`;
-  return pipe(
-    errorMessage,
-    Console.error,
-    Effect.flatMap(() => Effect.fail(error))
-  );
+  return pipe(errorMessage, Console.error, Effect.andThen(Effect.fail(error)));
 };
 
 const program = pipe(validateMarkdownExamples, Effect.catchAll(logErrorAndFail));
