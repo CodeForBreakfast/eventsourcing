@@ -8,6 +8,7 @@ import eslintComments from 'eslint-plugin-eslint-comments';
 import noUnnecessaryPipeWrapper from './eslint-rules/no-unnecessary-pipe-wrapper.js';
 import preferMatchTag from './eslint-rules/prefer-match-tag.js';
 import preferMatchOverConditionals from './eslint-rules/prefer-match-over-conditionals.js';
+import preferSchemaValidationOverAssertions from './eslint-rules/prefer-schema-validation-over-assertions.js';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -36,6 +37,7 @@ const commonPlugins = {
       'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
       'prefer-match-tag': preferMatchTag,
       'prefer-match-over-conditionals': preferMatchOverConditionals,
+      'prefer-schema-validation-over-assertions': preferSchemaValidationOverAssertions,
     },
   },
 };
@@ -349,6 +351,7 @@ export default [
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
       'custom-rules/prefer-match-tag': 'error',
       'custom-rules/prefer-match-over-conditionals': 'error',
+      'custom-rules/prefer-schema-validation-over-assertions': 'error',
     },
   },
   {
@@ -376,6 +379,7 @@ export default [
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
       'custom-rules/prefer-match-tag': 'error',
       'custom-rules/prefer-match-over-conditionals': 'error',
+      'custom-rules/prefer-schema-validation-over-assertions': 'error',
     },
   },
   {
@@ -392,6 +396,7 @@ export default [
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
       'custom-rules/prefer-match-tag': 'error',
       'custom-rules/prefer-match-over-conditionals': 'error',
+      'custom-rules/prefer-schema-validation-over-assertions': 'error',
     },
   },
   {
@@ -409,6 +414,7 @@ export default [
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
       'custom-rules/prefer-match-tag': 'error',
       'custom-rules/prefer-match-over-conditionals': 'error',
+      'custom-rules/prefer-schema-validation-over-assertions': 'error',
     },
   },
   {
