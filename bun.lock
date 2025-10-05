@@ -62,7 +62,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -80,7 +80,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -97,7 +97,7 @@
         "type-fest": "5.0.1",
       },
       "devDependencies": {
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -118,7 +118,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -135,7 +135,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -153,7 +153,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -176,7 +176,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@effect/platform-bun": "0.81.0",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -194,7 +194,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -210,7 +210,7 @@
         "type-fest": "5.0.1",
       },
       "devDependencies": {
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -229,7 +229,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -249,7 +249,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "bun-types": "1.2.23",
         "effect": "3.18.1",
         "eslint": "9.36.0",
@@ -268,7 +268,7 @@
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.6.1",
+        "@types/node": "24.6.2",
         "effect": "3.18.1",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
@@ -549,7 +549,7 @@
 
     "@types/json5": ["@types/json5@0.0.29", "", {}, "sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ=="],
 
-    "@types/node": ["@types/node@24.6.1", "", { "dependencies": { "undici-types": "~7.13.0" } }, "sha512-ljvjjs3DNXummeIaooB4cLBKg2U6SPI6Hjra/9rRIy7CpM0HpLtG9HptkMKAb4HYWy5S7HUvJEuWgr/y0U8SHw=="],
+    "@types/node": ["@types/node@24.6.2", "", { "dependencies": { "undici-types": "~7.13.0" } }, "sha512-d2L25Y4j+W3ZlNAeMKcy7yDsK425ibcAOO2t7aPTz6gNMH0z2GThtwENCDc0d/Pw9wgyRqE5Px1wkV7naz8ang=="],
 
     "@types/react": ["@types/react@19.1.13", "", { "dependencies": { "csstype": "^3.0.2" } }, "sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ=="],
 
