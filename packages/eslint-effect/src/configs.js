@@ -219,3 +219,8 @@ export const pipeStrict = () => ({
   name: '@codeforbreakfast/eslint-effect/pipe-strict',
   rules: pipeStrictRulesOnly,
 });
+
+// Export raw restriction arrays for advanced use cases
+export const syntaxRestrictions = {
+  pipeStrict: pipeStrictRestrictions,
+};

@@ -159,14 +159,14 @@ export default [
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithFunctional,
     rules: {
+      ...effectPlugin.configs.strict.rules,
       ...testFileImportRestrictions,
       'no-restricted-syntax': [
         'error',
         ...testSyntaxRestrictions,
-        ...effectPlugin.configs.pipeStrict.rules['no-restricted-syntax'].slice(1),
+        ...effectPlugin.configs.syntaxRestrictions.pipeStrict,
       ],
       ...testFunctionalRules,
-      ...effectPlugin.configs.strict.rules,
     },
   },
   {
