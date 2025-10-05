@@ -114,3 +114,33 @@ const firstArgFnCall = pipe(
   Effect.succeed(42),
   Effect.map((x) => x + 1)
 );
+
+// ========================================
+// FLATMAP WITH DISCARDED INPUT (should fail - use andThen)
+// ========================================
+
+// Direct call without pipe
+// eslint-disable-next-line no-restricted-syntax -- Testing flatMap with discarded input
+const flatMapDirect = Effect.flatMap(() => Effect.succeed('hello'));
+
+const flatMapDiscarded = pipe(
+  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  Effect.succeed(42),
+  // eslint-disable-next-line no-restricted-syntax -- Testing flatMap with discarded input
+  Effect.flatMap(() => Effect.succeed('hello'))
+);
+
+// ========================================
+// MAP WITH CONSTANT VALUE (should fail - use as)
+// ========================================
+
+// Direct call without pipe
+// eslint-disable-next-line no-restricted-syntax -- Testing map with constant value
+const mapDirect = Effect.map(() => 'constant');
+
+const mapConstant = pipe(
+  // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
+  Effect.succeed(42),
+  // eslint-disable-next-line no-restricted-syntax -- Testing map with constant value
+  Effect.map(() => 'constant')
+);
