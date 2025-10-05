@@ -97,7 +97,7 @@ describe('Command Registry', () => {
 
     type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
 
-    const assertValidationErrorDetails = (error: FailureError) =>
+    const assertValidationErrorDetails = (error: ReadonlyDeep<FailureError>) =>
       pipe(
         error,
         Match.value,
@@ -159,7 +159,7 @@ describe('Command Registry', () => {
 
     type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
 
-    const assertUnknownCommandErrorDetails = (error: FailureError) =>
+    const assertUnknownCommandErrorDetails = (error: ReadonlyDeep<FailureError>) =>
       pipe(
         error,
         Match.value,
@@ -218,7 +218,7 @@ describe('Command Registry', () => {
 
     type FailureError = Extract<CommandResult, { readonly _tag: 'Failure' }>['error'];
 
-    const assertUnknownErrorDetails = (error: FailureError) =>
+    const assertUnknownErrorDetails = (error: ReadonlyDeep<FailureError>) =>
       pipe(
         error,
         Match.value,

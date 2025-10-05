@@ -35,6 +35,7 @@ export default {
           'dist/.*[.]js$', // Built files
           'build[.](?:ts|js|mjs|cjs)$', // Build scripts
           'packages/eslint-test-rules/.*', // ESLint rule test files - intentionally not imported
+          'packages/eslint-effect/test/.*', // ESLint rule test files - intentionally not imported
           '[.]turbo/.*', // Turbo cache and temp files
         ],
       },
