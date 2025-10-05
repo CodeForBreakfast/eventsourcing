@@ -1,5 +1,11 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.3.1
+
+### Patch Changes
+
+- [#212](https://github.com/CodeForBreakfast/eventsourcing/pull/212) [`6f018d1`](https://github.com/CodeForBreakfast/eventsourcing/commit/6f018d19f0cb318c3e79251af72f333d88feb51b) Thanks [@GraemeF](https://github.com/GraemeF)! - Fixed npm publication configuration. The package now includes the required `publishConfig.access` setting to allow publication to the public npm registry. This was preventing the package from being published successfully.
+
 ## 0.3.0
 
 ### Minor Changes
