@@ -360,7 +360,7 @@ const createWebSocketServer = (
                 connectedAt: new Date(),
               }));
 
-            // eslint-disable-next-line no-restricted-syntax -- WebSocket open handler is a synchronous callback at application boundary, requires Effect.runSync
+            // eslint-disable-next-line effect/no-runSync -- WebSocket open handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 createClientIdAndTimestamp(),
@@ -376,7 +376,7 @@ const createWebSocketServer = (
             ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
             message: ReadonlyDeep<string>
           ) => {
-            // eslint-disable-next-line no-restricted-syntax -- WebSocket message handler is a synchronous callback at application boundary, requires Effect.runSync
+            // eslint-disable-next-line effect/no-runSync -- WebSocket message handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,
@@ -390,7 +390,7 @@ const createWebSocketServer = (
           },
 
           close: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
-            // eslint-disable-next-line no-restricted-syntax -- WebSocket close handler is a synchronous callback at application boundary, requires Effect.runSync
+            // eslint-disable-next-line effect/no-runSync -- WebSocket close handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,

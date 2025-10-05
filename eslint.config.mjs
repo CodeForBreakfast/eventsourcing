@@ -47,14 +47,6 @@ const functionalPluginOnly = {
   functional: functionalPlugin,
 };
 
-// Shared effect custom rules to avoid repetition
-const effectCustomRules = {
-  'effect/no-unnecessary-pipe-wrapper': 'error',
-  'effect/prefer-match-tag': 'error',
-  'effect/prefer-match-over-conditionals': 'error',
-  'effect/prefer-schema-validation-over-assertions': 'error',
-};
-
 // Test-specific configurations defined locally (consumers configure these as needed)
 // TODO: These should be exported from @codeforbreakfast/buntest package
 const testSyntaxRestrictions = [
@@ -102,6 +94,12 @@ const testingContractsExceptionRules = {
   'functional/type-declaration-immutability': 'off',
   'no-restricted-imports': 'off',
   'no-restricted-syntax': 'off',
+  'effect/prefer-andThen': 'off',
+  'effect/prefer-as': 'off',
+  'effect/no-classes': 'off',
+  'effect/no-gen': 'off',
+  'effect/no-runSync': 'off',
+  'effect/no-runPromise': 'off',
 };
 
 // Common TypeScript rules
@@ -141,7 +139,7 @@ export default [
     rules: typescriptBaseRules,
   },
   {
-    name: 'effect-coding-standards',
+    ...effectPlugin.configs.recommended,
     files: [
       '**/*.ts',
       '**/*.tsx',
@@ -151,10 +149,6 @@ export default [
       '**/*.spec.tsx',
     ],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
-    rules: {
-      'no-restricted-syntax': ['error', ...effectPlugin.configs.effectSyntaxRestrictions],
-    },
   },
   {
     name: 'buntest-integration',
@@ -171,15 +165,17 @@ export default [
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithFunctional,
     rules: {
+      ...effectPlugin.configs.strict.rules,
       ...testFileImportRestrictions,
+      // Override runPromise/runSync rules for tests - they use it.effect() instead
+      'effect/no-runPromise': 'off',
+      'effect/no-runSync': 'off',
       'no-restricted-syntax': [
         'error',
-        ...effectPlugin.configs.effectSyntaxRestrictions,
         ...testSyntaxRestrictions,
-        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
+        ...effectPlugin.configs.syntaxRestrictions.pipeStrict,
       ],
       ...testFunctionalRules,
-      ...effectCustomRules,
     },
   },
   {
@@ -193,32 +189,28 @@ export default [
     rules: testingContractsExceptionRules,
   },
   {
-    name: 'simple-pipes',
+    ...effectPlugin.configs.noGen,
     files: ['packages/**/*.ts', 'packages/**/*.tsx'],
     ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
     languageOptions: commonLanguageOptions,
-    plugins: commonPlugins,
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        ...effectPlugin.configs.effectSyntaxRestrictions,
-        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
-      ],
-      ...effectCustomRules,
-    },
   },
   {
-    name: 'scripts-production-rules',
+    ...effectPlugin.configs.pipeStrict,
+    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
+    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
+    languageOptions: commonLanguageOptions,
+  },
+  {
+    name: 'scripts-strict-with-runPromise-allowed',
     files: ['scripts/**/*.ts'],
     languageOptions: commonLanguageOptions,
-    plugins: commonPlugins,
     rules: {
-      'no-restricted-syntax': [
-        'error',
-        ...effectPlugin.configs.effectSyntaxRestrictions,
-        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
-      ],
-      ...effectCustomRules,
+      ...effectPlugin.configs.recommended.rules,
+      ...effectPlugin.configs.noGen.rules,
+      ...effectPlugin.configs.pipeStrict.rules,
+      // Allow runPromise/runSync in scripts as they are application entry points
+      'effect/no-runPromise': 'off',
+      'effect/no-runSync': 'off',
     },
   },
   {
@@ -228,12 +220,7 @@ export default [
     plugins: commonPlugins,
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
-      'no-restricted-syntax': [
-        'error',
-        ...effectPlugin.configs.effectSyntaxRestrictions,
-        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
-      ],
-      ...effectCustomRules,
+      ...effectPlugin.configs.strict.rules,
     },
   },
   {

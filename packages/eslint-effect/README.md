@@ -88,32 +88,67 @@ Effect.map((x) => handler(x as MyType));
 (Effect.flatMap(Schema.decodeUnknown(MyTypeSchema)), Effect.map(handler));
 ```
 
-## Configuration Presets
+## Rule Presets
 
-### Effect Syntax Restrictions
+### Recommended Presets
 
-Enforces Effect best practices:
+#### `recommended` ⭐
 
-- Forbids `Effect.gen` (use `pipe` instead)
-- Forbids classes (except Effect service tags and Data.TaggedError)
-- Forbids `Effect.runSync`/`runPromise` in production code
-- Forbids direct `_tag` access (use type guards or `Match`)
-- Forbids `switch` on `_tag` (use `Match` functions)
+**Recommended for most projects** - Core Effect best practices without controversial rules:
+
+- All Effect plugin rules
+- Forbids classes (except Effect tags/errors)
+- Forbids `Effect.runSync`/`runPromise` in production
 - Enforces `Effect.andThen()` over `Effect.flatMap(() => )`
 - Enforces `Effect.as()` over `Effect.map(() => value)`
-
-### Simple Pipe Syntax Restrictions
-
-Ensures consistent pipe usage:
-
 - Forbids method-based `.pipe()` (use standalone `pipe()`)
 - Forbids curried function calls (use `pipe` instead)
-- Forbids nested `pipe()` calls
-- Forbids multiple `pipe()` calls in one function
 - Forbids identity functions in transformations
 - Enforces proper pipe argument order
 
-### Functional Immutability Rules
+**Does NOT include:**
+
+- `Effect.gen` ban (opt-in with `noGen`)
+- `_tag` access ban (opt-in with `preferMatch`)
+- Strict pipe rules (opt-in with `pipeStrict`)
+
+#### `strict`
+
+**For zealots** - Everything in `recommended` plus all opinionated rules:
+
+- All `recommended` rules
+- Forbids `Effect.gen` (use `pipe` instead)
+- Forbids direct `_tag` access (use type guards or `Match`)
+- Forbids `switch` on `_tag` (use `Match` functions)
+- Forbids nested `pipe()` calls
+- Forbids multiple `pipe()` calls in one function
+
+### Opt-in Configs
+
+Mix these with `recommended` to customize your rules:
+
+#### `noGen`
+
+Forbids `Effect.gen` in favor of `pipe` composition. **Controversial** - some teams prefer gen!
+
+#### `preferMatch`
+
+Forbids direct `_tag` access and `switch` on `_tag`. Encourages declarative `Match` patterns.
+
+#### `pipeStrict`
+
+Enforces strict pipe composition rules:
+
+- Forbids nested `pipe()` calls
+- Forbids multiple `pipe()` calls per function
+
+#### `plugin`
+
+Plugin rules only, no syntax restrictions.
+
+### Functional Immutability
+
+#### `functionalImmutabilityRules`
 
 Leverages `eslint-plugin-functional` with Effect-aware configuration:
 
@@ -124,112 +159,161 @@ Leverages `eslint-plugin-functional` with Effect-aware configuration:
 
 ## Usage
 
-### Basic Setup
+### Recommended Setup
+
+Start with `recommended` for sensible defaults:
 
 ```javascript
 import effectPlugin from '@codeforbreakfast/eslint-effect';
 
 export default [
   {
+    ...effectPlugin.configs.recommended,
     files: ['**/*.ts', '**/*.tsx'],
     plugins: {
-      effect: {
-        rules: effectPlugin.rules,
-      },
-    },
-    rules: {
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+      effect: effectPlugin,
     },
   },
 ];
 ```
 
-### Using Syntax Restrictions
+### Add Opinionated Rules
+
+Opt-in to stricter rules as needed:
 
 ```javascript
-import {
-  rules,
-  effectSyntaxRestrictions,
-  simplePipeSyntaxRestrictions,
-} from '@codeforbreakfast/eslint-effect';
+import effectPlugin from '@codeforbreakfast/eslint-effect';
 
 export default [
   {
-    files: ['packages/**/*.ts'],
+    ...effectPlugin.configs.recommended,
+    files: ['**/*.ts', '**/*.tsx'],
     plugins: {
-      effect: { rules },
+      effect: effectPlugin,
     },
-    rules: {
-      'no-restricted-syntax': [
-        'error',
-        ...effectSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
-      ],
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+  },
+  // Forbid Effect.gen
+  {
+    ...effectPlugin.configs.noGen,
+    files: ['src/**/*.ts'],
+  },
+  // Enforce strict pipe rules
+  {
+    ...effectPlugin.configs.pipeStrict,
+    files: ['src/**/*.ts'],
+  },
+  // Or just use strict for everything
+  {
+    ...effectPlugin.configs.strict,
+    files: ['src/**/*.ts'],
+    plugins: {
+      effect: effectPlugin,
     },
   },
 ];
 ```
 
-### Using with Functional Immutability
+### With Functional Immutability
 
 Requires `eslint-plugin-functional`:
 
 ```javascript
 import functionalPlugin from 'eslint-plugin-functional';
-import { rules, functionalImmutabilityRules } from '@codeforbreakfast/eslint-effect';
+import effectPlugin from '@codeforbreakfast/eslint-effect';
 
 export default [
   {
     files: ['**/*.ts'],
     plugins: {
-      effect: { rules },
       functional: functionalPlugin,
     },
-    rules: {
-      ...functionalImmutabilityRules,
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
+    rules: effectPlugin.configs.functionalImmutabilityRules,
+  },
+  {
+    ...effectPlugin.configs.recommended,
+    files: ['**/*.ts'],
+    plugins: {
+      effect: effectPlugin,
     },
   },
 ];
 ```
 
-## Available Exports
+### Disabling Individual Rules
 
-### Named Exports
+All syntax restriction rules are exposed as named ESLint rules, making it easy to disable specific rules:
 
-```typescript
-import {
-  rules, // All custom rules
-  effectSyntaxRestrictions, // Effect syntax restrictions array
-  simplePipeSyntaxRestrictions, // Pipe syntax restrictions array
-  functionalImmutabilityRules, // Immutability rules object
-} from '@codeforbreakfast/eslint-effect';
+```javascript
+import effectPlugin from '@codeforbreakfast/eslint-effect';
+
+export default [
+  {
+    ...effectPlugin.configs.recommended,
+    files: ['scripts/**/*.ts'],
+    plugins: {
+      effect: effectPlugin,
+    },
+    rules: {
+      // Allow runPromise/runSync in scripts (application entry points)
+      'effect/no-runPromise': 'off',
+      'effect/no-runSync': 'off',
+    },
+  },
+];
 ```
 
-### Default Export
+**Available named rules:**
+
+- `effect/no-classes` - Forbid classes except Effect tags/errors
+- `effect/no-runSync` - Forbid Effect.runSync
+- `effect/no-runPromise` - Forbid Effect.runPromise
+- `effect/prefer-andThen` - Use andThen over flatMap(() => ...)
+- `effect/prefer-as` - Use as over map(() => value)
+- `effect/no-gen` - Forbid Effect.gen (opt-in via `noGen` config)
+- `effect/no-unnecessary-pipe-wrapper` - Detect unnecessary pipe wrappers
+- `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
+- `effect/prefer-match-over-conditionals` - Use Match over if statements
+- `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
+
+## Available Exports
+
+### Default Export (Recommended)
 
 ```typescript
 import effectPlugin from '@codeforbreakfast/eslint-effect';
 
 effectPlugin.rules; // All custom rules
-effectPlugin.configs.effectSyntaxRestrictions; // Effect syntax restrictions
-effectPlugin.configs.simplePipeSyntaxRestrictions;
-effectPlugin.configs.functionalImmutabilityRules;
+effectPlugin.meta; // Plugin metadata
+
+// Configs
+effectPlugin.configs.recommended; // ⭐ Recommended for most projects
+effectPlugin.configs.strict; // All rules including opinionated ones
+effectPlugin.configs.noGen; // Opt-in: forbid Effect.gen
+effectPlugin.configs.preferMatch; // Opt-in: forbid _tag access
+effectPlugin.configs.pipeStrict; // Opt-in: strict pipe rules
+effectPlugin.configs.plugin; // Plugin rules only
+effectPlugin.configs.functionalImmutabilityRules; // Functional immutability rules object
+```
+
+Each config (except `functionalImmutabilityRules`) is a complete ESLint flat config object with:
+
+- `name`: Config identifier
+- `rules`: Rule configuration
+- `plugins`: Required plugins (where applicable)
+
+### Named Exports
+
+```typescript
+import {
+  rules, // All custom rules (for plugin registration)
+  functionalImmutabilityRules, // Functional immutability rules object
+} from '@codeforbreakfast/eslint-effect';
 ```
 
 ### Scoped Imports
 
 ```javascript
 import rules from '@codeforbreakfast/eslint-effect/rules';
-import configs from '@codeforbreakfast/eslint-effect/configs';
 ```
 
 ## Philosophy
