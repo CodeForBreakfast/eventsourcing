@@ -6,6 +6,7 @@ import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
 import eslintComments from 'eslint-plugin-eslint-comments';
 import effectPlugin from '@codeforbreakfast/eslint-effect';
+import buntestPlugin from '@codeforbreakfast/buntest/eslint';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -37,6 +38,13 @@ const commonPlugins = {
 const commonPluginsWithFunctional = {
   ...commonPlugins,
   functional: functionalPlugin,
+};
+
+const commonPluginsWithBuntest = {
+  ...commonPluginsWithFunctional,
+  buntest: {
+    rules: buntestPlugin.rules,
+  },
 };
 
 const typescriptPlugin = {
@@ -143,12 +151,15 @@ export default [
     ],
     ignores: ['**/buntest/**'],
     languageOptions: commonLanguageOptions,
-    plugins: commonPluginsWithFunctional,
+    plugins: commonPluginsWithBuntest,
     rules: {
       ...testFileImportRestrictions,
-      // Override runPromise/runSync rules for tests - they use it.effect() instead
+      // Override runPromise/runSync rules - tests use it.effect() instead
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
+      // Enforce buntest rules
+      'buntest/no-runPromise-in-tests': 'error',
+      'buntest/no-runSync-in-tests': 'error',
       ...testFunctionalRules,
     },
   },
