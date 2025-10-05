@@ -15,7 +15,7 @@ import noCurriedCalls from './no-curried-calls.js';
 import noIdentityTransform from './no-identity-transform.js';
 import noPipeFirstArgCall from './no-pipe-first-arg-call.js';
 import noNestedPipe from './no-nested-pipe.js';
-import noMultiplePipes from './no-multiple-pipes.js';
+import noNestedPipes from './no-nested-pipes.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -35,5 +35,5 @@ export default {
   'no-identity-transform': noIdentityTransform,
   'no-pipe-first-arg-call': noPipeFirstArgCall,
   'no-nested-pipe': noNestedPipe,
-  'no-multiple-pipes': noMultiplePipes,
+  'no-nested-pipes': noNestedPipes,
 };

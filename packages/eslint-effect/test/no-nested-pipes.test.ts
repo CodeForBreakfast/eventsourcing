@@ -1,14 +1,25 @@
 import { pipe, Effect } from 'effect';
 
 // ========================================
-// MULTIPLE PIPES IN ONE FUNCTION (should fail)
+// MULTIPLE PIPES IN ONE FUNCTION (should NOT fail - they're not nested)
 // ========================================
 
 const multiplePipes = () => {
   const result1 = pipe(42, (x) => x + 1);
-  // eslint-disable-next-line effect/no-multiple-pipes -- Testing multiple pipes ban
   const result2 = pipe(result1, (x) => x * 2);
   return result2;
+};
+
+// ========================================
+// NESTED PIPES (should fail)
+// ========================================
+
+const nestedPipes = () => {
+  return pipe(
+    // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Testing nested pipes ban
+    pipe(42, (x) => x + 1),
+    (x) => x * 2
+  );
 };
 
 // ========================================
@@ -59,3 +70,26 @@ const multipleExtractedCalls = (x: number, y: string) =>
     (n) => String(n),
     (s) => s + y
   );
+
+// ========================================
+// MORE EDGE CASES
+// ========================================
+
+// Should NOT fail - pipes in different functions defined in same scope
+const helperOne = () => pipe(1, (x) => x + 1);
+const helperTwo = () => pipe(2, (x) => x * 2);
+
+// Should NOT fail - multiple sequential pipes in same function
+const multipleSequentialPipes = () => {
+  const a = pipe(1, (x) => x + 1);
+  const b = pipe(2, (x) => x + 2);
+  const c = pipe(3, (x) => x + 3);
+  return a + b + c;
+};
+
+// Should NOT fail - pipe in a callback isn't nested in the outer pipe
+const pipeInCallback = pipe(
+  [1, 2, 3],
+  // eslint-disable-next-line effect/no-nested-pipe, effect/no-unnecessary-pipe-wrapper -- Pipes in callbacks are allowed (different function scope)
+  (arr) => arr.map((x) => pipe(x, (n) => n * 2))
+);

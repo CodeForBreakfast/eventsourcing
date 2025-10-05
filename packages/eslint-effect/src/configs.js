@@ -29,7 +29,7 @@ const pipeRecommendedRules = {
 // Opinionated: strict pipe composition rules (now as named rules)
 const pipeStrictRules = {
   'effect/no-nested-pipe': 'error',
-  'effect/no-multiple-pipes': 'error',
+  'effect/no-nested-pipes': 'error',
 };
 
 export const functionalImmutabilityRules = {
