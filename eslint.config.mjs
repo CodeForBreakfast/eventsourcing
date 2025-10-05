@@ -5,6 +5,7 @@ import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
 import eslintComments from 'eslint-plugin-eslint-comments';
+import noUnnecessaryPipeWrapper from './eslint-rules/no-unnecessary-pipe-wrapper.js';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -28,6 +29,11 @@ const commonPlugins = {
   'unused-imports': unusedImports,
   import: importPlugin,
   'eslint-comments': eslintComments,
+  'custom-rules': {
+    rules: {
+      'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
+    },
+  },
 };
 
 const commonPluginsWithFunctional = {
@@ -157,18 +163,6 @@ const simplePipeSyntaxRestrictions = [
       'CallExpression[callee.type="Identifier"][callee.name="pipe"] > .arguments:first-child[type="CallExpression"][arguments.length=1]',
     message:
       'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
-  },
-  {
-    selector:
-      'ArrowFunctionExpression > CallExpression.body[callee.type="Identifier"][callee.name="pipe"][arguments.length=2] > .arguments:first-child[type="Identifier"]',
-    message:
-      'Unnecessary function wrapper around single pipe operation. This function just passes a parameter through pipe() and could be simplified or inlined. Example: (x) => pipe(x, fn) is redundant - just use fn directly.',
-  },
-  {
-    selector:
-      ':matches(FunctionDeclaration, FunctionExpression) > BlockStatement > ReturnStatement > CallExpression.argument[callee.type="Identifier"][callee.name="pipe"][arguments.length=2] > .arguments:first-child[type="Identifier"]',
-    message:
-      'Unnecessary function wrapper around single pipe operation. This function just passes a parameter through pipe() and could be simplified or inlined. Example: function foo(x) { return pipe(x, fn); } is redundant - just use fn directly.',
   },
 ];
 
@@ -348,6 +342,7 @@ export default [
         ...simplePipeSyntaxRestrictions,
       ],
       ...testFunctionalRules,
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
@@ -365,33 +360,35 @@ export default [
     files: ['packages/**/*.ts', 'packages/**/*.tsx'],
     ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       'no-restricted-syntax': [
         'error',
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
     name: 'scripts-production-rules',
     files: ['scripts/**/*.ts'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       'no-restricted-syntax': [
         'error',
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
     name: 'eslint-test-rules-exceptions',
     files: ['**/eslint-test-rules/**/*.ts', '**/eslint-test-rules/**/*.tsx'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
       'no-restricted-syntax': [
@@ -399,6 +396,7 @@ export default [
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {

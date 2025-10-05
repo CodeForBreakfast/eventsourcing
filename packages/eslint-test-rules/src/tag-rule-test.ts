@@ -79,7 +79,7 @@ const methodPipe = Effect.succeed(42).pipe(Effect.map((x) => x + 1));
 
 const nestedPipe = pipe(
   42,
-  // eslint-disable-next-line no-restricted-syntax -- Testing nested pipe ban
+  // eslint-disable-next-line no-restricted-syntax, custom-rules/no-unnecessary-pipe-wrapper -- Testing nested pipe ban (also unnecessary wrapper)
   (x) => pipe(x, (y) => y + 1)
 );
 
@@ -152,11 +152,11 @@ const mapConstant = pipe(
 const someFn = (x: number) => x * 2;
 
 const unnecessaryArrowWrapper = (value: number) =>
-  // eslint-disable-next-line no-restricted-syntax -- Testing unnecessary arrow pipe wrapper
+  // eslint-disable-next-line custom-rules/no-unnecessary-pipe-wrapper -- Testing unnecessary arrow pipe wrapper
   pipe(value, someFn);
 
 const unnecessaryEffectWrapper = (value: number) =>
-  // eslint-disable-next-line no-restricted-syntax -- Testing unnecessary arrow pipe wrapper with Effect
+  // eslint-disable-next-line custom-rules/no-unnecessary-pipe-wrapper -- Testing unnecessary arrow pipe wrapper with Effect
   pipe(value, Effect.succeed);
 
 // ========================================
@@ -164,11 +164,11 @@ const unnecessaryEffectWrapper = (value: number) =>
 // ========================================
 
 function unnecessaryFunctionWrapper(value: number) {
-  // eslint-disable-next-line no-restricted-syntax -- Testing unnecessary function declaration pipe wrapper
+  // eslint-disable-next-line custom-rules/no-unnecessary-pipe-wrapper -- Testing unnecessary function declaration pipe wrapper
   return pipe(value, someFn);
 }
 
 const unnecessaryFunctionExpr = function (value: number) {
-  // eslint-disable-next-line no-restricted-syntax -- Testing unnecessary function expression pipe wrapper
+  // eslint-disable-next-line custom-rules/no-unnecessary-pipe-wrapper -- Testing unnecessary function expression pipe wrapper
   return pipe(value, Effect.succeed);
 };

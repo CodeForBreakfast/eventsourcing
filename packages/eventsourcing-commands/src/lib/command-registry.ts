@@ -25,7 +25,7 @@ export const dispatchCommand = (
 ): Effect.Effect<CommandResult, never, CommandRegistry> =>
   pipe(
     CommandRegistry,
-    Effect.andThen((registry) => registry.dispatch(wireCommand))
+    Effect.flatMap((registry) => registry.dispatch(wireCommand))
   );
 
 // ============================================================================
