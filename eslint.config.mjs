@@ -351,6 +351,19 @@ export default [
     },
   },
   {
+    name: 'scripts-production-rules',
+    files: ['scripts/**/*.ts'],
+    languageOptions: commonLanguageOptions,
+    plugins: typescriptPlugin,
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        ...effectSyntaxRestrictions,
+        ...simplePipeSyntaxRestrictions,
+      ],
+    },
+  },
+  {
     name: 'eslint-test-rules-exceptions',
     files: ['**/eslint-test-rules/**/*.ts', '**/eslint-test-rules/**/*.tsx'],
     languageOptions: commonLanguageOptions,
@@ -420,6 +433,7 @@ export default [
       '**/*.js',
       '**/*.mjs',
       '**/build.ts',
+      '**/.turbo/**',
     ],
   },
 ];

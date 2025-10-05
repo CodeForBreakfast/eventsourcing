@@ -49,11 +49,18 @@ const updateEmailCommand = defineCommand('UpdateEmail', UpdateEmailPayload);
 ### 2. Create Command Matcher
 
 ```typescript
-import { Effect, Match } from 'effect';
+import { Effect, Match, pipe, Schema } from 'effect';
 import {
   CommandFromDefinitions,
   makeCommandRegistry,
+  CommandResult,
+  CommandDefinition,
 } from '@codeforbreakfast/eventsourcing-commands';
+import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
+
+// Declare commands from previous example
+declare const createUserCommand: CommandDefinition<'CreateUser', { name: string; email: string }>;
+declare const updateEmailCommand: CommandDefinition<'UpdateEmail', { newEmail: string }>;
 
 // Define your command array
 const commands = [createUserCommand, updateEmailCommand] as const;
@@ -62,18 +69,19 @@ const commands = [createUserCommand, updateEmailCommand] as const;
 type Commands = CommandFromDefinitions<typeof commands>;
 
 // Create a matcher using Effect's pattern matching
-const commandMatcher = (command: Commands) =>
-  Match.value(command).pipe(
+const commandMatcher = (command: Commands): Effect.Effect<CommandResult, never, never> =>
+  pipe(
+    Match.value(command),
     Match.when({ name: 'CreateUser' }, (cmd) =>
       Effect.succeed({
         _tag: 'Success' as const,
-        position: { streamId: cmd.target, eventNumber: 1 },
+        position: { streamId: cmd.target, eventNumber: 1 } as EventStreamPosition,
       })
     ),
     Match.when({ name: 'UpdateEmail' }, (cmd) =>
       Effect.succeed({
         _tag: 'Success' as const,
-        position: { streamId: cmd.target, eventNumber: 2 },
+        position: { streamId: cmd.target, eventNumber: 2 } as EventStreamPosition,
       })
     ),
     Match.exhaustive // TypeScript ensures all commands are handled!
@@ -86,7 +94,20 @@ const commandMatcher = (command: Commands) =>
 import {
   makeCommandRegistry,
   makeCommandRegistryLayer,
+  CommandFromDefinitions,
+  CommandDefinition,
+  CommandResult,
 } from '@codeforbreakfast/eventsourcing-commands';
+import { Effect } from 'effect';
+
+// Declare from previous examples
+declare const commands: readonly [
+  CommandDefinition<'CreateUser', { name: string; email: string }>,
+  CommandDefinition<'UpdateEmail', { newEmail: string }>,
+];
+declare const commandMatcher: (
+  command: CommandFromDefinitions<typeof commands>
+) => Effect.Effect<CommandResult, never, never>;
 
 // Create the registry with commands and matcher
 const registry = makeCommandRegistry(commands, commandMatcher);
@@ -98,7 +119,15 @@ const registryLayer = makeCommandRegistryLayer(commands, commandMatcher);
 ### 4. Dispatch Commands
 
 ```typescript
-import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+import {
+  WireCommand,
+  CommandRegistry,
+  CommandResult,
+} from '@codeforbreakfast/eventsourcing-commands';
+import { Effect, Context } from 'effect';
+
+// Declare registry from previous example
+declare const registry: Context.Tag.Service<typeof CommandRegistry>;
 
 const wireCommand: WireCommand = {
   id: 'cmd-123',
@@ -111,7 +140,7 @@ const wireCommand: WireCommand = {
 };
 
 // The registry automatically validates the command against the appropriate schema
-const result = await Effect.runPromise(registry.dispatch(wireCommand));
+const result: CommandResult = await Effect.runPromise(registry.dispatch(wireCommand));
 
 if (result._tag === 'Success') {
   console.log('Command executed successfully:', result.position);
@@ -155,9 +184,24 @@ interface DomainCommand<TPayload> {
 All command processing results follow this discriminated union:
 
 ```typescript
+import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
+
 type CommandResult =
   | { _tag: 'Success'; position: EventStreamPosition }
-  | { _tag: 'Failure'; error: CommandError };
+  | {
+      _tag: 'Failure';
+      error: {
+        _tag:
+          | 'ValidationError'
+          | 'HandlerNotFound'
+          | 'ExecutionError'
+          | 'AggregateNotFound'
+          | 'ConcurrencyConflict'
+          | 'UnknownError';
+        commandId: string;
+        [key: string]: unknown;
+      };
+    };
 ```
 
 ### Command Definition API
@@ -184,7 +228,12 @@ const userCommand = defineCommand(
 Builds a discriminated union schema from multiple command definitions. This creates an exhaustive schema that validates any registered command:
 
 ```typescript
-import { buildCommandSchema } from '@codeforbreakfast/eventsourcing-commands';
+import { buildCommandSchema, CommandDefinition } from '@codeforbreakfast/eventsourcing-commands';
+import { Schema } from 'effect';
+
+// Declare commands from previous examples
+declare const createUserCommand: CommandDefinition<'CreateUser', { name: string; email: string }>;
+declare const updateEmailCommand: CommandDefinition<'UpdateEmail', { newEmail: string }>;
 
 const commands = [createUserCommand, updateEmailCommand];
 const exhaustiveSchema = buildCommandSchema(commands);
@@ -202,16 +251,37 @@ Creates a command registry using Effect's pattern matching. Features:
 - **Type inference**: Full TypeScript support throughout the dispatch pipeline
 
 ```typescript
-import { Match } from 'effect';
-import { makeCommandRegistry, CommandFromDefinitions } from '@codeforbreakfast/eventsourcing-commands';
+import { Match, pipe, Effect } from 'effect';
+import {
+  makeCommandRegistry,
+  CommandFromDefinitions,
+  CommandResult,
+  CommandDefinition,
+} from '@codeforbreakfast/eventsourcing-commands';
+import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
+
+// Declare commands from previous examples
+declare const createUserCommand: CommandDefinition<'CreateUser', { name: string; email: string }>;
+declare const updateEmailCommand: CommandDefinition<'UpdateEmail', { newEmail: string }>;
 
 const commands = [createUserCommand, updateEmailCommand] as const;
 type Commands = CommandFromDefinitions<typeof commands>;
 
-const commandMatcher = (command: Commands) =>
-  Match.value(command).pipe(
-    Match.when({ name: 'CreateUser' }, (cmd) => /* handle CreateUser */),
-    Match.when({ name: 'UpdateEmail' }, (cmd) => /* handle UpdateEmail */),
+const commandMatcher = (command: Commands): Effect.Effect<CommandResult, never, never> =>
+  pipe(
+    Match.value(command),
+    Match.when({ name: 'CreateUser' }, (cmd) =>
+      Effect.succeed({
+        _tag: 'Success' as const,
+        position: { streamId: cmd.target, eventNumber: 1 } as EventStreamPosition,
+      })
+    ),
+    Match.when({ name: 'UpdateEmail' }, (cmd) =>
+      Effect.succeed({
+        _tag: 'Success' as const,
+        position: { streamId: cmd.target, eventNumber: 2 } as EventStreamPosition,
+      })
+    ),
     Match.exhaustive // Compile-time exhaustiveness checking
   );
 
@@ -223,18 +293,34 @@ const registry = makeCommandRegistry(commands, commandMatcher);
 Creates an Effect Layer containing the command registry:
 
 ```typescript
+import { Effect, pipe } from 'effect';
 import {
   makeCommandRegistryLayer,
   CommandRegistry,
+  CommandFromDefinitions,
+  CommandDefinition,
+  CommandResult,
+  WireCommand,
 } from '@codeforbreakfast/eventsourcing-commands';
+
+// Declare from previous examples
+declare const commands: readonly [
+  CommandDefinition<'CreateUser', { name: string; email: string }>,
+  CommandDefinition<'UpdateEmail', { newEmail: string }>,
+];
+declare const commandMatcher: (
+  command: CommandFromDefinitions<typeof commands>
+) => Effect.Effect<CommandResult, never, never>;
+declare const wireCommand: WireCommand;
 
 const layer = makeCommandRegistryLayer(commands, commandMatcher);
 
 // Use in your Effect program
-const program = Effect.gen(function* () {
-  const registry = yield* CommandRegistry;
-  return yield* registry.dispatch(wireCommand);
-}).pipe(Effect.provide(layer));
+const program = pipe(
+  CommandRegistry,
+  Effect.flatMap((registry) => registry.dispatch(wireCommand)),
+  Effect.provide(layer)
+);
 ```
 
 ## Key Benefits
@@ -258,7 +344,18 @@ The matcher-based registry system provides several compile-time guarantees:
 ### Example Error Handling
 
 ```typescript
-const result = await Effect.runPromise(registry.dispatch(wireCommand));
+import { Effect, Context } from 'effect';
+import {
+  WireCommand,
+  CommandRegistry,
+  CommandResult,
+} from '@codeforbreakfast/eventsourcing-commands';
+
+// Declare from previous examples
+declare const registry: Context.Tag.Service<typeof CommandRegistry>;
+declare const wireCommand: WireCommand;
+
+const result: CommandResult = await Effect.runPromise(registry.dispatch(wireCommand));
 
 switch (result._tag) {
   case 'Success':

@@ -26,90 +26,92 @@ bun add @codeforbreakfast/eventsourcing-store-postgres effect @effect/platform @
 ## Quick Start
 
 ```typescript
-import { Effect, Layer, Stream, pipe } from 'effect';
+import { Effect, Layer, Redacted, Schema, Stream, pipe } from 'effect';
 import {
-  postgresEventStore,
-  createConnectionManager,
-  runMigrations,
+  sqlEventStore,
+  EventSubscriptionServicesLive,
+  EventRowServiceLive,
+  PostgresLive,
+  PgConfiguration,
 } from '@codeforbreakfast/eventsourcing-store-postgres';
-import { PgClient } from '@effect/sql-pg';
+import {
+  type EventStore,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 
-// Define your events
-interface UserRegistered {
-  type: 'UserRegistered';
-  userId: string;
-  email: string;
-  timestamp: string;
-}
+const UserRegistered = Schema.Struct({
+  type: Schema.Literal('UserRegistered'),
+  userId: Schema.String,
+  email: Schema.String,
+  timestamp: Schema.String,
+});
 
-interface UserEmailUpdated {
-  type: 'UserEmailUpdated';
-  userId: string;
-  oldEmail: string;
-  newEmail: string;
-  timestamp: string;
-}
+const UserEmailUpdated = Schema.Struct({
+  type: Schema.Literal('UserEmailUpdated'),
+  userId: Schema.String,
+  oldEmail: Schema.String,
+  newEmail: Schema.String,
+  timestamp: Schema.String,
+});
 
-type UserEvent = UserRegistered | UserEmailUpdated;
+const UserEvent = Schema.Union(UserRegistered, UserEmailUpdated);
+type UserEvent = typeof UserEvent.Type;
 
-// Database configuration
-const dbConfig = {
+const PgConfigLive = Layer.succeed(PgConfiguration, {
   host: 'localhost',
   port: 5432,
   database: 'eventstore',
   username: 'postgres',
-  password: 'password',
-};
+  password: Redacted.make('password'),
+});
 
-// Create PostgreSQL layer
-const PostgresLive = PgClient.layer(dbConfig);
+const createTypedEventStore = (stringEventStore: EventStore<string>) =>
+  encodedEventStore(Schema.parseJson(UserEvent))(stringEventStore);
 
-// Create event store layer
-const EventStoreLive = Layer.provide(postgresEventStore<UserEvent>(), PostgresLive);
-
-// Example usage
-const program = pipe(
-  Effect.all({
-    eventStore: EventStore,
-    _: runMigrations(),
-  }),
-  Effect.flatMap(({ eventStore }) =>
-    pipe(
-      toStreamId('user-123'),
-      Effect.flatMap((streamId) =>
-        pipe(
-          beginning(streamId),
-          Effect.flatMap((position) => {
-            const events: UserEvent[] = [
-              {
-                type: 'UserRegistered',
-                userId: 'user-123',
-                email: 'user@example.com',
-                timestamp: new Date().toISOString(),
-              },
-            ];
-
-            return pipe(
-              Stream.fromIterable(events),
-              Stream.run(eventStore.append(position)),
-              Effect.tap((newPosition) =>
-                Effect.logInfo(`Events written at position: ${JSON.stringify(newPosition)}`)
-              ),
-              Effect.flatMap(() => eventStore.read(position)),
-              Effect.flatMap(Stream.runCollect),
-              Effect.tap((allEvents) =>
-                Effect.logInfo(`Retrieved events: ${JSON.stringify(allEvents)}`)
-              )
-            );
-          })
+const writeAndReadEvents = (eventStore: EventStore<UserEvent>) =>
+  pipe(
+    toStreamId('user-123'),
+    Effect.flatMap((streamId) =>
+      pipe(
+        beginning(streamId),
+        Effect.flatMap((position) =>
+          pipe(
+            Stream.make({
+              type: 'UserRegistered' as const,
+              userId: 'user-123',
+              email: 'user@example.com',
+              timestamp: new Date().toISOString(),
+            }),
+            Stream.run(eventStore.append(position)),
+            Effect.tap((newPosition) =>
+              Effect.logInfo(`Events written at position: ${JSON.stringify(newPosition)}`)
+            ),
+            Effect.flatMap(() => eventStore.read(position)),
+            Effect.flatMap(Stream.runCollect),
+            Effect.tap((allEvents) =>
+              Effect.logInfo(`Retrieved events: ${JSON.stringify(allEvents)}`)
+            )
+          )
         )
       )
     )
-  )
+  );
+
+const program = pipe(
+  sqlEventStore(),
+  Effect.map(createTypedEventStore),
+  Effect.flatMap(writeAndReadEvents)
 );
 
-// Run the program
-pipe(program, Effect.provide(EventStoreLive), Effect.runPromise);
+const AppLayer = pipe(
+  Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive),
+  Layer.provide(PostgresLive),
+  Layer.provide(PgConfigLive)
+);
+
+const runProgram = pipe(program, Effect.provide(AppLayer));
 ```
 
 ## Database Setup
@@ -119,7 +121,12 @@ pipe(program, Effect.provide(EventStoreLive), Effect.runPromise);
 The package includes automatic database schema management:
 
 ```typescript
-import { runMigrations, MigrationConfig } from '@codeforbreakfast/eventsourcing-store-postgres';
+import { Effect, pipe } from 'effect';
+
+declare const runMigrations: (config: {
+  readonly migrationsTable: string;
+  readonly schemaName: string;
+}) => Effect.Effect<void>;
 
 const setupDatabase = pipe(
   runMigrations({
@@ -167,25 +174,31 @@ CREATE TABLE IF NOT EXISTS snapshots (
 ### Connection Management
 
 ```typescript
-import { createConnectionManager } from '@codeforbreakfast/eventsourcing-store-postgres';
+import { Layer, Redacted, pipe } from 'effect';
+import {
+  sqlEventStore,
+  EventSubscriptionServicesLive,
+  EventRowServiceLive,
+  PostgresLive,
+  PgConfiguration,
+} from '@codeforbreakfast/eventsourcing-store-postgres';
 
-const connectionManagerLayer = createConnectionManager({
-  // Connection pool settings
-  maxConnections: 20,
-  connectionTimeoutMs: 5000,
-  idleTimeoutMs: 30000,
+interface UserEvent {
+  readonly type: string;
+}
 
-  // Retry configuration
-  maxRetries: 3,
-  retryDelayMs: 1000,
-
-  // Health check settings
-  healthCheckIntervalMs: 30000,
+const PgConfigLive = Layer.succeed(PgConfiguration, {
+  host: 'localhost',
+  port: 5432,
+  database: 'eventstore',
+  username: 'postgres',
+  password: Redacted.make('password'),
 });
 
-const EventStoreLive = Layer.provide(
-  postgresEventStore<UserEvent>(),
-  Layer.merge(PostgresLive, connectionManagerLayer)
+const EventStoreLive = pipe(
+  Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive),
+  Layer.provide(PostgresLive),
+  Layer.provide(PgConfigLive)
 );
 ```
 
@@ -194,32 +207,54 @@ const EventStoreLive = Layer.provide(
 Enable real-time event streaming using PostgreSQL LISTEN/NOTIFY:
 
 ```typescript
+import { Effect, Schema, Stream, pipe } from 'effect';
+import { sqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
 import {
-  createNotificationListener,
-  createSubscriptionManager,
-} from '@codeforbreakfast/eventsourcing-store-postgres';
+  type EventStore,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 
-const realTimeEventProcessing = pipe(
-  createSubscriptionManager(),
-  Effect.flatMap((subscriptionManager) =>
-    pipe(
-      subscriptionManager.subscribe({
-        streamPattern: '*', // All streams
-        fromPosition: 'live', // Only new events
-      }),
-      Effect.flatMap((eventStream) =>
-        pipe(
-          eventStream,
-          Stream.runForeach((event) =>
-            pipe(
-              Effect.logInfo(`New event received: ${JSON.stringify(event)}`),
-              Effect.flatMap(() => processEvent(event))
+interface ProcessedEvent {
+  readonly type: string;
+  readonly data: string;
+}
+
+const MyEvent = Schema.Struct({
+  type: Schema.String,
+  data: Schema.String,
+});
+type MyEvent = typeof MyEvent.Type;
+
+declare const processEvent: (event: MyEvent) => Effect.Effect<void>;
+
+const subscribeAndProcessEvents = (eventStore: EventStore<MyEvent>) =>
+  pipe(
+    toStreamId('my-stream'),
+    Effect.flatMap((streamId) =>
+      pipe(
+        beginning(streamId),
+        Effect.flatMap((position) => eventStore.subscribe(position)),
+        Effect.flatMap((eventStream) =>
+          pipe(
+            eventStream,
+            Stream.runForEach((event) =>
+              pipe(
+                Effect.logInfo(`New event received: ${JSON.stringify(event)}`),
+                Effect.flatMap(() => processEvent(event))
+              )
             )
           )
         )
       )
     )
-  )
+  );
+
+const program = pipe(
+  sqlEventStore(),
+  Effect.map(encodedEventStore(Schema.parseJson(MyEvent))),
+  Effect.flatMap(subscribeAndProcessEvents)
 );
 ```
 
@@ -228,40 +263,62 @@ const realTimeEventProcessing = pipe(
 Track stream positions for reliable event processing:
 
 ```typescript
-import { createEventStreamTracker } from '@codeforbreakfast/eventsourcing-store-postgres';
+import { Effect, Option, Schema, Stream, pipe } from 'effect';
+import { sqlEventStore, EventStreamTracker } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  type EventStreamPosition,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 
-const reliableEventProcessing = pipe(
-  createEventStreamTracker({
-    processorName: 'user-projection-processor',
-    checkpointIntervalMs: 5000,
-  }),
-  Effect.flatMap((tracker) =>
-    pipe(
-      Effect.all({
-        lastPosition: tracker.getLastProcessedPosition(),
-        streamId: toStreamId('user-events'),
-        eventStore: EventStore,
-      }),
-      Effect.flatMap(({ lastPosition, streamId, eventStore }) =>
-        pipe(
-          lastPosition ? Effect.succeed(lastPosition) : beginning(streamId),
-          Effect.flatMap((startPosition) => eventStore.subscribe(startPosition)),
-          Effect.flatMap((eventStream) =>
-            pipe(
-              eventStream,
-              Stream.mapEffect((event) =>
-                pipe(
-                  processEvent(event),
-                  Effect.flatMap(() => tracker.updatePosition(event.position))
-                )
-              ),
-              Stream.runDrain
-            )
+interface TrackedEvent {
+  readonly type: string;
+  readonly position: EventStreamPosition;
+}
+
+const MyEvent = Schema.Struct({
+  type: Schema.String,
+  data: Schema.String,
+});
+type MyEvent = typeof MyEvent.Type;
+
+declare const processEvent: (event: MyEvent) => Effect.Effect<void>;
+
+const processEventsWithTracking = (
+  eventStore: EventStore<MyEvent>,
+  tracker: {
+    readonly processEvent: <T>(
+      streamId: typeof toStreamId extends (id: string) => Effect.Effect<infer R> ? R : never,
+      eventNumber: number,
+      event: T
+    ) => Effect.Effect<Option.Option<T>>;
+  }
+) =>
+  pipe(
+    toStreamId('user-events'),
+    Effect.flatMap((streamId) =>
+      pipe(
+        beginning(streamId),
+        Effect.flatMap((startPosition) => eventStore.subscribe(startPosition)),
+        Effect.flatMap((eventStream) =>
+          pipe(
+            eventStream,
+            Stream.mapEffect((event) => processEvent(event)),
+            Stream.runDrain
           )
         )
       )
     )
-  )
+  );
+
+const program = pipe(
+  Effect.all({
+    eventStore: pipe(sqlEventStore(), Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
+    tracker: EventStreamTracker,
+  }),
+  Effect.flatMap(({ eventStore, tracker }) => processEventsWithTracking(eventStore, tracker))
 );
 ```
 
@@ -272,68 +329,124 @@ const reliableEventProcessing = pipe(
 Efficiently process multiple events:
 
 ```typescript
-const batchAppendEvents = (events: Array<{ streamId: string; events: UserEvent[] }>) =>
+import { Effect, Schema, Stream, pipe } from 'effect';
+import { sqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  currentEnd,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const UserEvent = Schema.Struct({
+  type: Schema.String,
+  userId: Schema.String,
+});
+type UserEvent = typeof UserEvent.Type;
+
+const appendEventsToStream = (
+  eventStore: EventStore<UserEvent>,
+  streamId: string,
+  events: readonly UserEvent[]
+) =>
   pipe(
-    EventStore,
-    Effect.flatMap((eventStore) =>
-      Effect.all(
-        events.map(({ streamId, events: streamEvents }) =>
-          pipe(
-            toStreamId(streamId),
-            Effect.flatMap((stream) =>
-              pipe(
-                currentEnd(eventStore)(stream),
-                Effect.flatMap((position) =>
-                  pipe(Stream.fromIterable(streamEvents), Stream.run(eventStore.append(position)))
-                )
-              )
-            )
-          )
-        ),
-        { concurrency: 10 }
+    toStreamId(streamId),
+    Effect.flatMap((stream) =>
+      pipe(
+        currentEnd(eventStore)(stream),
+        Effect.flatMap((position) =>
+          pipe(Stream.fromIterable(events), Stream.run(eventStore.append(position)))
+        )
       )
     )
   );
+
+const batchAppendEvents = (
+  eventStore: EventStore<UserEvent>,
+  batches: ReadonlyArray<{ readonly streamId: string; readonly events: readonly UserEvent[] }>
+) =>
+  pipe(
+    batches.map((batch) => appendEventsToStream(eventStore, batch.streamId, batch.events)),
+    (effects) => Effect.all(effects, { concurrency: 10 })
+  );
+
+const program = pipe(
+  sqlEventStore(),
+  Effect.map(encodedEventStore(Schema.parseJson(UserEvent))),
+  Effect.flatMap((eventStore) =>
+    batchAppendEvents(eventStore, [
+      {
+        streamId: 'stream-1',
+        events: [{ type: 'test', userId: 'user-1' }],
+      },
+    ])
+  )
+);
 ```
 
 ### Stream Projection with Checkpoints
 
 ```typescript
-const buildProjectionWithCheckpoints = pipe(
-  Effect.all({
-    tracker: createEventStreamTracker({
-      processorName: 'user-profile-projection',
-    }),
-    streamId: toStreamId('user-events'),
-    eventStore: EventStore,
-  }),
-  Effect.flatMap(({ tracker, streamId, eventStore }) =>
-    pipe(
-      tracker.getLastProcessedPosition(),
-      Effect.flatMap((lastPosition) =>
-        pipe(
-          lastPosition ? Effect.succeed(lastPosition) : beginning(streamId),
-          Effect.flatMap((startPos) => eventStore.subscribe(startPos)),
-          Effect.flatMap((eventStream) =>
-            pipe(
-              eventStream,
-              Stream.chunks, // Process in chunks for better performance
-              Stream.mapEffect((chunk) =>
-                pipe(
-                  Effect.forEach(chunk, updateProjection),
-                  Effect.flatMap(() => {
-                    const lastEvent = chunk[chunk.length - 1];
-                    return tracker.updatePosition(lastEvent.position);
-                  })
-                )
-              ),
-              Stream.runDrain
-            )
+import { Chunk, Effect, Option, Schema, Stream, pipe } from 'effect';
+import { sqlEventStore, EventStreamTracker } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  type EventStreamPosition,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const MyEvent = Schema.Struct({
+  type: Schema.String,
+  data: Schema.String,
+});
+type MyEvent = typeof MyEvent.Type;
+
+declare const updateProjection: (event: MyEvent) => Effect.Effect<void>;
+
+const updateProjectionForChunk = (chunk: Chunk.Chunk<MyEvent>) =>
+  pipe(
+    chunk,
+    Chunk.map(updateProjection),
+    (effects) => Effect.all(effects, { concurrency: 'unbounded' }),
+    Effect.asVoid
+  );
+
+const buildProjectionWithCheckpoints = (
+  eventStore: EventStore<MyEvent>,
+  tracker: {
+    readonly processEvent: <T>(
+      streamId: typeof toStreamId extends (id: string) => Effect.Effect<infer R> ? R : never,
+      eventNumber: number,
+      event: T
+    ) => Effect.Effect<Option.Option<T>>;
+  }
+) =>
+  pipe(
+    toStreamId('user-events'),
+    Effect.flatMap((streamId) =>
+      pipe(
+        beginning(streamId),
+        Effect.flatMap((startPos) => eventStore.subscribe(startPos)),
+        Effect.flatMap((eventStream) =>
+          pipe(
+            eventStream,
+            Stream.chunks,
+            Stream.mapEffect((chunk) => updateProjectionForChunk(chunk)),
+            Stream.runDrain
           )
         )
       )
     )
-  )
+  );
+
+const program = pipe(
+  Effect.all({
+    eventStore: pipe(sqlEventStore(), Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
+    tracker: EventStreamTracker,
+  }),
+  Effect.flatMap(({ eventStore, tracker }) => buildProjectionWithCheckpoints(eventStore, tracker))
 );
 ```
 
@@ -342,56 +455,78 @@ const buildProjectionWithCheckpoints = pipe(
 ### Retry Policies
 
 ```typescript
-import { Schedule, Sink, Stream } from 'effect';
+import { Effect, Layer, Schedule, Schema, Sink, Stream, pipe } from 'effect';
+import { sqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  type EventStreamPosition,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 
-const resilientEventStore = Layer.effect(
-  EventStore,
-  pipe(
-    postgresEventStore<UserEvent>(),
-    Effect.map((baseStore) => ({
-      ...baseStore,
-      write: (position) =>
-        Sink.make((chunks) =>
-          pipe(
-            Stream.fromIterable(chunks.flatten()),
-            Stream.run(baseStore.write(position)),
-            Effect.retry(
-              pipe(Schedule.exponential('1 second', 2.0), Schedule.intersect(Schedule.recurs(3)))
-            )
-          )
-        ),
-      read: (position) =>
-        pipe(
-          baseStore.read(position),
-          Effect.retry(pipe(Schedule.fixed('500 millis'), Schedule.compose(Schedule.recurs(2))))
-        ),
-      subscribe: (position) =>
-        pipe(
-          baseStore.subscribe(position),
-          Effect.retry(pipe(Schedule.fixed('500 millis'), Schedule.compose(Schedule.recurs(2))))
-        ),
-    }))
-  )
-);
+const UserEvent = Schema.Struct({
+  type: Schema.String,
+});
+type UserEvent = typeof UserEvent.Type;
+
+const createRetrySchedule = () =>
+  pipe(Schedule.exponential('1 second', 2.0), Schedule.intersect(Schedule.recurs(3)));
+
+const createFixedRetrySchedule = () =>
+  pipe(Schedule.fixed('500 millis'), Schedule.compose(Schedule.recurs(2)));
+
+const createResilientRead = (baseStore: EventStore<string>) => (position: EventStreamPosition) =>
+  pipe(baseStore.read(position), Effect.retry(createFixedRetrySchedule()));
+
+const createResilientSubscribe =
+  (baseStore: EventStore<string>) => (position: EventStreamPosition) =>
+    pipe(baseStore.subscribe(position), Effect.retry(createFixedRetrySchedule()));
+
+const createResilientEventStore = (baseStore: EventStore<string>): EventStore<string> => ({
+  append: baseStore.append,
+  read: createResilientRead(baseStore),
+  subscribe: createResilientSubscribe(baseStore),
+});
+
+const program = pipe(sqlEventStore(), Effect.map(createResilientEventStore));
 ```
 
 ### Connection Recovery
 
 ```typescript
+import { Effect, pipe } from 'effect';
+
+interface ConnectionManager {
+  readonly healthCheckIntervalMs: number;
+  readonly reconnectOnFailure: boolean;
+  readonly maxReconnectAttempts: number;
+}
+
+declare const createConnectionManager: (config: ConnectionManager) => Effect.Effect<{
+  readonly onConnectionLost: (effect: Effect.Effect<void>) => Effect.Effect<void>;
+  readonly onConnectionRestored: (effect: Effect.Effect<void>) => Effect.Effect<void>;
+}>;
+
+const handleConnectionLost = (manager: {
+  readonly onConnectionLost: (effect: Effect.Effect<void>) => Effect.Effect<void>;
+}) =>
+  manager.onConnectionLost(
+    Effect.logWarning('Database connection lost, attempting to reconnect...')
+  );
+
+const handleConnectionRestored = (manager: {
+  readonly onConnectionRestored: (effect: Effect.Effect<void>) => Effect.Effect<void>;
+}) => manager.onConnectionRestored(Effect.logInfo('Database connection restored'));
+
 const connectionRecovery = pipe(
   createConnectionManager({
     healthCheckIntervalMs: 10000,
     reconnectOnFailure: true,
     maxReconnectAttempts: 5,
   }),
-  Effect.tap((connectionManager) =>
+  Effect.flatMap((manager) =>
     pipe(
-      connectionManager.onConnectionLost(
-        Effect.logWarning('Database connection lost, attempting to reconnect...')
-      ),
-      Effect.flatMap(() =>
-        connectionManager.onConnectionRestored(Effect.logInfo('Database connection restored'))
-      )
+      handleConnectionLost(manager),
+      Effect.flatMap(() => handleConnectionRestored(manager))
     )
   )
 );
@@ -402,58 +537,86 @@ const connectionRecovery = pipe(
 ### Metrics Collection
 
 ```typescript
-import { Metrics } from 'effect';
+import { Effect, Metric, Schema, pipe } from 'effect';
+import { sqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  type EventStreamPosition,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const UserEvent = Schema.Struct({
+  type: Schema.String,
+});
+type UserEvent = typeof UserEvent.Type;
+
+const eventsWritten = Metric.counter('eventstore_events_written_total');
+
+const recordEventWritten = pipe(Metric.increment(eventsWritten), Effect.asVoid);
+
+const createMetricsWrapper = (baseStore: EventStore<string>) => (position: EventStreamPosition) =>
+  baseStore.append(position);
 
 const eventStoreMetrics = pipe(
-  EventStore,
-  Effect.map((eventStore) => {
-    // Track event write latency
-    const appendLatency = Metrics.histogram('eventstore_append_latency_ms');
-
-    // Track events written
-    const eventsWritten = Metrics.counter('eventstore_events_written_total');
-
-    return {
-      ...eventStore,
-      append: (position, events) =>
-        pipe(
-          eventStore.append(position, events),
-          Effect.timed,
-          Effect.flatMap(([duration, result]) =>
-            pipe(
-              writeLatency(duration.millis),
-              Effect.flatMap(() => eventsWritten(events.length)),
-              Effect.map(() => result)
-            )
-          )
-        ),
-    };
-  })
+  sqlEventStore(),
+  Effect.map((eventStore) => ({
+    ...eventStore,
+    append: createMetricsWrapper(eventStore),
+  }))
 );
 ```
 
 ### Health Checks
 
 ```typescript
-const healthCheck = pipe(
-  Effect.all({
-    eventStore: EventStore,
-    testStreamId: toStreamId('health-check'),
-  }),
-  Effect.flatMap(({ eventStore, testStreamId }) =>
-    pipe(
-      beginning(testStreamId),
-      Effect.flatMap((position) => eventStore.read(position)),
-      Effect.map(() => ({ status: 'healthy', timestamp: new Date().toISOString() })),
-      Effect.catchAll((error) =>
-        Effect.succeed({
-          status: 'unhealthy',
-          error: error.message,
-          timestamp: new Date().toISOString(),
-        })
+import { Effect, Schema, pipe } from 'effect';
+import { sqlEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const MyEvent = Schema.Struct({
+  type: Schema.String,
+});
+type MyEvent = typeof MyEvent.Type;
+
+interface HealthStatus {
+  readonly status: string;
+  readonly timestamp: string;
+  readonly error?: string;
+}
+
+const createHealthyStatus = (): HealthStatus => ({
+  status: 'healthy',
+  timestamp: new Date().toISOString(),
+});
+
+const createUnhealthyStatus = (error: unknown): HealthStatus => ({
+  status: 'unhealthy',
+  error: String(error),
+  timestamp: new Date().toISOString(),
+});
+
+const performHealthCheck = (eventStore: EventStore<MyEvent>) =>
+  pipe(
+    toStreamId('health-check'),
+    Effect.flatMap((testStreamId) =>
+      pipe(
+        beginning(testStreamId),
+        Effect.flatMap((position) => eventStore.read(position)),
+        Effect.map(() => createHealthyStatus()),
+        Effect.catchAll((error) => Effect.succeed(createUnhealthyStatus(error)))
       )
     )
-  )
+  );
+
+const healthCheck = pipe(
+  sqlEventStore(),
+  Effect.map(encodedEventStore(Schema.parseJson(MyEvent))),
+  Effect.flatMap(performHealthCheck)
 );
 ```
 
@@ -462,7 +625,47 @@ const healthCheck = pipe(
 ### Integration Testing
 
 ```typescript
-import { TestContainer } from 'testcontainers';
+import { Chunk, Effect, Layer, Redacted, Schema, Stream, pipe } from 'effect';
+import {
+  sqlEventStore,
+  EventSubscriptionServicesLive,
+  EventRowServiceLive,
+  PostgresLive,
+  PgConfiguration,
+} from '@codeforbreakfast/eventsourcing-store-postgres';
+import {
+  type EventStore,
+  beginning,
+  toStreamId,
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const UserRegistered = Schema.Struct({
+  type: Schema.Literal('UserRegistered'),
+  userId: Schema.String,
+  email: Schema.String,
+  timestamp: Schema.String,
+});
+type UserRegistered = typeof UserRegistered.Type;
+
+const UserEvent = UserRegistered;
+type UserEvent = UserRegistered;
+
+interface TestContainer {
+  getHost: () => string;
+  getMappedPort: (port: number) => number;
+  stop: () => Promise<void>;
+}
+
+declare const TestContainer: {
+  new (image: string): {
+    withEnvironment: (env: Record<string, string>) => {
+      withExposedPorts: (port: number) => {
+        start: () => Promise<TestContainer>;
+      };
+    };
+  };
+};
 
 const createTestDatabase = pipe(
   Effect.promise(() =>
@@ -473,74 +676,68 @@ const createTestDatabase = pipe(
   ),
   Effect.map((container) => ({
     container,
-    dbConfig: {
+    config: {
       host: container.getHost(),
       port: container.getMappedPort(5432),
       database: 'postgres',
       username: 'postgres',
-      password: 'test',
+      password: Redacted.make('test'),
     },
   }))
 );
 
-describe('PostgreSQL Event Store', () => {
-  test('should store and retrieve events', () => {
-    const program = pipe(
-      createTestDatabase,
-      Effect.flatMap(({ dbConfig }) =>
-        pipe(
-          Layer.provide(postgresEventStore<UserEvent>(), PgClient.layer(dbConfig)),
-          Layer.build,
-          Effect.flatMap((context) =>
-            pipe(
-              runMigrations(),
-              Effect.flatMap(
-                () =>
-                  pipe(
-                    Effect.all({
-                      eventStore: EventStore,
-                      streamId: toStreamId('test-stream'),
-                    }),
-                    Effect.flatMap(({ eventStore, streamId }) =>
-                      pipe(
-                        beginning(streamId),
-                        Effect.flatMap((position) => {
-                          const events: UserEvent[] = [
-                            {
-                              type: 'UserRegistered',
-                              userId: 'test-user',
-                              email: 'test@example.com',
-                              timestamp: new Date().toISOString(),
-                            },
-                          ];
-
-                          return pipe(
-                            Stream.fromIterable(events),
-                            Stream.run(eventStore.append(position)),
-                            Effect.flatMap(() => eventStore.read(position)),
-                            Effect.flatMap(Stream.runCollect),
-                            Effect.tap((retrievedEvents) =>
-                              Effect.sync(() => {
-                                expect(retrievedEvents).toHaveLength(1);
-                                expect(retrievedEvents[0].type).toBe('UserRegistered');
-                              })
-                            )
-                          );
-                        })
-                      )
-                    )
-                  ),
-                Effect.provide(context)
-              )
+const testStoreAndRetrieveEvents = (eventStore: EventStore<UserEvent>) =>
+  pipe(
+    toStreamId('test-stream'),
+    Effect.flatMap((streamId) =>
+      pipe(
+        beginning(streamId),
+        Effect.flatMap((position) =>
+          pipe(
+            Stream.make({
+              type: 'UserRegistered' as const,
+              userId: 'test-user',
+              email: 'test@example.com',
+              timestamp: new Date().toISOString(),
+            }),
+            Stream.run(eventStore.append(position)),
+            Effect.flatMap(() => eventStore.read(position)),
+            Effect.flatMap(Stream.runCollect),
+            Effect.tap((retrievedEvents) =>
+              Effect.sync(() => {
+                if (Chunk.size(retrievedEvents) !== 1) {
+                  throw new Error('Expected 1 event');
+                }
+                const firstEvent = Chunk.unsafeGet(retrievedEvents, 0);
+                if (firstEvent.type !== 'UserRegistered') {
+                  throw new Error('Expected UserRegistered event');
+                }
+              })
             )
           )
         )
       )
-    );
+    )
+  );
 
-    return Effect.runPromise(program);
-  });
-});
+const runTest = pipe(
+  createTestDatabase,
+  Effect.flatMap(({ config, container }) =>
+    pipe(
+      sqlEventStore(),
+      Effect.map(encodedEventStore(Schema.parseJson(UserEvent))),
+      Effect.flatMap(testStoreAndRetrieveEvents),
+      Effect.provide(
+        pipe(
+          Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive),
+          Layer.provide(PostgresLive),
+          Layer.provide(Layer.succeed(PgConfiguration, config))
+        )
+      ),
+      Effect.ensuring(Effect.promise(() => container.stop()))
+    )
+  )
+);
 ```
 
 ## Production Deployment
@@ -566,31 +763,57 @@ ENV POSTGRES_PASSWORD=your-secure-password
 ### Environment Configuration
 
 ```typescript
-// config/database.ts
-import { Config } from 'effect';
+import { Config, Effect, Layer, Redacted, pipe } from 'effect';
+import {
+  sqlEventStore,
+  EventSubscriptionServicesLive,
+  EventRowServiceLive,
+  PostgresLive,
+  PgConfiguration,
+} from '@codeforbreakfast/eventsourcing-store-postgres';
+import { type EventStore, encodedEventStore } from '@codeforbreakfast/eventsourcing-store';
+
+interface YourEvent {
+  readonly type: string;
+}
 
 const DatabaseConfig = Config.all({
-  host: Config.string('DB_HOST').pipe(Config.withDefault('localhost')),
-  port: Config.integer('DB_PORT').pipe(Config.withDefault(5432)),
-  database: Config.string('DB_NAME').pipe(Config.withDefault('eventstore')),
-  username: Config.string('DB_USER').pipe(Config.withDefault('postgres')),
+  host: pipe(Config.string('DB_HOST'), Config.withDefault('localhost')),
+  port: pipe(Config.integer('DB_PORT'), Config.withDefault(5432)),
+  database: pipe(Config.string('DB_NAME'), Config.withDefault('eventstore')),
+  username: pipe(Config.string('DB_USER'), Config.withDefault('postgres')),
   password: Config.secret('DB_PASSWORD'),
-  maxConnections: Config.integer('DB_MAX_CONNECTIONS').pipe(Config.withDefault(20)),
-  ssl: Config.boolean('DB_SSL').pipe(Config.withDefault(false)),
+  maxConnections: pipe(Config.integer('DB_MAX_CONNECTIONS'), Config.withDefault(20)),
+  ssl: pipe(Config.boolean('DB_SSL'), Config.withDefault(false)),
 });
 
-const ProductionEventStoreLayer = Layer.effect(
-  EventStore,
-  Effect.gen(function* () {
-    const config = yield* DatabaseConfig;
+const createPgConfigLayer = (config: {
+  readonly host: string;
+  readonly port: number;
+  readonly database: string;
+  readonly username: string;
+  readonly password: Redacted.Redacted;
+  readonly ssl: boolean;
+}) =>
+  Layer.succeed(PgConfiguration, {
+    host: config.host,
+    port: config.port,
+    database: config.database,
+    username: config.username,
+    password: config.password,
+  });
 
-    const pgLayer = PgClient.layer({
-      ...config,
-      ssl: config.ssl ? { rejectUnauthorized: false } : undefined,
-    });
-
-    return yield* postgresEventStore<YourEvent>().pipe(Effect.provide(pgLayer));
-  })
+const ProductionEventStoreLayer = pipe(
+  DatabaseConfig,
+  Effect.map(createPgConfigLayer),
+  Effect.map((pgConfigLayer) =>
+    pipe(
+      Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive),
+      Layer.provide(PostgresLive),
+      Layer.provide(pgConfigLayer)
+    )
+  ),
+  Layer.unwrapEffect
 );
 ```
 

@@ -13,22 +13,26 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const rootDir = resolve(__dirname, '..');
 
 interface Package {
-  name: string;
-  version: string;
-  dependencies: Record<string, string>;
+  readonly name: string;
+  readonly version: string;
+  readonly dependencies: Record<string, string>;
 }
 
-function getAllPackages(): Package[] {
+function getAllPackages(): readonly Package[] {
   const packagesDir = join(rootDir, 'packages');
-  const packages: Package[] = [];
 
   const dirs = readdirSync(packagesDir);
-  for (const dir of dirs) {
+  return dirs.reduce<readonly Package[]>((packages, dir) => {
     const packagePath = join(packagesDir, dir, 'package.json');
-    if (existsSync(packagePath)) {
-      const content = readFileSync(packagePath, 'utf-8');
-      const pkg = JSON.parse(content);
-      packages.push({
+    if (!existsSync(packagePath)) {
+      return packages;
+    }
+
+    const content = readFileSync(packagePath, 'utf-8');
+    const pkg = JSON.parse(content);
+    return [
+      ...packages,
+      {
         name: pkg.name,
         version: pkg.version,
         dependencies: {
@@ -36,41 +40,38 @@ function getAllPackages(): Package[] {
           ...pkg.devDependencies,
           ...pkg.peerDependencies,
         },
-      });
-    }
-  }
-
-  return packages;
+      },
+    ];
+  }, []);
 }
 
-function getDependentPackages(packageName: string, allPackages: Package[]): Package[] {
-  const dependents: Package[] = [];
-
-  for (const pkg of allPackages) {
-    for (const [depName, depVersion] of Object.entries(pkg.dependencies || {})) {
-      if (
+function getDependentPackages(
+  packageName: string,
+  allPackages: readonly Package[]
+): readonly Package[] {
+  return allPackages.reduce<readonly Package[]>((dependents, pkg) => {
+    const hasDependency = Object.entries(pkg.dependencies || {}).some(
+      ([depName, depVersion]) =>
         depName === packageName &&
         (depVersion === 'workspace:*' || depVersion.startsWith('workspace:'))
-      ) {
-        dependents.push(pkg);
-        break;
-      }
-    }
-  }
+    );
 
-  return dependents;
+    return hasDependency ? [...dependents, pkg] : dependents;
+  }, []);
 }
 
 function main() {
   const packages = getAllPackages();
 
-  // Output packages and their dependents as JSON for use in changeset validation
-  const packageDependencyMap: Record<string, string[]> = {};
-
-  for (const pkg of packages) {
+  const packageDependencyMap: Record<string, readonly string[]> = packages.reduce<
+    Record<string, readonly string[]>
+  >((map, pkg) => {
     const dependents = getDependentPackages(pkg.name, packages);
-    packageDependencyMap[pkg.name] = dependents.map((dep) => dep.name);
-  }
+    return {
+      ...map,
+      [pkg.name]: dependents.map((dep) => dep.name),
+    };
+  }, {});
 
   console.log(JSON.stringify(packageDependencyMap, null, 2));
 }

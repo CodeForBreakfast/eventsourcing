@@ -21,20 +21,9 @@ bun add -D @codeforbreakfast/eventsourcing-testing-contracts
 
 ### 1. Domain Contract Tests
 
-Test pure event sourcing domain behaviors that any implementation must respect:
+Test pure event sourcing domain behaviors that any implementation must respect.
 
-```typescript
-import { runDomainContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-
-runDomainContractTests('My Implementation', () => {
-  return Effect.succeed({
-    processCommand: (cmd) => myBackend.processCommand(cmd),
-    getEventCount: (streamId) => myBackend.getEventCount(streamId),
-    getLastEventNumber: (streamId) => myBackend.getLastEventNumber(streamId),
-    reset: () => myBackend.reset(),
-  });
-});
-```
+Note: This package currently focuses on transport-layer testing contracts. For domain-level event sourcing testing, you would need to implement your own test suite based on your aggregate and command handling logic.
 
 **Required Behaviors:**
 
@@ -89,24 +78,327 @@ Note: These examples focus on client-server integration tests. Dedicated server-
 
 #### Client-Server Integration Contracts
 
-Test bidirectional communication between paired client and server transports. For complete integration examples, see:
+Test bidirectional communication between paired client and server transports.
 
-**WebSocket Integration:**
+**Real-World Implementations:**
 
-- `/packages/eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts` (lines 38-95)
-- Shows `TransportPair` implementation with random port allocation
-- Demonstrates real WebSocket server/client coordination
-- Includes proper error mapping and connection state management
-- Line 116: `runClientServerContractTests('WebSocket', createWebSocketTestContext)`
+- [WebSocket integration tests](../eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts) - Lines 88-134
+- [InMemory integration tests](../eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts) - Lines 105-161
 
-**InMemory Integration:**
+**Example: WebSocket Transport Integration**
 
-- `/packages/eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts` (lines 37-104)
-- Shows shared server instance pattern for synchronized testing
-- Demonstrates direct connection without network protocols
-- Line 126: `runClientServerContractTests('InMemory', createInMemoryTestContext)`
+```typescript
+import { Effect, Stream, pipe } from 'effect';
+import {
+  TransportMessage,
+  ConnectionState,
+  makeTransportMessage,
+  Server,
+} from '@codeforbreakfast/eventsourcing-transport';
+import {
+  runClientServerContractTests,
+  type ClientServerTestContext,
+  type TransportPair,
+  type ClientTransport,
+  type ServerTransport,
+  waitForConnectionState as defaultWaitForConnectionState,
+  collectMessages as defaultCollectMessages,
+} from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-Both implementations also include transport-specific tests (lines 122+ in WebSocket, lines 132+ in InMemory) that test implementation details beyond the standard contracts.
+declare const WebSocketConnector: {
+  connect: (url: string) => Effect.Effect<
+    {
+      readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+      readonly publish: (msg: TransportMessage) => Effect.Effect<void, Error, never>;
+      readonly subscribe: (
+        filter?: (msg: TransportMessage) => boolean
+      ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never>;
+    },
+    Error,
+    never
+  >;
+};
+
+declare const WebSocketAcceptor: {
+  make: (config: {
+    port: number;
+    host: string;
+  }) => Effect.Effect<{ start: () => Effect.Effect<Server.Transport, Error, never> }, Error, never>;
+};
+
+const mapConnectionForContract = (conn: Server.ClientConnection) => ({
+  id: String(conn.clientId),
+  transport: {
+    connectionState: conn.transport.connectionState,
+    publish: (msg: TransportMessage) =>
+      pipe(
+        msg,
+        conn.transport.publish,
+        Effect.mapError(() => new Error('Failed to publish message'))
+      ),
+    subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+      pipe(
+        filter,
+        conn.transport.subscribe,
+        Effect.mapError(() => new Error('Failed to subscribe'))
+      ),
+  } satisfies ClientTransport,
+});
+
+const mapServerTransportForContract = (transport: Server.Transport): ServerTransport => ({
+  connections: pipe(transport.connections, Stream.map(mapConnectionForContract)),
+  broadcast: (message: TransportMessage) =>
+    pipe(
+      message,
+      transport.broadcast,
+      Effect.mapError(() => new Error('Failed to broadcast'))
+    ),
+});
+
+const mapClientTransportForContract = (transport: {
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+  readonly publish: (msg: TransportMessage) => Effect.Effect<void, Error, never>;
+  readonly subscribe: (
+    filter?: (msg: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, Error, never>;
+}): ClientTransport => ({
+  connectionState: transport.connectionState,
+  publish: (msg: TransportMessage) =>
+    pipe(
+      msg,
+      transport.publish,
+      Effect.mapError(() => new Error('Failed to publish message'))
+    ),
+  subscribe: (filter?: (msg: TransportMessage) => boolean) =>
+    pipe(
+      filter,
+      transport.subscribe,
+      Effect.mapError(() => new Error('Failed to subscribe'))
+    ),
+});
+
+const createWebSocketTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
+  Effect.succeed({
+    makeTransportPair: (): TransportPair => {
+      const port = Math.floor(Math.random() * (65535 - 49152) + 49152);
+      const host = 'localhost';
+      const url = `ws://${host}:${port}`;
+
+      return {
+        makeServer: () =>
+          pipe(
+            { port, host },
+            WebSocketAcceptor.make,
+            Effect.flatMap((acceptor) => acceptor.start()),
+            Effect.map(mapServerTransportForContract)
+          ),
+
+        makeClient: () =>
+          pipe(
+            url,
+            WebSocketConnector.connect,
+            Effect.map(mapClientTransportForContract),
+            Effect.mapError(() => new Error('Failed to connect to server'))
+          ),
+      };
+    },
+
+    waitForConnectionState: (
+      transport: ClientTransport,
+      expectedState: ConnectionState,
+      timeoutMs?: number
+    ) => defaultWaitForConnectionState(transport.connectionState, expectedState, timeoutMs),
+
+    collectMessages: defaultCollectMessages,
+
+    makeTestMessage: (type: string, payload: unknown) => {
+      const id = `test-${Date.now()}-${Math.random()}`;
+      return makeTransportMessage(id, type, JSON.stringify(payload));
+    },
+  });
+
+runClientServerContractTests('WebSocket', createWebSocketTestContext);
+```
+
+**Example: InMemory Transport Integration**
+
+```typescript
+import { Effect, Stream, pipe } from 'effect';
+import {
+  TransportMessage,
+  ConnectionState,
+  makeTransportMessage,
+} from '@codeforbreakfast/eventsourcing-transport';
+import {
+  runClientServerContractTests,
+  type ClientServerTestContext,
+  type TransportPair,
+  type ClientTransport,
+  type ServerTransport,
+  waitForConnectionState as defaultWaitForConnectionState,
+  collectMessages as defaultCollectMessages,
+} from '@codeforbreakfast/eventsourcing-testing-contracts';
+
+type InMemoryServer = {
+  readonly connections: Stream.Stream<
+    {
+      readonly clientId: string;
+      readonly transport: {
+        readonly connectionState: Stream.Stream<ConnectionState>;
+        readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+        readonly subscribe: (
+          filter?: (msg: TransportMessage) => boolean
+        ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+      };
+    },
+    never,
+    never
+  >;
+  readonly broadcast: (message: TransportMessage) => Effect.Effect<void, unknown>;
+  readonly connector: () => Effect.Effect<
+    {
+      readonly connectionState: Stream.Stream<ConnectionState>;
+      readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+      readonly subscribe: (
+        filter?: (msg: TransportMessage) => boolean
+      ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+    },
+    never,
+    never
+  >;
+};
+
+declare const InMemoryAcceptor: {
+  make: () => Effect.Effect<
+    { start: () => Effect.Effect<InMemoryServer, never, never> },
+    never,
+    never
+  >;
+};
+
+const wrapPublish =
+  (transport: { readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown> }) =>
+  (msg: TransportMessage) =>
+    pipe(
+      msg,
+      transport.publish,
+      Effect.mapError(() => new Error('Failed to publish message'))
+    );
+
+const wrapSubscribe =
+  (transport: {
+    readonly subscribe: (
+      filter?: (msg: TransportMessage) => boolean
+    ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+  }) =>
+  (filter?: (msg: TransportMessage) => boolean) =>
+    pipe(
+      filter,
+      transport.subscribe,
+      Effect.mapError(() => new Error('Failed to subscribe'))
+    );
+
+const wrapBroadcast =
+  (transport: {
+    readonly broadcast: (message: TransportMessage) => Effect.Effect<void, unknown>;
+  }) =>
+  (message: TransportMessage) =>
+    pipe(
+      message,
+      transport.broadcast,
+      Effect.mapError(() => new Error('Failed to broadcast'))
+    );
+
+const mapServerConnection = (conn: {
+  readonly clientId: string;
+  readonly transport: {
+    readonly connectionState: Stream.Stream<ConnectionState>;
+    readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+    readonly subscribe: (
+      filter?: (msg: TransportMessage) => boolean
+    ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+  };
+}) => ({
+  id: String(conn.clientId),
+  transport: {
+    connectionState: conn.transport.connectionState,
+    publish: wrapPublish(conn.transport),
+    subscribe: wrapSubscribe(conn.transport),
+  } satisfies ClientTransport,
+});
+
+const mapServerConnections = (transport: InMemoryServer) =>
+  pipe(transport.connections, Stream.map(mapServerConnection));
+
+const createServerTransport = (transport: InMemoryServer): ServerTransport => ({
+  connections: mapServerConnections(transport),
+  broadcast: wrapBroadcast(transport),
+});
+
+const createClientTransport = (transport: {
+  readonly connectionState: Stream.Stream<ConnectionState>;
+  readonly publish: (msg: TransportMessage) => Effect.Effect<void, unknown>;
+  readonly subscribe: (
+    filter?: (msg: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage>, unknown>;
+}): ClientTransport => ({
+  connectionState: transport.connectionState,
+  publish: wrapPublish(transport),
+  subscribe: wrapSubscribe(transport),
+});
+
+const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, never, never> =>
+  Effect.succeed({
+    makeTransportPair: (): TransportPair => {
+      let serverInstance: InMemoryServer | null = null;
+
+      return {
+        makeServer: () =>
+          pipe(
+            InMemoryAcceptor.make(),
+            Effect.flatMap((acceptor) => acceptor.start()),
+            Effect.tap((server) =>
+              Effect.sync(() => {
+                serverInstance = server;
+              })
+            ),
+            Effect.map(createServerTransport)
+          ),
+
+        makeClient: () =>
+          pipe(
+            () => {
+              if (!serverInstance) {
+                throw new Error('Server must be created before client');
+              }
+              return serverInstance;
+            },
+            Effect.sync,
+            Effect.flatMap((server) => server.connector()),
+            Effect.map(createClientTransport),
+            Effect.mapError(() => new Error('Failed to connect to server'))
+          ),
+      };
+    },
+
+    waitForConnectionState: (
+      transport: ClientTransport,
+      expectedState: ConnectionState,
+      timeoutMs?: number
+    ) => defaultWaitForConnectionState(transport.connectionState, expectedState, timeoutMs),
+
+    collectMessages: defaultCollectMessages,
+
+    makeTestMessage: (type: string, payload: unknown) => {
+      const id = `test-${Date.now()}-${Math.random()}`;
+      return makeTransportMessage(id, type, JSON.stringify(payload));
+    },
+  });
+
+runClientServerContractTests('InMemory', createInMemoryTestContext);
+```
+
+Both implementations also include transport-specific tests that verify implementation details beyond the standard contracts.
 
 **Required Client Behaviors:**
 
@@ -128,18 +420,9 @@ Both implementations also include transport-specific tests (lines 122+ in WebSoc
 
 ### 3. Event Sourcing Transport Tests
 
-Extended transport tests specifically for event sourcing scenarios:
+Extended transport tests specifically for event sourcing scenarios.
 
-```typescript
-import { runEventSourcingTransportTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-
-runEventSourcingTransportTests('WebSocket', () => setupEventSourcingTransportContext(), {
-  supportsEventOrdering: true,
-  supportsEventReplay: true,
-  supportsStreamFiltering: true,
-  supportsMetrics: true,
-});
-```
+Note: This package currently focuses on generic transport contracts. Event sourcing-specific transport tests would be implemented as part of your event sourcing protocol layer.
 
 **Additional Features:**
 
@@ -151,82 +434,62 @@ runEventSourcingTransportTests('WebSocket', () => setupEventSourcingTransportCon
 
 ### 4. Integration Test Suite
 
-Test the integration between transport layer and event sourcing concepts:
+Test the integration between transport layer and event sourcing concepts.
 
-```typescript
-import { runIntegrationTestSuite } from '@codeforbreakfast/eventsourcing-testing-contracts';
-
-runIntegrationTestSuite(
-  'WebSocket',
-  () => EventTransportLive('ws://localhost:8080'),
-  setupMockServer, // Optional mock server for testing
-  {
-    supportsStreamFiltering: true,
-    supportsCommandPipelining: true,
-  }
-);
-```
-
-**Test Categories:**
-
-- **REQUIRED:** Must be correctly implemented by all transports
-- **OPTIONAL:** May be implemented based on transport capabilities
-- **IMPLEMENTATION-SPECIFIC:** Varies by transport type
+Note: This package provides the building blocks for transport testing. Integration tests combining transport with event sourcing protocols would be implemented in your protocol layer packages.
 
 ## Mock Implementations
 
 ### Mock Transport
 
 ```typescript
-import { createMockTransport } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import { Effect, pipe } from 'effect';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
+import { makeMockTransport } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-const mockTransport = await Effect.runPromise(createMockTransport());
+const program = Effect.scoped(
+  pipe(
+    makeMockTransport(),
+    Effect.flatMap((transport) => {
+      const testMessage = makeTransportMessage(
+        'msg-123',
+        'test-type',
+        JSON.stringify({ data: 'value' })
+      );
 
-// Use in your tests
-await Effect.runPromise(mockTransport.connect());
-await Effect.runPromise(mockTransport.publish(testMessage));
-```
+      return pipe(
+        transport.publish(testMessage),
+        Effect.flatMap(() => transport.subscribe()),
+        Effect.map((subscription) => ({ transport, subscription }))
+      );
+    })
+  )
+);
 
-### Mock Domain Context
-
-```typescript
-import { createMockDomainContext } from '@codeforbreakfast/eventsourcing-testing-contracts';
-
-const mockDomain = await Effect.runPromise(createMockDomainContext());
-
-// Test command processing
-const result = await Effect.runPromise(mockDomain.processCommand(testCommand));
+await Effect.runPromise(program);
 ```
 
 ## Test Data Generators
 
 ```typescript
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import {
-  generateStreamId,
-  createTestCommand,
-  createTestStreamEvent,
-  generateTestEvents,
+  generateMessageId,
+  makeTestMessage,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-// Generate unique stream IDs
-const streamId = generateStreamId('user-stream');
+// Generate unique message ID
+const messageId = generateMessageId();
 
-// Create test commands
-const command = createTestCommand(
-  { action: 'update', value: 42 },
-  {
-    aggregateName: 'User',
-    commandName: 'UpdateProfile',
-    position: { streamId, eventNumber: 0 },
-  }
+// Create transport message with proper typing
+const transportMessage = makeTransportMessage(
+  messageId,
+  'UserUpdated',
+  JSON.stringify({ userId: 123, value: 42 })
 );
 
-// Generate sequences of test events
-const events = generateTestEvents(
-  (i) => ({ type: 'UserUpdated', data: `update-${i}` }),
-  10,
-  streamId
-);
+// Create simple test message
+const simpleMessage = makeTestMessage('test-type', 'test-payload');
 ```
 
 ## Test Utilities
@@ -234,85 +497,96 @@ const events = generateTestEvents(
 ### Wait for Conditions
 
 ```typescript
+import { Effect, Ref, pipe } from 'effect';
 import { waitForCondition } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-await Effect.runPromise(
-  waitForCondition(
-    () => transport.isConnected(),
-    5000, // timeout ms
-    100 // check interval ms
-  )
+const program = pipe(
+  Ref.make(false),
+  Effect.flatMap((isConnectedRef) => waitForCondition(() => Ref.get(isConnectedRef), 5000, 100))
 );
+
+await Effect.runPromise(program);
 ```
 
 ### Collect Stream with Timeout
 
 ```typescript
+import { Effect, Stream, pipe } from 'effect';
 import { collectStreamWithTimeout } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-const events = await Effect.runPromise(
-  collectStreamWithTimeout(
-    eventStream,
-    5, // expected count
-    3000 // timeout ms
-  )
+const eventStream = Stream.make('event1', 'event2', 'event3');
+
+const events = await pipe(
+  eventStream,
+  (stream) => collectStreamWithTimeout(stream, 3000),
+  Effect.runPromise
 );
 ```
 
 ### Common Test Scenarios
 
-```typescript
-import { TestScenarios } from '@codeforbreakfast/eventsourcing-testing-contracts';
+For common test scenarios, refer to the contract test implementations in this package. The contract tests demonstrate best practices for:
 
-// Test basic command flow
-const result = await Effect.runPromise(TestScenarios.basicCommandFlow(processCommand));
-
-// Test optimistic concurrency
-const { result1, result2 } = await Effect.runPromise(
-  TestScenarios.optimisticConcurrency(processCommand)
-);
-```
+- Testing connection lifecycle management
+- Testing message publishing and subscription
+- Testing concurrent operations
+- Testing error handling scenarios
 
 ## Complete Example
 
+For complete working examples of using the transport contract tests, see the actual transport implementations:
+
+**WebSocket Transport Testing:**
+
+- [WebSocket integration tests](../eventsourcing-transport-websocket/src/tests/integration/client-server.test.ts)
+- Full implementation showing `runClientServerContractTests` usage
+- Demonstrates proper scope management and resource cleanup
+- Includes WebSocket-specific tests beyond the standard contracts
+
+**InMemory Transport Testing:**
+
+- [InMemory integration tests](../eventsourcing-transport-inmemory/src/tests/integration/client-server.test.ts)
+- Shows in-memory transport testing patterns
+- Demonstrates shared server instance pattern
+- Includes simpler testing scenarios without network concerns
+
+### Basic Usage Example
+
 ```typescript
-import { describe } from 'bun:test';
+import { describe, it, expect } from 'bun:test';
+import { Effect, pipe } from 'effect';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import {
-  runDomainContractTests,
-  runTransportContractTests,
-  runEventSourcingTransportTests,
-  runIntegrationTestSuite,
-  createMockDomainContext,
-  createMockTransport,
+  makeMockTransport,
+  collectMessages,
 } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-describe('My WebSocket Transport', () => {
-  // Test domain contracts
-  runDomainContractTests('WebSocket', () => createMockDomainContext());
+describe('My Transport', () => {
+  it('should publish and receive messages', async () => {
+    const program = Effect.scoped(
+      pipe(
+        makeMockTransport(),
+        Effect.flatMap((transport) => {
+          const message = makeTransportMessage(
+            'msg-123',
+            'test-type',
+            JSON.stringify({ data: 'value' })
+          );
 
-  // Test transport contracts
-  runTransportContractTests('WebSocket', () => createMockTransport());
+          return pipe(
+            transport.publish(message),
+            Effect.flatMap(() => transport.subscribe()),
+            Effect.flatMap((messageStream) => collectMessages(messageStream, 1, 1000)),
+            Effect.map((messages) => ({ messages, transport }))
+          );
+        }),
+        Effect.map(({ messages }) => messages)
+      )
+    );
 
-  // Test event sourcing specific transport features
-  runEventSourcingTransportTests('WebSocket', () => setupEventSourcingContext(), {
-    supportsEventOrdering: true,
-    supportsStreamFiltering: true,
-  });
-
-  // Test integration
-  runIntegrationTestSuite('WebSocket', () => makeTransportLayer(), setupMockServer, {
-    supportsStreamFiltering: true,
-  });
-
-  // Add implementation-specific tests
-  describe('WebSocket-specific features', () => {
-    it('should handle binary frames', () => {
-      // Custom test for WebSocket-specific behavior
-    });
-
-    it('should handle WebSocket close codes correctly', () => {
-      // Test proper handling of different close codes
-    });
+    const messages = await Effect.runPromise(program);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.type).toBe('test-type');
   });
 });
 ```
@@ -335,30 +609,54 @@ describe('My WebSocket Transport', () => {
 ### 3. Error Testing
 
 ```typescript
+import { Effect, pipe } from 'effect';
 import { expectError } from '@codeforbreakfast/eventsourcing-testing-contracts';
 
-// Test that an effect fails with expected error
-await Effect.runPromise(
-  expectError(invalidOperation(), (error) => error.message.includes('validation'))
+class ValidationError {
+  readonly _tag = 'ValidationError';
+  constructor(readonly message: string) {}
+}
+
+const invalidOperation = Effect.fail(new ValidationError('validation failed'));
+
+await pipe(
+  invalidOperation,
+  (effect) => expectError(effect, (error) => error._tag === 'ValidationError'),
+  Effect.runPromise
 );
 ```
 
 ### 4. Performance Testing
 
 ```typescript
-// Test command throughput
-const commands = generateTestCommands((i) => ({ value: i }), 100);
-const startTime = Date.now();
+import { Effect, pipe } from 'effect';
+import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
+import { makeMockTransport } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import { expect } from 'bun:test';
 
-const results = await Effect.runPromise(
-  Effect.all(
-    commands.map((cmd) => transport.sendCommand(cmd)),
-    { concurrency: 'unbounded' }
+const program = Effect.scoped(
+  pipe(
+    makeMockTransport(),
+    Effect.flatMap((transport) => {
+      const messages = Array.from({ length: 100 }, (_, i) =>
+        makeTransportMessage(`perf-test-${i}`, 'perf-test', JSON.stringify({ value: i }))
+      );
+
+      const startTime = Date.now();
+
+      return pipe(
+        Effect.all(
+          messages.map((msg) => transport.publish(msg)),
+          { concurrency: 'unbounded' }
+        ),
+        Effect.map(() => Date.now() - startTime)
+      );
+    })
   )
 );
 
-const duration = Date.now() - startTime;
-expect(duration).toBeLessThan(1000); // Should process 100 commands in <1s
+const duration = await Effect.runPromise(program);
+expect(duration).toBeLessThan(1000);
 ```
 
 ## Feature Support Matrix

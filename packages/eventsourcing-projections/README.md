@@ -24,14 +24,14 @@ bun add @codeforbreakfast/eventsourcing-projections effect
 ## Quick Start
 
 ```typescript
-import { Effect, Option, pipe } from 'effect';
+import { Context, Effect, Option, ParseResult, pipe } from 'effect';
 import {
   loadProjection,
+  MissingProjectionError,
   Projection,
   ProjectionEventStore,
 } from '@codeforbreakfast/eventsourcing-projections';
 
-// Define your events (same as in aggregates)
 interface UserRegistered {
   type: 'UserRegistered';
   userId: string;
@@ -49,7 +49,6 @@ interface UserEmailUpdated {
 
 type UserEvent = UserRegistered | UserEmailUpdated;
 
-// Define your projection data model
 interface UserProfile {
   userId: string;
   email: string;
@@ -57,10 +56,11 @@ interface UserProfile {
   registrationDate: string;
 }
 
-// Event application logic for projections
 const applyUserEvent =
   (currentData: Option.Option<UserProfile>) =>
-  (event: UserEvent): Effect.Effect<UserProfile, Error> => {
+  (
+    event: UserEvent
+  ): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> => {
     switch (event.type) {
       case 'UserRegistered':
         return Effect.succeed({
@@ -74,7 +74,12 @@ const applyUserEvent =
         return pipe(
           currentData,
           Option.match({
-            onNone: () => Effect.fail(new Error(`User ${event.userId} not found for email update`)),
+            onNone: () =>
+              Effect.fail(
+                new MissingProjectionError({
+                  message: `User ${event.userId} not found for email update`,
+                })
+              ),
             onSome: (profile) =>
               Effect.succeed({
                 ...profile,
@@ -85,22 +90,27 @@ const applyUserEvent =
         );
 
       default:
-        // Handle unknown events gracefully
         return pipe(
           currentData,
           Option.match({
             onNone: () =>
-              Effect.fail(new Error('Cannot process unknown event on empty projection')),
+              Effect.fail(
+                new MissingProjectionError({
+                  message: 'Cannot process unknown event on empty projection',
+                })
+              ),
             onSome: (profile) => Effect.succeed(profile),
           })
         );
     }
   };
 
-// Load and build projection
-const loadUserProfile = loadProjection(ProjectionEventStore, applyUserEvent);
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
 
-// Usage example
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
 const program = pipe(
   loadUserProfile('user-123'),
   Effect.tap((userProjection) =>
@@ -117,6 +127,9 @@ const program = pipe(
 ### Projection Interface
 
 ```typescript
+import { Option } from 'effect';
+import { EventNumber } from '@codeforbreakfast/eventsourcing-projections';
+
 interface Projection<TData> {
   readonly nextEventNumber: EventNumber;
   readonly data: Option.Option<TData>;
@@ -130,10 +143,34 @@ The projection tracks both the data and the position in the event stream, enabli
 The `loadProjection` function reconstructs projection state from events:
 
 ```typescript
-const loadMyProjection = loadProjection(ProjectionEventStore, applyEventToProjection);
+import { Context, Effect, Option, ParseResult, pipe } from 'effect';
+import {
+  loadProjection,
+  MissingProjectionError,
+  ProjectionEventStore,
+} from '@codeforbreakfast/eventsourcing-projections';
 
-// Load specific projection
-const projection = yield * loadMyProjection('projection-id');
+interface MyEvent {
+  type: string;
+}
+
+interface MyData {
+  value: string;
+}
+
+const applyEventToProjection =
+  (data: Option.Option<MyData>) =>
+  (event: MyEvent): Effect.Effect<MyData, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ value: 'example' });
+
+const MyEventStoreTag = Context.GenericTag<ProjectionEventStore<MyEvent>>('@services/MyEventStore');
+
+const loadMyProjection = loadProjection(MyEventStoreTag, applyEventToProjection);
+
+const loadSpecificProjection = pipe(
+  loadMyProjection('projection-id'),
+  Effect.map((projection) => projection)
+);
 ```
 
 ## Advanced Projection Patterns
@@ -143,7 +180,41 @@ const projection = yield * loadMyProjection('projection-id');
 Handle multiple related event types in a single projection:
 
 ```typescript
-// Events from different aggregates
+import { Effect, Option, ParseResult, pipe } from 'effect';
+import { MissingProjectionError } from '@codeforbreakfast/eventsourcing-projections';
+
+interface OrderCreated {
+  type: 'OrderCreated';
+  orderId: string;
+  totalAmount: number;
+}
+
+interface OrderShipped {
+  type: 'OrderShipped';
+  orderId: string;
+  timestamp: string;
+}
+
+interface OrderCancelled {
+  type: 'OrderCancelled';
+  orderId: string;
+}
+
+interface PaymentProcessed {
+  type: 'PaymentProcessed';
+  orderId: string;
+}
+
+interface PaymentFailed {
+  type: 'PaymentFailed';
+  orderId: string;
+}
+
+interface PaymentRefunded {
+  type: 'PaymentRefunded';
+  orderId: string;
+}
+
 type OrderEvent = OrderCreated | OrderShipped | OrderCancelled;
 type PaymentEvent = PaymentProcessed | PaymentFailed | PaymentRefunded;
 type AllEvents = OrderEvent | PaymentEvent;
@@ -158,13 +229,15 @@ interface OrderSummary {
 
 const applyOrderSummaryEvent =
   (current: Option.Option<OrderSummary>) =>
-  (event: AllEvents): Effect.Effect<OrderSummary, Error> => {
+  (
+    event: AllEvents
+  ): Effect.Effect<OrderSummary, ParseResult.ParseError | MissingProjectionError> => {
     switch (event.type) {
       case 'OrderCreated':
         return Effect.succeed({
           orderId: event.orderId,
-          status: 'pending',
-          paymentStatus: 'pending',
+          status: 'pending' as const,
+          paymentStatus: 'pending' as const,
           totalAmount: event.totalAmount,
         });
 
@@ -172,11 +245,11 @@ const applyOrderSummaryEvent =
         return pipe(
           current,
           Option.match({
-            onNone: () => Effect.fail(new Error('Order not found')),
+            onNone: () => Effect.fail(new MissingProjectionError({ message: 'Order not found' })),
             onSome: (summary) =>
               Effect.succeed({
                 ...summary,
-                status: 'shipped',
+                status: 'shipped' as const,
                 shippedDate: event.timestamp,
               }),
           })
@@ -186,16 +259,53 @@ const applyOrderSummaryEvent =
         return pipe(
           current,
           Option.match({
-            onNone: () => Effect.fail(new Error('Order not found')),
+            onNone: () => Effect.fail(new MissingProjectionError({ message: 'Order not found' })),
             onSome: (summary) =>
               Effect.succeed({
                 ...summary,
-                paymentStatus: 'paid',
+                paymentStatus: 'paid' as const,
               }),
           })
         );
 
-      // Handle other events...
+      case 'OrderCancelled':
+        return pipe(
+          current,
+          Option.match({
+            onNone: () => Effect.fail(new MissingProjectionError({ message: 'Order not found' })),
+            onSome: (summary) =>
+              Effect.succeed({
+                ...summary,
+                status: 'cancelled' as const,
+              }),
+          })
+        );
+
+      case 'PaymentFailed':
+        return pipe(
+          current,
+          Option.match({
+            onNone: () => Effect.fail(new MissingProjectionError({ message: 'Order not found' })),
+            onSome: (summary) =>
+              Effect.succeed({
+                ...summary,
+                paymentStatus: 'failed' as const,
+              }),
+          })
+        );
+
+      case 'PaymentRefunded':
+        return pipe(
+          current,
+          Option.match({
+            onNone: () => Effect.fail(new MissingProjectionError({ message: 'Order not found' })),
+            onSome: (summary) =>
+              Effect.succeed({
+                ...summary,
+                paymentStatus: 'refunded' as const,
+              }),
+          })
+        );
     }
   };
 ```
@@ -205,18 +315,41 @@ const applyOrderSummaryEvent =
 Add Schema validation to ensure data integrity:
 
 ```typescript
-import { Schema, ParseResult } from 'effect';
+import { Effect, Option, ParseResult, Schema, pipe } from 'effect';
+import { MissingProjectionError } from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserProfile {
+  userId: string;
+  email: string;
+  lastUpdated: string;
+  registrationDate: string;
+}
+
+interface UserEvent {
+  type: string;
+  userId: string;
+}
 
 const UserProfileSchema = Schema.Struct({
   userId: Schema.String,
-  email: Schema.String.pipe(Schema.format('email')),
+  email: Schema.String.pipe(Schema.pattern(/^[^@]+@[^@]+$/)),
   lastUpdated: Schema.String,
   registrationDate: Schema.String,
 });
 
+const applyUserEvent =
+  (current: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({
+      userId: 'user-1',
+      email: 'test@example.com',
+      lastUpdated: '2024-01-01',
+      registrationDate: '2024-01-01',
+    });
+
 const applyValidatedUserEvent =
   (current: Option.Option<UserProfile>) =>
-  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | Error> =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
     pipe(applyUserEvent(current)(event), Effect.flatMap(Schema.decode(UserProfileSchema)));
 ```
 
@@ -225,16 +358,41 @@ const applyValidatedUserEvent =
 Only update projections based on certain conditions:
 
 ```typescript
+import { Effect, Option, ParseResult, pipe } from 'effect';
+import { MissingProjectionError } from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserProfile {
+  userId: string;
+  email: string;
+  isActive: boolean;
+}
+
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+const applyUserEvent =
+  (current: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: 'user-1', email: 'test@example.com', isActive: true });
+
 const applyConditionalEvent =
   (current: Option.Option<UserProfile>) =>
-  (event: UserEvent): Effect.Effect<UserProfile, Error> => {
-    // Only process events for active users
-    if (current.pipe(Option.exists((profile) => !profile.isActive))) {
+  (
+    event: UserEvent
+  ): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> => {
+    if (
+      pipe(
+        current,
+        Option.exists((profile) => !profile.isActive)
+      )
+    ) {
       return pipe(
         current,
         Option.match({
-          onNone: () => Effect.fail(new Error('No current state')),
-          onSome: (profile) => Effect.succeed(profile), // No change
+          onNone: () => Effect.fail(new MissingProjectionError({ message: 'No current state' })),
+          onSome: (profile) => Effect.succeed(profile),
         })
       );
     }
@@ -248,23 +406,55 @@ const applyConditionalEvent =
 Process events as they arrive:
 
 ```typescript
-import { Stream } from 'effect';
+import { Context, Effect, Option, ParseResult, Schema, Stream, pipe } from 'effect';
+import {
+  EventNumber,
+  MissingProjectionError,
+  Projection,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
 
-const processEventStream = (eventStream: Stream.Stream<UserEvent, Error>) =>
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email: string;
+}
+
+const applyUserEvent =
+  (data: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: 'test@example.com' });
+
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
+
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
+const saveProjection = (id: string, projection: Projection<UserProfile>): Effect.Effect<void> =>
+  Effect.void;
+
+const processEventStream = (eventStream: Stream.Stream<UserEvent, never>) =>
   pipe(
-    ProjectionEventStore,
-    Effect.flatMap(() =>
+    eventStream,
+    Stream.runForEach((event: UserEvent) =>
       pipe(
-        eventStream,
-        Stream.runForeach((event) =>
+        loadUserProfile(event.userId),
+        Effect.flatMap((projection) =>
           pipe(
-            loadUserProfile(event.userId),
-            Effect.flatMap((projection) =>
+            applyUserEvent(projection.data)(event),
+            Effect.flatMap((updatedData) =>
               pipe(
-                applyUserEvent(projection.data)(event),
-                Effect.flatMap((updatedData) =>
+                projection.nextEventNumber + 1,
+                Schema.decode(EventNumber),
+                Effect.flatMap((nextEventNumber) =>
                   saveProjection(event.userId, {
-                    nextEventNumber: EventNumber(projection.nextEventNumber + 1),
+                    nextEventNumber,
                     data: Option.some(updatedData),
                   })
                 )
@@ -282,7 +472,39 @@ const processEventStream = (eventStream: Stream.Stream<UserEvent, Error>) =>
 Rebuild projections from historical events:
 
 ```typescript
-const rebuildUserProjections = (userIds: string[]) =>
+import { Context, Effect, Option, ParseResult, pipe } from 'effect';
+import {
+  MissingProjectionError,
+  Projection,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email: string;
+}
+
+const applyUserEvent =
+  (data: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: 'test@example.com' });
+
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
+
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
+const saveProjection = (id: string, projection: Projection<UserProfile>): Effect.Effect<void> =>
+  Effect.void;
+
+const rebuildUserProjections = (userIds: readonly string[]) =>
   Effect.forEach(
     userIds,
     (userId) =>
@@ -292,7 +514,7 @@ const rebuildUserProjections = (userIds: string[]) =>
         Effect.flatMap((projection) => saveProjection(userId, projection)),
         Effect.flatMap(() => Effect.logInfo(`Completed rebuild for user ${userId}`))
       ),
-    { concurrency: 10 } // Process 10 users concurrently
+    { concurrency: 10 }
   );
 ```
 
@@ -301,7 +523,22 @@ const rebuildUserProjections = (userIds: string[]) =>
 Handle projection errors gracefully:
 
 ```typescript
-import { Data } from 'effect';
+import { Context, Data, Effect, Option, ParseResult, pipe } from 'effect';
+import {
+  MissingProjectionError,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email: string;
+}
 
 class ProjectionError extends Data.TaggedError('ProjectionError')<{
   projectionId: string;
@@ -309,15 +546,29 @@ class ProjectionError extends Data.TaggedError('ProjectionError')<{
   message: string;
 }> {}
 
+const applyUserEvent =
+  (data: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: 'test@example.com' });
+
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
+
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
 const resilientProjectionUpdate = (projectionId: string, event: UserEvent) =>
   pipe(
     loadUserProfile(projectionId),
     Effect.flatMap((projection) => applyUserEvent(projection.data)(event)),
+    Effect.map(Option.some),
     Effect.catchAll((error) =>
       pipe(
-        Effect.logError(`Projection update failed: ${error.message}`),
+        Effect.logError(`Projection update failed: ${String(error)}`),
         Effect.flatMap(() => {
-          if (error.message.includes('not found')) {
+          const errorMessage =
+            error instanceof MissingProjectionError ? error.message : String(error);
+          if (errorMessage.includes('not found')) {
             return pipe(
               Effect.logWarning(`Skipping event for missing projection ${projectionId}`),
               Effect.map(() => Option.none<UserProfile>())
@@ -328,7 +579,7 @@ const resilientProjectionUpdate = (projectionId: string, event: UserEvent) =>
             new ProjectionError({
               projectionId,
               eventType: event.type,
-              message: error.message,
+              message: errorMessage,
             })
           );
         })
@@ -342,7 +593,69 @@ const resilientProjectionUpdate = (projectionId: string, event: UserEvent) =>
 Test projection logic in isolation:
 
 ```typescript
-import { Effect, Option } from 'effect';
+import { Effect, Option, ParseResult, pipe } from 'effect';
+import { MissingProjectionError } from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserRegistered {
+  type: 'UserRegistered';
+  userId: string;
+  email: string;
+  timestamp: string;
+}
+
+interface UserEmailUpdated {
+  type: 'UserEmailUpdated';
+  userId: string;
+  oldEmail: string;
+  newEmail: string;
+  timestamp: string;
+}
+
+type UserEvent = UserRegistered | UserEmailUpdated;
+
+interface UserProfile {
+  userId: string;
+  email: string;
+  lastUpdated: string;
+  registrationDate: string;
+}
+
+const applyUserEvent =
+  (currentData: Option.Option<UserProfile>) =>
+  (
+    event: UserEvent
+  ): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> => {
+    switch (event.type) {
+      case 'UserRegistered':
+        return Effect.succeed({
+          userId: event.userId,
+          email: event.email,
+          lastUpdated: event.timestamp,
+          registrationDate: event.timestamp,
+        });
+
+      case 'UserEmailUpdated':
+        return pipe(
+          currentData,
+          Option.match({
+            onNone: () =>
+              Effect.fail(
+                new MissingProjectionError({ message: `User ${event.userId} not found` })
+              ),
+            onSome: (profile) =>
+              Effect.succeed({
+                ...profile,
+                email: event.newEmail,
+                lastUpdated: event.timestamp,
+              }),
+          })
+        );
+    }
+  };
+
+declare const describe: (name: string, fn: () => void) => void;
+declare const test: (name: string, fn: () => void) => void;
+declare const expect: (value: unknown) => { toBe: (expected: unknown) => void };
 
 describe('User Profile Projection', () => {
   test('should create profile on UserRegistered', () => {
@@ -391,7 +704,20 @@ describe('User Profile Projection', () => {
 Design projections based on your query patterns:
 
 ```typescript
-// Instead of loading full user data, create specific projections
+import { Context, Effect, Option, ParseResult } from 'effect';
+import {
+  MissingProjectionError,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserEvent {
+  type: string;
+  userId: string;
+  email?: string;
+  loginDate?: string;
+}
+
 interface UserEmailLookup {
   userId: string;
   email: string;
@@ -404,9 +730,34 @@ interface UserActivitySummary {
   isActive: boolean;
 }
 
-// Create focused projections for specific use cases
-const loadUserEmail = loadProjection(ProjectionEventStore, applyEmailEvents);
-const loadUserActivity = loadProjection(ProjectionEventStore, applyActivityEvents);
+const applyEmailEvents =
+  (data: Option.Option<UserEmailLookup>) =>
+  (
+    event: UserEvent
+  ): Effect.Effect<UserEmailLookup, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: event.email ?? 'unknown@example.com' });
+
+const applyActivityEvents =
+  (data: Option.Option<UserActivitySummary>) =>
+  (
+    event: UserEvent
+  ): Effect.Effect<UserActivitySummary, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({
+      userId: event.userId,
+      lastLoginDate: event.loginDate ?? '2024-01-01',
+      loginCount: 1,
+      isActive: true,
+    });
+
+const UserEmailEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEmailEventStore'
+);
+const UserActivityEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserActivityEventStore'
+);
+
+const loadUserEmail = loadProjection(UserEmailEventStoreTag, applyEmailEvents);
+const loadUserActivity = loadProjection(UserActivityEventStoreTag, applyActivityEvents);
 ```
 
 ### Batch Processing
@@ -414,39 +765,104 @@ const loadUserActivity = loadProjection(ProjectionEventStore, applyActivityEvent
 Process multiple events efficiently:
 
 ```typescript
-const batchUpdateProjections = (events: UserEvent[]) =>
-  pipe(
-    Effect.succeed(groupBy(events, (event) => event.userId)),
-    Effect.flatMap((eventsByUser) =>
-      Effect.forEach(
-        Object.entries(eventsByUser),
-        ([userId, userEvents]) =>
-          pipe(
-            loadUserProfile(userId),
-            Effect.flatMap((initialProjection) =>
-              pipe(
-                userEvents.reduce(
-                  (acc, event) =>
-                    pipe(
-                      acc,
-                      Effect.flatMap((projection) =>
-                        pipe(
-                          applyUserEvent(projection.data)(event),
-                          Effect.map((updatedData) => ({
-                            nextEventNumber: EventNumber(projection.nextEventNumber + 1),
-                            data: Option.some(updatedData),
-                          }))
-                        )
-                      )
-                    ),
-                  Effect.succeed(initialProjection)
-                ),
-                Effect.flatMap((finalProjection) => saveProjection(userId, finalProjection))
-              )
-            )
-          ),
-        { concurrency: 5 }
+import { Array, Context, Effect, Option, ParseResult, Schema, pipe } from 'effect';
+import {
+  EventNumber,
+  MissingProjectionError,
+  Projection,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
+
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email: string;
+}
+
+const applyUserEvent =
+  (data: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: 'test@example.com' });
+
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
+
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
+const saveProjection = (id: string, projection: Projection<UserProfile>): Effect.Effect<void> =>
+  Effect.void;
+
+const groupBy = <T>(items: readonly T[], keyFn: (item: T) => string): Record<string, T[]> =>
+  items.reduce(
+    (acc, item) => {
+      const key = keyFn(item);
+      return { ...acc, [key]: [...(acc[key] ?? []), item] };
+    },
+    {} as Record<string, T[]>
+  );
+
+const applyEventsToProjection = (
+  projection: Projection<UserProfile>,
+  events: readonly UserEvent[]
+): Effect.Effect<Projection<UserProfile>, ParseResult.ParseError | MissingProjectionError> => {
+  const applyEvent = (
+    currentProjection: Projection<UserProfile>,
+    event: UserEvent
+  ): Effect.Effect<Projection<UserProfile>, ParseResult.ParseError | MissingProjectionError> =>
+    pipe(
+      applyUserEvent(currentProjection.data)(event),
+      Effect.flatMap((updatedData) =>
+        pipe(
+          currentProjection.nextEventNumber + 1,
+          Schema.decode(EventNumber),
+          Effect.map(
+            (nextEventNumber): Projection<UserProfile> => ({
+              nextEventNumber,
+              data: Option.some(updatedData),
+            })
+          )
+        )
       )
+    );
+
+  return pipe(
+    events,
+    Array.reduce(
+      Effect.succeed(projection) as Effect.Effect<
+        Projection<UserProfile>,
+        ParseResult.ParseError | MissingProjectionError
+      >,
+      (accEffect, event) =>
+        pipe(
+          accEffect,
+          Effect.flatMap((proj) => applyEvent(proj, event))
+        )
+    )
+  );
+};
+
+const batchUpdateProjections = (events: readonly UserEvent[]) =>
+  pipe(
+    groupBy(events, (event) => event.userId),
+    Object.entries,
+    Effect.forEach(
+      ([userId, userEvents]) =>
+        pipe(
+          loadUserProfile(userId),
+          Effect.flatMap((initialProjection) =>
+            pipe(
+              applyEventsToProjection(initialProjection, userEvents),
+              Effect.flatMap((finalProjection) => saveProjection(userId, finalProjection))
+            )
+          )
+        ),
+      { concurrency: 5 }
     )
   );
 ```
@@ -456,19 +872,43 @@ const batchUpdateProjections = (events: UserEvent[]) =>
 This package works with the event store implementations:
 
 ```typescript
-// With in-memory store (testing)
-import { inMemoryEventStore } from '@codeforbreakfast/eventsourcing-store';
+import { Context, Effect, Layer, Option, ParseResult, pipe } from 'effect';
+import {
+  MissingProjectionError,
+  ProjectionEventStore,
+  loadProjection,
+} from '@codeforbreakfast/eventsourcing-projections';
 
-// With PostgreSQL store (production)
-import { postgresEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+interface UserEvent {
+  type: string;
+  userId: string;
+}
+
+interface UserProfile {
+  userId: string;
+  email: string;
+}
+
+const applyUserEvent =
+  (data: Option.Option<UserProfile>) =>
+  (event: UserEvent): Effect.Effect<UserProfile, ParseResult.ParseError | MissingProjectionError> =>
+    Effect.succeed({ userId: event.userId, email: 'test@example.com' });
+
+const UserEventStoreTag = Context.GenericTag<ProjectionEventStore<UserEvent>>(
+  '@services/UserEventStore'
+);
+
+const loadUserProfile = loadProjection(UserEventStoreTag, applyUserEvent);
+
+declare const inMemoryEventStore: <TEvent>() => Layer.Layer<ProjectionEventStore<TEvent>>;
+declare const postgresEventStore: <TEvent>() => Layer.Layer<ProjectionEventStore<TEvent>>;
 
 const testLayer = inMemoryEventStore<UserEvent>();
 const prodLayer = postgresEventStore<UserEvent>();
 
-// Use the same projection logic with different stores
-const runProjections = projection.pipe(
-  Effect.provide(testLayer) // or prodLayer
-);
+const projection = loadUserProfile('user-123');
+
+const runProjections = pipe(projection, Effect.provide(testLayer));
 ```
 
 ## Related Packages

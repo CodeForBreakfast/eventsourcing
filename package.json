@@ -20,6 +20,7 @@
     "arch:check": "dependency-cruiser packages --validate",
     "deps:check": "knip --include dependencies,unlisted,binaries,unresolved,duplicates",
     "code:check": "knip",
+    "scripts:lint": "eslint scripts",
     "release:validate:changesets": "bun scripts/validate-changesets.ts",
     "release:validate:publish": "bun scripts/orchestrate-publish-validation.ts",
     "release:validate": "bun scripts/validate-release.ts"
@@ -46,6 +47,7 @@
     "@typescript-eslint/eslint-plugin": "8.45.0",
     "@typescript-eslint/parser": "8.45.0",
     "dependency-cruiser": "17.0.1",
+    "effect": "3.18.1",
     "eslint": "9.36.0",
     "eslint-config-prettier": "10.1.8",
     "eslint-plugin-compat": "6.0.2",

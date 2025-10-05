@@ -20,35 +20,47 @@ bun add @codeforbreakfast/eventsourcing-store-inmemory
 ## Quick Start
 
 ```typescript
-import { Effect } from 'effect';
+import { Effect, Stream, Chunk, pipe } from 'effect';
 import {
-  makeInMemoryStore,
+  InMemoryStore,
   makeInMemoryEventStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
+import { toStreamId, beginning } from '@codeforbreakfast/eventsourcing-store';
 
 type MyEvent = { type: 'UserCreated'; data: { id: string; name: string } };
 
-// Create the store and event store
-const program = Effect.gen(function* () {
-  const store = yield* makeInMemoryStore<MyEvent>();
-  const eventStore = yield* makeInMemoryEventStore(store);
-
-  // Append events
-  yield* eventStore.append('user-123', [
-    { type: 'UserCreated', data: { id: '123', name: 'John' } },
-  ]);
-
-  // Read events
-  const events = yield* eventStore.read('user-123');
-  console.log(events);
-});
+const program = pipe(
+  InMemoryStore.make<MyEvent>(),
+  Effect.flatMap(makeInMemoryEventStore),
+  Effect.flatMap((eventStore) =>
+    pipe(
+      toStreamId('user-123'),
+      Effect.flatMap((streamId) =>
+        pipe(
+          beginning(streamId),
+          Effect.flatMap((position) => {
+            const events = Chunk.of<MyEvent>({
+              type: 'UserCreated',
+              data: { id: '123', name: 'John' },
+            });
+            return pipe(events, Stream.fromChunk, Stream.run(eventStore.append(position)));
+          }),
+          Effect.flatMap(() => beginning(streamId)),
+          Effect.flatMap((position) => eventStore.read(position)),
+          Effect.flatMap(Stream.runCollect),
+          Effect.tap((events) => Effect.log(events))
+        )
+      )
+    )
+  )
+);
 
 Effect.runPromise(program);
 ```
 
 ## API Reference
 
-### `makeInMemoryStore<T>()`
+### `InMemoryStore.make<T>()`
 
 Creates a new in-memory store instance.
 
@@ -68,9 +80,9 @@ Creates an EventStore implementation backed by the in-memory store.
 
 The returned EventStore implements the complete interface:
 
-- `append(streamId, events, expectedVersion?)` - Append events to a stream
-- `read(streamId, options?)` - Read events from a stream
-- `subscribe(streamId?, handler)` - Subscribe to events
+- `append(position)` - Returns a Sink that appends events to a stream at the given position
+- `read(position)` - Read historical events from a stream starting at position
+- `subscribe(position)` - Subscribe to both historical and live events from position
 
 ## Use Cases
 
@@ -80,11 +92,19 @@ Perfect for testing your event-sourced aggregates and domain logic:
 
 ```typescript
 import { describe, it, expect } from 'bun:test';
+import { Effect, pipe } from 'effect';
+import {
+  InMemoryStore,
+  makeInMemoryEventStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
 
 describe('UserAggregate', () => {
   it('should create user correctly', async () => {
-    const store = await Effect.runPromise(makeInMemoryStore());
-    const eventStore = await Effect.runPromise(makeInMemoryEventStore(store));
+    const eventStore = await pipe(
+      InMemoryStore.make(),
+      Effect.flatMap(makeInMemoryEventStore),
+      Effect.runPromise
+    );
 
     // Test your aggregate logic here
   });
@@ -96,11 +116,14 @@ describe('UserAggregate', () => {
 Great for local development when you don't want to set up a full database:
 
 ```typescript
+import { Effect, pipe } from 'effect';
+import {
+  InMemoryStore,
+  makeInMemoryEventStore,
+} from '@codeforbreakfast/eventsourcing-store-inmemory';
+
 const createDevEventStore = () =>
-  Effect.gen(function* () {
-    const store = yield* makeInMemoryStore();
-    return yield* makeInMemoryEventStore(store);
-  });
+  pipe(InMemoryStore.make(), Effect.flatMap(makeInMemoryEventStore));
 ```
 
 ## Performance

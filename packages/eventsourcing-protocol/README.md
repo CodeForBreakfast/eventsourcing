@@ -36,26 +36,24 @@ bun add @codeforbreakfast/eventsourcing-protocol
 ### Sending Commands
 
 ```typescript
-import { Effect } from 'effect';
+import { Effect, pipe } from 'effect';
 import { sendWireCommand } from '@codeforbreakfast/eventsourcing-protocol';
 import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
-const program = Effect.gen(function* () {
-  const command: WireCommand = {
-    id: crypto.randomUUID(),
-    target: 'user-123',
-    name: 'UpdateProfile',
-    payload: { name: 'John Doe', email: 'john@example.com' },
-  };
+declare const command: WireCommand;
 
-  const result = yield* sendWireCommand(command);
-
-  if (result._tag === 'Success') {
-    console.log('Command succeeded at position:', result.position);
-  } else {
-    console.error('Command failed:', result.error);
-  }
-});
+const program = pipe(
+  sendWireCommand(command),
+  Effect.tap((result) =>
+    Effect.sync(() => {
+      if (result._tag === 'Success') {
+        console.log('Command succeeded at position:', result.position);
+      } else {
+        console.error('Command failed:', result.error);
+      }
+    })
+  )
+);
 
 // Provide transport layer when running (see eventsourcing-websocket for setup)
 ```
@@ -63,23 +61,21 @@ const program = Effect.gen(function* () {
 ### Subscribing to Events
 
 ```typescript
-import { Effect, Stream } from 'effect';
-import { subscribe } from '@codeforbreakfast/eventsourcing-protocol';
+import { Effect, Stream, pipe } from 'effect';
+import { subscribe, type Event } from '@codeforbreakfast/eventsourcing-protocol';
 
-const program = Effect.gen(function* () {
-  // Subscribe to a stream
-  const eventStream = yield* subscribe('user-123');
+const processEvent = (event: Event) =>
+  Effect.sync(() => {
+    console.log(`Event: ${event.type}`);
+    console.log(`Position: ${event.position.eventNumber}`);
+    console.log(`Data:`, event.data);
+    console.log(`Timestamp:`, event.timestamp);
+  });
 
-  // Process events
-  yield* Stream.runForEach(eventStream, (event) =>
-    Effect.sync(() => {
-      console.log(`Event: ${event.type}`);
-      console.log(`Position: ${event.position.eventNumber}`);
-      console.log(`Data:`, event.data);
-      console.log(`Timestamp:`, event.timestamp);
-    })
-  );
-});
+const program = pipe(
+  subscribe('user-123'),
+  Effect.flatMap((eventStream) => Stream.runForEach(eventStream, processEvent))
+);
 
 // Provide transport layer when running
 ```
@@ -88,31 +84,30 @@ const program = Effect.gen(function* () {
 
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
-import { sendWireCommand, subscribe } from '@codeforbreakfast/eventsourcing-protocol';
+import {
+  sendWireCommand,
+  subscribe,
+  type Event,
+  type ProtocolValidationError,
+} from '@codeforbreakfast/eventsourcing-protocol';
 import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
-const application = Effect.gen(function* () {
-  // Subscribe to events first
-  const events = yield* subscribe('user-123');
+declare const command: WireCommand;
 
-  // Process events in background
-  yield* pipe(
-    events,
-    Stream.runForEach((event) => Effect.sync(() => console.log('Received event:', event.type))),
-    Effect.fork
-  );
+const logEvent = (event: Event) => Effect.sync(() => console.log('Received event:', event.type));
 
-  // Send a command
-  const command: WireCommand = {
-    id: crypto.randomUUID(),
-    target: 'user-123',
-    name: 'CreateUser',
-    payload: { name: 'Alice', email: 'alice@example.com' },
-  };
+const processEventsInBackground = (events: Stream.Stream<Event, ProtocolValidationError, never>) =>
+  pipe(events, Stream.runForEach(logEvent), Effect.fork);
 
-  const result = yield* sendWireCommand(command);
-  return result;
-});
+const application = pipe(
+  subscribe('user-123'),
+  Effect.flatMap((events) =>
+    pipe(
+      processEventsInBackground(events),
+      Effect.flatMap(() => sendWireCommand(command))
+    )
+  )
+);
 
 // Setup transport layer (see @codeforbreakfast/eventsourcing-websocket)
 // Then run: Effect.runPromise(application.pipe(Effect.provide(layer)))
@@ -125,33 +120,42 @@ const application = Effect.gen(function* () {
 The server-side protocol handles incoming commands and publishes events:
 
 ```typescript
-import { Effect, Stream } from 'effect';
-import { ServerProtocol, ServerProtocolLive } from '@codeforbreakfast/eventsourcing-protocol';
+import { Effect, Stream, pipe, Context } from 'effect';
+import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
 import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
-import type { Event } from '@codeforbreakfast/eventsourcing-store';
+import { toStreamId } from '@codeforbreakfast/eventsourcing-store';
 
-const serverProgram = Effect.gen(function* () {
-  const protocol = yield* ServerProtocol;
-
-  // Listen for incoming commands
-  yield* pipe(
-    protocol.onWireCommand,
-    Stream.runForEach((command: WireCommand) =>
-      Effect.gen(function* () {
-        console.log('Received command:', command.name);
-
-        // Process command (your domain logic here)
-        const result: CommandResult = {
-          _tag: 'Success',
-          position: { streamId: command.target, eventNumber: 1 },
-        };
-
-        // Send result back to client
-        yield* protocol.sendResult(command.id, result);
-      })
-    )
+const createSuccessResult = (target: string) =>
+  pipe(
+    toStreamId(target),
+    Effect.map((streamId) => {
+      const result: CommandResult = {
+        _tag: 'Success' as const,
+        position: { streamId, eventNumber: 1 },
+      };
+      return result;
+    })
   );
-});
+
+const handleCommand = (
+  protocol: Context.Tag.Service<typeof ServerProtocol>,
+  command: WireCommand
+) =>
+  pipe(
+    Effect.sync(() => console.log('Received command:', command.name)),
+    Effect.flatMap(() => createSuccessResult(command.target)),
+    Effect.flatMap((result) => protocol.sendResult(command.id, result))
+  );
+
+const serverProgram = pipe(
+  ServerProtocol,
+  Effect.flatMap((protocol) =>
+    pipe(
+      protocol.onWireCommand,
+      Stream.runForEach((command) => handleCommand(protocol, command))
+    )
+  )
+);
 
 // Provide ServerProtocolLive with a server transport
 // Effect.runPromise(serverProgram.pipe(Effect.provide(ServerProtocolLive(serverTransport))))
@@ -160,19 +164,25 @@ const serverProgram = Effect.gen(function* () {
 ### Publishing Events
 
 ```typescript
-import { Effect } from 'effect';
-import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
-import type { Event } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, pipe } from 'effect';
+import { ServerProtocol, type Event } from '@codeforbreakfast/eventsourcing-protocol';
+import { toStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 const publishEvent = (streamId: string, event: Event) =>
-  Effect.gen(function* () {
-    const protocol = yield* ServerProtocol;
-
-    yield* protocol.publishEvent({
-      ...event,
-      streamId,
-    });
-  });
+  pipe(
+    toStreamId(streamId),
+    Effect.flatMap((eventStreamId) =>
+      pipe(
+        ServerProtocol,
+        Effect.flatMap((protocol) =>
+          protocol.publishEvent({
+            ...event,
+            streamId: eventStreamId,
+          })
+        )
+      )
+    )
+  );
 ```
 
 ## API Reference
@@ -182,9 +192,15 @@ const publishEvent = (streamId: string, event: Event) =>
 #### `sendWireCommand`
 
 ```typescript
-const sendWireCommand: (
+import type { Effect } from 'effect';
+import type { Protocol } from '@codeforbreakfast/eventsourcing-protocol';
+import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+import type { ProtocolCommandTimeoutError } from '@codeforbreakfast/eventsourcing-protocol';
+
+declare const sendWireCommand: (
   command: WireCommand
-) => Effect<CommandResult, TransportError | ProtocolCommandTimeoutError, Protocol>;
+) => Effect.Effect<CommandResult, TransportError | ProtocolCommandTimeoutError, Protocol>;
 ```
 
 Sends a command and waits for the result. Automatically times out after 10 seconds.
@@ -206,7 +222,14 @@ Sends a command and waits for the result. Automatically times out after 10 secon
 #### `subscribe`
 
 ```typescript
-const subscribe: (streamId: string) => Effect<Stream<Event>, TransportError, Scope | Protocol>;
+import type { Effect, Stream, Scope } from 'effect';
+import type { Protocol } from '@codeforbreakfast/eventsourcing-protocol';
+import type { Event } from '@codeforbreakfast/eventsourcing-store';
+import type { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const subscribe: (
+  streamId: string
+) => Effect.Effect<Stream.Stream<Event>, TransportError, Scope.Scope | Protocol>;
 ```
 
 Subscribes to events from a specific stream.
@@ -222,27 +245,39 @@ Subscribes to events from a specific stream.
 #### `ServerProtocol`
 
 ```typescript
-interface ServerProtocol {
-  readonly onWireCommand: Stream<WireCommand>;
-  readonly sendResult: (commandId: string, result: CommandResult) => Effect<void>;
-  readonly publishEvent: (event: Event & { streamId: string }) => Effect<void>;
+import type { Effect, Stream } from 'effect';
+import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import type { Event, ServerProtocolError } from '@codeforbreakfast/eventsourcing-protocol';
+import type { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+
+interface ServerProtocolService {
+  readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
+  readonly sendResult: (
+    commandId: string,
+    result: CommandResult
+  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+  readonly publishEvent: (
+    event: Event & { readonly streamId: EventStreamId }
+  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
 }
 ```
 
 ## Error Handling
 
 ```typescript
-import { Effect } from 'effect';
+import { Effect, pipe } from 'effect';
 import {
   sendWireCommand,
   ProtocolCommandTimeoutError,
 } from '@codeforbreakfast/eventsourcing-protocol';
 import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 
-const program = Effect.gen(function* () {
-  const result = yield* sendWireCommand(command);
-  return result;
-}).pipe(
+declare const command: WireCommand;
+
+const program = pipe(
+  sendWireCommand(command),
   Effect.catchTags({
     ProtocolCommandTimeoutError: (error) =>
       Effect.sync(() => console.error('Command timed out:', error.commandId)),
@@ -257,28 +292,11 @@ This package works with types from other packages:
 
 ```typescript
 import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
-import type { Event } from '@codeforbreakfast/eventsourcing-store';
+import type { Event, EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 
-// WireCommand structure
-interface WireCommand {
-  readonly id: string; // Unique command ID
-  readonly target: string; // Target aggregate/stream
-  readonly name: string; // Command name
-  readonly payload: unknown; // Command data (unvalidated)
-}
-
-// CommandResult tagged union
-type CommandResult =
-  | { _tag: 'Success'; position: EventStreamPosition }
-  | { _tag: 'Failure'; error: CommandError };
-
-// Event structure
-interface Event {
-  readonly position: EventStreamPosition;
-  readonly type: string; // Event type
-  readonly data: unknown; // Event data
-  readonly timestamp: Date;
-}
+declare const wireCommandStructure: WireCommand;
+declare const commandResultStructure: CommandResult;
+declare const eventStructure: Event;
 ```
 
 See the respective packages for full type definitions and validation schemas.
