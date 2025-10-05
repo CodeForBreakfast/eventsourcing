@@ -23,17 +23,13 @@ export const makeChannelName = (streamId: EventStreamId): string => `eventstore_
 /**
  * Parse notification payload from PostgreSQL trigger JSON
  */
-const decodeNotificationSchema = (payload: unknown) =>
-  pipe(
-    payload,
-    Schema.decodeUnknown(
-      Schema.Struct({
-        stream_id: Schema.String,
-        event_number: Schema.Number,
-        event_payload: Schema.String,
-      })
-    )
-  );
+const decodeNotificationSchema = Schema.decodeUnknown(
+  Schema.Struct({
+    stream_id: Schema.String,
+    event_number: Schema.Number,
+    event_payload: Schema.String,
+  })
+);
 
 const parseNotificationPayload = (
   jsonString: string
@@ -279,11 +275,9 @@ const logListenerStarted = Effect.logInfo(
 
 const startListenerService = pipe(logListenerStarted, Effect.asVoid);
 
-const getActiveChannels = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
-  pipe(activeChannels, Ref.get);
+const getActiveChannels = Ref.get;
 
-const clearActiveChannels = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
-  pipe(activeChannels, Ref.set(HashSet.empty()));
+const clearActiveChannels = Ref.set(HashSet.empty<string>());
 
 const logListenerStopped = Effect.logInfo('PostgreSQL notification listener stopped');
 

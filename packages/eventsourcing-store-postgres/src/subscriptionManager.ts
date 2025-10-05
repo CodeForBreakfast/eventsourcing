@@ -119,8 +119,7 @@ const getOrCreatePubSub = <T>(
 const removeStreamFromHashMap = <T>(
   streamId: EventStreamId,
   subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
-  pipe(streamId, (id) => HashMap.remove(subscriptions, id));
+): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => HashMap.remove(subscriptions, streamId);
 
 /**
  * Remove a subscription for a stream ID
@@ -172,11 +171,7 @@ const publishToSubscriptionIfExists = <T>(
 /**
  * Publish an event to subscribers of a stream
  */
-const getSubscriptions = <T>(
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
-  >
-) => pipe(ref, SynchronizedRef.get);
+const getSubscriptions = SynchronizedRef.get;
 
 const publishToStream = <T>(
   ref: ReadonlyDeep<

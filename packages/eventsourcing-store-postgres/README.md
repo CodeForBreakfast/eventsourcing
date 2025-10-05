@@ -100,7 +100,7 @@ const writeAndReadEvents = (eventStore: EventStore<UserEvent>) =>
   );
 
 const program = pipe(
-  sqlEventStore(),
+  sqlEventStore,
   Effect.map(createTypedEventStore),
   Effect.flatMap(writeAndReadEvents)
 );
@@ -252,7 +252,7 @@ const subscribeAndProcessEvents = (eventStore: EventStore<MyEvent>) =>
   );
 
 const program = pipe(
-  sqlEventStore(),
+  sqlEventStore,
   Effect.map(encodedEventStore(Schema.parseJson(MyEvent))),
   Effect.flatMap(subscribeAndProcessEvents)
 );
@@ -315,7 +315,7 @@ const processEventsWithTracking = (
 
 const program = pipe(
   Effect.all({
-    eventStore: pipe(sqlEventStore(), Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
+    eventStore: pipe(sqlEventStore, Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
     tracker: EventStreamTracker,
   }),
   Effect.flatMap(({ eventStore, tracker }) => processEventsWithTracking(eventStore, tracker))
@@ -371,7 +371,7 @@ const batchAppendEvents = (
   );
 
 const program = pipe(
-  sqlEventStore(),
+  sqlEventStore,
   Effect.map(encodedEventStore(Schema.parseJson(UserEvent))),
   Effect.flatMap((eventStore) =>
     batchAppendEvents(eventStore, [
@@ -443,7 +443,7 @@ const buildProjectionWithCheckpoints = (
 
 const program = pipe(
   Effect.all({
-    eventStore: pipe(sqlEventStore(), Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
+    eventStore: pipe(sqlEventStore, Effect.map(encodedEventStore(Schema.parseJson(MyEvent)))),
     tracker: EventStreamTracker,
   }),
   Effect.flatMap(({ eventStore, tracker }) => buildProjectionWithCheckpoints(eventStore, tracker))
@@ -487,7 +487,7 @@ const createResilientEventStore = (baseStore: EventStore<string>): EventStore<st
   subscribe: createResilientSubscribe(baseStore),
 });
 
-const program = pipe(sqlEventStore(), Effect.map(createResilientEventStore));
+const program = pipe(sqlEventStore, Effect.map(createResilientEventStore));
 ```
 
 ### Connection Recovery
@@ -558,7 +558,7 @@ const createMetricsWrapper = (baseStore: EventStore<string>) => (position: Event
   baseStore.append(position);
 
 const eventStoreMetrics = pipe(
-  sqlEventStore(),
+  sqlEventStore,
   Effect.map((eventStore) => ({
     ...eventStore,
     append: createMetricsWrapper(eventStore),
@@ -614,7 +614,7 @@ const performHealthCheck = (eventStore: EventStore<MyEvent>) =>
   );
 
 const healthCheck = pipe(
-  sqlEventStore(),
+  sqlEventStore,
   Effect.map(encodedEventStore(Schema.parseJson(MyEvent))),
   Effect.flatMap(performHealthCheck)
 );
@@ -724,7 +724,7 @@ const runTest = pipe(
   createTestDatabase,
   Effect.flatMap(({ config, container }) =>
     pipe(
-      sqlEventStore(),
+      sqlEventStore,
       Effect.map(encodedEventStore(Schema.parseJson(UserEvent))),
       Effect.flatMap(testStoreAndRetrieveEvents),
       Effect.provide(

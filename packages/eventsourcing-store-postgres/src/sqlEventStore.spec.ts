@@ -23,7 +23,7 @@ const JsonFooEvent = Schema.parseJson(FooEvent);
 
 export const FooEventStoreLive = Layer.effect(
   FooEventStore,
-  pipe(sqlEventStore(), Effect.map(encodedEventStore(JsonFooEvent)))
+  pipe(sqlEventStore, Effect.map(encodedEventStore(JsonFooEvent)))
 );
 
 // Complete test layer with all dependencies
