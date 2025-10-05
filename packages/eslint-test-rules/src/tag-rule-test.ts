@@ -1,4 +1,4 @@
-import { Either, Option, Effect, pipe } from 'effect';
+import { Either, Option, Effect, pipe, Match } from 'effect';
 
 const either = Either.right(42);
 const option = Option.some(42);
@@ -172,3 +172,22 @@ const unnecessaryFunctionExpr = function (value: number) {
   // eslint-disable-next-line custom-rules/no-unnecessary-pipe-wrapper -- Testing unnecessary function expression pipe wrapper
   return pipe(value, Effect.succeed);
 };
+
+// ========================================
+// MATCH.WHEN WITH _TAG (should fail - use Match.tag)
+// ========================================
+
+type MyResult =
+  | { readonly _tag: 'Success'; readonly value: number }
+  | { readonly _tag: 'Failure'; readonly error: string };
+
+const matchWithTagTest = (result: MyResult) =>
+  pipe(
+    result,
+    Match.value,
+    // eslint-disable-next-line custom-rules/prefer-match-tag -- Testing Match.when with _tag ban
+    Match.when({ _tag: 'Success' }, (res) => res.value),
+    // eslint-disable-next-line custom-rules/prefer-match-tag -- Testing Match.when with _tag ban
+    Match.when({ _tag: 'Failure' }, (res) => 0),
+    Match.exhaustive
+  );

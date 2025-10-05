@@ -6,6 +6,7 @@ import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
 import eslintComments from 'eslint-plugin-eslint-comments';
 import noUnnecessaryPipeWrapper from './eslint-rules/no-unnecessary-pipe-wrapper.js';
+import preferMatchTag from './eslint-rules/prefer-match-tag.js';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -32,6 +33,7 @@ const commonPlugins = {
   'custom-rules': {
     rules: {
       'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
+      'prefer-match-tag': preferMatchTag,
     },
   },
 };
@@ -343,6 +345,7 @@ export default [
       ],
       ...testFunctionalRules,
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
+      'custom-rules/prefer-match-tag': 'error',
     },
   },
   {
@@ -368,6 +371,7 @@ export default [
         ...simplePipeSyntaxRestrictions,
       ],
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
+      'custom-rules/prefer-match-tag': 'error',
     },
   },
   {
@@ -382,6 +386,7 @@ export default [
         ...simplePipeSyntaxRestrictions,
       ],
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
+      'custom-rules/prefer-match-tag': 'error',
     },
   },
   {
@@ -397,6 +402,7 @@ export default [
         ...simplePipeSyntaxRestrictions,
       ],
       'custom-rules/no-unnecessary-pipe-wrapper': 'error',
+      'custom-rules/prefer-match-tag': 'error',
     },
   },
   {

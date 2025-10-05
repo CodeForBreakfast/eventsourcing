@@ -136,13 +136,13 @@ const buildResultMessage = (
   pipe(
     result,
     Match.value,
-    Match.when({ _tag: 'Success' }, (res) => ({
+    Match.tag('Success', (res) => ({
       type: 'command_result' as const,
       commandId,
       success: true,
       position: res.position,
     })),
-    Match.when({ _tag: 'Failure' }, (res) => ({
+    Match.tag('Failure', (res) => ({
       type: 'command_result' as const,
       commandId,
       success: false,
