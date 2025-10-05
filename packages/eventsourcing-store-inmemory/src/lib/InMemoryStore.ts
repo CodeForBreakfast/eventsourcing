@@ -50,9 +50,6 @@ const logAppendedEvents = (newEvents: Chunk.Chunk<unknown>, streamEnd: EventStre
     streamEnd,
   });
 
-const publishEventsToSubscribers = <V>(pubsub: PubSub.PubSub<V>, newEvents: Chunk.Chunk<V>) =>
-  pipe(pubsub, PubSub.publishAll(newEvents));
-
 const updateEventStreamsById = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
   updatedEventStream: EventStream<V>,
@@ -64,14 +61,11 @@ const updateEventStreamsById = <V>(
     HashMap.set(streamEnd.streamId, updatedEventStream),
     Effect.succeed,
     Effect.tap(() => logAppendedEvents(newEvents, streamEnd)),
-    Effect.tap(() => publishEventsToSubscribers(updatedEventStream.pubsub, newEvents))
+    Effect.tap(() => pipe(updatedEventStream.pubsub, PubSub.publishAll(newEvents)))
   );
 
 const tagEventsWithStreamId = <V>(newEvents: Chunk.Chunk<V>, streamId: EventStreamId) =>
-  pipe(
-    newEvents,
-    Chunk.map((event) => ({ streamId, event }))
-  );
+  Chunk.map(newEvents, (event) => ({ streamId, event }));
 
 const createUpdatedValue = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
@@ -115,15 +109,13 @@ const modifyEventStreamsWithEmptyIfMissing = <V>(
   streamId: EventStreamId,
   emptyStream: EventStream<V>
 ) =>
-  pipe(
+  HashMap.modifyAt(
     eventStreamsById,
-    HashMap.modifyAt(
-      streamId,
-      Option.match({
-        onNone: () => Option.some(emptyStream),
-        onSome: (existing: EventStream<V>) => Option.some(existing),
-      })
-    )
+    streamId,
+    Option.match({
+      onNone: () => Option.some(emptyStream),
+      onSome: (existing: EventStream<V>) => Option.some(existing),
+    })
   );
 
 const ensureEventStream =

@@ -52,7 +52,7 @@ const addSubscriptionDataToMap = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
   streamId: EventStreamId,
   pubsub: PubSub.PubSub<T>
-) => pipe(subs, HashMap.set(streamId, { pubsub, subscribers: 0 }));
+) => HashMap.set(subs, streamId, { pubsub, subscribers: 0 });
 
 const createPubSubAndAddToMap = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
@@ -114,13 +114,10 @@ const updateSubscribersCount = <T>(
   streamId: EventStreamId,
   delta: number
 ) =>
-  pipe(
-    subscriptions,
-    HashMap.modify(streamId, (data) => ({
-      ...data,
-      subscribers: Math.max(0, data.subscribers + delta),
-    }))
-  );
+  HashMap.modify(subscriptions, streamId, (data) => ({
+    ...data,
+    subscribers: Math.max(0, data.subscribers + delta),
+  }));
 
 const incrementSubscribers = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
@@ -144,11 +141,7 @@ const decrementSubscribers = <T>(
 
 const filterActiveSubscriptions = <T>(
   subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-) =>
-  pipe(
-    subscriptions,
-    HashMap.filter((data) => data.subscribers > 0)
-  );
+) => HashMap.filter(subscriptions, (data) => data.subscribers > 0);
 
 const cleanupUnusedSubscriptions = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
