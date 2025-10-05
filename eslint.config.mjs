@@ -47,22 +47,6 @@ const functionalPluginOnly = {
   functional: functionalPlugin,
 };
 
-// Test-specific configurations defined locally (consumers configure these as needed)
-// TODO: These should be exported from @codeforbreakfast/buntest package
-const testSyntaxRestrictions = [
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runPromise"]',
-    message:
-      'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runPromise() in tests.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runSync"]',
-    message: 'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
-  },
-];
-
 const testFunctionalRules = {
   'functional/no-let': 'off',
   'functional/immutable-data': 'off',
@@ -139,16 +123,12 @@ export default [
     rules: typescriptBaseRules,
   },
   {
-    ...effectPlugin.configs.recommended,
-    files: [
-      '**/*.ts',
-      '**/*.tsx',
-      '**/*.test.ts',
-      '**/*.test.tsx',
-      '**/*.spec.ts',
-      '**/*.spec.tsx',
-    ],
+    name: 'effect-strict',
+    files: ['**/*.ts', '**/*.tsx'],
+    ignores: ['**/eventsourcing-testing-contracts/**', '**/buntest/**'],
     languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
+    rules: effectPlugin.configs.strict.rules,
   },
   {
     name: 'buntest-integration',
@@ -165,16 +145,10 @@ export default [
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithFunctional,
     rules: {
-      ...effectPlugin.configs.strict.rules,
       ...testFileImportRestrictions,
       // Override runPromise/runSync rules for tests - they use it.effect() instead
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
-      'no-restricted-syntax': [
-        'error',
-        ...testSyntaxRestrictions,
-        ...effectPlugin.configs.syntaxRestrictions.pipeStrict,
-      ],
       ...testFunctionalRules,
     },
   },
@@ -189,25 +163,10 @@ export default [
     rules: testingContractsExceptionRules,
   },
   {
-    ...effectPlugin.configs.noGen,
-    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
-    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
-    languageOptions: commonLanguageOptions,
-  },
-  {
-    ...effectPlugin.configs.pipeStrict,
-    files: ['packages/**/*.ts', 'packages/**/*.tsx'],
-    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
-    languageOptions: commonLanguageOptions,
-  },
-  {
     name: 'scripts-strict-with-runPromise-allowed',
     files: ['scripts/**/*.ts'],
     languageOptions: commonLanguageOptions,
     rules: {
-      ...effectPlugin.configs.recommended.rules,
-      ...effectPlugin.configs.noGen.rules,
-      ...effectPlugin.configs.pipeStrict.rules,
       // Allow runPromise/runSync in scripts as they are application entry points
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
