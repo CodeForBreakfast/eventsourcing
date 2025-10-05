@@ -7,13 +7,18 @@
     "@effect/platform",
     "eslint-plugin-*",
     "fast-check",
-    "npm"
+    "npm",
+    "@codeforbreakfast/eslint-effect"
   ],
   "ignoreBinaries": ["publish"],
   "workspaces": {
     "packages/eslint-test-rules": {
       "entry": ["src/**/*.ts"],
       "project": ["src/**/*.ts"]
+    },
+    "packages/eslint-effect": {
+      "entry": ["src/index.js", "test/**/*.ts"],
+      "project": ["src/**/*.js", "test/**/*.ts"]
     },
     "packages/*": {
       "entry": ["src/index.{ts,js,mjs}"],

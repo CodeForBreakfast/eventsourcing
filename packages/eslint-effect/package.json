@@ -1,0 +1,48 @@
+{
+  "name": "@codeforbreakfast/eslint-effect",
+  "version": "0.1.0",
+  "description": "ESLint rules and configurations for Effect projects enforcing functional programming best practices",
+  "type": "module",
+  "license": "MIT",
+  "author": "CodeForBreakfast",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing.git",
+    "directory": "packages/eslint-effect"
+  },
+  "keywords": [
+    "eslint",
+    "eslint-plugin",
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "typescript",
+    "linting"
+  ],
+  "exports": {
+    ".": "./src/index.js",
+    "./rules": "./src/rules/index.js",
+    "./configs": "./src/configs.js"
+  },
+  "files": [
+    "src",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "lint": "eslint test --ext .ts,.tsx --report-unused-disable-directives",
+    "typecheck": "tsc --noEmit",
+    "test": "bun run lint && bun run typecheck",
+    "validate:pack": "bun pm pack --dry-run",
+    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
+  },
+  "peerDependencies": {
+    "eslint": ">=8.0.0"
+  },
+  "devDependencies": {
+    "eslint": "9.36.0",
+    "@typescript-eslint/eslint-plugin": "8.45.0",
+    "typescript": "5.9.3",
+    "effect": "3.18.1"
+  }
+}
