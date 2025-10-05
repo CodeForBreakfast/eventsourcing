@@ -161,6 +161,9 @@ export default [
     rules: {
       ...effectPlugin.configs.strict.rules,
       ...testFileImportRestrictions,
+      // Override runPromise/runSync rules for tests - they use it.effect() instead
+      'effect/no-runPromise': 'off',
+      'effect/no-runSync': 'off',
       'no-restricted-syntax': [
         'error',
         ...testSyntaxRestrictions,
