@@ -212,10 +212,10 @@ const appendEventsAndUpdatePosition = <V>(
   pipe(
     value,
     SynchronizedRef.updateEffect(appendToEventStream(streamEnd, newEvents)),
-    Effect.map(() => ({
+    Effect.as({
       ...streamEnd,
       eventNumber: streamEnd.eventNumber + newEvents.length,
-    }))
+    })
   );
 
 const getLiveStreamForId = <V>(
