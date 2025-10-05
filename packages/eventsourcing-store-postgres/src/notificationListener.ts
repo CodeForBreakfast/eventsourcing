@@ -146,7 +146,7 @@ const processRawNotification =
   (rawPayload: string) =>
     pipe(
       logReceivedNotification(channelName, rawPayload),
-      Effect.flatMap(() => parseAndQueueNotification(rawPayload, notificationQueue, streamId)),
+      Effect.andThen(parseAndQueueNotification(rawPayload, notificationQueue, streamId)),
       Effect.catchAll((error) =>
         Effect.logError(`Failed to process notification for ${channelName}`, {
           error,
@@ -185,9 +185,7 @@ const activateChannelAndStartListening = (
   pipe(
     activeChannels,
     Ref.update(HashSet.add(channelName)),
-    Effect.flatMap(() =>
-      Effect.logDebug(`Successfully started listening on channel: ${channelName}`)
-    ),
+    Effect.andThen(Effect.logDebug(`Successfully started listening on channel: ${channelName}`)),
     Effect.tap(() => startListeningOnChannel(client, notificationQueue, streamId, channelName))
   );
 
@@ -225,7 +223,7 @@ const startListenForStream = (
   pipe(
     streamId,
     logStartListen,
-    Effect.flatMap(() => activateAndListen(activeChannels, client, notificationQueue, streamId)),
+    Effect.andThen(activateAndListen(activeChannels, client, notificationQueue, streamId)),
     Effect.mapError((error) =>
       eventStoreError.subscribe(streamId, `Failed to listen to stream: ${String(error)}`, error)
     )
@@ -254,7 +252,7 @@ const stopListenForStream = (
   pipe(
     streamId,
     logStopListen,
-    Effect.flatMap(() => removeChannelForStream(activeChannels, streamId)),
+    Effect.andThen(removeChannelForStream(activeChannels, streamId)),
     Effect.mapError((error) =>
       eventStoreError.subscribe(streamId, `Failed to unlisten from stream: ${String(error)}`, error)
     )
@@ -292,13 +290,13 @@ const logListenerStopped = Effect.logInfo('PostgreSQL notification listener stop
 const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
   pipe(
     logListenerStopped,
-    Effect.flatMap(() => getActiveChannels(activeChannels)),
+    Effect.andThen(getActiveChannels(activeChannels)),
     Effect.flatMap((channels) =>
       Effect.forEach(Array.from(channels), (channelName) =>
         Effect.logDebug(`Cleaning up channel: ${channelName}`)
       )
     ),
-    Effect.flatMap(() => clearActiveChannels(activeChannels)),
+    Effect.andThen(clearActiveChannels(activeChannels)),
     Effect.asVoid
   );
 

@@ -206,7 +206,7 @@ const bridgeNotification = (
 ) =>
   pipe(
     Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
-    Effect.flatMap(() => publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
+    Effect.andThen(publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
         error,
@@ -253,7 +253,7 @@ const startNotificationListener = (
 ) =>
   pipe(
     notificationListener.start,
-    Effect.flatMap(() => consumeNotifications(notificationListener, subscriptionManager))
+    Effect.andThen(consumeNotifications(notificationListener, subscriptionManager))
   );
 
 const logBridgeStart = Effect.logInfo(
@@ -273,7 +273,7 @@ const startNotificationBridge = (
 ) =>
   pipe(
     logBridgeStart,
-    Effect.flatMap(() => startNotificationListener(notificationListener, subscriptionManager))
+    Effect.andThen(startNotificationListener(notificationListener, subscriptionManager))
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
@@ -328,7 +328,7 @@ const subscribeToStreamWithHistory = (
   pipe(
     from.streamId,
     notificationListener.listen,
-    Effect.flatMap(() => subscribeToLiveStream(subscriptionManager, from.streamId)),
+    Effect.andThen(subscribeToLiveStream(subscriptionManager, from.streamId)),
     Effect.flatMap((liveStream) => combineHistoricalAndLiveStreams(eventRows, from, liveStream)),
     Effect.map((stream) =>
       Stream.mapError(stream, (error) =>
