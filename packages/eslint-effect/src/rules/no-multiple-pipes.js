@@ -27,6 +27,17 @@ export default {
         }
         seen.add(n);
 
+        // Stop traversing if we hit a function boundary (arrow, function expression, or function declaration)
+        // This prevents counting pipes in extracted functions that are called from this function
+        if (
+          n !== node &&
+          (n.type === 'ArrowFunctionExpression' ||
+            n.type === 'FunctionExpression' ||
+            n.type === 'FunctionDeclaration')
+        ) {
+          return;
+        }
+
         if (
           n.type === 'CallExpression' &&
           n.callee.type === 'Identifier' &&
