@@ -149,7 +149,7 @@ export default [
       '**/*test*.tsx',
       '**/testing/**/*.ts',
     ],
-    ignores: ['**/buntest/**'],
+    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithBuntest,
     rules: {
