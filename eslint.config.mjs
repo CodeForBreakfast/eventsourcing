@@ -94,6 +94,12 @@ const testingContractsExceptionRules = {
   'functional/type-declaration-immutability': 'off',
   'no-restricted-imports': 'off',
   'no-restricted-syntax': 'off',
+  'effect/prefer-andThen': 'off',
+  'effect/prefer-as': 'off',
+  'effect/no-classes': 'off',
+  'effect/no-gen': 'off',
+  'effect/no-runSync': 'off',
+  'effect/no-runPromise': 'off',
 };
 
 // Common TypeScript rules
