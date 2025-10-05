@@ -1,5 +1,97 @@
 # @codeforbreakfast/eventsourcing-protocol-default
 
+## 0.4.0
+
+### Minor Changes
+
+- [#157](https://github.com/CodeForBreakfast/eventsourcing/pull/157) [`2b03f0f`](https://github.com/CodeForBreakfast/eventsourcing/commit/2b03f0faea585e54ac3488f6f5f9c97629eb1222) Thanks [@GraemeF](https://github.com/GraemeF)! - Remove deprecated Command type export and clean up legacy code
+
+  **BREAKING CHANGE**: The deprecated `Command` type export has been removed from `@codeforbreakfast/eventsourcing-commands`. Use `WireCommand` instead for transport layer commands.
+  - Removed deprecated `Command` type export - use `WireCommand` for clarity about transport layer vs domain commands
+  - Updated all internal references from `Command` to `WireCommand`
+  - Removed migration guides and backward compatibility documentation
+  - Cleaned up legacy helper functions and test comments
+
+  To update your code:
+
+  ```typescript
+  // Before
+  import { Command } from '@codeforbreakfast/eventsourcing-commands';
+
+  // After
+  import { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+  ```
+
+### Patch Changes
+
+- [#167](https://github.com/CodeForBreakfast/eventsourcing/pull/167) [`e3a002a`](https://github.com/CodeForBreakfast/eventsourcing/commit/e3a002a8dabbc4a57c750d9d6aa760c7e5494caf) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated type-fest dependency to v5 and removed unused ESLint directives. No functional changes to the API.
+
+- [#164](https://github.com/CodeForBreakfast/eventsourcing/pull/164) [`96c7eb3`](https://github.com/CodeForBreakfast/eventsourcing/commit/96c7eb357abb7a36bc45a007bd58ec6e594f7abb) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved code quality by configuring ESLint to recognize Effect types as immutable-by-contract and removing unnecessary ESLint suppressions. This change has no runtime impact but improves code maintainability.
+
+  **WebSocket Transport**: Fixed mutation anti-patterns by replacing type-cast mutations with proper Effect immutable data structures (HashMap, HashSet, Ref). All 21 ESLint suppressions across websocket transport files have been removed.
+
+  **Protocol**: Removed 15 unnecessary ESLint suppressions that are no longer needed with the improved ESLint configuration.
+
+  **ESLint Configuration**: Configured functional programming rules to understand that Effect types (Ref, Queue, HashMap, HashSet, Stream, PubSub) are immutable-by-contract despite containing internal mutable state managed through controlled APIs.
+
+- [#200](https://github.com/CodeForBreakfast/eventsourcing/pull/200) [`1a4b174`](https://github.com/CodeForBreakfast/eventsourcing/commit/1a4b1743ba8edd7bf1a359468bae5dc8218ddf43) Thanks [@GraemeF](https://github.com/GraemeF)! - Enhanced ESLint rules to better detect unnecessary function wrappers. The custom rule now correctly identifies when `(x) => pipe(x, fn)` is redundant while allowing valid cases like `(x) => pipe(SomeService, fn)`. This improves code quality by preventing unnecessary indirection while preserving valid functional composition patterns.
+
+- [#199](https://github.com/CodeForBreakfast/eventsourcing/pull/199) [`a6482b6`](https://github.com/CodeForBreakfast/eventsourcing/commit/a6482b69a1070b62654e63fb501fd6346413b50f) Thanks [@GraemeF](https://github.com/GraemeF)! - Improve code quality by using idiomatic Effect patterns
+
+  The codebase now uses `Effect.andThen()` instead of `Effect.flatMap(() => ...)` when sequencing effects that don't need the previous result, and `Effect.as()` instead of `Effect.map(() => constant)` when replacing values with constants. These changes make the code more readable and better reflect the intent of each operation, following Effect.ts best practices.
+
+- [#175](https://github.com/CodeForBreakfast/eventsourcing/pull/175) [`8503302`](https://github.com/CodeForBreakfast/eventsourcing/commit/850330219126aac119ad10f0c9471dc8b89d773a) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce simplified pipe usage patterns
+
+  This update improves code maintainability and readability by enforcing consistent functional programming patterns. The codebase now exclusively uses the standalone `pipe()` function instead of method-based `.pipe()` calls, eliminates nested pipe compositions in favor of named helper functions, and removes curried function calls. These changes make the code easier to understand and debug while maintaining the same functionality.
+
+- [#198](https://github.com/CodeForBreakfast/eventsourcing/pull/198) [`460784f`](https://github.com/CodeForBreakfast/eventsourcing/commit/460784fb8d0c31b1d5b4b122d73a4807e2ce9bbe) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix all TypeScript code examples in documentation to pass validation. All examples now compile successfully with proper imports, type declarations, and adherence to functional programming patterns using pipe() composition.
+
+- [#206](https://github.com/CodeForBreakfast/eventsourcing/pull/206) [`322a7ab`](https://github.com/CodeForBreakfast/eventsourcing/commit/322a7aba4778b3f2e1cf4aa6ad4abc37414af8a7) Thanks [@GraemeF](https://github.com/GraemeF)! - CI workflow now uses concurrency groups to prevent duplicate workflow runs when the release bot updates PRs. This eliminates wasted compute resources from race conditions in GitHub's API-based commit handling.
+
+- [#159](https://github.com/CodeForBreakfast/eventsourcing/pull/159) [`04e27b8`](https://github.com/CodeForBreakfast/eventsourcing/commit/04e27b86f885c7a7746580f83460de3be7bae1bb) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix turbo cache invalidation for lint tasks to ensure CI properly detects code changes
+  - Simplified lint task input patterns to prevent cache inconsistencies
+  - Added tracking for root package.json and bun.lock to invalidate cache when dependencies change
+  - Added missing TSX test file patterns to ensure all test files are tracked
+  - Removed duplicate and non-existent file patterns that were causing unreliable cache behavior
+
+  This ensures that lint errors are always caught in CI and prevents false-positive builds from stale cache.
+
+- [#193](https://github.com/CodeForBreakfast/eventsourcing/pull/193) [`38cd622`](https://github.com/CodeForBreakfast/eventsourcing/commit/38cd622f81a026c17f0e8c3c7a957e3ca0388806) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved client documentation to emphasize transport abstraction.
+
+  The documentation now clearly shows:
+  - Protocol package provides transport-agnostic API (`sendWireCommand`, `subscribe`)
+  - WebSocket package is used only for creating Effect layers
+  - Application code should be written against protocol abstractions
+  - Transport choice (WebSocket, HTTP, etc.) is configured once when setting up layers
+
+  This makes it easier to:
+  - Write transport-independent application code
+  - Switch transports without changing application logic
+  - Understand the proper separation between layers
+
+- [#201](https://github.com/CodeForBreakfast/eventsourcing/pull/201) [`0f7cba1`](https://github.com/CodeForBreakfast/eventsourcing/commit/0f7cba1afa2808d6812f909707c052abcf2dc09b) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved type safety and code clarity by enforcing Match.tag() over Match.when() for discriminated union matching. The codebase now consistently uses Match.tag() when matching on \_tag discriminators, providing better type inference and clearer intent.
+
+- [#185](https://github.com/CodeForBreakfast/eventsourcing/pull/185) [`5c27220`](https://github.com/CodeForBreakfast/eventsourcing/commit/5c2722029b72f69d23b3e0dd7ccdb46270158959) Thanks [@GraemeF](https://github.com/GraemeF)! - Renamed protocol message types to use `Protocol*` prefix for clearer layer separation. Protocol-level message types (`ProtocolCommand`, `ProtocolCommandResult`, `ProtocolEvent`, `ProtocolSubscribe`, `ProtocolIncoming`) are now clearly distinguished from the public Wire API (`WireCommand`) and transport layer (`TransportMessage`). This improves code clarity by making the internal protocol implementation details explicit.
+
+- [#169](https://github.com/CodeForBreakfast/eventsourcing/pull/169) [`abfb14d`](https://github.com/CodeForBreakfast/eventsourcing/commit/abfb14d261138b629a31a2b0f86bd17b77f56720) Thanks [@GraemeF](https://github.com/GraemeF)! - Modernized service definitions to use Effect-TS 2.3+ patterns. Services now use `Context.Tag` instead of `Effect.Tag` with inlined service shapes, providing better type inference and cleaner code. Generic services use the `Context.GenericTag` factory pattern for proper type parameter support.
+
+  For most users, these are internal improvements with no breaking changes. If you're directly referencing service types (like `CommandRegistryService`), use `Context.Tag.Service<typeof ServiceName>` to extract the service type instead.
+
+- [#203](https://github.com/CodeForBreakfast/eventsourcing/pull/203) [`d2b1c32`](https://github.com/CodeForBreakfast/eventsourcing/commit/d2b1c329050725ad7dad65442514387972d1d1f4) Thanks [@GraemeF](https://github.com/GraemeF)! - Code quality improvements: All packages now follow stricter functional programming patterns by removing type assertions in Effect callbacks. The codebase uses proper Schema validation and runtime type checking instead of unsafe type casts, improving type safety and code reliability.
+
+- [#179](https://github.com/CodeForBreakfast/eventsourcing/pull/179) [`02f67ff`](https://github.com/CodeForBreakfast/eventsourcing/commit/02f67ffe83a70fceebe5ee8d848e0a858529319b) Thanks [@GraemeF](https://github.com/GraemeF)! - Replace direct `_tag` property access with Effect type guards throughout the codebase. This change improves type safety and follows Effect's recommended patterns for working with discriminated unions. The transport packages now properly validate incoming messages using Schema validation instead of unsafe type casts.
+
+- [#180](https://github.com/CodeForBreakfast/eventsourcing/pull/180) [`b481714`](https://github.com/CodeForBreakfast/eventsourcing/commit/b4817141e319d830f10f1914b8a12935ed10fbf8) Thanks [@GraemeF](https://github.com/GraemeF)! - Enforce documented justifications for all ESLint rule suppressions
+
+  All `eslint-disable` comments now require a description explaining why the rule is being suppressed. This improves code maintainability by documenting the reasoning behind each exception to the linting rules.
+
+- [#178](https://github.com/CodeForBreakfast/eventsourcing/pull/178) [`f4c06d6`](https://github.com/CodeForBreakfast/eventsourcing/commit/f4c06d6430f61976ec9c28af38faac39f88800d1) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactored pipe usage patterns to comply with simplified functional composition rules. All `pipe(fn(x), ...)` patterns have been converted to `pipe(x, fn, ...)` for better readability and consistency. This change also fixes Effect type signatures to properly use `never` instead of `unknown` in context parameters where appropriate.
+
+- Updated dependencies [[`2b03f0f`](https://github.com/CodeForBreakfast/eventsourcing/commit/2b03f0faea585e54ac3488f6f5f9c97629eb1222), [`e3a002a`](https://github.com/CodeForBreakfast/eventsourcing/commit/e3a002a8dabbc4a57c750d9d6aa760c7e5494caf), [`1a4b174`](https://github.com/CodeForBreakfast/eventsourcing/commit/1a4b1743ba8edd7bf1a359468bae5dc8218ddf43), [`4e9f8c9`](https://github.com/CodeForBreakfast/eventsourcing/commit/4e9f8c9711df00e01b0ab943dad67aa14d59df06), [`a6482b6`](https://github.com/CodeForBreakfast/eventsourcing/commit/a6482b69a1070b62654e63fb501fd6346413b50f), [`ae77963`](https://github.com/CodeForBreakfast/eventsourcing/commit/ae7796342df299997ece012b7090f1ce9190b0a4), [`8503302`](https://github.com/CodeForBreakfast/eventsourcing/commit/850330219126aac119ad10f0c9471dc8b89d773a), [`460784f`](https://github.com/CodeForBreakfast/eventsourcing/commit/460784fb8d0c31b1d5b4b122d73a4807e2ce9bbe), [`322a7ab`](https://github.com/CodeForBreakfast/eventsourcing/commit/322a7aba4778b3f2e1cf4aa6ad4abc37414af8a7), [`04e27b8`](https://github.com/CodeForBreakfast/eventsourcing/commit/04e27b86f885c7a7746580f83460de3be7bae1bb), [`abfb14d`](https://github.com/CodeForBreakfast/eventsourcing/commit/abfb14d261138b629a31a2b0f86bd17b77f56720), [`d2b1c32`](https://github.com/CodeForBreakfast/eventsourcing/commit/d2b1c329050725ad7dad65442514387972d1d1f4), [`02f67ff`](https://github.com/CodeForBreakfast/eventsourcing/commit/02f67ffe83a70fceebe5ee8d848e0a858529319b), [`b481714`](https://github.com/CodeForBreakfast/eventsourcing/commit/b4817141e319d830f10f1914b8a12935ed10fbf8)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.0
+  - @codeforbreakfast/eventsourcing-store@0.8.0
+  - @codeforbreakfast/eventsourcing-transport@0.3.5
+
 ## 0.3.5
 
 ### Patch Changes
