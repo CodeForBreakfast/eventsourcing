@@ -269,7 +269,7 @@ const repeatHeartbeat =
           Schedule.spaced(config.heartbeatIntervalMs)
         )
       ),
-      (fiber) => ({ fiber }) as const
+      (fiber) => ({ fiber })
     );
 
 const buildConnectionManager =
