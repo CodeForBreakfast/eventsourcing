@@ -13,7 +13,6 @@
 '@codeforbreakfast/eventsourcing-websocket': patch
 '@codeforbreakfast/buntest': patch
 '@codeforbreakfast/eslint-effect': patch
-'@codeforbreakfast/eslint-test-rules': patch
 ---
 
 CI workflow now uses concurrency groups to prevent duplicate workflow runs when the release bot updates PRs. This eliminates wasted compute resources from race conditions in GitHub's API-based commit handling.

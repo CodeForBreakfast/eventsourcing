@@ -47,12 +47,13 @@ const functionalPluginOnly = {
   functional: functionalPlugin,
 };
 
-// Import configs from the effect plugin
-const effectSyntaxRestrictions = effectPlugin.configs.effectSyntaxRestrictions;
-
-const simplePipeSyntaxRestrictions = effectPlugin.configs.simplePipeSyntaxRestrictions;
-
-const functionalImmutabilityRules = effectPlugin.configs.functionalImmutabilityRules;
+// Shared effect custom rules to avoid repetition
+const effectCustomRules = {
+  'effect/no-unnecessary-pipe-wrapper': 'error',
+  'effect/prefer-match-tag': 'error',
+  'effect/prefer-match-over-conditionals': 'error',
+  'effect/prefer-schema-validation-over-assertions': 'error',
+};
 
 // Test-specific configurations defined locally (consumers configure these as needed)
 // TODO: These should be exported from @codeforbreakfast/buntest package
@@ -130,7 +131,7 @@ export default [
     files: ['**/*.ts', '**/*.tsx'],
     languageOptions: commonLanguageOptionsWithProject,
     plugins: functionalPluginOnly,
-    rules: functionalImmutabilityRules,
+    rules: effectPlugin.configs.functionalImmutabilityRules,
   },
   {
     name: 'typescript-base',
@@ -152,7 +153,7 @@ export default [
     languageOptions: commonLanguageOptions,
     plugins: typescriptPlugin,
     rules: {
-      'no-restricted-syntax': ['error', ...effectSyntaxRestrictions],
+      'no-restricted-syntax': ['error', ...effectPlugin.configs.effectSyntaxRestrictions],
     },
   },
   {
@@ -173,15 +174,12 @@ export default [
       ...testFileImportRestrictions,
       'no-restricted-syntax': [
         'error',
-        ...effectSyntaxRestrictions,
+        ...effectPlugin.configs.effectSyntaxRestrictions,
         ...testSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
+        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
       ],
       ...testFunctionalRules,
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+      ...effectCustomRules,
     },
   },
   {
@@ -203,13 +201,10 @@ export default [
     rules: {
       'no-restricted-syntax': [
         'error',
-        ...effectSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
+        ...effectPlugin.configs.effectSyntaxRestrictions,
+        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
       ],
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+      ...effectCustomRules,
     },
   },
   {
@@ -220,31 +215,10 @@ export default [
     rules: {
       'no-restricted-syntax': [
         'error',
-        ...effectSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
+        ...effectPlugin.configs.effectSyntaxRestrictions,
+        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
       ],
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
-    },
-  },
-  {
-    name: 'eslint-test-rules-exceptions',
-    files: ['**/eslint-test-rules/**/*.ts', '**/eslint-test-rules/**/*.tsx'],
-    languageOptions: commonLanguageOptions,
-    plugins: commonPlugins,
-    rules: {
-      '@typescript-eslint/no-unused-vars': 'off',
-      'no-restricted-syntax': [
-        'error',
-        ...effectSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
-      ],
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+      ...effectCustomRules,
     },
   },
   {
@@ -256,13 +230,10 @@ export default [
       '@typescript-eslint/no-unused-vars': 'off',
       'no-restricted-syntax': [
         'error',
-        ...effectSyntaxRestrictions,
-        ...simplePipeSyntaxRestrictions,
+        ...effectPlugin.configs.effectSyntaxRestrictions,
+        ...effectPlugin.configs.simplePipeSyntaxRestrictions,
       ],
-      'effect/no-unnecessary-pipe-wrapper': 'error',
-      'effect/prefer-match-tag': 'error',
-      'effect/prefer-match-over-conditionals': 'error',
-      'effect/prefer-schema-validation-over-assertions': 'error',
+      ...effectCustomRules,
     },
   },
   {

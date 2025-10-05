@@ -1,4 +1,4 @@
-import { Either, Option, Effect, pipe, Match } from 'effect';
+import { Either, Option, Effect, pipe, Match, Schema } from 'effect';
 
 const either = Either.right(42);
 const option = Option.some(42);
@@ -72,6 +72,15 @@ Effect.runPromise(Effect.succeed(42));
 
 // eslint-disable-next-line no-restricted-syntax -- Testing method-based pipe ban
 const methodPipe = Effect.succeed(42).pipe(Effect.map((x) => x + 1));
+
+// ========================================
+// CURRIED FUNCTION CALLS (should fail)
+// ========================================
+
+const MySchema = Schema.Struct({ value: Schema.Number });
+
+// eslint-disable-next-line no-restricted-syntax -- Testing curried function call ban
+const curriedCall = Schema.decodeUnknown(MySchema)({ value: 42 });
 
 // ========================================
 // NESTED PIPE (should fail)

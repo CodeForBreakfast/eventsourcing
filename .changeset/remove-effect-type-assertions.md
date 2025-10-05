@@ -1,5 +1,4 @@
 ---
-'@codeforbreakfast/eslint-test-rules': patch
 '@codeforbreakfast/eventsourcing-store': patch
 '@codeforbreakfast/eventsourcing-testing-contracts': patch
 '@codeforbreakfast/eventsourcing-projections': patch
