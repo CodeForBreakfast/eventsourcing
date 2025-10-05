@@ -264,7 +264,7 @@ const aggregateFactory = <TId, TEvent, TState, TCommands, TTag>(
 **Example**:
 
 ```typescript
-import { Effect, Option, Match, pipe } from 'effect';
+import { Effect, Option, Match, Schema, pipe } from 'effect';
 import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 
 declare const UserEvent: any;
@@ -301,7 +301,7 @@ const applyUserEvent =
       Match.orElse(() => Effect.succeed({ name: '', email: '' }))
     );
 
-const UserAggregate = makeAggregateRoot(UserId, applyUserEvent, UserEventStore, {
+const UserAggregate = makeAggregateRoot(UserId, Schema.String, applyUserEvent, UserEventStore, {
   createUser,
   updateUser,
 });

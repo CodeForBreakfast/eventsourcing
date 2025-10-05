@@ -33,7 +33,6 @@ import {
   // Core interfaces and types
   AggregateState,
   EventMetadata,
-  EventOriginatorId,
 
   // Command processing
   CommandHandler,
@@ -45,11 +44,7 @@ import {
 
   // Command context services
   CommandContext,
-  CommandInitiatorId,
-
-  // Current user services
-  CurrentUser,
-  CurrentUserError,
+  CommandContextService,
 
   // Helper functions
   eventMetadata,
@@ -76,13 +71,17 @@ import { makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store-in
 const UserId = Schema.String.pipe(Schema.brand('UserId'));
 type UserId = typeof UserId.Type;
 
-// 2. Define your domain events using eventSchema
-const UserRegisteredEvent = eventSchema(Schema.Literal('UserRegistered'), {
+// 2. Define your initiator ID schema (who executes commands)
+const InitiatorId = Schema.String.pipe(Schema.brand('InitiatorId'));
+type InitiatorId = typeof InitiatorId.Type;
+
+// 3. Define your domain events using eventSchema
+const UserRegisteredEvent = eventSchema(Schema.String, Schema.Literal('UserRegistered'), {
   email: Schema.String,
   name: Schema.String,
 });
 
-const UserEmailUpdatedEvent = eventSchema(Schema.Literal('UserEmailUpdated'), {
+const UserEmailUpdatedEvent = eventSchema(Schema.String, Schema.Literal('UserEmailUpdated'), {
   oldEmail: Schema.String,
   newEmail: Schema.String,
 });
@@ -90,7 +89,7 @@ const UserEmailUpdatedEvent = eventSchema(Schema.Literal('UserEmailUpdated'), {
 const UserEvent = Schema.Union(UserRegisteredEvent, UserEmailUpdatedEvent);
 type UserEvent = typeof UserEvent.Type;
 
-// 3. Define your aggregate state
+// 4. Define your aggregate state
 // Note: Aggregate state doesn't need to store its own ID - that's implicit from the stream
 interface UserState {
   email: string;
@@ -98,7 +97,7 @@ interface UserState {
   isActive: boolean;
 }
 
-// 4. Create the event application function
+// 5. Create the event application function
 // Events don't contain aggregate IDs - the ID comes from the event stream
 const applyUserEvent: (
   state: Option.Option<UserState>
@@ -125,13 +124,13 @@ const applyUserEvent: (
         : Effect.fail(new Error(`Unknown event type: ${(event as any).type}`))
   );
 
-// 5. Create event store tag
+// 6. Create event store tag
 class UserEventStore extends Context.Tag('UserEventStore')<
   UserEventStore,
   EventStore<UserEvent>
 >() {}
 
-// 6. Define command handlers that return functions taking state
+// 7. Define command handlers that return functions taking state
 // Note: Commands don't need userId for existing aggregates - it's implicit from the stream
 const registerUser = (email: string, name: string) => (currentState: AggregateState<UserState>) =>
   pipe(
@@ -140,7 +139,7 @@ const registerUser = (email: string, name: string) => (currentState: AggregateSt
       onSome: () => Effect.fail(new Error('User already exists')),
       onNone: () =>
         pipe(
-          eventMetadata(),
+          eventMetadata<string>(),
           Effect.map((metadata) =>
             Chunk.of({
               type: 'UserRegistered' as const,
@@ -159,7 +158,7 @@ const updateUserEmail = (newEmail: string) => (currentState: AggregateState<User
       onNone: () => Effect.fail(new Error('User not found')),
       onSome: (state) =>
         pipe(
-          eventMetadata(),
+          eventMetadata<string>(),
           Effect.map((metadata) =>
             Chunk.of({
               type: 'UserEmailUpdated' as const,
@@ -174,13 +173,19 @@ const updateUserEmail = (newEmail: string) => (currentState: AggregateState<User
     })
   );
 
-// 7. Create the aggregate root
-const UserAggregate = makeAggregateRoot(UserId, applyUserEvent as any, UserEventStore, {
-  registerUser,
-  updateUserEmail,
-});
+// 8. Create the aggregate root
+const UserAggregate = makeAggregateRoot(
+  UserId,
+  Schema.String,
+  applyUserEvent as any,
+  UserEventStore,
+  {
+    registerUser,
+    updateUserEmail,
+  }
+);
 
-// 8. Usage example
+// 9. Usage example
 const userId = 'user-123' as UserId; // The aggregate ID is only used for loading/committing
 
 const program = pipe(
@@ -227,7 +232,7 @@ const program = pipe(
 // Run with dependencies
 (async () => {
   const eventStoreLayer: any = makeInMemoryEventStore(UserEventStore as any);
-  const contextLayer: any = CommandContextTest(Option.some('system-user' as any));
+  const contextLayer: any = CommandContextTest<string>('system-user');
 
   const runnable: Effect.Effect<any, any, never> = pipe(
     program,
@@ -259,6 +264,7 @@ interface AggregateState<TData> {
 The main function for creating aggregate roots with event sourcing capabilities:
 
 ```typescript
+import { Schema } from 'effect';
 import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 
 declare const IdSchema: any;
@@ -266,7 +272,13 @@ declare const applyEventFunction: any;
 declare const EventStoreTag: any;
 declare const commandHandlers: any;
 
-const MyAggregate = makeAggregateRoot(IdSchema, applyEventFunction, EventStoreTag, commandHandlers);
+const MyAggregate = makeAggregateRoot(
+  IdSchema,
+  Schema.String,
+  applyEventFunction,
+  EventStoreTag,
+  commandHandlers
+);
 ```
 
 ### Event Schema Creation
@@ -277,7 +289,7 @@ Use `eventSchema` to create properly structured domain events:
 import { Schema } from 'effect';
 import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 
-const MyEvent = eventSchema(Schema.Literal('MyEventType'), {
+const MyEvent = eventSchema(Schema.String, Schema.Literal('MyEventType'), {
   field1: Schema.String,
   field2: Schema.Number,
 });
@@ -288,31 +300,16 @@ const MyEvent = eventSchema(Schema.Literal('MyEventType'), {
 Track command execution metadata:
 
 ```typescript
-import { Effect, Option, pipe } from 'effect';
+import { Effect, pipe } from 'effect';
 import { CommandContext, CommandContextTest } from '@codeforbreakfast/eventsourcing-aggregates';
 
 const myCommand = pipe(
-  CommandContext,
-  Effect.flatMap((context) => context.getInitiatorId),
+  CommandContext<string>(),
+  Effect.flatMap((context) => context.getInitiator),
   Effect.map((initiatorId) => initiatorId)
 );
 
-const testLayer = CommandContextTest(Option.some('test-user-id' as any));
-```
-
-### Current User Service
-
-Track the current user executing commands:
-
-```typescript
-import { Effect, pipe } from 'effect';
-import { CurrentUser } from '@codeforbreakfast/eventsourcing-aggregates';
-
-const userAwareCommand = pipe(
-  CurrentUser,
-  Effect.flatMap((currentUserService) => currentUserService.getCurrentUser()),
-  Effect.map((currentUser) => currentUser)
-);
+const testLayer = CommandContextTest<string>('test-user-id');
 ```
 
 ### Event Metadata Generation
@@ -324,7 +321,7 @@ import { Effect, pipe } from 'effect';
 import { eventMetadata } from '@codeforbreakfast/eventsourcing-aggregates';
 
 const createEvent = pipe(
-  eventMetadata(),
+  eventMetadata<string>(),
   Effect.map((metadata) => ({
     type: 'SomethingHappened' as const,
     metadata,
@@ -360,7 +357,7 @@ const transferMoney =
           }
 
           return pipe(
-            eventMetadata(),
+            eventMetadata<string>(),
             Effect.map((metadata) =>
               Chunk.of({
                 type: 'MoneyTransferred' as const,
@@ -486,7 +483,7 @@ describe('UserAggregate', () => {
     ) as any;
 
     await Effect.runPromise(
-      pipe(program, Effect.provide(CommandContextTest(Option.some('test-initiator' as any))))
+      pipe(program, Effect.provide(CommandContextTest<string>('test-initiator')))
     );
   });
 
@@ -510,7 +507,7 @@ describe('UserAggregate', () => {
     ) as any;
 
     await Effect.runPromise(
-      pipe(program, Effect.provide(CommandContextTest(Option.some('test-initiator' as any))))
+      pipe(program, Effect.provide(CommandContextTest<string>('test-initiator')))
     );
   });
 });
