@@ -19,6 +19,9 @@
     "typescript",
     "linting"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": "./src/index.js",
     "./rules": "./src/rules/index.js",
