@@ -14,41 +14,52 @@ export default {
   create(context) {
     return {
       ClassDeclaration(node) {
-        const hasAllowedExtension = node.body.body.some((member) => {
-          if (member.type === 'MethodDefinition' && member.kind === 'constructor') {
-            return member.value.body.body.some((statement) => {
-              if (
-                statement.type === 'ExpressionStatement' &&
-                statement.expression.type === 'CallExpression' &&
-                statement.expression.callee.type === 'Super'
-              ) {
-                return true;
-              }
-              return false;
-            });
-          }
-          return false;
-        });
-
         const superClass = node.superClass;
-        if (superClass && superClass.type === 'MemberExpression') {
-          const object = superClass.object?.name;
-          const property = superClass.property?.name;
 
-          const allowedClasses = [
-            { object: 'Data', property: 'TaggedError' },
-            { object: 'Context', property: 'Tag' },
-            { object: 'Effect', property: 'Tag' },
-            { object: 'Context', property: 'GenericTag' },
-            { object: 'Schema', property: 'Class' },
-          ];
+        // Check for allowed patterns:
+        // 1. MemberExpression: extends Data.TaggedError, Schema.Class
+        // 2. CallExpression: extends Context.Tag(...), Effect.Tag(...)
+        if (superClass) {
+          // Pattern: extends Data.TaggedError or Schema.Class
+          if (superClass.type === 'MemberExpression') {
+            const object = superClass.object?.name;
+            const property = superClass.property?.name;
 
-          const isAllowed = allowedClasses.some(
-            (allowed) => object === allowed.object && property === allowed.property
-          );
+            const allowedMemberExpressions = [
+              { object: 'Data', property: 'TaggedError' },
+              { object: 'Schema', property: 'Class' },
+            ];
 
-          if (isAllowed) {
-            return;
+            const isAllowed = allowedMemberExpressions.some(
+              (allowed) => object === allowed.object && property === allowed.property
+            );
+
+            if (isAllowed) {
+              return;
+            }
+          }
+
+          // Pattern: extends Context.Tag(...), Effect.Tag(...), Context.GenericTag(...)
+          if (
+            superClass.type === 'CallExpression' &&
+            superClass.callee.type === 'MemberExpression'
+          ) {
+            const object = superClass.callee.object?.name;
+            const property = superClass.callee.property?.name;
+
+            const allowedCallExpressions = [
+              { object: 'Context', property: 'Tag' },
+              { object: 'Effect', property: 'Tag' },
+              { object: 'Context', property: 'GenericTag' },
+            ];
+
+            const isAllowed = allowedCallExpressions.some(
+              (allowed) => object === allowed.object && property === allowed.property
+            );
+
+            if (isAllowed) {
+              return;
+            }
           }
         }
 
