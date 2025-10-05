@@ -12,6 +12,7 @@ import {
   Scope,
   Clock,
   Effect,
+  Schema,
 } from 'effect';
 import { type ReadonlyDeep } from 'type-fest';
 import {
@@ -28,6 +29,7 @@ import {
   ProtocolCommandResult,
   ProtocolEvent,
   ProtocolSubscribe,
+  ProtocolServerIncoming,
   ProtocolValidationError,
 } from './protocol';
 
@@ -77,6 +79,20 @@ const parseTransportPayload = (message: ReadonlyDeep<TransportMessage>) =>
       }),
   });
 
+const validateServerIncomingMessage = (rawPayload: unknown) =>
+  pipe(
+    rawPayload,
+    Schema.decodeUnknown(ProtocolServerIncoming),
+    Effect.mapError(
+      (cause) =>
+        new ProtocolValidationError({
+          message: 'Invalid server incoming message format',
+          rawData: rawPayload,
+          cause,
+        })
+    )
+  );
+
 const currentTimestamp = () =>
   pipe(
     Clock.currentTimeMillis,
@@ -111,21 +127,25 @@ const handleProtocolSubscribe =
       }))
     );
 
+const routeParsedMessage =
+  (commandQueue: Queue.Queue<WireCommand>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
+  (parsedMessage: ReadonlyDeep<ProtocolServerIncoming>) =>
+    pipe(
+      parsedMessage,
+      Match.value,
+      Match.when({ type: 'command' }, handleProtocolCommand(commandQueue)),
+      Match.when({ type: 'subscribe' }, handleProtocolSubscribe(stateRef, connectionId)),
+      Match.orElse(() => Effect.void)
+    );
+
 const processIncomingMessage =
   (commandQueue: Queue.Queue<WireCommand>, stateRef: Ref.Ref<ServerState>, connectionId: string) =>
   (message: ReadonlyDeep<TransportMessage>) =>
     pipe(
       message,
       parseTransportPayload,
-      Effect.flatMap((parsedMessage) => {
-        if (parsedMessage.type === 'command') {
-          return handleProtocolCommand(commandQueue)(parsedMessage);
-        }
-        if (parsedMessage.type === 'subscribe') {
-          return handleProtocolSubscribe(stateRef, connectionId)(parsedMessage);
-        }
-        return Effect.void;
-      }),
+      Effect.flatMap(validateServerIncomingMessage),
+      Effect.flatMap(routeParsedMessage(commandQueue, stateRef, connectionId)),
       Effect.catchAll(() => Effect.void)
     );
 

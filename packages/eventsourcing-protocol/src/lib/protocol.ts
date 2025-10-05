@@ -82,6 +82,10 @@ export const ProtocolSubscribe = Schema.Struct({
 });
 export type ProtocolSubscribe = typeof ProtocolSubscribe.Type;
 
+// Union of all possible server incoming messages (client -> server)
+export const ProtocolServerIncoming = Schema.Union(ProtocolCommand, ProtocolSubscribe);
+export type ProtocolServerIncoming = ReadonlyDeep<typeof ProtocolServerIncoming.Type>;
+
 // Incoming messages (server -> client)
 export const ProtocolCommandResult = Schema.Struct({
   type: Schema.Literal('command_result'),
