@@ -245,6 +245,13 @@ describe('WebSocket Transport - Error Scenarios', () => {
 // WebSocket-Specific Message Handling Tests
 // =============================================================================
 
+const extractMessageId = (msg: unknown): string => {
+  if (typeof msg === 'object' && msg !== null && 'id' in msg && typeof msg.id === 'string') {
+    return msg.id;
+  }
+  throw new Error('Invalid message structure');
+};
+
 const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
   pipe(
     subscription,
@@ -253,7 +260,7 @@ const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
     Effect.map((message) => {
       expect(Option.isSome(message)).toBe(true);
       if (Option.isSome(message)) {
-        expect((message.value as { readonly id: string }).id).toBe('valid-id');
+        expect(extractMessageId(message.value)).toBe('valid-id');
       }
     })
   );
