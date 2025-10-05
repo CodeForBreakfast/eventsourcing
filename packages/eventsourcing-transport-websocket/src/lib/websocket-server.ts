@@ -215,6 +215,24 @@ const createClientResources = (): Effect.Effect<
     subscribersRef: createEmptySubscribersRef(),
   });
 
+const buildClientState = (
+  clientId: Server.ClientId,
+  connectedAt: ReadonlyDeep<Date>,
+  ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
+  resources: {
+    readonly connectionStateQueue: Queue.Queue<ConnectionState>;
+    readonly connectionStateRef: Ref.Ref<ConnectionState>;
+    readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
+  }
+): ClientState => ({
+  id: clientId,
+  socket: ws,
+  connectionStateRef: resources.connectionStateRef,
+  connectionStateQueue: resources.connectionStateQueue,
+  subscribersRef: resources.subscribersRef,
+  connectedAt,
+});
+
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
@@ -222,17 +240,7 @@ const createClientStateResources = (
 ): Effect.Effect<ClientState, never, never> =>
   pipe(
     createClientResources(),
-    Effect.map(
-      ({ connectionStateQueue, connectionStateRef, subscribersRef }) =>
-        ({
-          id: clientId,
-          socket: ws,
-          connectionStateRef,
-          connectionStateQueue,
-          subscribersRef,
-          connectedAt,
-        }) as ClientState
-    )
+    Effect.map((resources) => buildClientState(clientId, connectedAt, ws, resources))
   );
 
 const createAddClientToServerStateUpdater = (clientState: ClientState) => (state: ServerState) => ({

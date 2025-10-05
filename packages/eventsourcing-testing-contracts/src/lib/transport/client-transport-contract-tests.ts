@@ -130,10 +130,13 @@ const publishAndHandleError = (transport: ConnectedTransportTestInterface) => {
     payload: 'should be handled gracefully',
   };
 
+  const success = 'success';
+  const error = 'error';
+
   return pipe(
     transport.publish(message),
-    Effect.map(() => 'success' as const),
-    Effect.catchAll(() => Effect.succeed('error' as const)),
+    Effect.map(() => success),
+    Effect.catchAll(() => Effect.succeed(error)),
     Effect.tap((result) => Effect.sync(() => expect(['success', 'error']).toContain(result)))
   );
 };

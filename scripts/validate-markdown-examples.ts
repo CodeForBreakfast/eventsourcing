@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe, Array as EffectArray, Console, Option } from 'effect';
+import { Effect, pipe, Array as EffectArray, Console, Option, Schema } from 'effect';
 import { readdir, readFile, writeFile, mkdir, rm } from 'fs/promises';
 import { join, relative } from 'path';
 
@@ -177,6 +177,35 @@ const reduceDirectoryEntries = (
       Effect.flatMap(acc, (currentFiles) => processEntryFiles(currentDir, entry, currentFiles))
   );
 
+const DirEntrySchema = Schema.Struct({
+  name: Schema.String,
+  isDirectory: Schema.Unknown,
+  isFile: Schema.Unknown,
+});
+
+const DirEntriesArraySchema = Schema.Array(DirEntrySchema);
+
+type DirEntry = Schema.Schema.Type<typeof DirEntrySchema>;
+
+const createDirEntryWithMethods = (entry: DirEntry) => {
+  const isDirectoryFn = entry.isDirectory;
+  const isFileFn = entry.isFile;
+
+  return {
+    name: entry.name,
+    isDirectory: typeof isDirectoryFn === 'function' ? () => Boolean(isDirectoryFn()) : () => false,
+    isFile: typeof isFileFn === 'function' ? () => Boolean(isFileFn()) : () => false,
+  };
+};
+
+const validateDirEntries = (entries: unknown) =>
+  pipe(
+    entries,
+    Schema.decodeUnknown(DirEntriesArraySchema),
+    Effect.mapError((error) => new Error(`Invalid directory entries: ${error}`)),
+    Effect.map((validatedEntries) => validatedEntries.map(createDirEntryWithMethods))
+  );
+
 const processDirectory = (
   currentDir: string,
   files: readonly string[] = []
@@ -188,17 +217,8 @@ const processDirectory = (
 
   return pipe(
     readdirEffect,
-    Effect.flatMap((entries) =>
-      reduceDirectoryEntries(
-        entries as readonly {
-          readonly name: string;
-          readonly isDirectory: () => boolean;
-          readonly isFile: () => boolean;
-        }[],
-        files,
-        currentDir
-      )
-    )
+    Effect.flatMap(validateDirEntries),
+    Effect.flatMap((entries) => reduceDirectoryEntries(entries, files, currentDir))
   );
 };
 

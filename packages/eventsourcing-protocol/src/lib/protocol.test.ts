@@ -1685,17 +1685,22 @@ describe('Protocol Behavior Tests', () => {
         ...createWireCommand('user-456', 'CreateUser', { name: 'Bob' }),
         id: duplicateId,
       };
-      return pipe(
+
+      const runCommands = pipe(
         Effect.all(
           [
             sendCommandAsEither(command1, clientTransport),
             sendCommandAsEither(command2, clientTransport),
-            TestClock.adjust(Duration.millis(100)),
           ],
           { concurrency: 'unbounded' }
-        ),
-        Effect.map(([result1, result2, _]) => [result1, result2] as const),
-        Effect.tap(verifyDuplicateCommandResults)
+        )
+      );
+
+      const adjustClock = TestClock.adjust(Duration.millis(100));
+
+      return pipe(
+        Effect.all([runCommands, adjustClock], { concurrency: 'unbounded' }),
+        Effect.flatMap(([results]) => verifyDuplicateCommandResults(results))
       );
     };
 
@@ -1910,9 +1915,19 @@ describe('Protocol Behavior Tests', () => {
           expect(result.firstEvent?.position.eventNumber).toBe(1);
         });
 
-        const uniqueStreamIds = new Set(
-          results.map((r) => (r.firstEvent?.data as { readonly streamId?: string })?.streamId)
-        );
+        const extractStreamId = (result: {
+          readonly cycleNumber: number;
+          readonly eventCount: number;
+          readonly firstEvent: Event | undefined;
+        }) => {
+          const data = result.firstEvent?.data;
+          if (data && typeof data === 'object' && 'streamId' in data) {
+            return data.streamId;
+          }
+          return undefined;
+        };
+
+        const uniqueStreamIds = new Set(results.map(extractStreamId));
         expect(uniqueStreamIds.size).toBe(10);
 
         Array.from({ length: 10 }, (_, i) => i).forEach((i) => {

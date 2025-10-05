@@ -69,11 +69,10 @@ const decodeProjectionEventNumber = <TData>(
     nextEventNumber,
     Schema.decode(EventNumber),
     Effect.map(
-      (nextEventNumber: EventNumber): Projection<TData> =>
-        ({
-          nextEventNumber,
-          data,
-        }) as const
+      (nextEventNumber: EventNumber): Projection<TData> => ({
+        nextEventNumber,
+        data,
+      })
     )
   );
 

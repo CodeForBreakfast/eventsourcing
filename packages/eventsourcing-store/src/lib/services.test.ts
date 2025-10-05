@@ -55,15 +55,15 @@ describe('Service Definitions', () => {
       expect(typeof EventStoreService).toBe('object');
     });
 
+    const createTestEventStreamPosition = (): EventStreamPosition => ({
+      streamId: 'test' as EventStreamId,
+      eventNumber: 0,
+    });
+
     const testEventStoreErrorCatching = () =>
       pipe(
         EventStoreService,
-        Effect.flatMap((store) =>
-          store.read({
-            streamId: 'test' as EventStreamId,
-            eventNumber: 0,
-          } as EventStreamPosition)
-        ),
+        Effect.flatMap((store) => store.read(createTestEventStreamPosition())),
         Effect.catchTag('EventStoreError', (error) =>
           Effect.succeed(`Caught error: ${error.message}`)
         ),
@@ -95,12 +95,7 @@ describe('Service Definitions', () => {
     const testTypedEventStore = () =>
       pipe(
         MyEventStoreService,
-        Effect.flatMap((store) =>
-          store.read({
-            streamId: 'test' as EventStreamId,
-            eventNumber: 0,
-          } as EventStreamPosition)
-        ),
+        Effect.flatMap((store) => store.read(createTestEventStreamPosition())),
         Effect.as('Success'),
         Effect.map((result) => {
           expect(result).toBe('Success');

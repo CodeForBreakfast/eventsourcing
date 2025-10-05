@@ -181,6 +181,11 @@ const processEventStream = <TState, TEvent>(
     Effect.flatMap(foldEventsIntoState(apply, stream))
   );
 
+const createDecodedResult = (
+  decodedEventNumber: EventNumber,
+  data: Readonly<Option.Option<unknown>>
+) => ({ nextEventNumber: decodedEventNumber, data }) as const;
+
 const decodeEventNumber = (
   nextEventNumber: Readonly<number>,
   data: Readonly<Option.Option<unknown>>
@@ -188,9 +193,7 @@ const decodeEventNumber = (
   pipe(
     nextEventNumber,
     Schema.decode(EventNumber),
-    Effect.map(
-      (decodedEventNumber: EventNumber) => ({ nextEventNumber: decodedEventNumber, data }) as const
-    )
+    Effect.map((decodedEventNumber: EventNumber) => createDecodedResult(decodedEventNumber, data))
   );
 
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
