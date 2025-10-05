@@ -41,7 +41,7 @@ import { type ReadonlyDeep } from 'type-fest';
 // Test Helpers
 // ============================================================================
 
-const unsafeCreateStreamId = (id: string) => pipe(id, Schema.decodeUnknownSync(EventStreamId));
+const unsafeCreateStreamId = Schema.decodeUnknownSync(EventStreamId);
 
 // ============================================================================
 // Test Environment Setup
