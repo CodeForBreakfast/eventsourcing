@@ -1,5 +1,87 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.3.0
+
+### Minor Changes
+
+- [#208](https://github.com/CodeForBreakfast/eventsourcing/pull/208) [`15e3756`](https://github.com/CodeForBreakfast/eventsourcing/commit/15e37562fa5c207fa3801d3a05aa1c2f9f9b6ae7) Thanks [@GraemeF](https://github.com/GraemeF)! - Expose syntax restrictions as named ESLint rules for easier configuration
+
+  Rules previously bundled in `no-restricted-syntax` are now available as individual named rules that can be easily enabled or disabled:
+
+  **New named rules:**
+  - `effect/no-classes` - Forbid classes except Effect tags/errors/schemas
+  - `effect/no-runSync` - Forbid Effect.runSync in production code
+  - `effect/no-runPromise` - Forbid Effect.runPromise in production code
+  - `effect/prefer-andThen` - Prefer Effect.andThen() over Effect.flatMap(() => ...)
+  - `effect/prefer-as` - Prefer Effect.as() over Effect.map(() => value)
+  - `effect/no-gen` - Forbid Effect.gen (used in `noGen` config)
+
+  **Before:**
+
+  ```javascript
+  // Had to manipulate no-restricted-syntax arrays
+  rules: {
+    'no-restricted-syntax': [
+      'error',
+      ...effectPlugin.configs.recommended.rules['no-restricted-syntax']
+        .slice(1)
+        .filter(restriction => ...)
+    ]
+  }
+  ```
+
+  **After:**
+
+  ```javascript
+  // Simply disable by rule name
+  {
+    ...effectPlugin.configs.recommended,
+    rules: {
+      'effect/no-runPromise': 'off',
+      'effect/no-runSync': 'off',
+    }
+  }
+  ```
+
+  This makes it much easier to customize which rules are enabled for different file patterns (e.g., allowing `runPromise` in application entry points while forbidding it in library code).
+
+### Patch Changes
+
+- [#211](https://github.com/CodeForBreakfast/eventsourcing/pull/211) [`6c1f10d`](https://github.com/CodeForBreakfast/eventsourcing/commit/6c1f10dc95b18cf554d1614c6d31535920f0a767) Thanks [@GraemeF](https://github.com/GraemeF)! - Improve nested pipe detection and add test enforcement rules
+
+  **Breaking behavior change in `no-nested-pipes` rule (formerly `no-multiple-pipes`):**
+
+  The rule now only flags truly nested pipe calls (where one pipe is used as an argument to another pipe), instead of flagging any function with multiple sequential pipe calls.
+
+  **Before:**
+
+  ```typescript
+  // This was incorrectly flagged as an error
+  const result1 = pipe(42, (x) => x + 1);
+  const result2 = pipe(result1, (x) => x * 2); // ❌ Error
+  ```
+
+  **After:**
+
+  ```typescript
+  // Multiple sequential pipes are now allowed
+  const result1 = pipe(42, (x) => x + 1);
+  const result2 = pipe(result1, (x) => x * 2); // ✅ OK
+
+  // Only nested pipes are flagged
+  const bad = pipe(
+    pipe(42, (x) => x + 1), // ❌ Error - nested pipe
+    (x) => x * 2
+  );
+  ```
+
+  **New buntest rules:**
+  - `buntest/no-runPromise-in-tests` - Enforces using `it.effect()` instead of `Effect.runPromise()` in test files for better error handling and test isolation
+
+  **Migration guide:**
+
+  If you were relying on the old `no-multiple-pipes` behavior, you'll need to update your ESLint config to use the new rule name `no-nested-pipes`. The rule is less strict now and only catches genuinely problematic nested pipe patterns.
+
 ## 0.2.0
 
 ### Minor Changes
