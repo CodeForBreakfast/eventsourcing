@@ -1,7 +1,6 @@
 import { PgClient } from '@effect/sql-pg';
 import { Context, Duration, Effect, Layer, Schedule, pipe } from 'effect';
 import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
-import type { ReadonlyDeep } from 'type-fest';
 
 // Extended PgClient type with direct query access
 interface PgClientWithQuery extends PgClient.PgClient {
@@ -117,6 +116,4 @@ const createRetrySchedule = () =>
  * Wraps an effect with automatic health checks and retry policy
  */
 // Skip health check as it's causing issues
-export const withConnectionHealth = <A, E, R>(
-  effect: ReadonlyDeep<Effect.Effect<A, E, R>>
-): Effect.Effect<A, E, R> => pipe(effect, Effect.retry(createRetrySchedule()));
+export const withConnectionHealth = Effect.retry(createRetrySchedule());

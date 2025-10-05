@@ -169,10 +169,7 @@ const notifySubscribers = (
     Effect.catchAll(() => Effect.succeed(undefined))
   );
 
-const concatStreams = (
-  historicalStream: Stream.Stream<string, never, never>,
-  liveStream: Stream.Stream<string, EventStoreError, never>
-) => pipe(historicalStream, Stream.concat(liveStream));
+const concatStreams = Stream.concat;
 
 const getHistoricalEventsAndConcatWithLive = (
   eventRows: EventRowServiceInterface,
@@ -260,7 +257,7 @@ const logBridgeStart = Effect.logInfo(
   'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
 );
 
-const startNotificationBridge = (
+const startBridge = (
   notificationListener: Readonly<{
     readonly start: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
@@ -271,9 +268,9 @@ const startNotificationBridge = (
   }>,
   subscriptionManager: SubscriptionManagerService
 ) =>
-  pipe(
+  Effect.andThen(
     logBridgeStart,
-    Effect.andThen(startNotificationListener(notificationListener, subscriptionManager))
+    startNotificationListener(notificationListener, subscriptionManager)
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
@@ -309,7 +306,7 @@ const readHistoricalEvents = (eventRows: EventRowServiceInterface, from: EventSt
 const subscribeToLiveStream = (
   subscriptionManager: SubscriptionManagerService,
   streamId: EventStreamId
-) => pipe(streamId, subscriptionManager.subscribeToStream);
+) => subscriptionManager.subscribeToStream(streamId);
 
 const combineHistoricalAndLiveStreams = (
   eventRows: EventRowServiceInterface,
@@ -421,7 +418,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       notificationListener,
     })),
     Effect.tap(({ notificationListener, subscriptionManager }) =>
-      startNotificationBridge(notificationListener, subscriptionManager)
+      startBridge(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
       const eventStore: EventStore<string> = {
@@ -475,27 +472,28 @@ const getSqlEventStoreManagerDependencies = Effect.all({
   notificationListener: NotificationListener,
 });
 
-const makeSqlEventStoreEffect = () =>
-  pipe(
-    getSqlEventStoreManagerDependencies,
-    Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-      makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
-    )
-  );
+const makeSqlEventStoreEffect = pipe(
+  getSqlEventStoreManagerDependencies,
+  Effect.flatMap(({ subscriptionManager, notificationListener }) =>
+    makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
+  )
+);
 
 const mergeEventStoreLayers = () =>
   Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive);
 
-const createSqlEventStoreEffect = Layer.effect(SqlEventStore, makeSqlEventStoreEffect());
+const createSqlEventStoreEffect = Layer.effect(SqlEventStore, makeSqlEventStoreEffect);
 
-const createSqlEventStoreLayer = () =>
-  pipe(createSqlEventStoreEffect, Layer.provide(mergeEventStoreLayers()));
+const createSqlEventStoreLayer = pipe(
+  createSqlEventStoreEffect,
+  Layer.provide(mergeEventStoreLayers())
+);
 
 /**
  * Main SQL EventStore layer with simplified dependency management
  * Uses the logical layer groups defined above for clearer composition
  */
-export const SqlEventStoreLive = createSqlEventStoreLayer();
+export const SqlEventStoreLive = createSqlEventStoreLayer;
 
 /**
  * Backward-compatible function - requires SubscriptionManager and NotificationListener in context
@@ -505,14 +503,13 @@ const getSqlEventStoreDependencies = Effect.all({
   notificationListener: NotificationListener,
 });
 
-export const sqlEventStore = (): Effect.Effect<
+export const sqlEventStore: Effect.Effect<
   EventStore<string>,
   EventStoreError,
   EventRowService | SubscriptionManager | NotificationListener
-> =>
-  pipe(
-    getSqlEventStoreDependencies,
-    Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-      makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
-    )
-  );
+> = pipe(
+  getSqlEventStoreDependencies,
+  Effect.flatMap(({ subscriptionManager, notificationListener }) =>
+    makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
+  )
+);

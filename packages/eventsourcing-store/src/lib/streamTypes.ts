@@ -8,7 +8,7 @@ export const EventStreamId = pipe(
 );
 export type EventStreamId = typeof EventStreamId.Type;
 
-export const toStreamId = (id: string) => pipe(id, Schema.decode(EventStreamId));
+export const toStreamId = Schema.decode(EventStreamId);
 
 export const EventNumber = pipe(Schema.Number, Schema.nonNegative());
 export type EventNumber = typeof EventNumber.Type;

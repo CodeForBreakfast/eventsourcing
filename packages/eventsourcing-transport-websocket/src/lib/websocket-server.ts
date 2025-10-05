@@ -235,21 +235,20 @@ const createClientStateResources = (
     )
   );
 
+const createAddClientToServerStateUpdater = (clientState: ClientState) => (state: ServerState) => ({
+  ...state,
+  clients: HashMap.set(state.clients, clientState.id, clientState),
+});
+
 const addClientToServerState = (
   serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
   clientState: ClientState
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    serverStateRef,
-    Ref.update((state) => ({
-      ...state,
-      clients: HashMap.set(state.clients, clientState.id, clientState),
-    }))
-  );
+  Ref.update(serverStateRef, createAddClientToServerStateUpdater(clientState));
 
 const getServerState = (
   serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>
-): Effect.Effect<ServerState, never, never> => pipe(serverStateRef, Ref.get);
+): Effect.Effect<ServerState, never, never> => Ref.get(serverStateRef);
 
 const offerNewConnection =
   (clientState: ClientState) =>
@@ -299,17 +298,17 @@ const processClientMessage = (
     Effect.orElse(() => Effect.void)
   );
 
+const createRemoveClientFromServerStateUpdater =
+  (clientId: Server.ClientId) => (s: ServerState) => ({
+    ...s,
+    clients: HashMap.remove(s.clients, clientId),
+  });
+
 const removeClientFromServerState = (
   serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
   clientId: Server.ClientId
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    serverStateRef,
-    Ref.update((s) => ({
-      ...s,
-      clients: HashMap.remove(s.clients, clientId),
-    }))
-  );
+  Ref.update(serverStateRef, createRemoveClientFromServerStateUpdater(clientId));
 
 const disconnectClientAndCleanup =
   (serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>) =>

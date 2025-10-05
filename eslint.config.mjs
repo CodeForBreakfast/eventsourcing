@@ -5,6 +5,7 @@ import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
 import eslintComments from 'eslint-plugin-eslint-comments';
+import noUnnecessaryPipeWrapper from './eslint-rules/no-unnecessary-pipe-wrapper.js';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -28,6 +29,11 @@ const commonPlugins = {
   'unused-imports': unusedImports,
   import: importPlugin,
   'eslint-comments': eslintComments,
+  'custom-rules': {
+    rules: {
+      'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
+    },
+  },
 };
 
 const commonPluginsWithFunctional = {
@@ -336,6 +342,7 @@ export default [
         ...simplePipeSyntaxRestrictions,
       ],
       ...testFunctionalRules,
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
@@ -353,33 +360,35 @@ export default [
     files: ['packages/**/*.ts', 'packages/**/*.tsx'],
     ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       'no-restricted-syntax': [
         'error',
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
     name: 'scripts-production-rules',
     files: ['scripts/**/*.ts'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       'no-restricted-syntax': [
         'error',
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {
     name: 'eslint-test-rules-exceptions',
     files: ['**/eslint-test-rules/**/*.ts', '**/eslint-test-rules/**/*.tsx'],
     languageOptions: commonLanguageOptions,
-    plugins: typescriptPlugin,
+    plugins: commonPlugins,
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
       'no-restricted-syntax': [
@@ -387,6 +396,7 @@ export default [
         ...effectSyntaxRestrictions,
         ...simplePipeSyntaxRestrictions,
       ],
+      'custom-rules/no-unnecessary-pipe-wrapper': 'error',
     },
   },
   {

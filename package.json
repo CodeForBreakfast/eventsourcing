@@ -20,6 +20,7 @@
     "arch:check": "dependency-cruiser packages --validate",
     "deps:check": "knip --include dependencies,unlisted,binaries,unresolved,duplicates",
     "code:check": "knip",
+    "scripts:typecheck": "tsc --noEmit --project tsconfig.scripts.json",
     "scripts:lint": "eslint scripts",
     "release:validate:changesets": "bun scripts/validate-changesets.ts",
     "release:validate:publish": "bun scripts/orchestrate-publish-validation.ts",

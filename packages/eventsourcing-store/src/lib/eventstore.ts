@@ -74,29 +74,20 @@ export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 
-const decodeEvent = <A, I>(schema: Schema.Schema<A, I>, event: I) =>
-  pipe(event, Schema.decode(schema));
-
-const decodeStreamEvents = <A, I>(
-  schema: Schema.Schema<A, I>,
-  stream: Stream.Stream<I, ParseResult.ParseError | EventStoreError>
-): Stream.Stream<A, ParseResult.ParseError | EventStoreError> =>
-  pipe(
-    stream,
-    Stream.flatMap((event: I) => decodeEvent(schema, event))
-  );
+const decodeStreamEvents = <A, I>(schema: Schema.Schema<A, I>) =>
+  Stream.flatMap(Schema.decode(schema));
 
 const readAndDecodeEvents = <A, I>(
   schema: Schema.Schema<A, I>,
   eventstore: Readonly<EventStore<I>>,
   from: EventStreamPosition
-) => Effect.map(eventstore.read(from), (stream) => decodeStreamEvents(schema, stream));
+) => Effect.map(eventstore.read(from), decodeStreamEvents(schema));
 
 const subscribeAndDecodeEvents = <A, I>(
   schema: Schema.Schema<A, I>,
   eventstore: Readonly<EventStore<I>>,
   from: EventStreamPosition
-) => Effect.map(eventstore.subscribe(from), (stream) => decodeStreamEvents(schema, stream));
+) => Effect.map(eventstore.subscribe(from), decodeStreamEvents(schema));
 
 const createEncodingSink = <A, I>(
   schema: Schema.Schema<A, I>,
@@ -108,9 +99,13 @@ const createEncodingSink = <A, I>(
   >
 ) => {
   type SinkError = ConcurrencyConflictError | ParseResult.ParseError | EventStoreError;
-  return Sink.mapInputEffect(originalSink, (a: A) =>
-    pipe(a, Schema.encode(schema))
-  ) as unknown as Sink.Sink<EventStreamPosition, A, A, SinkError, never>;
+  return Sink.mapInputEffect(originalSink, Schema.encode(schema)) as unknown as Sink.Sink<
+    EventStreamPosition,
+    A,
+    A,
+    SinkError,
+    never
+  >;
 };
 
 /**

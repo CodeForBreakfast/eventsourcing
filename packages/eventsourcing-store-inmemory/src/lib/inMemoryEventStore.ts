@@ -1,4 +1,4 @@
-import { Chunk, Effect, Scope, Sink, Stream, pipe } from 'effect';
+import { Effect, Scope, Sink, Stream, pipe } from 'effect';
 import {
   EventStreamPosition,
   EventStore,
@@ -14,7 +14,7 @@ export interface SubscribableEventStore<T> extends EventStore<T> {
 }
 
 const dropEventsFromStream = <T>(stream: Readonly<Stream.Stream<T, never, never>>, count: number) =>
-  pipe(stream, Stream.drop(count));
+  Stream.drop(stream, count);
 
 const readHistoricalEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
   pipe(
@@ -46,17 +46,16 @@ const subscribeToStreamWithError = <T>(
     )
   );
 
-const appendChunkToStore =
-  <T>(store: InMemoryStore<T>) =>
-  (end: EventStreamPosition, chunk: Chunk.Chunk<T>) =>
-    pipe(chunk, store.append(end));
-
 export const makeInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<EventStore<T>, never, never> =>
   Effect.succeed({
     append: (to: EventStreamPosition) =>
-      Sink.foldChunksEffect(to, () => true, appendChunkToStore(store)),
+      Sink.foldChunksEffect(
+        to,
+        () => true,
+        (end, chunk) => pipe(chunk, store.append(end))
+      ),
     read: (from: EventStreamPosition) => readHistoricalEvents(store, from),
     subscribe: (from: EventStreamPosition) => readAllEvents(store, from),
   });

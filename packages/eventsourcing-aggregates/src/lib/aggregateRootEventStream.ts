@@ -120,16 +120,11 @@ const commit =
       )
     );
 
-const updateStateWithEvent =
-  <TState>(newState: TState) =>
-  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
-    pipe(
-      stateRef,
-      Ref.update(() => ({
-        nextEventNumber: 0,
-        data: Option.some(newState),
-      }))
-    );
+const updateStateWithEvent = <TState>(newState: TState) =>
+  Ref.update<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>(() => ({
+    nextEventNumber: 0,
+    data: Option.some(newState),
+  }));
 
 const applyAndUpdateState =
   <TState, TEvent>(

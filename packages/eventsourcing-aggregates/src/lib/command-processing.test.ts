@@ -27,10 +27,10 @@ const UnknownErrorSchema = Schema.Struct({
   message: Schema.String,
 });
 
-const isUnknownError = (
+const isUnknownError: (
   error: CommandFailure['error']
-): error is Extract<CommandFailure['error'], { readonly _tag: 'UnknownError' }> =>
-  pipe(error, Schema.is(UnknownErrorSchema));
+) => error is Extract<CommandFailure['error'], { readonly _tag: 'UnknownError' }> =
+  Schema.is(UnknownErrorSchema);
 
 const UserCreated = Schema.Struct({
   type: Schema.Literal('UserCreated'),

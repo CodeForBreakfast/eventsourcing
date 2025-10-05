@@ -89,17 +89,9 @@ const serializeAndSend =
   (message: Readonly<TransportMessage>) =>
     pipe(message, serializeMessage, Effect.flatMap(sendSerializedMessage(writer)));
 
-const getWebSocketInternalState = (
-  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
-): Effect.Effect<WebSocketInternalState, never, never> => pipe(stateRef, Ref.get);
+const getWebSocketInternalState = Ref.get<WebSocketInternalState>;
 
-const getWriter = (
-  writerRef: Readonly<Ref.Ref<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>>
-): Effect.Effect<
-  ((data: string) => Effect.Effect<void, Socket.SocketError>) | null,
-  never,
-  never
-> => pipe(writerRef, Ref.get);
+const getWriter = Ref.get<((data: string) => Effect.Effect<void, Socket.SocketError>) | null>;
 
 const getStateAndWriter = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
@@ -118,7 +110,7 @@ const serializeMessageWithWriter =
   (
     writer: (data: string) => Effect.Effect<void, Socket.SocketError>
   ): Effect.Effect<void, TransportError, never> =>
-    pipe(message, serializeAndSend(writer));
+    serializeAndSend(writer)(message);
 
 const publishMessage =
   (
@@ -154,13 +146,10 @@ const applyFilterSafely =
 const addSubscriberToState =
   (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
   (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
-    pipe(
-      stateRef,
-      Ref.update((state) => ({
-        ...state,
-        subscribers: HashSet.add(state.subscribers, queue),
-      }))
-    );
+    Ref.update(stateRef, (state) => ({
+      ...state,
+      subscribers: HashSet.add(state.subscribers, queue),
+    }));
 
 const subscribeToMessages =
   (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
@@ -191,9 +180,7 @@ const createConnectedTransport = (
 // Pure Functions for WebSocket Operations
 // =============================================================================
 
-const getStateRef = (
-  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>
-): Effect.Effect<WebSocketInternalState, never, never> => pipe(stateRef, Ref.get);
+const getStateRef = Ref.get<WebSocketInternalState>;
 
 const publishToStatePubSub =
   (newState: Readonly<ConnectionState>) =>
@@ -217,7 +204,7 @@ const updateConnectionState = (
 const offerMessageToQueue =
   (message: TransportMessage) =>
   (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
-    pipe(queue, Queue.offer(message));
+    Queue.offer(queue, message);
 
 const distributeMessageToSubscribers = (
   stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,

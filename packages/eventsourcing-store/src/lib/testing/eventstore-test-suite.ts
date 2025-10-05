@@ -98,12 +98,7 @@ export function runEventStoreTestSuite<E>(
                   streamId,
                   Effect.flatMap(beginning),
                   Effect.flatMap((position) => eventstore.read(position)),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.runCollect // No take needed - read only returns historical
-                    )
-                  )
+                  Effect.flatMap(Stream.runCollect)
                 )
               )
             )
@@ -159,12 +154,7 @@ export function runEventStoreTestSuite<E>(
                         streamId,
                         Effect.flatMap(beginning),
                         Effect.flatMap((position) => eventstore.read(position)),
-                        Effect.flatMap((stream) =>
-                          pipe(
-                            stream,
-                            Stream.runCollect // No take needed - read only returns historical
-                          )
-                        )
+                        Effect.flatMap(Stream.runCollect)
                       )
                     )
                   )
@@ -307,12 +297,7 @@ export function runEventStoreTestSuite<E>(
                 nonExistentStreamId,
                 Effect.flatMap(beginning),
                 Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.runCollect // No events in non-existent stream
-                  )
-                )
+                Effect.flatMap(Stream.runCollect)
               )
             )
           )
@@ -356,12 +341,7 @@ export function runEventStoreTestSuite<E>(
                 streamId,
                 Effect.flatMap(beginning),
                 Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.runCollect // No take needed - read only returns historical
-                  )
-                )
+                Effect.flatMap(Stream.runCollect)
               )
             )
           )
@@ -397,12 +377,7 @@ export function runEventStoreTestSuite<E>(
                 streamId,
                 Effect.flatMap(beginning),
                 Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.runCollect // No take needed - read only returns historical
-                  )
-                )
+                Effect.flatMap(Stream.runCollect)
               )
             )
           )
