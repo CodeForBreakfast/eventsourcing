@@ -28,21 +28,12 @@ When delegating to agents, you MUST include these instructions:
 
 ### Strict Lint Rules
 
-This codebase enforces extremely strict functional programming rules enforced by lint, including:
-
-1. **NO method-based `.pipe()`** - Use standalone `pipe()` function only
-2. **NO curried function calls** - Use `pipe(a, fn(b))` instead of `fn(b)(a)`
-3. **NO nested `pipe()` calls** - Extract inner pipes to separate named functions
-4. **NO multiple `pipe()` calls in one function** - One pipe per function only
-5. **NO `let` statements** - Use immutable patterns
-6. **NO `Effect.gen`** - Use `pipe()` and `Effect.all/Effect.forEach` instead
-7. **Import `pipe` from 'effect'** when using the standalone function
-
-These rules are to ensure we have readable, functional code. Use function names carefully to aid readability.
+This codebase enforces extremely strict functional programming rules enforced by lint. These rules are to ensure we have readable, functional code. Use function names carefully to aid readability.
 
 ### Verification
 
-- Run `turbo all` repeatedly until YOUR file is no longer the source of errors (typecheck, lint, or test failures)
+- Run `turbo all` repeatedly until YOUR file is no longer the source of errors (typecheck, lint, or test failures).
+- NO OTHER COMMANDS ARE PERMITTED. Only `turbo all`.
 - The next file may fail - that's expected and will be handled by the next agent
 - Ensure your fixes don't break other files (watch for import changes, type changes, etc.)
 
