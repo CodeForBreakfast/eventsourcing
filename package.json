@@ -1,6 +1,7 @@
 {
   "name": "@codeforbreakfast/eventsourcing-monorepo",
   "private": true,
+  "type": "module",
   "packageManager": "bun@1.2.19",
   "scripts": {
     "preinstall": "only-allow bun",
