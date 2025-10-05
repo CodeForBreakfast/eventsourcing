@@ -125,8 +125,14 @@
       "cache": true,
       "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
     },
-    "//#scripts:lint": {
+    "//#scripts:typecheck": {
       "dependsOn": [],
+      "outputs": [],
+      "inputs": ["scripts/**/*.ts", "tsconfig.json", "package.json"],
+      "cache": true
+    },
+    "//#scripts:lint": {
+      "dependsOn": ["//#scripts:typecheck"],
       "outputs": [],
       "inputs": ["scripts/**/*.ts", "eslint.config.mjs", "package.json", "bun.lock"],
       "cache": true

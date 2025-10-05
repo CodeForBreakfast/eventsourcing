@@ -124,29 +124,31 @@ const extractCodeBlocks = (content: string, filePath: string) => {
 const shouldSkipEntry = (name: string): boolean =>
   name === 'node_modules' || name === '.git' || name === 'dist';
 
-const processDirectoryEntry =
-  (currentDir: string, files: readonly string[]) =>
-  (entry: {
+const processDirectoryEntry = (
+  currentDir: string,
+  files: readonly string[],
+  entry: {
     readonly name: string;
     readonly isDirectory: () => boolean;
     readonly isFile: () => boolean;
-  }): Effect.Effect<readonly string[], Error, never> => {
-    if (shouldSkipEntry(entry.name)) {
-      return Effect.succeed(files);
-    }
-
-    const fullPath = join(currentDir, entry.name);
-
-    if (entry.isDirectory()) {
-      return processDirectory(fullPath, files);
-    }
-
-    if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
-      return Effect.succeed([...files, fullPath]);
-    }
-
+  }
+): Effect.Effect<readonly string[], Error, never> => {
+  if (shouldSkipEntry(entry.name)) {
     return Effect.succeed(files);
-  };
+  }
+
+  const fullPath = join(currentDir, entry.name);
+
+  if (entry.isDirectory()) {
+    return processDirectory(fullPath, files);
+  }
+
+  if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
+    return Effect.succeed([...files, fullPath]);
+  }
+
+  return Effect.succeed(files);
+};
 
 const reduceDirectoryEntries = (
   entries: readonly {
@@ -157,8 +159,8 @@ const reduceDirectoryEntries = (
   files: readonly string[],
   currentDir: string
 ) =>
-  EffectArray.reduce(entries, Effect.succeed(files), (acc, _entry) =>
-    Effect.flatMap(acc, processDirectoryEntry(currentDir))
+  EffectArray.reduce(entries, Effect.succeed(files), (acc, entry) =>
+    Effect.flatMap(acc, (files) => processDirectoryEntry(currentDir, files, entry))
   );
 
 const processDirectory = (
