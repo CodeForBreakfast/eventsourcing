@@ -533,7 +533,7 @@ const runValidation = (packageDir: string, tempDir: string) => {
 
 const getValidationDirs = Effect.sync(() => ({
   packageDir: process.cwd(),
-  tempDir: join(process.cwd(), '.turbo', 'validate-docs'),
+  tempDir: join(process.cwd(), 'node_modules', '.cache', 'validate-docs'),
 }));
 
 const validateMarkdownExamples = pipe(
