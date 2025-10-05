@@ -1,21 +1,14 @@
-import { Context, Effect, Layer, Option, pipe, Schema } from 'effect';
+import { Context, Effect, Layer } from 'effect';
+import { CommandContextError } from './commandContextError';
 
-// Mock PersonId for now - replace with actual implementation
-const PersonId = pipe(Schema.String, Schema.brand('PersonId'));
-type PersonId = typeof PersonId.Type;
-import { CurrentUserError } from './currentUser';
+export interface CommandContextService<TInitiator> {
+  readonly getInitiator: Effect.Effect<TInitiator, CommandContextError>;
+}
 
-export const CommandInitiatorId = Schema.Union(PersonId);
-export type CommandInitiatorId = typeof CommandInitiatorId.Type;
+export const CommandContext = <TInitiator>() =>
+  Context.GenericTag<CommandContextService<TInitiator>>('CommandContext');
 
-export class CommandContext extends Context.Tag('CommandContext')<
-  CommandContext,
-  {
-    readonly getInitiatorId: Effect.Effect<Option.Option<CommandInitiatorId>, CurrentUserError>;
-  }
->() {}
-
-export const CommandContextTest = (initiatorId: Readonly<Option.Option<CommandInitiatorId>>) =>
-  Layer.succeed(CommandContext, {
-    getInitiatorId: Effect.succeed(initiatorId),
+export const CommandContextTest = <TInitiator>(initiator: TInitiator) =>
+  Layer.succeed(CommandContext<TInitiator>(), {
+    getInitiator: Effect.succeed(initiator),
   });
