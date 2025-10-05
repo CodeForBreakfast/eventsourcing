@@ -35,13 +35,16 @@ const program = Effect.gen(function* () {
 ### Connecting Clients
 
 ```typescript
+import { Effect } from 'effect';
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+
 const program = Effect.gen(function* () {
   const acceptor = yield* InMemoryAcceptor.make();
   const server = yield* acceptor.start();
 
   // Connect clients using the server's connector
-  const client1 = yield* server.connector('inmemory://client1');
-  const client2 = yield* server.connector('inmemory://client2');
+  const client1 = yield* server.connector();
+  const client2 = yield* server.connector();
 
   // Both clients are now connected to the same server
   return { server, client1, client2 };
@@ -51,6 +54,9 @@ const program = Effect.gen(function* () {
 ### Multiple Isolated Servers
 
 ```typescript
+import { Effect, pipe } from 'effect';
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+
 const program = Effect.gen(function* () {
   // Create two completely isolated servers
   const [server1, server2] = yield* Effect.all([
@@ -65,8 +71,8 @@ const program = Effect.gen(function* () {
   ]);
 
   // Connect clients to different servers
-  const client1 = yield* server1.connector('inmemory://test');
-  const client2 = yield* server2.connector('inmemory://test');
+  const client1 = yield* server1.connector();
+  const client2 = yield* server2.connector();
 
   // client1 and client2 are on completely different servers
   return { server1, server2, client1, client2 };
@@ -76,18 +82,20 @@ const program = Effect.gen(function* () {
 ### Messaging Example
 
 ```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
 import { makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
 const program = Effect.gen(function* () {
   const acceptor = yield* InMemoryAcceptor.make();
   const server = yield* acceptor.start();
-  const client = yield* server.connector('inmemory://test');
+  const client = yield* server.connector();
 
   // Subscribe to messages
   const messageStream = yield* client.subscribe();
 
   // Broadcast a message
-  const message = makeTransportMessage('msg-1', 'test-event', { data: 'hello' });
+  const message = makeTransportMessage('msg-1', 'test-event', JSON.stringify({ data: 'hello' }));
   yield* server.broadcast(message);
 
   // Receive the message
@@ -122,22 +130,30 @@ The new design:
 
 ## Type Safety
 
+The package exports strongly-typed interfaces for type-safe usage:
+
 ```typescript
-import type {
-  InMemoryServer,
-  InMemoryConnector,
+import { Effect } from 'effect';
+import {
+  InMemoryAcceptor,
+  type InMemoryServer,
+  type InMemoryConnector,
 } from '@codeforbreakfast/eventsourcing-transport-inmemory';
 
-// Server type
-const server: InMemoryServer = {
-  connections: Stream<Server.ClientConnection>,
-  broadcast: (message: TransportMessage) => Effect<void>,
-  connector: InMemoryConnector,
-};
+const createTypedServer = Effect.gen(function* () {
+  const acceptor = yield* InMemoryAcceptor.make();
+  const server: InMemoryServer = yield* acceptor.start();
 
-// Connector type
-const connector: InMemoryConnector = (url: string) =>
-  Effect<Client.Transport<TransportMessage>, ConnectionError, Scope>;
+  // InMemoryServer provides:
+  // - connections: Stream.Stream<Server.ClientConnection>
+  // - broadcast: (message: TransportMessage) => Effect.Effect<void>
+  // - connector: InMemoryConnector (function to create clients)
+
+  // InMemoryConnector signature:
+  // () => Effect.Effect<Client.Transport, ConnectionError, Scope.Scope>
+
+  return server;
+});
 ```
 
 ## Testing
@@ -145,15 +161,19 @@ const connector: InMemoryConnector = (url: string) =>
 Perfect for contract testing with complete isolation:
 
 ```typescript
+import { describe, it } from 'bun:test';
+import { Effect } from 'effect';
+import { InMemoryAcceptor } from '@codeforbreakfast/eventsourcing-transport-inmemory';
+
 describe('My Tests', () => {
-  test('isolated server per test', async () => {
+  it('isolated server per test', async () => {
     await Effect.runPromise(
       Effect.scoped(
         Effect.gen(function* () {
           // Each test gets its own isolated server
           const acceptor = yield* InMemoryAcceptor.make();
           const server = yield* acceptor.start();
-          const client = yield* server.connector('inmemory://test');
+          const client = yield* server.connector();
 
           // Test your logic here...
         })

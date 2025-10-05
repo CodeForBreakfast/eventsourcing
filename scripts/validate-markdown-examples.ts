@@ -467,7 +467,8 @@ const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: stri
 
 const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockFile[]) =>
   pipe(
-    typeCheckDirectory(tempDir),
+    tempDir,
+    typeCheckDirectory,
     Effect.map(() => [] as readonly ValidationError[]),
     Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, blockFiles)))
   );
@@ -508,11 +509,7 @@ const handleValidationErrors = (
     ? displayErrorsAndFail(errors)
     : Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`);
 
-const typeCheckAndReportErrors = (
-  allBlocks: readonly CodeBlock[],
-  tempDir: string,
-  packageDir: string
-) => {
+const typeCheckAndReportErrors = (allBlocks: readonly CodeBlock[], tempDir: string) => {
   const blockCountMessage = `📝 Found ${allBlocks.length} TypeScript code blocks\n`;
   return pipe(
     blockCountMessage,
@@ -534,10 +531,10 @@ const skipValidationIfNoBlocks = (tempDir: string) => {
   );
 };
 
-const processAllBlocks = (allBlocks: readonly CodeBlock[], tempDir: string, packageDir: string) =>
+const processAllBlocks = (allBlocks: readonly CodeBlock[], tempDir: string, _packageDir: string) =>
   allBlocks.length === 0
     ? skipValidationIfNoBlocks(tempDir)
-    : typeCheckAndReportErrors(allBlocks, tempDir, packageDir);
+    : typeCheckAndReportErrors(allBlocks, tempDir);
 
 const runValidation = (packageDir: string, tempDir: string) => {
   const validationMessage = `🔍 Validating TypeScript examples in ${packageDir}...\n`;
