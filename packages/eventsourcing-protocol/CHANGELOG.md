@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-protocol-default
 
+## 0.4.1
+
+### Patch Changes
+
+- Updated dependencies [[`6c1f10d`](https://github.com/CodeForBreakfast/eventsourcing/commit/6c1f10dc95b18cf554d1614c6d31535920f0a767)]:
+  - @codeforbreakfast/eventsourcing-store@0.8.1
+  - @codeforbreakfast/eventsourcing-commands@0.4.1
+
 ## 0.4.0
 
 ### Minor Changes
