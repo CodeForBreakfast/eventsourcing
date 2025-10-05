@@ -4,6 +4,7 @@ import {
   WireCommand,
   DomainCommand,
   CommandResult,
+  CommandFailure,
   CommandDefinition,
   buildCommandSchema,
   CommandFromDefinitions,
@@ -57,27 +58,46 @@ export const makeCommandRegistry = <
   // Extract command names for the registry interface
   const commandNames = commands.map((cmd) => cmd.name);
 
+  const createUnknownErrorFailure = (commandId: string, message: string): CommandFailure => ({
+    _tag: 'Failure',
+    error: {
+      _tag: 'UnknownError',
+      commandId,
+      message,
+    },
+  });
+
+  const toReadonlyDeep = <A>(value: A): ReadonlyDeep<A> => value as ReadonlyDeep<A>;
+
   const executeMatcherWithErrorHandling = (
-    command: ReadonlyDeep<CommandFromDefinitions<T>>,
+    command: CommandFromDefinitions<T>,
     wireCommand: ReadonlyDeep<WireCommand>
   ): Effect.Effect<CommandResult, never, never> =>
     pipe(
       command,
+      toReadonlyDeep,
       matcher,
       Effect.exit,
-      Effect.map((matcherResult) =>
+      Effect.flatMap((matcherResult) =>
         Exit.isFailure(matcherResult)
-          ? {
-              _tag: 'Failure' as const,
-              error: {
-                _tag: 'UnknownError' as const,
-                commandId: wireCommand.id,
-                message: String(matcherResult.cause),
-              },
-            }
-          : matcherResult.value
+          ? Effect.succeed(createUnknownErrorFailure(wireCommand.id, String(matcherResult.cause)))
+          : Effect.succeed(matcherResult.value)
       )
     );
+
+  const createValidationErrorFailure = (
+    commandId: string,
+    commandName: string,
+    validationErrors: ReadonlyArray<string>
+  ): CommandFailure => ({
+    _tag: 'Failure',
+    error: {
+      _tag: 'ValidationError',
+      commandId,
+      commandName,
+      validationErrors,
+    },
+  });
 
   const dispatch = (
     wireCommand: ReadonlyDeep<WireCommand>
@@ -89,22 +109,15 @@ export const makeCommandRegistry = <
       Effect.flatMap((parseResult) => {
         if (Either.isLeft(parseResult)) {
           // Validation failed
-          return Effect.succeed({
-            _tag: 'Failure' as const,
-            error: {
-              _tag: 'ValidationError' as const,
-              commandId: wireCommand.id,
-              commandName: wireCommand.name,
-              validationErrors: [parseResult.left.message || 'Command validation failed'],
-            },
-          });
+          return Effect.succeed(
+            createValidationErrorFailure(wireCommand.id, wireCommand.name, [
+              parseResult.left.message || 'Command validation failed',
+            ])
+          );
         }
 
         // Execute the matcher with exact command type - it handles all the dispatch logic
-        return executeMatcherWithErrorHandling(
-          parseResult.right as ReadonlyDeep<CommandFromDefinitions<T>>,
-          wireCommand
-        );
+        return executeMatcherWithErrorHandling(parseResult.right, wireCommand);
       })
     );
 
