@@ -158,6 +158,18 @@ const simplePipeSyntaxRestrictions = [
     message:
       'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
   },
+  {
+    selector:
+      'ArrowFunctionExpression > CallExpression.body[callee.type="Identifier"][callee.name="pipe"][arguments.length=2] > .arguments:first-child[type="Identifier"]',
+    message:
+      'Unnecessary function wrapper around single pipe operation. This function just passes a parameter through pipe() and could be simplified or inlined. Example: (x) => pipe(x, fn) is redundant - just use fn directly.',
+  },
+  {
+    selector:
+      ':matches(FunctionDeclaration, FunctionExpression) > BlockStatement > ReturnStatement > CallExpression.argument[callee.type="Identifier"][callee.name="pipe"][arguments.length=2] > .arguments:first-child[type="Identifier"]',
+    message:
+      'Unnecessary function wrapper around single pipe operation. This function just passes a parameter through pipe() and could be simplified or inlined. Example: function foo(x) { return pipe(x, fn); } is redundant - just use fn directly.',
+  },
 ];
 
 // Common functional immutability rules
