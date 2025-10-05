@@ -111,14 +111,29 @@ Both files also include transport-specific tests (lines 122+ in WebSocket, lines
 This is the core interface that client transports must implement:
 
 ```typescript
+import { Effect, Stream } from 'effect';
+import { TransportError } from '@codeforbreakfast/eventsourcing-transport';
+
+type ConnectionState =
+  | 'connecting'
+  | 'connected'
+  | 'disconnecting'
+  | 'disconnected'
+  | 'reconnecting'
+  | 'failed';
+
+interface TransportMessage {
+  readonly id: string;
+  readonly type: string;
+  readonly payload: unknown;
+  readonly metadata?: Record<string, unknown>;
+}
+
 interface ConnectedTransportTestInterface {
-  // Monitor connection state changes
   readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 
-  // Publish a message to the transport
   readonly publish: (message: TransportMessage) => Effect.Effect<void, TransportError, never>;
 
-  // Subscribe to incoming messages with optional filtering
   readonly subscribe: (
     filter?: (msg: TransportMessage) => boolean
   ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never>;

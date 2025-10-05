@@ -15,21 +15,22 @@ function main() {
   console.log('🔍 Discovering packages that need publish validation...\n');
 
   // Step 1: Discover packages using the discovery script
-  let packagesToValidate: string[];
-  try {
-    const output = execSync('bun scripts/validate-publish.ts', {
-      cwd: rootDir,
-      encoding: 'utf-8',
-      stdio: 'pipe',
-    });
+  const packagesToValidate: readonly string[] = (() => {
+    try {
+      const output = execSync('bun scripts/validate-publish.ts', {
+        cwd: rootDir,
+        encoding: 'utf-8',
+        stdio: 'pipe',
+      });
 
-    packagesToValidate = output
-      .split('\n')
-      .filter((line) => line.trim() && !line.includes('No changed packages detected'));
-  } catch {
-    console.log('❌ Failed to discover packages');
-    process.exit(1);
-  }
+      return output
+        .split('\n')
+        .filter((line) => line.trim() && !line.includes('No changed packages detected'));
+    } catch {
+      console.log('❌ Failed to discover packages');
+      process.exit(1);
+    }
+  })();
 
   if (packagesToValidate.length === 0) {
     console.log('✅ No packages need validation');

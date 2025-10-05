@@ -25,14 +25,9 @@ bun add @codeforbreakfast/eventsourcing-store effect
 
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
+import { type EventStore, toStreamId, beginning } from '@codeforbreakfast/eventsourcing-store';
 import {
-  EventStore,
-  toStreamId,
-  beginning,
-  EventNumber,
-} from '@codeforbreakfast/eventsourcing-store';
-import {
-  makeInMemoryStore,
+  InMemoryStore,
   makeInMemoryEventStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
 
@@ -53,7 +48,7 @@ type UserEvent = UserRegistered | UserEmailUpdated;
 
 // Create an in-memory event store (from separate package)
 const createEventStore = Effect.gen(function* () {
-  const store = yield* makeInMemoryStore<UserEvent>();
+  const store = yield* InMemoryStore.make<UserEvent>();
   return yield* makeInMemoryEventStore(store);
 });
 
@@ -82,25 +77,25 @@ const readUserEvents = (eventStore: EventStore<UserEvent>) => (userId: string) =
 
 // Usage with pipe composition
 const program = pipe(
-  Effect.all([
-    Effect.succeed('user-123'),
-    Effect.succeed([
-      {
-        type: 'UserRegistered' as const,
-        userId: 'user-123',
-        email: 'user@example.com',
-      },
-      {
-        type: 'UserEmailUpdated' as const,
-        userId: 'user-123',
-        newEmail: 'newemail@example.com',
-      },
-    ] as UserEvent[]),
-  ]),
-  Effect.flatMap(([userId, events]) =>
+  createEventStore,
+  Effect.flatMap((eventStore) =>
     pipe(
-      EventStore,
-      Effect.flatMap((eventStore) =>
+      Effect.all([
+        Effect.succeed('user-123'),
+        Effect.succeed([
+          {
+            type: 'UserRegistered' as const,
+            userId: 'user-123',
+            email: 'user@example.com',
+          },
+          {
+            type: 'UserEmailUpdated' as const,
+            userId: 'user-123',
+            newEmail: 'newemail@example.com',
+          },
+        ] as UserEvent[]),
+      ]),
+      Effect.flatMap(([userId, events]) =>
         pipe(
           appendEvents(eventStore)(userId, events),
           Effect.flatMap(() => readUserEvents(eventStore)(userId)),
@@ -115,7 +110,7 @@ const program = pipe(
 );
 
 // Run the program
-pipe(program, Effect.provide(eventStoreLayer), Effect.runPromise);
+Effect.runPromise(program);
 ```
 
 ## Core Types
@@ -125,6 +120,13 @@ pipe(program, Effect.provide(eventStoreLayer), Effect.runPromise);
 The main service interface for reading and writing events:
 
 ```typescript
+import { Effect, ParseResult, Sink, Stream } from 'effect';
+import {
+  EventStoreError,
+  ConcurrencyConflictError,
+  type EventStreamPosition,
+} from '@codeforbreakfast/eventsourcing-store';
+
 interface EventStore<TEvent> {
   readonly append: (
     to: EventStreamPosition
@@ -227,13 +229,18 @@ bun add @codeforbreakfast/eventsourcing-store-inmemory
 ```
 
 ```typescript
+import { Effect } from 'effect';
 import {
-  makeInMemoryStore,
+  InMemoryStore,
   makeInMemoryEventStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
 
+interface MyEvent {
+  type: string;
+}
+
 const createEventStore = Effect.gen(function* () {
-  const store = yield* makeInMemoryStore<MyEvent>();
+  const store = yield* InMemoryStore.make<MyEvent>();
   return yield* makeInMemoryEventStore(store);
 });
 ```
@@ -247,7 +254,18 @@ bun add @codeforbreakfast/eventsourcing-store-postgres
 ```
 
 ```typescript
-import { makePostgresEventStore } from '@codeforbreakfast/eventsourcing-store-postgres';
+import { Effect, Layer, Schema, Context } from 'effect';
+import { SqlEventStoreLive, PostgresLive } from '@codeforbreakfast/eventsourcing-store-postgres';
+import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
+
+interface MyEvent {
+  type: string;
+}
+
+const MyEventStore = Context.GenericTag<EventStore<MyEvent>, EventStore<MyEvent>>('MyEventStore');
+
+// Create the Postgres event store layer
+const eventStoreLayer = Layer.provide(SqlEventStoreLive, PostgresLive);
 ```
 
 ## Utility Functions
@@ -255,41 +273,70 @@ import { makePostgresEventStore } from '@codeforbreakfast/eventsourcing-store-po
 ### Stream Position Helpers
 
 ```typescript
-import { beginning, currentEnd, positionAfter } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, ParseResult, Schema, pipe } from 'effect';
+import {
+  beginning,
+  toStreamId,
+  type EventStreamId,
+  type EventStreamPosition,
+} from '@codeforbreakfast/eventsourcing-store';
+
+declare const streamId: EventStreamId;
 
 // Get the beginning of a stream
 const startPos = pipe(toStreamId('my-stream'), Effect.flatMap(beginning));
 
-// Get the current end of a stream
-const endPos = pipe(
-  currentEnd(eventStore),
-  Effect.flatMap((fn) => fn(streamId))
-);
+// Create a position at a specific event number
+const positionAt = (
+  streamId: EventStreamId,
+  eventNumber: number
+): Effect.Effect<EventStreamPosition, ParseResult.ParseError> =>
+  Schema.decode(
+    Schema.Struct({
+      streamId: Schema.Literal(streamId),
+      eventNumber: Schema.Number,
+    })
+  )({ streamId, eventNumber });
 
-// Create position after a specific event number
-const nextPos = positionAfter(EventNumber(5))(streamId);
+const nextPos = positionAt(streamId, 5);
 ```
 
 ### Stream Processing
 
 ```typescript
-import { OptimizedStreamHandler } from '@codeforbreakfast/eventsourcing-store';
+import { Chunk, Effect, Stream, pipe } from 'effect';
+import {
+  beginning,
+  type EventStore,
+  type EventStreamId,
+} from '@codeforbreakfast/eventsourcing-store';
 
-// Create an optimized stream handler for processing events
-const streamHandler = pipe(
-  OptimizedStreamHandler,
-  Effect.flatMap((handler) =>
-    handler.processStream({
-      streamId,
-      batchSize: 100,
-      processor: (events) =>
-        pipe(
-          Effect.logInfo(`Processing ${events.length} events`),
-          Effect.map(() => events)
+interface MyEvent {
+  type: string;
+}
+
+declare const streamId: EventStreamId;
+declare const eventStore: EventStore<MyEvent>;
+
+// Process events from a stream in batches
+const processStreamInBatches = (batchSize: number) =>
+  pipe(
+    beginning(streamId),
+    Effect.flatMap(eventStore.read),
+    Effect.flatMap((stream) =>
+      pipe(
+        stream,
+        Stream.grouped(batchSize),
+        Stream.mapEffect((events: Chunk.Chunk<MyEvent>) =>
+          pipe(
+            Effect.logInfo(`Processing ${events.length} events`),
+            Effect.map(() => events)
+          )
         ),
-    })
-  )
-);
+        Stream.runDrain
+      )
+    )
+  );
 ```
 
 ## Testing Your Event Store
@@ -297,15 +344,23 @@ const streamHandler = pipe(
 This package includes comprehensive testing utilities:
 
 ```typescript
-import { runEventStoreTestSuite } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, Layer, Schema } from 'effect';
+import {
+  runEventStoreTestSuite,
+  FooEventStore,
+  type EventStore,
+} from '@codeforbreakfast/eventsourcing-store';
+
+const FooEvent = Schema.Struct({ bar: Schema.String });
+type FooEvent = typeof FooEvent.Type;
+
+declare const myCustomEventStore: EventStore<FooEvent>;
 
 // Test your custom event store implementation
-const testLayer = Layer.effect(EventStore, Effect.succeed(myCustomEventStore));
+const testLayer = Layer.effect(FooEventStore, Effect.succeed(myCustomEventStore));
 
-// Run the full test suite
-describe('My Custom Event Store', () => {
-  runEventStoreTestSuite(testLayer);
-});
+// Run the full test suite with the implementation name
+runEventStoreTestSuite('My Custom Event Store', () => testLayer);
 ```
 
 ## Error Handling
@@ -313,9 +368,12 @@ describe('My Custom Event Store', () => {
 The library provides specific error types for different failure scenarios:
 
 ```typescript
+import { Effect, pipe } from 'effect';
 import { EventStoreError, ConcurrencyConflictError } from '@codeforbreakfast/eventsourcing-store';
 
-const handleErrors = (effect: Effect.Effect<A, EventStoreError | ConcurrencyConflictError, R>) =>
+const handleErrors = <A, R>(
+  effect: Effect.Effect<A, EventStoreError | ConcurrencyConflictError, R>
+) =>
   pipe(
     effect,
     Effect.catchTag('EventStoreError', (error) =>

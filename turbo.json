@@ -5,7 +5,7 @@
       "dependsOn": ["ci"]
     },
     "ci": {
-      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check"]
+      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check", "validate:docs"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
@@ -80,6 +80,7 @@
         "**/*.spec.tsx",
         "tsconfig*.json",
         "$TURBO_ROOT$/eslint.config.mjs",
+        "$TURBO_ROOT$/scripts/**/*.ts",
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/bun.lock",
         "package.json"
@@ -123,6 +124,25 @@
       "inputs": [".changeset/**/*.md", ".changeset/config.json", "packages/**/package.json"],
       "cache": true,
       "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
+    },
+    "//#scripts:lint": {
+      "dependsOn": [],
+      "outputs": [],
+      "inputs": ["scripts/**/*.ts", "eslint.config.mjs", "package.json", "bun.lock"],
+      "cache": true
+    },
+    "validate:docs": {
+      "dependsOn": ["^build", "//#scripts:lint"],
+      "outputs": [],
+      "inputs": [
+        "**/*.md",
+        "src/**/*.ts",
+        "dist/**",
+        "package.json",
+        "tsconfig*.json",
+        "$TURBO_ROOT$/scripts/validate-markdown-examples.ts"
+      ],
+      "cache": true
     }
   }
 }

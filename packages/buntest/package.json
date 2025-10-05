@@ -13,7 +13,8 @@
     "lint": "echo 'Using root lint config'",
     "test": "bun test",
     "validate:pack": "bun pm pack --dry-run",
-    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
+    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0",
+    "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
   },
   "dependencies": {
     "effect": "3.18.1"

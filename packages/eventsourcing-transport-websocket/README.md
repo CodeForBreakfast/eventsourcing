@@ -58,7 +58,8 @@ const program = Effect.scoped(
     yield* transport.publish({
       id: makeMessageId('msg-1'),
       type: 'chat.message',
-      payload: { text: 'Hello WebSocket!' },
+      payload: JSON.stringify({ text: 'Hello WebSocket!' }),
+      metadata: {},
     });
   })
 );
@@ -70,6 +71,9 @@ await Effect.runPromise(program);
 ### Message Filtering
 
 ```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
+
 const program = Effect.scoped(
   Effect.gen(function* () {
     const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
@@ -93,6 +97,7 @@ const program = Effect.scoped(
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
 import { WebSocketAcceptor } from '@codeforbreakfast/eventsourcing-transport-websocket';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
 
 const program = Effect.scoped(
   Effect.gen(function* () {
@@ -140,6 +145,10 @@ await Effect.runPromise(program);
 ### Broadcasting to All Clients
 
 ```typescript
+import { Effect } from 'effect';
+import { WebSocketAcceptor } from '@codeforbreakfast/eventsourcing-transport-websocket';
+import { makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
+
 const program = Effect.scoped(
   Effect.gen(function* () {
     const acceptor = yield* WebSocketAcceptor.make({
@@ -153,7 +162,8 @@ const program = Effect.scoped(
     yield* transport.broadcast({
       id: makeMessageId('broadcast-1'),
       type: 'server.announcement',
-      payload: { message: 'Server is shutting down in 5 minutes' },
+      payload: JSON.stringify({ message: 'Server is shutting down in 5 minutes' }),
+      metadata: {},
     });
   })
 );
@@ -169,6 +179,9 @@ The transport tracks connection states:
 - `error`: Connection error occurred
 
 ```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
+
 const program = Effect.scoped(
   Effect.gen(function* () {
     const transport = yield* WebSocketConnector.connect('ws://localhost:8080');
@@ -201,7 +214,8 @@ const program = Effect.scoped(
 The transport uses typed errors from the contracts package:
 
 ```typescript
-import { ConnectionError, TransportError } from '@codeforbreakfast/eventsourcing-transport';
+import { Effect, pipe } from 'effect';
+import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
 
 const program = Effect.scoped(
   pipe(
@@ -269,27 +283,29 @@ The transport is protocol-agnostic and moves `TransportMessage` objects between 
 #### WebSocketConnector
 
 ```typescript
-const WebSocketConnector: Context.Tag.Service<typeof Client.Connector> = {
-  connect(url: string): Effect.Effect<
-    Client.Transport,
-    ConnectionError,
-    Scope.Scope
-  >
-}
+import { Effect, Scope } from 'effect';
+import { Client, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const WebSocketConnector: {
+  connect(url: string): Effect.Effect<Client.Transport, ConnectionError, Scope.Scope>;
+};
 ```
 
 #### Client.Transport
 
 ```typescript
-interface Transport<TMessage> {
+import { Effect, Stream } from 'effect';
+import { TransportError, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const transport: {
   connectionState: Stream.Stream<ConnectionState, never, never>;
 
-  publish(message: TMessage): Effect.Effect<void, TransportError, never>;
+  publish(message: unknown): Effect.Effect<void, TransportError, never>;
 
   subscribe(
-    filter?: (message: TMessage) => boolean
-  ): Effect.Effect<Stream.Stream<TMessage, never, never>, TransportError, never>;
-}
+    filter?: (message: unknown) => boolean
+  ): Effect.Effect<Stream.Stream<unknown, never, never>, TransportError, never>;
+};
 ```
 
 ### Server API
@@ -297,7 +313,10 @@ interface Transport<TMessage> {
 #### WebSocketAcceptor
 
 ```typescript
-const WebSocketAcceptor: {
+import { Effect, Context } from 'effect';
+import { Server } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const WebSocketAcceptor: {
   make(config: {
     port: number;
     host: string;
@@ -308,11 +327,14 @@ const WebSocketAcceptor: {
 #### Server.Transport
 
 ```typescript
-interface Transport<TMessage> {
-  connections: Stream.Stream<ClientConnection, never, never>;
+import { Effect, Stream } from 'effect';
+import { Server, TransportError } from '@codeforbreakfast/eventsourcing-transport';
 
-  broadcast(message: TMessage): Effect.Effect<void, TransportError, never>;
-}
+declare const transport: {
+  connections: Stream.Stream<Server.ClientConnection, never, never>;
+
+  broadcast(message: unknown): Effect.Effect<void, TransportError, never>;
+};
 ```
 
 ## Implementation Notes

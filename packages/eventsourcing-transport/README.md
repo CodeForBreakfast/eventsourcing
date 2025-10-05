@@ -18,28 +18,43 @@ This package provides the core abstractions for building transport layers in eve
 
 ## Core Interfaces
 
-### `ConnectedTransport<TMessage>`
+### `Client.Transport`
 
 The main interface representing a fully connected transport that can send and receive messages:
 
 ```typescript
-interface ConnectedTransport<TMessage extends TransportMessage = TransportMessage>
-  extends ConnectionManager,
-    MessagePublisher<TMessage>,
-    MessageSubscriber<TMessage>,
-    RequestResponse {}
+import { Effect, Stream, Scope } from 'effect';
+import type {
+  TransportMessage,
+  ConnectionState,
+  TransportError,
+} from '@codeforbreakfast/eventsourcing-transport';
+
+interface Transport {
+  readonly connectionState: Stream.Stream<ConnectionState, never, never>;
+  readonly publish: (message: TransportMessage) => Effect.Effect<void, TransportError, never>;
+  readonly subscribe: (
+    filter?: (message: TransportMessage) => boolean
+  ) => Effect.Effect<Stream.Stream<TransportMessage, never, never>, TransportError, never>;
+}
 ```
 
-### `TransportConnector<TMessage>`
+### `Client.Connector`
 
-The factory interface for creating connected transports. This design prevents calling transport methods before establishing a connection:
+The service tag for creating connected transports. This design prevents calling transport methods before establishing a connection:
 
 ```typescript
-interface TransportConnector<TMessage extends TransportMessage = TransportMessage> {
-  readonly connect: (
-    url: string
-  ) => Effect.Effect<ConnectedTransport<TMessage>, ConnectionError, Scope.Scope>;
-}
+import { Context, Effect, Scope } from 'effect';
+import type { Client, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
+
+class Connector extends Context.Tag('@transport/Client.Connector')<
+  Connector,
+  {
+    readonly connect: (
+      url: string
+    ) => Effect.Effect<Client.Transport, ConnectionError, Scope.Scope>;
+  }
+>() {}
 ```
 
 ### `TransportMessage`
@@ -47,12 +62,16 @@ interface TransportConnector<TMessage extends TransportMessage = TransportMessag
 The base message type that all transport implementations must handle:
 
 ```typescript
-interface TransportMessage {
-  readonly id: string;
+import { Brand } from 'effect';
+import type { TransportMessage } from '@codeforbreakfast/eventsourcing-transport';
+
+// TransportMessage has this structure:
+type MessageStructure = {
+  readonly id: string & Brand.Brand<'MessageId'>;
   readonly type: string;
   readonly payload: string; // Always a JSON string - transport doesn't parse it
   readonly metadata: Record<string, unknown>;
-}
+};
 ```
 
 The transport layer only validates the envelope structure. The payload is always a serialized JSON string - the transport doesn't care what's inside.
@@ -67,71 +86,65 @@ The package provides standardized error types:
 
 ## Contract Testing
 
-Use `runTransportContractTests` to verify your transport implementation meets all requirements:
+Use `runClientTransportContractTests` from the testing contracts package to verify your transport implementation meets all requirements:
 
 ```typescript
-import { runTransportContractTests } from '@codeforbreakfast/eventsourcing-transport';
+import { runClientTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import type { TransportTestContext } from '@codeforbreakfast/eventsourcing-testing-contracts';
+import { Effect, Scope } from 'effect';
 
-runTransportContractTests('My Transport', () => setupMyTransport(), {
-  supportsReconnection: true,
-  supportsOfflineBuffering: false,
-  guaranteesOrdering: true,
-  supportsMultiplexing: true,
-});
-```
+const setupMyTransport = (): Effect.Effect<TransportTestContext, never, never> =>
+  Effect.succeed({
+    makeConnectedTransport: (url: string) =>
+      Effect.scoped(
+        Effect.acquireRelease(
+          Effect.succeed({} as any), // Your transport creation here
+          () => Effect.void
+        )
+      ),
+  });
 
-## Optional Features
-
-Transports can optionally support advanced features:
-
-```typescript
-interface TransportFeatures {
-  readonly supportsReconnection?: boolean;
-  readonly supportsOfflineBuffering?: boolean;
-  readonly supportsBackpressure?: boolean;
-  readonly guaranteesOrdering?: boolean;
-  readonly supportsMultiplexing?: boolean;
-  readonly supportsBatching?: boolean;
-  readonly supportsCompression?: boolean;
-}
+runClientTransportContractTests('My Transport', setupMyTransport);
 ```
 
 ## Usage Example
 
 ```typescript
-import { Effect, Stream } from 'effect';
-import type {
-  TransportConnector,
-  TransportMessage,
-} from '@codeforbreakfast/eventsourcing-transport';
+import { Effect, Stream, pipe } from 'effect';
+import { Client, makeMessageId } from '@codeforbreakfast/eventsourcing-transport';
+import type { TransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 
-// Define your message types
-interface MyMessage extends TransportMessage<string> {
-  type: 'chat' | 'notification';
-}
-
-// Use a transport connector
-const useTransport = (connector: TransportConnector<MyMessage>) =>
-  Effect.gen(function* () {
-    // Connect to transport
-    const transport = yield* connector.connect('ws://localhost:8080');
-
-    // Subscribe to messages
-    const messageStream = yield* transport.subscribe((msg) => msg.type === 'chat');
-
-    // Send a message
-    yield* transport.publish({
-      id: crypto.randomUUID(),
-      type: 'chat',
-      payload: 'Hello, world!',
-      timestamp: new Date(),
-    });
-
-    // Process incoming messages
-    yield* Stream.runForEach(messageStream, (message) =>
-      Effect.logInfo(`Received: ${message.payload}`)
-    );
-  });
+const useTransport = pipe(
+  Client.Connector,
+  Effect.andThen((connector) =>
+    pipe(
+      connector.connect('ws://localhost:8080'),
+      Effect.andThen((transport: Client.Transport) =>
+        pipe(
+          // Subscribe to messages
+          transport.subscribe((msg: TransportMessage) => msg.type === 'chat'),
+          Effect.andThen((messageStream: Stream.Stream<TransportMessage, never, never>) =>
+            pipe(
+              // Send a message
+              transport.publish({
+                id: makeMessageId(crypto.randomUUID()),
+                type: 'chat',
+                payload: JSON.stringify({ text: 'Hello, world!' }),
+                metadata: {},
+              }),
+              Effect.andThen(() =>
+                // Process incoming messages
+                Stream.runForEach(messageStream, (message: TransportMessage) =>
+                  Effect.logInfo(`Received: ${message.payload}`)
+                )
+              )
+            )
+          )
+        )
+      )
+    )
+  )
+);
 ```
 
 ## Design Principles

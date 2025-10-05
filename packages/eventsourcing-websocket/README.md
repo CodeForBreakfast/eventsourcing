@@ -24,62 +24,52 @@ bun add @codeforbreakfast/eventsourcing-commands
 import { makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
 import { sendWireCommand, subscribe } from '@codeforbreakfast/eventsourcing-protocol';
 import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
-import { Effect, Stream } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 
-// ============================================================================
-// Application Code (transport-agnostic)
-// ============================================================================
+const sendCommand = (command: WireCommand) =>
+  pipe(
+    sendWireCommand(command),
+    Effect.flatMap(() => subscribe('user-123')),
+    Effect.flatMap((events) =>
+      Stream.runForEach(events, (event) => Effect.sync(() => console.log('Event:', event.type)))
+    )
+  );
 
-const myApplication = Effect.gen(function* () {
-  // Your code uses protocol abstractions - doesn't know about WebSocket
-  const command: WireCommand = {
-    id: crypto.randomUUID(),
-    target: 'user-123',
-    name: 'CreateUser',
-    payload: { name: 'Alice', email: 'alice@example.com' },
-  };
-
-  const result = yield* sendWireCommand(command);
-
-  const events = yield* subscribe('user-123');
-  yield* Stream.runForEach(events, (event) => Effect.sync(() => console.log('Event:', event.type)));
+const myApplication = sendCommand({
+  id: crypto.randomUUID(),
+  target: 'user-123',
+  name: 'CreateUser',
+  payload: { name: 'Alice', email: 'alice@example.com' },
 });
-
-// ============================================================================
-// Layer Setup (WebSocket-specific - ONE PLACE ONLY)
-// ============================================================================
 
 const layer = makeWebSocketProtocolLayer('ws://localhost:8080');
 
-// Run application with WebSocket transport
-await Effect.runPromise(myApplication.pipe(Effect.provide(layer)));
+await Effect.runPromise(pipe(myApplication, Effect.provide(layer), Effect.scoped));
 ```
 
 To switch transports (e.g., to HTTP), you'd only change the layer - application code stays the same.
 
 ### Convenience: Direct Connection
 
-For quick prototypes or scripts:
+For quick prototypes or scripts, you can use the makeWebSocketProtocolLayer directly with Effect.scoped:
 
 ```typescript
-import { connect } from '@codeforbreakfast/eventsourcing-websocket';
-import { Effect } from 'effect';
+import { makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
+import { sendWireCommand } from '@codeforbreakfast/eventsourcing-protocol';
+import { Effect, pipe } from 'effect';
 
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    // Returns Protocol service directly
-    const protocol = yield* connect('ws://localhost:8080');
-
-    const result = yield* protocol.sendWireCommand({
-      id: crypto.randomUUID(),
-      target: 'user-123',
-      name: 'CreateUser',
-      payload: { name: 'Alice' },
-    });
-  })
+const sendCommand = pipe(
+  sendWireCommand({
+    id: crypto.randomUUID(),
+    target: 'user-123',
+    name: 'CreateUser',
+    payload: { name: 'Alice' },
+  }),
+  Effect.provide(makeWebSocketProtocolLayer('ws://localhost:8080')),
+  Effect.scoped
 );
 
-await Effect.runPromise(program);
+Effect.runPromise(sendCommand);
 ```
 
 **Note**: The layer-based approach is preferred for production applications as it supports dependency injection and testing.
@@ -89,9 +79,13 @@ await Effect.runPromise(program);
 ### `makeWebSocketProtocolLayer`
 
 ```typescript
-const makeWebSocketProtocolLayer: (
+import { Layer, Scope } from 'effect';
+import { Protocol } from '@codeforbreakfast/eventsourcing-protocol';
+import { TransportError, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const makeWebSocketProtocolLayer: (
   url: string
-) => Layer<Protocol, TransportError | ConnectionError, Scope>;
+) => Layer.Layer<Protocol, TransportError | ConnectionError, Scope.Scope>;
 ```
 
 Creates an Effect Layer that provides the Protocol service over WebSocket.
@@ -105,16 +99,30 @@ Creates an Effect Layer that provides the Protocol service over WebSocket.
 **Example:**
 
 ```typescript
-const layer = makeWebSocketProtocolLayer('ws://localhost:8080');
-Effect.runPromise(myApp.pipe(Effect.provide(layer)));
+import { Effect, pipe } from 'effect';
+import { makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
+
+declare const myApp: Effect.Effect<void, never, never>;
+
+const runApp = pipe(
+  myApp,
+  Effect.provide(makeWebSocketProtocolLayer('ws://localhost:8080')),
+  Effect.scoped
+);
+
+Effect.runPromise(runApp);
 ```
 
 ### `connect`
 
 ```typescript
-const connect: (
+import { Effect, Scope } from 'effect';
+import { Protocol } from '@codeforbreakfast/eventsourcing-protocol';
+import { TransportError, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
+
+declare const connect: (
   url: string
-) => Effect<Protocol, TransportError | ConnectionError, Protocol | Scope>;
+) => Effect.Effect<Protocol, TransportError | ConnectionError, Protocol | Scope.Scope>;
 ```
 
 Convenience function that connects and returns the Protocol service directly.
@@ -128,11 +136,13 @@ Convenience function that connects and returns the Protocol service directly.
 **Example:**
 
 ```typescript
-const program = Effect.scoped(
-  Effect.gen(function* () {
-    const protocol = yield* connect('ws://localhost:8080');
-    // use protocol...
-  })
+import { Effect, pipe } from 'effect';
+import { connect } from '@codeforbreakfast/eventsourcing-websocket';
+
+const program = pipe(
+  connect('ws://localhost:8080'),
+  Effect.flatMap((protocol) => Effect.succeed(protocol)), // use protocol...
+  Effect.scoped
 );
 ```
 

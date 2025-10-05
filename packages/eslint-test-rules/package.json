@@ -6,7 +6,8 @@
   "type": "module",
   "scripts": {
     "lint": "eslint . --ext .ts,.tsx --report-unused-disable-directives",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
   },
   "devDependencies": {
     "effect": "3.18.1",
