@@ -110,20 +110,12 @@ const finalizeParserState =
     return logUnclosedBlock(filePath, state);
   };
 
-const processLineInState =
-  (filePath: string, index: number, line: string) =>
-  (accEffect: Effect.Effect<ParserState, never, never>) =>
-    pipe(
-      accEffect,
-      Effect.flatMap((state) => processMarkdownLine(filePath, index)(state, line))
-    );
-
 const extractCodeBlocks = (content: string, filePath: string) => {
   const lines = content.split('\n');
   return pipe(
     lines,
     EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
-      processLineInState(filePath, index, line)(accEffect)
+      Effect.flatMap(accEffect, processMarkdownLine(filePath, index))
     ),
     Effect.flatMap(finalizeParserState(filePath))
   );
@@ -156,21 +148,6 @@ const processDirectoryEntry =
     return Effect.succeed(files);
   };
 
-const processEntryWithFiles =
-  (
-    currentDir: string,
-    entry: {
-      readonly name: string;
-      readonly isDirectory: () => boolean;
-      readonly isFile: () => boolean;
-    }
-  ) =>
-  (acc: Effect.Effect<readonly string[], Error, never>) =>
-    pipe(
-      acc,
-      Effect.flatMap((currentFiles) => processDirectoryEntry(currentDir, currentFiles)(entry))
-    );
-
 const reduceDirectoryEntries = (
   entries: readonly {
     readonly name: string;
@@ -180,11 +157,8 @@ const reduceDirectoryEntries = (
   files: readonly string[],
   currentDir: string
 ) =>
-  pipe(
-    entries,
-    EffectArray.reduce(Effect.succeed(files), (acc, entry) =>
-      processEntryWithFiles(currentDir, entry)(acc)
-    )
+  EffectArray.reduce(entries, Effect.succeed(files), (acc, _entry) =>
+    Effect.flatMap(acc, processDirectoryEntry(currentDir))
   );
 
 const processDirectory = (
@@ -306,10 +280,7 @@ const typeCheckDirectory = (tempDir: string) => {
 };
 
 const findBlockFileByFilename = (filename: string, blockFiles: readonly BlockFile[]) =>
-  pipe(
-    blockFiles,
-    EffectArray.findFirst((bf) => bf.filename === filename)
-  );
+  EffectArray.findFirst(blockFiles, (bf) => bf.filename === filename);
 
 const createValidationError = (
   blockFile: BlockFile,
@@ -386,14 +357,11 @@ const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
     ? Console.error(`   ${line}`)
     : Effect.void;
 
-const formatErrorLineWithAcc = (line: string) => (acc: Effect.Effect<void, never, never>) =>
-  pipe(acc, Effect.andThen(formatErrorLine(line)));
-
 const formatErrorLines = (errorLines: readonly string[]) =>
   pipe(
     errorLines,
     EffectArray.filter((line) => line.trim().length > 0),
-    EffectArray.reduce(Effect.void, (acc, line) => formatErrorLineWithAcc(line)(acc))
+    EffectArray.reduce(Effect.void, (acc, line) => Effect.andThen(acc, formatErrorLine(line)))
   );
 
 const formatError = (error: ValidationError) => {
@@ -441,19 +409,9 @@ const readAndExtractCodeBlocks = (
   );
 };
 
-const processFileWithBlocks =
-  (packageDir: string, file: string) => (acc: Effect.Effect<readonly CodeBlock[], Error, never>) =>
-    pipe(
-      acc,
-      Effect.flatMap((blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
-    );
-
 const collectAllCodeBlocks = (markdownFiles: readonly string[], packageDir: string) =>
-  pipe(
-    markdownFiles,
-    EffectArray.reduce(Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
-      processFileWithBlocks(packageDir, file)(acc)
-    )
+  EffectArray.reduce(markdownFiles, Effect.succeed([] as readonly CodeBlock[]), (acc, file) =>
+    Effect.flatMap(acc, (blocks) => readAndExtractCodeBlocks(file, packageDir, blocks))
   );
 
 const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockFile[]) =>
@@ -464,14 +422,8 @@ const runTypeCheckAndParseErrors = (tempDir: string, blockFiles: readonly BlockF
     Effect.catchAll((stdout) => Effect.succeed(parseTypeErrors(stdout as string, blockFiles)))
   );
 
-const formatErrorWithAcc = (error: ValidationError) => (acc: Effect.Effect<void, never, never>) =>
-  pipe(acc, Effect.andThen(formatError(error)));
-
 const formatAllErrors = (errors: readonly ValidationError[]) =>
-  pipe(
-    errors,
-    EffectArray.reduce(Effect.void, (acc, error) => formatErrorWithAcc(error)(acc))
-  );
+  EffectArray.reduce(errors, Effect.void, (acc, error) => Effect.andThen(acc, formatError(error)));
 
 const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
   const errorCountMessage = `\n❌ Found ${errors.length} invalid example(s):\n`;
