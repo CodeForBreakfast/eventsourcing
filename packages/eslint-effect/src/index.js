@@ -1,22 +1,35 @@
 import rules from './rules/index.js';
 import {
-  effectSyntaxRestrictions,
-  simplePipeSyntaxRestrictions,
   functionalImmutabilityRules,
+  pluginRules,
+  recommended,
+  strict,
+  noGen,
+  preferMatch,
+  pipeStrict,
 } from './configs.js';
 
-export {
+const plugin = {
   rules,
-  effectSyntaxRestrictions,
-  simplePipeSyntaxRestrictions,
-  functionalImmutabilityRules,
+  meta: {
+    name: '@codeforbreakfast/eslint-effect',
+    version: '0.2.0',
+  },
 };
 
+const configs = {
+  functionalImmutabilityRules,
+  plugin: pluginRules(),
+  recommended: recommended(),
+  strict: strict(),
+  noGen: noGen(),
+  preferMatch: preferMatch(),
+  pipeStrict: pipeStrict(),
+};
+
+export { rules, functionalImmutabilityRules };
+
 export default {
-  rules,
-  configs: {
-    effectSyntaxRestrictions,
-    simplePipeSyntaxRestrictions,
-    functionalImmutabilityRules,
-  },
+  ...plugin,
+  configs,
 };

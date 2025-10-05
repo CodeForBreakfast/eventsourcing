@@ -37,7 +37,7 @@ if ('Right' === either._tag) {
 // EFFECT.GEN RULES (should fail)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing Effect.gen call
+// eslint-disable-next-line effect/no-gen -- Testing Effect.gen call
 const genTest = Effect.gen(function* () {
   yield* Effect.succeed(42);
   return 'done';
@@ -50,7 +50,7 @@ const genRef = Effect.gen;
 // CLASSES RULES (should fail)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing class restriction
+// eslint-disable-next-line effect/no-classes -- Testing class restriction
 class MyClass {
   // eslint-disable-next-line functional/prefer-immutable-types, functional/prefer-readonly-type -- Testing class property rules
   value = 42;
@@ -60,10 +60,10 @@ class MyClass {
 // EFFECT.RUNSYNC / RUNPROMISE (should fail in production)
 // ========================================
 
-// eslint-disable-next-line no-restricted-syntax -- Testing Effect.runSync ban
+// eslint-disable-next-line effect/no-runSync -- Testing Effect.runSync ban
 Effect.runSync(Effect.succeed(42));
 
-// eslint-disable-next-line no-restricted-syntax -- Testing Effect.runPromise ban
+// eslint-disable-next-line effect/no-runPromise -- Testing Effect.runPromise ban
 Effect.runPromise(Effect.succeed(42));
 
 // ========================================
@@ -129,13 +129,13 @@ const firstArgFnCall = pipe(
 // ========================================
 
 // Direct call without pipe
-// eslint-disable-next-line no-restricted-syntax -- Testing flatMap with discarded input
+// eslint-disable-next-line effect/prefer-andThen -- Testing flatMap with discarded input
 const flatMapDirect = Effect.flatMap(() => Effect.succeed('hello'));
 
 const flatMapDiscarded = pipe(
   // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
   Effect.succeed(42),
-  // eslint-disable-next-line no-restricted-syntax -- Testing flatMap with discarded input
+  // eslint-disable-next-line effect/prefer-andThen -- Testing flatMap with discarded input
   Effect.flatMap(() => Effect.succeed('hello'))
 );
 
@@ -144,13 +144,13 @@ const flatMapDiscarded = pipe(
 // ========================================
 
 // Direct call without pipe
-// eslint-disable-next-line no-restricted-syntax -- Testing map with constant value
+// eslint-disable-next-line effect/prefer-as -- Testing map with constant value
 const mapDirect = Effect.map(() => 'constant');
 
 const mapConstant = pipe(
   // eslint-disable-next-line no-restricted-syntax -- Testing first arg in pipe
   Effect.succeed(42),
-  // eslint-disable-next-line no-restricted-syntax -- Testing map with constant value
+  // eslint-disable-next-line effect/prefer-as -- Testing map with constant value
   Effect.map(() => 'constant')
 );
 

@@ -1,27 +1,19 @@
-export const effectSyntaxRestrictions = [
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="gen"]',
-    message: 'Effect.gen is forbidden. Use pipe and Effect.all/Effect.forEach instead.',
-  },
-  {
-    selector:
-      'ClassDeclaration:not(:has(CallExpression > MemberExpression.callee[object.type="Identifier"][object.name=/^(Data|Effect|Context|Schema)$/][property.type="Identifier"][property.name=/^(TaggedError|Tag|GenericTag|Class)$/]))',
-    message:
-      'Classes are forbidden in functional programming. Only Effect service tags (extending Context.Tag, Effect.Tag, or Context.GenericTag), error classes (extending Data.TaggedError), and Schema classes (extending Schema.Class) are allowed.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runSync"]',
-    message:
-      'Effect.runSync is forbidden in production code. Effects should be composed and run at the application boundary.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="runPromise"]',
-    message:
-      'Effect.runPromise is forbidden in production code. Effects should be composed and run at the application boundary.',
-  },
+// Core Effect best practices - universally recommended (now as named rules)
+const effectRecommendedRules = {
+  'effect/no-classes': 'error',
+  'effect/no-runSync': 'error',
+  'effect/no-runPromise': 'error',
+  'effect/prefer-andThen': 'error',
+  'effect/prefer-as': 'error',
+};
+
+// Opinionated: forbid Effect.gen in favor of pipe composition
+const noGenRules = {
+  'effect/no-gen': 'error',
+};
+
+// Opinionated: prefer Match over direct _tag access
+const preferMatchRestrictions = [
   {
     selector: 'MemberExpression[computed=false][property.type="Identifier"][property.name="_tag"]',
     message:
@@ -33,21 +25,10 @@ export const effectSyntaxRestrictions = [
     message:
       "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
   },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="flatMap"][arguments.length=1][arguments.0.type="ArrowFunctionExpression"][arguments.0.params.length=0]',
-    message:
-      'Use Effect.andThen() when discarding the input value. Effect.flatMap(() => expr) should be Effect.andThen(expr).',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="map"][arguments.length=1][arguments.0.type="ArrowFunctionExpression"][arguments.0.params.length=0]',
-    message:
-      'Use Effect.as() when replacing with a constant value. Effect.map(() => value) should be Effect.as(value).',
-  },
 ];
 
-export const simplePipeSyntaxRestrictions = [
+// Basic pipe best practices - less controversial
+const pipeRecommendedRestrictions = [
   {
     selector:
       'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name="pipe"]',
@@ -60,6 +41,22 @@ export const simplePipeSyntaxRestrictions = [
     message:
       'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
   },
+  {
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
+    message:
+      'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
+  },
+  {
+    selector:
+      'CallExpression[callee.type="Identifier"][callee.name="pipe"] > .arguments:first-child[type="CallExpression"][arguments.length=1]',
+    message:
+      'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
+  },
+];
+
+// Opinionated: strict pipe composition rules
+const pipeStrictRestrictions = [
   {
     selector:
       'CallExpression[callee.type="Identifier"][callee.name="pipe"] CallExpression[callee.type="Identifier"][callee.name="pipe"]',
@@ -83,18 +80,6 @@ export const simplePipeSyntaxRestrictions = [
       'FunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
     message:
       'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
-    message:
-      'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="Identifier"][callee.name="pipe"] > .arguments:first-child[type="CallExpression"][arguments.length=1]',
-    message:
-      'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
   },
 ];
 
@@ -162,3 +147,75 @@ export const functionalImmutabilityRules = {
   'functional/no-conditional-statements': 'off',
   'functional/no-loop-statements': 'error',
 };
+
+// Plugin rules only
+const pluginRulesOnly = {
+  'effect/no-unnecessary-pipe-wrapper': 'error',
+  'effect/prefer-match-tag': 'error',
+  'effect/prefer-match-over-conditionals': 'error',
+  'effect/prefer-schema-validation-over-assertions': 'error',
+};
+
+// Recommended: Core Effect + basic pipe best practices
+const recommendedRulesOnly = {
+  ...pluginRulesOnly,
+  ...effectRecommendedRules,
+  'no-restricted-syntax': ['error', ...pipeRecommendedRestrictions],
+};
+
+// Strict: Recommended + no-gen + prefer-match + strict-pipe
+const strictRulesOnly = {
+  ...pluginRulesOnly,
+  ...effectRecommendedRules,
+  ...noGenRules,
+  'no-restricted-syntax': [
+    'error',
+    ...preferMatchRestrictions,
+    ...pipeRecommendedRestrictions,
+    ...pipeStrictRestrictions,
+  ],
+};
+
+// Individual opt-in configs
+const noGenRulesOnly = {
+  ...noGenRules,
+};
+
+const preferMatchRulesOnly = {
+  'no-restricted-syntax': ['error', ...preferMatchRestrictions],
+};
+
+const pipeStrictRulesOnly = {
+  'no-restricted-syntax': ['error', ...pipeStrictRestrictions],
+};
+
+// Exported configs
+export const pluginRules = () => ({
+  name: '@codeforbreakfast/eslint-effect/plugin',
+  rules: pluginRulesOnly,
+});
+
+export const recommended = () => ({
+  name: '@codeforbreakfast/eslint-effect/recommended',
+  rules: recommendedRulesOnly,
+});
+
+export const strict = () => ({
+  name: '@codeforbreakfast/eslint-effect/strict',
+  rules: strictRulesOnly,
+});
+
+export const noGen = () => ({
+  name: '@codeforbreakfast/eslint-effect/no-gen',
+  rules: noGenRulesOnly,
+});
+
+export const preferMatch = () => ({
+  name: '@codeforbreakfast/eslint-effect/prefer-match',
+  rules: preferMatchRulesOnly,
+});
+
+export const pipeStrict = () => ({
+  name: '@codeforbreakfast/eslint-effect/pipe-strict',
+  rules: pipeStrictRulesOnly,
+});
