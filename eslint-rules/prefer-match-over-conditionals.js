@@ -8,11 +8,11 @@ export default {
     type: 'suggestion',
     docs: {
       description:
-        'Detect imperative if statements in Effect callbacks that check discriminated union properties. Use Match.value with Match.tag for better type safety and functional composition.',
+        'Detect imperative if statements in Effect callbacks that check discriminated union properties. Use Match for better type safety and functional composition.',
     },
     messages: {
       useMatchInstead:
-        'Use Match.value with Match.tag instead of imperative if statements when checking discriminated unions. Example: pipe(value, Match.value, Match.tag("{{tagValue}}", handler)) instead of if (value.type === "{{tagValue}}")',
+        'Use Match instead of imperative if statements when checking discriminated unions. For _tag discriminators use Match.tag("{{tagValue}}", handler), for other properties use Match.when({ {{property}}: "{{tagValue}}" }, handler)',
     },
     schema: [],
   },
@@ -136,6 +136,7 @@ export default {
                 node: statement,
                 messageId: 'useMatchInstead',
                 data: {
+                  property: discriminatorCheck.property,
                   tagValue: discriminatorCheck.value,
                 },
               });
