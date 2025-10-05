@@ -77,7 +77,7 @@ const publishMessageToClient =
             message: 'Cannot publish message: client is not connected',
           })
       ),
-      Effect.flatMap(() =>
+      Effect.andThen(
         Effect.try({
           try: () => {
             const serialized = JSON.stringify(message);
@@ -151,7 +151,7 @@ const updateClientConnectionState = (
 ): Effect.Effect<void, never, never> =>
   pipe(
     setClientConnectionStateRef(clientState, newState),
-    Effect.flatMap(() => offerToClientConnectionStateQueue(clientState, newState))
+    Effect.andThen(offerToClientConnectionStateQueue(clientState, newState))
   );
 
 const offerMessageToClientQueue =
@@ -272,15 +272,17 @@ const registerClientAndTransition =
   (clientState: ClientState): Effect.Effect<void, never, never> =>
     pipe(
       updateClientConnectionState(clientState, 'connecting'),
-      Effect.flatMap(() => addClientToServerState(serverStateRef, clientState)),
-      Effect.flatMap(() => {
-        // eslint-disable-next-line functional/immutable-data -- Bun WebSocket API requires mutating the data property to attach client metadata
-        (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
-          clientId: clientState.id,
-        };
-        return updateClientConnectionState(clientState, 'connected');
-      }),
-      Effect.flatMap(() => getServerState(serverStateRef)),
+      Effect.andThen(addClientToServerState(serverStateRef, clientState)),
+      Effect.andThen(
+        Effect.sync(() => {
+          // eslint-disable-next-line functional/immutable-data -- Bun WebSocket API requires mutating the data property to attach client metadata
+          (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
+            clientId: clientState.id,
+          };
+        })
+      ),
+      Effect.andThen(updateClientConnectionState(clientState, 'connected')),
+      Effect.andThen(getServerState(serverStateRef)),
       Effect.flatMap(offerNewConnection(clientState))
     );
 
@@ -314,7 +316,7 @@ const disconnectClientAndCleanup =
   (clientState: ClientState): Effect.Effect<void, never, never> =>
     pipe(
       updateClientConnectionState(clientState, 'disconnected'),
-      Effect.flatMap(() => removeClientFromServerState(serverStateRef, clientState.id))
+      Effect.andThen(removeClientFromServerState(serverStateRef, clientState.id))
     );
 
 const handleClientDisconnection = (
@@ -462,7 +464,7 @@ const shutdownServerResources = (state: ServerState): Effect.Effect<void, never,
     Effect.forEach(HashMap.values(state.clients), notifySingleClientDisconnected, {
       discard: true,
     }),
-    Effect.flatMap(() =>
+    Effect.andThen(
       Effect.sync(() => {
         try {
           Array.from(HashMap.values(state.clients)).forEach((clientState) => {

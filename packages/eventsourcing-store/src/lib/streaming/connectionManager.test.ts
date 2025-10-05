@@ -17,11 +17,7 @@ const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
   );
 
 const verifyManagerAndApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
-  pipe(
-    () => expect(manager).toBeDefined(),
-    Effect.sync,
-    Effect.flatMap(() => verifyApiPort(manager))
-  );
+  pipe(() => expect(manager).toBeDefined(), Effect.sync, Effect.andThen(verifyApiPort(manager)));
 
 describe('ConnectionManager', () => {
   // Single minimal test to ensure the module loads

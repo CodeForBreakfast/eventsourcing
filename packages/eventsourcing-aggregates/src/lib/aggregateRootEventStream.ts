@@ -171,7 +171,7 @@ const foldEventsIntoState =
     pipe(
       stream,
       Stream.runForEach((event) => applyEventToState(apply, event)(stateRef)),
-      Effect.flatMap(() => Ref.get(stateRef))
+      Effect.andThen(Ref.get(stateRef))
     );
 
 const processEventStream = <TState, TEvent>(

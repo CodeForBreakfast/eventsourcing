@@ -210,7 +210,7 @@ const updateConnectionState = (
       ...state,
       connectionState: newState,
     })),
-    Effect.flatMap(() => getStateRef(stateRef)),
+    Effect.andThen(getStateRef(stateRef)),
     Effect.flatMap(publishToStatePubSub(newState))
   );
 
@@ -299,8 +299,8 @@ const cleanupConnection = (
 ): Effect.Effect<void, never, never> =>
   pipe(
     Ref.set(writerRef, null),
-    Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
-    Effect.flatMap(() =>
+    Effect.andThen(updateConnectionState(stateRef, 'disconnected')),
+    Effect.andThen(
       Ref.update(stateRef, (s) => ({
         socket: null,
         connectionState: 'disconnected' as ConnectionState,
@@ -318,7 +318,7 @@ const failDeferredAndUpdateState = (
 ) =>
   pipe(
     Deferred.fail(connectedDeferred, connectionError),
-    Effect.flatMap(() => updateConnectionState(stateRef, 'error'))
+    Effect.andThen(updateConnectionState(stateRef, 'error'))
   );
 
 const handleSocketError =
@@ -353,7 +353,7 @@ const monitorSocketFiber =
     pipe(
       fiber,
       Fiber.await,
-      Effect.flatMap(() => updateConnectionState(stateRef, 'disconnected')),
+      Effect.andThen(updateConnectionState(stateRef, 'disconnected')),
       Effect.forkScoped
     );
 
@@ -363,7 +363,7 @@ const handleOnOpen = (
 ) =>
   pipe(
     updateConnectionState(stateRef, 'connected'),
-    Effect.flatMap(() => Deferred.succeed(connectedDeferred, void 0))
+    Effect.andThen(Deferred.succeed(connectedDeferred, void 0))
   );
 
 const runSocketWithErrorHandling = (
@@ -422,7 +422,7 @@ const startSocketAndWaitForConnection = (
 ) =>
   pipe(
     runSocketFiberAndAwaitConnection(socket, stateRef, connectedDeferred, url),
-    Effect.map(() => createConnectedTransport(stateRef, writerRef))
+    Effect.as(createConnectedTransport(stateRef, writerRef))
   );
 
 const setupSocketWriter =
@@ -438,7 +438,7 @@ const setupSocketWriter =
     pipe(
       socket.writer,
       Effect.tap((writer) => Ref.set(writerRef, (data: string) => writer(data))),
-      Effect.flatMap(() =>
+      Effect.andThen(
         startSocketAndWaitForConnection(socket, stateRef, writerRef, connectedDeferred, url)
       )
     );
@@ -462,7 +462,7 @@ const acquireWebSocketConnection = (
     Effect.acquireRelease(createWebSocketConnectionWithProvider(url, stateRef), () =>
       cleanupConnection(stateRef, writerRef)
     ),
-    Effect.flatMap(setupSocketWriter(writerRef, stateRef, connectedDeferred, url))
+    Effect.andThen(setupSocketWriter(writerRef, stateRef, connectedDeferred, url))
   );
 
 const createConnectionResources = (): Effect.Effect<

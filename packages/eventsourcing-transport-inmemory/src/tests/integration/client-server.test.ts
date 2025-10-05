@@ -304,7 +304,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     pipe(
       testMessage,
       server.broadcast,
-      Effect.flatMap(() => collectFirstMessage(messageStream)),
+      Effect.andThen(collectFirstMessage(messageStream)),
       Effect.flatMap(verifyTestMessage(testMessage))
     );
 
@@ -319,7 +319,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     pipe(
       client,
       waitForConnected,
-      Effect.flatMap(() => client.subscribe()),
+      Effect.andThen(client.subscribe()),
       Effect.flatMap((messageStream) => broadcastAndCollect(server, testMessage, messageStream))
     );
 

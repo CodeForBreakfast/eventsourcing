@@ -101,7 +101,7 @@ describe('Service Definitions', () => {
             eventNumber: 0,
           } as EventStreamPosition)
         ),
-        Effect.map(() => 'Success'),
+        Effect.as('Success'),
         Effect.map((result) => {
           expect(result).toBe('Success');
         })

@@ -385,7 +385,7 @@ const runTestWithServerProtocol = <A, E, R>(
 ) =>
   pipe(
     createTestServerProtocol(server, commandHandler),
-    Effect.flatMap(() => testLogic(clientTransport))
+    Effect.andThen(testLogic(clientTransport))
   );
 
 const runTestWithFullServerProtocol = <A, E, R>(
@@ -404,7 +404,7 @@ const runTestWithFullServerProtocol = <A, E, R>(
 ) =>
   pipe(
     createTestServerProtocol(server, commandHandler, subscriptionHandler),
-    Effect.flatMap(() => testLogic(clientTransport))
+    Effect.andThen(testLogic(clientTransport))
   );
 
 const createTestEvent = (
@@ -525,8 +525,8 @@ const sendAndVerifyCommandAfterNoise = (
 ) =>
   pipe(
     noisyEffect,
-    Effect.flatMap(() => createTestServerProtocol(server, defaultSuccessHandler('user-123', 1))),
-    Effect.flatMap(() => sendTestCommandWithProtocol(clientTransport))
+    Effect.andThen(createTestServerProtocol(server, defaultSuccessHandler('user-123', 1))),
+    Effect.andThen(sendTestCommandWithProtocol(clientTransport))
   );
 
 describe('Protocol Behavior Tests', () => {
@@ -905,7 +905,7 @@ describe('Protocol Behavior Tests', () => {
             defaultSuccessHandler('test', 1),
             makeEventsByStreamId({ 'shared-stream': sharedStreamEvents })
           ),
-          Effect.flatMap(() => runBothClientsSubscription(client1Transport, client2Transport))
+          Effect.andThen(runBothClientsSubscription(client1Transport, client2Transport))
         );
 
     it.effect('should handle multiple clients subscribing to the same stream', () =>
@@ -1064,11 +1064,7 @@ describe('Protocol Behavior Tests', () => {
       });
 
     const verifyFirstBatchAndResubscribe = (firstBatch: readonly Event[]) =>
-      pipe(
-        firstBatch,
-        verifyFirstBatch,
-        Effect.flatMap(() => collectResubscribeBatch(firstBatch))
-      );
+      pipe(firstBatch, verifyFirstBatch, Effect.andThen(collectResubscribeBatch(firstBatch)));
 
     const runResubscriptionTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1163,7 +1159,7 @@ describe('Protocol Behavior Tests', () => {
       return pipe(
         sleepDuration,
         Effect.sleep,
-        Effect.flatMap(() => sendMalformedMessage(server, malformedMessage))
+        Effect.andThen(sendMalformedMessage(server, malformedMessage))
       );
     };
 
@@ -1206,7 +1202,7 @@ describe('Protocol Behavior Tests', () => {
       return pipe(
         sleepDuration,
         Effect.sleep,
-        Effect.flatMap(() => sendMalformedMessage(server, malformedMessage))
+        Effect.andThen(sendMalformedMessage(server, malformedMessage))
       );
     };
 
@@ -1311,7 +1307,7 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         subscribeAndVerifyFirstConnection,
         Effect.scoped,
-        Effect.flatMap(() => subscribeAndVerifyAfterReconnection),
+        Effect.andThen(subscribeAndVerifyAfterReconnection),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -1358,8 +1354,8 @@ describe('Protocol Behavior Tests', () => {
           _tag: 'Success',
           position: { streamId: unsafeCreateStreamId(cmd.target), eventNumber: 1 },
         })),
-        Effect.flatMap(() => sendFirstCommand(firstTransport)),
-        Effect.flatMap(() => connectNewClientAndVerify(server))
+        Effect.andThen(sendFirstCommand(firstTransport)),
+        Effect.andThen(connectNewClientAndVerify(server))
       );
 
     it.effect('should handle transport reconnection gracefully', () =>
@@ -1394,7 +1390,7 @@ describe('Protocol Behavior Tests', () => {
       return pipe(
         sleepDuration,
         Effect.sleep,
-        Effect.flatMap(() => sendCommandWithProtocol(command, clientTransport))
+        Effect.andThen(sendCommandWithProtocol(command, clientTransport))
       );
     };
 
@@ -1493,7 +1489,7 @@ describe('Protocol Behavior Tests', () => {
     ) =>
       pipe(
         verifyReceivedCommandMatches(command, receivedWireCommand),
-        Effect.flatMap(() => serverProtocol.sendResult(receivedWireCommand.id, successResult))
+        Effect.andThen(serverProtocol.sendResult(receivedWireCommand.id, successResult))
       );
 
     const processCommandAndSendResult = (
@@ -1641,7 +1637,7 @@ describe('Protocol Behavior Tests', () => {
     ) =>
       pipe(
         createTestServerProtocol(server, undefined, productStreamHandler),
-        Effect.flatMap(() => subscribeAndVerifyProductEvents(clientTransport))
+        Effect.andThen(subscribeAndVerifyProductEvents(clientTransport))
       );
 
     it.effect('should publish events via server protocol publishEvent', () =>
@@ -1856,7 +1852,7 @@ describe('Protocol Behavior Tests', () => {
           }),
           largeEventStreamHandler
         ),
-        Effect.flatMap(() => runLargePayloadTest(clientTransport))
+        Effect.andThen(runLargePayloadTest(clientTransport))
       );
 
     it.effect('should handle very large payloads in commands and events', () =>
@@ -1958,7 +1954,7 @@ describe('Protocol Behavior Tests', () => {
           }),
           cycleEventHandler
         ),
-        Effect.flatMap(() => runRapidCycles(clientTransport))
+        Effect.andThen(runRapidCycles(clientTransport))
       );
 
     it.effect('should handle rapid subscription/unsubscription cycles', () =>
@@ -1992,7 +1988,7 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         subscribeAndDrainUser123,
         Effect.scoped,
-        Effect.flatMap(() => subscribeAndDrainUser456),
+        Effect.andThen(subscribeAndDrainUser456),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -2047,7 +2043,7 @@ describe('Protocol Behavior Tests', () => {
             eventNumber: Math.floor(Math.random() * 100) + 1,
           },
         })),
-        Effect.flatMap(() => sendSequentialCommands(clientTransport))
+        Effect.andThen(sendSequentialCommands(clientTransport))
       );
 
     it.effect('should handle multiple sequential commands after cleanup', () =>

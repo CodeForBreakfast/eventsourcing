@@ -79,6 +79,18 @@ const effectSyntaxRestrictions = [
     message:
       "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
   },
+  {
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="flatMap"][arguments.length=1][arguments.0.type="ArrowFunctionExpression"][arguments.0.params.length=0]',
+    message:
+      'Use Effect.andThen() when discarding the input value. Effect.flatMap(() => expr) should be Effect.andThen(expr).',
+  },
+  {
+    selector:
+      'CallExpression[callee.type="MemberExpression"][callee.object.type="Identifier"][callee.object.name="Effect"][callee.property.type="Identifier"][callee.property.name="map"][arguments.length=1][arguments.0.type="ArrowFunctionExpression"][arguments.0.params.length=0]',
+    message:
+      'Use Effect.as() when replacing with a constant value. Effect.map(() => value) should be Effect.as(value).',
+  },
 ];
 
 // Test-specific syntax restrictions
@@ -370,6 +382,11 @@ export default [
     plugins: typescriptPlugin,
     rules: {
       '@typescript-eslint/no-unused-vars': 'off',
+      'no-restricted-syntax': [
+        'error',
+        ...effectSyntaxRestrictions,
+        ...simplePipeSyntaxRestrictions,
+      ],
     },
   },
   {

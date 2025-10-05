@@ -222,7 +222,7 @@ const updateStateAndCompleteDeferred = (
       ...state,
       pendingCommands: HashMap.remove(state.pendingCommands, commandId),
     })),
-    Effect.flatMap(() => Deferred.succeed(deferred, result))
+    Effect.andThen(Deferred.succeed(deferred, result))
   );
 
 const processDeferredCommandResult = (
@@ -374,8 +374,8 @@ const executeWireCommand = (
     Effect.acquireRelease(registerPendingCommand(stateRef, command.id, deferred), () =>
       cleanupPendingCommand(stateRef, command.id)
     ),
-    Effect.flatMap(() => publishCommandToTransport(transport, command)),
-    Effect.flatMap(() => awaitCommandResultWithTimeout(deferred, command.id))
+    Effect.andThen(publishCommandToTransport(transport, command)),
+    Effect.andThen(awaitCommandResultWithTimeout(deferred, command.id))
   );
 
 const createWireCommandSender =
@@ -432,7 +432,7 @@ const registerSubscriptionAndPublish = (
       ...state,
       subscriptions: HashMap.set(state.subscriptions, streamId, queue),
     })),
-    Effect.flatMap(() => publishSubscribeMessage(transport, streamId)),
+    Effect.andThen(publishSubscribeMessage(transport, streamId)),
     Effect.as(createSubscriptionStream(stateRef, streamId, queue))
   );
 
