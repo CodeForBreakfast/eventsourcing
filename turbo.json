@@ -137,6 +137,8 @@
       "inputs": [
         "**/*.md",
         "src/**/*.ts",
+        "dist/**",
+        "package.json",
         "tsconfig*.json",
         "$TURBO_ROOT$/scripts/validate-markdown-examples.ts"
       ],
