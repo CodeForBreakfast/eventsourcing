@@ -186,12 +186,7 @@ describe('Command Processing Service', () => {
           command: Readonly<WireCommand>
         ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
       }
-    ) =>
-      pipe(
-        testCommand,
-        service.processCommand,
-        Effect.flatMap(() => readEventsFromStore(eventStore))
-      );
+    ) => pipe(testCommand, service.processCommand, Effect.andThen(readEventsFromStore(eventStore)));
 
     const processCommandAndVerify = (service: {
       readonly processCommand: (
@@ -274,7 +269,7 @@ describe('Command Processing Service', () => {
       router,
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map(() => {
+      Effect.tap(() => {
         expect(handlerCalled).toBe(true);
       }),
       Effect.provide(testLayer)
