@@ -80,7 +80,6 @@
         "**/*.spec.tsx",
         "tsconfig*.json",
         "$TURBO_ROOT$/eslint.config.mjs",
-        "$TURBO_ROOT$/eslint-rules/**/*.js",
         "$TURBO_ROOT$/scripts/**/*.ts",
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/bun.lock",
@@ -135,13 +134,7 @@
     "//#scripts:lint": {
       "dependsOn": ["//#scripts:typecheck"],
       "outputs": [],
-      "inputs": [
-        "scripts/**/*.ts",
-        "eslint.config.mjs",
-        "eslint-rules/**/*.js",
-        "package.json",
-        "bun.lock"
-      ],
+      "inputs": ["scripts/**/*.ts", "eslint.config.mjs", "package.json", "bun.lock"],
       "cache": true
     },
     "validate:docs": {
