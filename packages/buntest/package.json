@@ -6,7 +6,8 @@
   "license": "MIT",
   "description": "Internal testing utilities for Effect with Bun (adapted from @effect/vitest)",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./eslint": "./src/eslint/index.js"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

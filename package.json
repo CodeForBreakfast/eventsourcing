@@ -39,6 +39,7 @@
     ]
   },
   "devDependencies": {
+    "@codeforbreakfast/buntest": "workspace:*",
     "@changesets/changelog-github": "0.5.1",
     "@changesets/cli": "2.29.7",
     "@commitlint/cli": "20.1.0",

@@ -1,4 +1,3 @@
-/* eslint-disable no-restricted-syntax -- Test suite contract that must work with bun:test directly and may use restricted patterns for comprehensive EventStore testing */
 import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
@@ -16,6 +15,138 @@ export const newEventStreamId = () =>
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
+
+const readStreamFromBeginning = (
+  streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    streamId,
+    Effect.flatMap(beginning),
+    Effect.flatMap((position) => eventstore.read(position)),
+    Effect.flatMap(Stream.runCollect)
+  );
+
+const appendEventsToStream = (
+  events: readonly FooEvent[],
+  position: EventStreamPosition,
+  eventstore: EventStore<FooEvent>
+) => {
+  const stream = Stream.make(...events);
+  return pipe(stream, Stream.run(eventstore.append(position)));
+};
+
+const subscribeAndTakeEvents =
+  (count: number, receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>) =>
+  (stream: Stream.Stream<FooEvent, unknown, never>) =>
+    pipe(
+      stream,
+      Stream.take(count),
+      Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
+      Stream.runDrain
+    );
+
+const takeAndCollectStreamEvents =
+  (count: number) => (stream: Stream.Stream<FooEvent, unknown, never>) =>
+    pipe(stream, Stream.take(count), Stream.runCollect);
+
+const readFromPosition = (
+  streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>,
+  eventNumber: number,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    streamId,
+    Effect.map((streamId) => ({ streamId, eventNumber })),
+    Effect.flatMap((position) => eventstore.read(position)),
+    Effect.flatMap(takeAndCollectStreamEvents(2))
+  );
+
+const createWrongEndPosition = (streamId: EventStreamId) =>
+  pipe(
+    streamId,
+    beginning,
+    Effect.map((streamBeginning: EventStreamPosition) => ({
+      streamId: streamBeginning.streamId,
+      eventNumber: 10,
+    }))
+  );
+
+const subscribeFromBeginning = (
+  streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    streamId,
+    Effect.flatMap(beginning),
+    Effect.flatMap((position) => eventstore.subscribe(position))
+  );
+
+const takeZeroAndDrain =
+  (receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>) =>
+  (stream: Stream.Stream<FooEvent, unknown, never>) =>
+    pipe(
+      stream,
+      Stream.take(0),
+      Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
+      Stream.runDrain
+    );
+
+const readAndTakeZeroEvents = (
+  streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>,
+  receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    streamId,
+    Effect.flatMap(beginning),
+    Effect.flatMap((position) => eventstore.read(position)),
+    Effect.flatMap(takeZeroAndDrain(receivedEventsRef))
+  );
+
+const writeEventsAtBeginning = (
+  streamId: EventStreamId,
+  events: readonly FooEvent[],
+  store: EventStore<FooEvent>
+) =>
+  pipe(
+    streamId,
+    beginning,
+    Effect.flatMap((pos) => appendEventsToStream(events, pos, store))
+  );
+
+const subscribeAtPosition = (
+  position: EventStreamPosition,
+  receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>,
+  store: EventStore<FooEvent>
+) => {
+  const subscription = store.subscribe(position);
+  return pipe(subscription, Effect.flatMap(subscribeAndTakeEvents(3, receivedEventsRef)));
+};
+
+const appendAndExpectConflict = (
+  events: readonly FooEvent[],
+  position: EventStreamPosition,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    appendEventsToStream(events, position, eventstore),
+    Effect.flip,
+    Effect.map((error) => {
+      expect(error).toBeInstanceOf(ConcurrencyConflictError);
+    })
+  );
+
+const subscribeFromBeginningAndTake = (
+  streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>,
+  count: number,
+  receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>,
+  eventstore: EventStore<FooEvent>
+) =>
+  pipe(
+    subscribeFromBeginning(streamId, eventstore),
+    Effect.flatMap(subscribeAndTakeEvents(count, receivedEventsRef))
+  );
 
 export class FooEventStore extends Effect.Tag('FooEventStore')<
   FooEventStore,
@@ -52,13 +183,16 @@ export function runEventStoreTestSuite<E>(
 
     const runPromiseWithEventStore = <A, E2>(
       effect: Effect.Effect<A, E2, FooEventStore>
-    ): Promise<A> => {
+    ): Promise<A> =>
       // After providing the eventstore Layer, we get Effect<A, E2 | E, unknown>
       // We need to handle the unknown requirement - assume test caller provides complete Layer
-      const provided = pipe(effect, Effect.provide(eventstore));
       // Type assertion needed because we can't statically know the Layer's requirements
-      return Effect.runPromise(provided as Effect.Effect<A, E2 | E, never>);
-    };
+      pipe(
+        effect,
+        Effect.provide(eventstore),
+        (e) => e as Effect.Effect<A, E2 | E, never>,
+        Effect.runPromise
+      );
 
     beforeAll(() => {
       eventstore = makeEventStore();
@@ -77,10 +211,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'baz' }, { bar: 'qux' }),
-                Stream.run(eventstore.append(streamBeginning))
-              )
+              appendEventsToStream([{ bar: 'baz' }, { bar: 'qux' }], streamBeginning, eventstore)
             )
           )
         );
@@ -94,12 +225,7 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                pipe(
-                  streamId,
-                  Effect.flatMap(beginning),
-                  Effect.flatMap((position) => eventstore.read(position)),
-                  Effect.flatMap(Stream.runCollect)
-                )
+                readStreamFromBeginning(streamId, eventstore)
               )
             )
           );
@@ -116,14 +242,7 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                pipe(
-                  Stream.make({ bar: 'foo' }),
-                  Stream.run(eventstore.append(streamBeginning)),
-                  Effect.flip,
-                  Effect.map((error) => {
-                    expect(error).toBeInstanceOf(ConcurrencyConflictError);
-                  })
-                )
+                appendAndExpectConflict([{ bar: 'foo' }], streamBeginning, eventstore)
               )
             )
           );
@@ -136,7 +255,7 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                pipe(Stream.make({ bar: 'foo' }), Stream.run(eventstore.append(result)))
+                appendEventsToStream([{ bar: 'foo' }], result, eventstore)
               )
             )
           );
@@ -150,12 +269,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     FooEventStore,
                     Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                      pipe(
-                        streamId,
-                        Effect.flatMap(beginning),
-                        Effect.flatMap((position) => eventstore.read(position)),
-                        Effect.flatMap(Stream.runCollect)
-                      )
+                      readStreamFromBeginning(streamId, eventstore)
                     )
                   )
                 )
@@ -172,21 +286,7 @@ export function runEventStoreTestSuite<E>(
                   pipe(
                     FooEventStore,
                     Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                      pipe(
-                        streamId,
-                        Effect.map((streamId) => ({
-                          streamId,
-                          eventNumber: 1,
-                        })),
-                        Effect.flatMap((position) => eventstore.read(position)),
-                        Effect.flatMap((stream) =>
-                          pipe(
-                            stream,
-                            Stream.take(2), // Take exactly 2 events (from position 1 onwards)
-                            Stream.runCollect
-                          )
-                        )
-                      )
+                      readFromPosition(streamId, 1, eventstore)
                     )
                   )
                 )
@@ -201,14 +301,7 @@ export function runEventStoreTestSuite<E>(
               pipe(
                 FooEventStore,
                 Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                  pipe(
-                    Stream.make({ bar: 'oh-oh' }),
-                    Stream.run(eventstore.append(result)),
-                    Effect.flip,
-                    Effect.map((error) => {
-                      expect(error).toBeInstanceOf(ConcurrencyConflictError);
-                    })
-                  )
+                  appendAndExpectConflict([{ bar: 'oh-oh' }], result, eventstore)
                 )
               )
             ));
@@ -219,22 +312,19 @@ export function runEventStoreTestSuite<E>(
 
           beforeEach(async () => {
             secondStreamId = newEventStreamId();
+            const secondStreamBeginning = pipe(
+              secondStreamId,
+              Effect.flatMap(beginning),
+              Effect.runSync
+            );
             result = await runPromiseWithEventStore(
               pipe(
                 FooEventStore,
                 Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-                  pipe(
-                    Stream.make({ bar: 'baz' }, { bar: 'qux' }),
-                    Stream.run(
-                      eventstore.append(
-                        pipe(
-                          secondStreamId,
-                          Effect.flatMap(beginning),
-                          Effect.map((pos) => pos),
-                          Effect.runSync
-                        )
-                      )
-                    )
+                  appendEventsToStream(
+                    [{ bar: 'baz' }, { bar: 'qux' }],
+                    secondStreamBeginning,
+                    eventstore
                   )
                 )
               )
@@ -251,16 +341,7 @@ export function runEventStoreTestSuite<E>(
         const emptyStreamId = newEventStreamId();
         emptyStreamWrongEnd = pipe(
           emptyStreamId,
-          Effect.flatMap((streamId: EventStreamId) =>
-            pipe(
-              streamId,
-              beginning,
-              Effect.map((streamBeginning: EventStreamPosition) => ({
-                streamId: streamBeginning.streamId,
-                eventNumber: 10,
-              }))
-            )
-          ),
+          Effect.flatMap(createWrongEndPosition),
           Effect.runSync
         );
       });
@@ -270,14 +351,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'foo' }),
-                Stream.run(eventstore.append(emptyStreamWrongEnd)),
-                Effect.flip,
-                Effect.map((error) => {
-                  expect(error).toBeInstanceOf(ConcurrencyConflictError);
-                })
-              )
+              appendAndExpectConflict([{ bar: 'foo' }], emptyStreamWrongEnd, eventstore)
             )
           )
         ));
@@ -293,12 +367,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                nonExistentStreamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap(Stream.runCollect)
-              )
+              readStreamFromBeginning(nonExistentStreamId, eventstore)
             )
           )
         );
@@ -324,9 +393,10 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'immediate-test-1' }, { bar: 'immediate-test-2' }),
-                Stream.run(eventstore.append(streamBeginning))
+              appendEventsToStream(
+                [{ bar: 'immediate-test-1' }, { bar: 'immediate-test-2' }],
+                streamBeginning,
+                eventstore
               )
             )
           )
@@ -337,12 +407,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap(Stream.runCollect)
-              )
+              readStreamFromBeginning(streamId, eventstore)
             )
           )
         );
@@ -360,9 +425,10 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'historical-test-1' }, { bar: 'historical-test-2' }),
-                Stream.run(eventstore.append(streamBeginning))
+              appendEventsToStream(
+                [{ bar: 'historical-test-1' }, { bar: 'historical-test-2' }],
+                streamBeginning,
+                eventstore
               )
             )
           )
@@ -373,12 +439,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap(Stream.runCollect)
-              )
+              readStreamFromBeginning(streamId, eventstore)
             )
           )
         );
@@ -408,10 +469,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'initial-event' }),
-                Stream.run(eventstore.append(streamBeginning))
-              )
+              appendEventsToStream([{ bar: 'initial-event' }], streamBeginning, eventstore)
             )
           )
         );
@@ -421,19 +479,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.subscribe(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.take(3), // Take initial event + 2 live events
-                    Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
-                    Stream.runDrain
-                  )
-                )
-              )
+              subscribeFromBeginningAndTake(streamId, 3, receivedEventsRef, eventstore)
             )
           )
         );
@@ -457,9 +503,10 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'live-event-1' }, { bar: 'live-event-2' }),
-                Stream.run(eventstore.append(nextPosition))
+              appendEventsToStream(
+                [{ bar: 'live-event-1' }, { bar: 'live-event-2' }],
+                nextPosition,
+                eventstore
               )
             )
           )
@@ -472,8 +519,11 @@ export function runEventStoreTestSuite<E>(
         ]);
 
         // Verify events were received (historical + live)
-        const receivedEvents = await Effect.runPromise(
-          pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+        const receivedEvents = await pipe(
+          receivedEventsRef,
+          Ref.get,
+          Effect.map(Chunk.toReadonlyArray),
+          Effect.runPromise
         );
         expect(receivedEvents).toEqual([
           { bar: 'initial-event' },
@@ -491,19 +541,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.subscribe(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.take(1),
-                    Stream.tap((event) => Ref.update(subscriber1EventsRef, Chunk.append(event))),
-                    Stream.runDrain
-                  )
-                )
-              )
+              subscribeFromBeginningAndTake(streamId, 1, subscriber1EventsRef, eventstore)
             )
           )
         ).catch(() => {});
@@ -513,19 +551,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.subscribe(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.take(1),
-                    Stream.tap((event) => Ref.update(subscriber2EventsRef, Chunk.append(event))),
-                    Stream.runDrain
-                  )
-                )
-              )
+              subscribeFromBeginningAndTake(streamId, 1, subscriber2EventsRef, eventstore)
             )
           )
         ).catch(() => {});
@@ -538,10 +564,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                Stream.make({ bar: 'multi-subscriber-event' }),
-                Stream.run(eventstore.append(streamBeginning))
-              )
+              appendEventsToStream([{ bar: 'multi-subscriber-event' }], streamBeginning, eventstore)
             )
           )
         );
@@ -553,11 +576,17 @@ export function runEventStoreTestSuite<E>(
         ]);
 
         // Both subscribers should receive the same event
-        const subscriber1Events = await Effect.runPromise(
-          pipe(Ref.get(subscriber1EventsRef), Effect.map(Chunk.toReadonlyArray))
+        const subscriber1Events = await pipe(
+          subscriber1EventsRef,
+          Ref.get,
+          Effect.map(Chunk.toReadonlyArray),
+          Effect.runPromise
         );
-        const subscriber2Events = await Effect.runPromise(
-          pipe(Ref.get(subscriber2EventsRef), Effect.map(Chunk.toReadonlyArray))
+        const subscriber2Events = await pipe(
+          subscriber2EventsRef,
+          Ref.get,
+          Effect.map(Chunk.toReadonlyArray),
+          Effect.runPromise
         );
         expect(subscriber1Events).toEqual([{ bar: 'multi-subscriber-event' }]);
         expect(subscriber2Events).toEqual([{ bar: 'multi-subscriber-event' }]);
@@ -571,19 +600,7 @@ export function runEventStoreTestSuite<E>(
           pipe(
             FooEventStore,
             Effect.flatMap((eventstore: EventStore<FooEvent>) =>
-              pipe(
-                streamId,
-                Effect.flatMap(beginning),
-                Effect.flatMap((position) => eventstore.read(position)),
-                Effect.flatMap((stream) =>
-                  pipe(
-                    stream,
-                    Stream.take(0), // Take 0 since stream doesn't exist
-                    Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
-                    Stream.runDrain
-                  )
-                )
-              )
+              readAndTakeZeroEvents(streamId, receivedEventsRef, eventstore)
             )
           )
         ).catch(() => {});
@@ -591,7 +608,7 @@ export function runEventStoreTestSuite<E>(
         await Promise.race([subscription, new Promise((resolve) => setTimeout(resolve, 500))]);
 
         // Should receive no events
-        const receivedEvents = await Effect.runPromise(Ref.get(receivedEventsRef));
+        const receivedEvents = await pipe(receivedEventsRef, Ref.get, Effect.runPromise);
         expect(receivedEvents).toHaveLength(0);
       });
     });
@@ -604,37 +621,35 @@ export function runEventStoreTestSuite<E>(
       describe('horizontal scaling with multiple instances', () => {
         it('should support cross-instance event propagation', async () => {
           const receivedEventsRef = Ref.unsafeMake(Chunk.empty<FooEvent>());
-          const streamId = await Effect.runPromise(newEventStreamId());
+          const streamId = await pipe(newEventStreamId(), Effect.runPromise);
 
           // Create TWO separate EventStore instances (simulating different application instances)
           const writerInstance = makeEventStore();
           const subscriberInstance = makeEventStore();
 
           // Helper to run effects with different instances
-          const runWithWriter = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) => {
-            const provided = pipe(effect, Effect.provide(writerInstance));
-            return Effect.runPromise(provided as Effect.Effect<A, E2 | E, never>);
-          };
+          const runWithWriter = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) =>
+            pipe(
+              effect,
+              Effect.provide(writerInstance),
+              (e) => e as Effect.Effect<A, E2 | E, never>,
+              Effect.runPromise
+            );
 
-          const runWithSubscriber = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) => {
-            const provided = pipe(effect, Effect.provide(subscriberInstance));
-            return Effect.runPromise(provided as Effect.Effect<A, E2 | E, never>);
-          };
+          const runWithSubscriber = <A, E2>(effect: Effect.Effect<A, E2, FooEventStore>) =>
+            pipe(
+              effect,
+              Effect.provide(subscriberInstance),
+              (e) => e as Effect.Effect<A, E2 | E, never>,
+              Effect.runPromise
+            );
 
           // FIRST: Write initial events using the writer instance
           await runWithWriter(
             pipe(
               FooEventStore,
               Effect.flatMap((store: EventStore<FooEvent>) =>
-                pipe(
-                  beginning(streamId),
-                  Effect.flatMap((pos) =>
-                    pipe(
-                      Stream.make({ bar: 'event-1' }, { bar: 'event-2' }),
-                      Stream.run(store.append(pos))
-                    )
-                  )
-                )
+                writeEventsAtBeginning(streamId, [{ bar: 'event-1' }, { bar: 'event-2' }], store)
               )
             )
           );
@@ -645,17 +660,7 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((store: EventStore<FooEvent>) =>
-                pipe(
-                  store.subscribe({ streamId, eventNumber: 0 }),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.take(3), // Expect 2 historical + 1 new event
-                      Stream.tap((event) => Ref.update(receivedEventsRef, Chunk.append(event))),
-                      Stream.runDrain
-                    )
-                  )
-                )
+                subscribeAtPosition({ streamId, eventNumber: 0 }, receivedEventsRef, store)
               ),
               Effect.scoped
             )
@@ -670,17 +675,17 @@ export function runEventStoreTestSuite<E>(
             pipe(
               FooEventStore,
               Effect.flatMap((store: EventStore<FooEvent>) =>
-                pipe(
-                  Stream.make({ bar: 'event-3-live' }),
-                  Stream.run(store.append({ streamId, eventNumber: 2 }))
-                )
+                appendEventsToStream([{ bar: 'event-3-live' }], { streamId, eventNumber: 2 }, store)
               )
             )
           );
 
           // Wait for subscription to complete
-          const receivedEvents = await Effect.runPromise(
-            pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+          const receivedEvents = await pipe(
+            receivedEventsRef,
+            Ref.get,
+            Effect.map(Chunk.toReadonlyArray),
+            Effect.runPromise
           );
           await Promise.race([
             subscriberFiber,
@@ -698,8 +703,11 @@ export function runEventStoreTestSuite<E>(
           ]);
 
           // Verify we received all events (2 historical + 1 live)
-          const finalReceivedEvents = await Effect.runPromise(
-            pipe(Ref.get(receivedEventsRef), Effect.map(Chunk.toReadonlyArray))
+          const finalReceivedEvents = await pipe(
+            receivedEventsRef,
+            Ref.get,
+            Effect.map(Chunk.toReadonlyArray),
+            Effect.runPromise
           );
           expect(finalReceivedEvents).toHaveLength(3);
           expect(finalReceivedEvents[0]).toEqual({ bar: 'event-1' });

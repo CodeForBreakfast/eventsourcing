@@ -8,6 +8,14 @@ import noRunPromise from './no-runPromise.js';
 import preferAndThen from './prefer-andThen.js';
 import preferAs from './prefer-as.js';
 import noGen from './no-gen.js';
+import noDirectTagAccess from './no-direct-tag-access.js';
+import noSwitchOnTag from './no-switch-on-tag.js';
+import noMethodPipe from './no-method-pipe.js';
+import noCurriedCalls from './no-curried-calls.js';
+import noIdentityTransform from './no-identity-transform.js';
+import noPipeFirstArgCall from './no-pipe-first-arg-call.js';
+import noNestedPipe from './no-nested-pipe.js';
+import noNestedPipes from './no-nested-pipes.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -20,4 +28,12 @@ export default {
   'prefer-andThen': preferAndThen,
   'prefer-as': preferAs,
   'no-gen': noGen,
+  'no-direct-tag-access': noDirectTagAccess,
+  'no-switch-on-tag': noSwitchOnTag,
+  'no-method-pipe': noMethodPipe,
+  'no-curried-calls': noCurriedCalls,
+  'no-identity-transform': noIdentityTransform,
+  'no-pipe-first-arg-call': noPipeFirstArgCall,
+  'no-nested-pipe': noNestedPipe,
+  'no-nested-pipes': noNestedPipes,
 };

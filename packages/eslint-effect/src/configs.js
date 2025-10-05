@@ -12,76 +12,25 @@ const noGenRules = {
   'effect/no-gen': 'error',
 };
 
-// Opinionated: prefer Match over direct _tag access
-const preferMatchRestrictions = [
-  {
-    selector: 'MemberExpression[computed=false][property.type="Identifier"][property.name="_tag"]',
-    message:
-      "Direct _tag access is forbidden. Use Effect's type guards instead: Either.isLeft/isRight, Option.isSome/isNone, Exit.isSuccess/isFailure, or match() functions.",
-  },
-  {
-    selector:
-      'SwitchStatement > MemberExpression.discriminant[property.type="Identifier"][property.name="_tag"]',
-    message:
-      "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
-  },
-];
+// Opinionated: prefer Match over direct _tag access (now as named rules)
+const preferMatchRules = {
+  'effect/no-direct-tag-access': 'error',
+  'effect/no-switch-on-tag': 'error',
+};
 
-// Basic pipe best practices - less controversial
-const pipeRecommendedRestrictions = [
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name="pipe"]',
-    message:
-      'Method-based .pipe() is forbidden. Use the standalone pipe() function instead for consistency.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="CallExpression"][callee.callee.type="MemberExpression"][callee.callee.object.type="Identifier"][callee.callee.property.type="Identifier"]:not([callee.callee.object.name="Context"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Context"][callee.callee.property.name="GenericTag"]):not([callee.callee.object.name="Effect"][callee.callee.property.name="Tag"]):not([callee.callee.object.name="Data"][callee.callee.property.name="TaggedError"]):not([callee.callee.object.name="Schema"][callee.callee.property.name="Class"])',
-    message:
-      'Curried function calls are forbidden. Use pipe() instead. Example: pipe(data, Schema.decodeUnknown(schema)) instead of Schema.decodeUnknown(schema)(data)',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="MemberExpression"][callee.property.type="Identifier"][callee.property.name=/^(map|flatMap|filterMap|tap|forEach)$/] > ArrowFunctionExpression[params.length=1][params.0.type="Identifier"][body.type="Identifier"]',
-    message:
-      'Identity function in transformation is pointless. Example: Effect.map((x) => x) does nothing. Remove it or replace with the actual transformation needed.',
-  },
-  {
-    selector:
-      'CallExpression[callee.type="Identifier"][callee.name="pipe"] > .arguments:first-child[type="CallExpression"][arguments.length=1]',
-    message:
-      'First argument in pipe() should not be a function call with a single argument. Instead of pipe(fn(x), ...), use pipe(x, fn, ...).',
-  },
-];
+// Basic pipe best practices - less controversial (now as named rules)
+const pipeRecommendedRules = {
+  'effect/no-method-pipe': 'error',
+  'effect/no-curried-calls': 'error',
+  'effect/no-identity-transform': 'error',
+  'effect/no-pipe-first-arg-call': 'error',
+};
 
-// Opinionated: strict pipe composition rules
-const pipeStrictRestrictions = [
-  {
-    selector:
-      'CallExpression[callee.type="Identifier"][callee.name="pipe"] CallExpression[callee.type="Identifier"][callee.name="pipe"]',
-    message:
-      'Nested pipe() calls are forbidden. Extract the inner pipe to a separate named function that returns an Effect.',
-  },
-  {
-    selector:
-      'ArrowFunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
-    message:
-      'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
-  },
-  {
-    selector:
-      'FunctionDeclaration:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
-    message:
-      'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
-  },
-  {
-    selector:
-      'FunctionExpression:has(CallExpression[callee.type="Identifier"][callee.name="pipe"]) CallExpression[callee.type="Identifier"][callee.name="pipe"] ~ CallExpression[callee.type="Identifier"][callee.name="pipe"]',
-    message:
-      'Multiple pipe() calls in a function are forbidden. Extract additional pipes to separate named functions.',
-  },
-];
+// Opinionated: strict pipe composition rules (now as named rules)
+const pipeStrictRules = {
+  'effect/no-nested-pipe': 'error',
+  'effect/no-nested-pipes': 'error',
+};
 
 export const functionalImmutabilityRules = {
   'functional/prefer-immutable-types': [
@@ -160,7 +109,7 @@ const pluginRulesOnly = {
 const recommendedRulesOnly = {
   ...pluginRulesOnly,
   ...effectRecommendedRules,
-  'no-restricted-syntax': ['error', ...pipeRecommendedRestrictions],
+  ...pipeRecommendedRules,
 };
 
 // Strict: Recommended + no-gen + prefer-match + strict-pipe
@@ -168,12 +117,9 @@ const strictRulesOnly = {
   ...pluginRulesOnly,
   ...effectRecommendedRules,
   ...noGenRules,
-  'no-restricted-syntax': [
-    'error',
-    ...preferMatchRestrictions,
-    ...pipeRecommendedRestrictions,
-    ...pipeStrictRestrictions,
-  ],
+  ...preferMatchRules,
+  ...pipeRecommendedRules,
+  ...pipeStrictRules,
 };
 
 // Individual opt-in configs
@@ -182,11 +128,11 @@ const noGenRulesOnly = {
 };
 
 const preferMatchRulesOnly = {
-  'no-restricted-syntax': ['error', ...preferMatchRestrictions],
+  ...preferMatchRules,
 };
 
 const pipeStrictRulesOnly = {
-  'no-restricted-syntax': ['error', ...pipeStrictRestrictions],
+  ...pipeStrictRules,
 };
 
 // Exported configs
@@ -219,8 +165,3 @@ export const pipeStrict = () => ({
   name: '@codeforbreakfast/eslint-effect/pipe-strict',
   rules: pipeStrictRulesOnly,
 });
-
-// Export raw restriction arrays for advanced use cases
-export const syntaxRestrictions = {
-  pipeStrict: pipeStrictRestrictions,
-};
