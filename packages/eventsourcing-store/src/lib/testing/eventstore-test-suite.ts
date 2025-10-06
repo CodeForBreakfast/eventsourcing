@@ -1,4 +1,4 @@
-import { Chunk, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
+import { Chunk, Duration, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
 import { type EventStore, ConcurrencyConflictError } from '../eventstore';
@@ -427,7 +427,7 @@ export function runEventStoreTestSuite<E>(
         });
 
         // Give subscription time to establish and receive initial event
-        await new Promise((resolve) => setTimeout(resolve, 100));
+        await pipe(100, Duration.millis, Effect.sleep, Effect.runPromise);
 
         // Write more events to trigger live streaming
         const nextPosition = await pipe(
@@ -448,7 +448,7 @@ export function runEventStoreTestSuite<E>(
         // Wait for subscription to process events
         await Promise.race([
           subscription,
-          new Promise((resolve) => setTimeout(resolve, 1000)), // Timeout fallback
+          pipe(1000, Duration.millis, Effect.sleep, Effect.runPromise),
         ]);
 
         // Verify events were received (historical + live)
@@ -486,7 +486,7 @@ export function runEventStoreTestSuite<E>(
         ).catch(() => {});
 
         // Give subscriptions time to establish
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await pipe(50, Duration.millis, Effect.sleep, Effect.runPromise);
 
         // Write an event after subscriptions are established
         await runPromiseWithEventStore(
@@ -500,8 +500,14 @@ export function runEventStoreTestSuite<E>(
 
         // Wait for both subscriptions to complete
         await Promise.all([
-          Promise.race([subscription1, new Promise((resolve) => setTimeout(resolve, 1000))]),
-          Promise.race([subscription2, new Promise((resolve) => setTimeout(resolve, 1000))]),
+          Promise.race([
+            subscription1,
+            pipe(1000, Duration.millis, Effect.sleep, Effect.runPromise),
+          ]),
+          Promise.race([
+            subscription2,
+            pipe(1000, Duration.millis, Effect.sleep, Effect.runPromise),
+          ]),
         ]);
 
         // Both subscribers should receive the same event
@@ -529,7 +535,10 @@ export function runEventStoreTestSuite<E>(
           pipe(FooEventStore, Effect.flatMap(readAndTakeZeroEvents(streamId, receivedEventsRef)))
         ).catch(() => {});
 
-        await Promise.race([subscription, new Promise((resolve) => setTimeout(resolve, 500))]);
+        await Promise.race([
+          subscription,
+          pipe(500, Duration.millis, Effect.sleep, Effect.runPromise),
+        ]);
 
         // Should receive no events
         const receivedEvents = await pipe(receivedEventsRef, Ref.get, Effect.runPromise);
@@ -589,7 +598,7 @@ export function runEventStoreTestSuite<E>(
           ).catch(() => {});
 
           // Give subscription time to receive historical events
-          await new Promise((resolve) => setTimeout(resolve, 100));
+          await pipe(100, Duration.millis, Effect.sleep, Effect.runPromise);
 
           // THIRD: Write a new event with writer instance
           // This should be received by the active subscription on the subscriber instance
@@ -611,16 +620,18 @@ export function runEventStoreTestSuite<E>(
           );
           await Promise.race([
             subscriberFiber,
-            new Promise((_, reject) =>
-              setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `Subscription timed out. Received ${receivedEvents.length} events: ${JSON.stringify(receivedEvents)}`
-                    )
-                  ),
-                5000
-              )
+            pipe(
+              5000,
+              Duration.millis,
+              Effect.sleep,
+              Effect.andThen(
+                Effect.fail(
+                  new Error(
+                    `Subscription timed out. Received ${receivedEvents.length} events: ${JSON.stringify(receivedEvents)}`
+                  )
+                )
+              ),
+              Effect.runPromise
             ),
           ]);
 

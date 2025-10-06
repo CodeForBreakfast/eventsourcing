@@ -6,7 +6,7 @@
  */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, pipe, Stream, Layer, Option } from 'effect';
+import { Duration, Effect, pipe, Stream, Layer, Option } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import { ConnectionError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import { WebSocketConnector } from './websocket-transport';
@@ -38,7 +38,7 @@ const createMockWebSocket =
   (config: TestSocketConfig = {}): Readonly<globalThis.WebSocket> => {
     // Mutable state for the mock (contained within closure)
     let readyState: number = WebSocketState.CONNECTING;
-    let openTimeout: NodeJS.Timeout | undefined;
+    let closedEarly = false;
     const eventListeners = new Map<string, readonly ((event: unknown) => void)[]>();
 
     const dispatchEvent = (event: unknown): boolean => {
@@ -70,23 +70,28 @@ const createMockWebSocket =
       }
 
       const openDelay = config.openDelay ?? 0;
-      openTimeout = setTimeout(() => {
+      pipe(openDelay, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+        if (closedEarly) return;
         readyState = WebSocketState.OPEN;
         dispatchEvent({ type: 'open' });
 
         // Send preloaded messages if configured
         if (config.preloadedMessages) {
-          setTimeout(() => {
+          pipe(100, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+            if (closedEarly) return;
             config.preloadedMessages!.forEach((message) => {
               dispatchEvent({ type: 'message', data: message });
             });
-          }, 100);
+          });
         }
-      }, openDelay);
+      });
     };
 
     // Start connection simulation with delay to allow 'connecting' state to be observed
-    setTimeout(() => simulateConnection(), 50);
+    pipe(50, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+      if (closedEarly) return;
+      simulateConnection();
+    });
 
     // Return WebSocket-compatible object
     return {
@@ -131,9 +136,7 @@ const createMockWebSocket =
       },
 
       close(code?: number, reason?: string) {
-        if (openTimeout) {
-          clearTimeout(openTimeout);
-        }
+        closedEarly = true;
         readyState = WebSocketState.CLOSED;
         dispatchEvent({ type: 'close', code: code ?? 1000, reason: reason ?? '' });
       },
