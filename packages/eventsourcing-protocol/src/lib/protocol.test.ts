@@ -2071,4 +2071,331 @@ describe('Protocol Behavior Tests', () => {
       )
     );
   });
+
+  describe('OpenTelemetry Context Propagation', () => {
+    describe('Wire Protocol Schema', () => {
+      it.effect('ProtocolCommand should include context with traceId and parentId', () =>
+        pipe(
+          setupTestEnvironment,
+          Effect.flatMap(({ server, clientTransport }) => {
+            const capturedMessages: readonly ParsedMessage[] = [];
+
+            const captureMessage = (msg: ReadonlyDeep<TransportMessage>) => {
+              const parsed = JSON.parse(msg.payload) as ParsedMessage;
+              if (parsed.type === 'command') {
+                capturedMessages.push(parsed);
+              }
+            };
+
+            const setupMessageCapture = pipe(
+              server.connections,
+              Stream.take(1),
+              Stream.runCollect,
+              Effect.flatMap((connections) => {
+                const connection = Array.from(connections)[0]!;
+                return pipe(
+                  connection.transport.subscribe(),
+                  Effect.flatMap((stream) =>
+                    pipe(
+                      stream,
+                      Stream.runForEach((msg) => Effect.sync(() => captureMessage(msg))),
+                      Effect.forkScoped
+                    )
+                  )
+                );
+              })
+            );
+
+            const sendCommand = pipe(
+              Effect.sleep(50),
+              Effect.andThen(
+                sendWireCommand({
+                  id: 'cmd-123',
+                  target: 'test-target',
+                  name: 'TestCommand',
+                  payload: { data: 'test' },
+                })
+              ),
+              Effect.provide(ProtocolLive(clientTransport)),
+              Effect.ignore
+            );
+
+            return pipe(
+              setupMessageCapture,
+              Effect.andThen(sendCommand),
+              Effect.andThen(Effect.sleep(100)),
+              Effect.andThen(
+                Effect.sync(() => {
+                  expect(capturedMessages.length).toBeGreaterThan(0);
+                  const commandMessage = capturedMessages[0]!;
+                  expect(commandMessage.type).toBe('command');
+                  expect(commandMessage.context).toBeDefined();
+                  expect(
+                    (commandMessage.context as { readonly traceId?: string }).traceId
+                  ).toBeDefined();
+                  expect(
+                    (commandMessage.context as { readonly parentId?: string }).parentId
+                  ).toBeDefined();
+                  expect(
+                    typeof (commandMessage.context as { readonly traceId?: string }).traceId
+                  ).toBe('string');
+                  expect(
+                    typeof (commandMessage.context as { readonly parentId?: string }).parentId
+                  ).toBe('string');
+                  expect(
+                    (commandMessage.context as { readonly traceId?: string }).traceId!.length
+                  ).toBe(32);
+                  expect(
+                    (commandMessage.context as { readonly parentId?: string }).parentId!.length
+                  ).toBe(16);
+                })
+              )
+            );
+          }),
+          Effect.scoped
+        )
+      );
+
+      it.effect('ProtocolSubscribe should include context with traceId and parentId', () =>
+        pipe(
+          setupTestEnvironment,
+          Effect.flatMap(({ server, clientTransport }) => {
+            const capturedMessages: readonly ParsedMessage[] = [];
+
+            const captureMessage = (msg: ReadonlyDeep<TransportMessage>) => {
+              const parsed = JSON.parse(msg.payload) as ParsedMessage;
+              if (parsed.type === 'subscribe') {
+                capturedMessages.push(parsed);
+              }
+            };
+
+            const setupMessageCapture = pipe(
+              server.connections,
+              Stream.take(1),
+              Stream.runCollect,
+              Effect.flatMap((connections) => {
+                const connection = Array.from(connections)[0]!;
+                return pipe(
+                  connection.transport.subscribe(),
+                  Effect.flatMap((stream) =>
+                    pipe(
+                      stream,
+                      Stream.runForEach((msg) => Effect.sync(() => captureMessage(msg))),
+                      Effect.forkScoped
+                    )
+                  )
+                );
+              })
+            );
+
+            const sendSubscribe = pipe(
+              Effect.sleep(50),
+              Effect.andThen(subscribe('test-stream')),
+              Effect.provide(ProtocolLive(clientTransport)),
+              Effect.forkScoped
+            );
+
+            return pipe(
+              setupMessageCapture,
+              Effect.andThen(sendSubscribe),
+              Effect.andThen(Effect.sleep(100)),
+              Effect.andThen(
+                Effect.sync(() => {
+                  expect(capturedMessages.length).toBeGreaterThan(0);
+                  const subscribeMessage = capturedMessages[0]!;
+                  expect(subscribeMessage.type).toBe('subscribe');
+                  expect(subscribeMessage.context).toBeDefined();
+                  expect(
+                    (subscribeMessage.context as { readonly traceId?: string }).traceId
+                  ).toBeDefined();
+                  expect(
+                    (subscribeMessage.context as { readonly parentId?: string }).parentId
+                  ).toBeDefined();
+                  expect(
+                    typeof (subscribeMessage.context as { readonly traceId?: string }).traceId
+                  ).toBe('string');
+                  expect(
+                    typeof (subscribeMessage.context as { readonly parentId?: string }).parentId
+                  ).toBe('string');
+                  expect(
+                    (subscribeMessage.context as { readonly traceId?: string }).traceId!.length
+                  ).toBe(32);
+                  expect(
+                    (subscribeMessage.context as { readonly parentId?: string }).parentId!.length
+                  ).toBe(16);
+                })
+              )
+            );
+          }),
+          Effect.scoped
+        )
+      );
+
+      it.effect('ProtocolCommandResult should include context with traceId and parentId', () =>
+        pipe(
+          setupTestEnvironment,
+          Effect.flatMap(({ server, clientTransport }) => {
+            let capturedResult: ParsedMessage | null = null;
+
+            const setupServerHandler = pipe(
+              ServerProtocol,
+              Effect.flatMap((serverProtocol) =>
+                pipe(
+                  serverProtocol.onWireCommand,
+                  Stream.runForEach((cmd) =>
+                    serverProtocol.sendResult(cmd.id, {
+                      _tag: 'Success',
+                      position: {
+                        streamId: unsafeCreateStreamId('test'),
+                        eventNumber: 1,
+                      },
+                    })
+                  ),
+                  Effect.forkScoped
+                )
+              ),
+              Effect.provide(ServerProtocolLive(server))
+            );
+
+            const captureCommandResult = pipe(
+              clientTransport.subscribe(),
+              Effect.flatMap((stream) =>
+                pipe(
+                  stream,
+                  Stream.runForEach((msg) =>
+                    Effect.sync(() => {
+                      const parsed = JSON.parse(msg.payload) as ParsedMessage;
+                      if (parsed.type === 'command_result') {
+                        capturedResult = parsed;
+                      }
+                    })
+                  ),
+                  Effect.forkScoped
+                )
+              )
+            );
+
+            const sendCommand = pipe(
+              Effect.sleep(50),
+              Effect.andThen(
+                sendWireCommand({
+                  id: 'cmd-result-test',
+                  target: 'test-target',
+                  name: 'TestCommand',
+                  payload: { data: 'test' },
+                })
+              ),
+              Effect.provide(ProtocolLive(clientTransport)),
+              Effect.ignore
+            );
+
+            return pipe(
+              setupServerHandler,
+              Effect.andThen(captureCommandResult),
+              Effect.andThen(sendCommand),
+              Effect.andThen(Effect.sleep(200)),
+              Effect.andThen(
+                Effect.sync(() => {
+                  expect(capturedResult).not.toBeNull();
+                  expect(capturedResult!.type).toBe('command_result');
+                  expect(capturedResult!.context).toBeDefined();
+                  expect(
+                    (capturedResult!.context as { readonly traceId?: string }).traceId
+                  ).toBeDefined();
+                  expect(
+                    (capturedResult!.context as { readonly parentId?: string }).parentId
+                  ).toBeDefined();
+                  expect(
+                    typeof (capturedResult!.context as { readonly traceId?: string }).traceId
+                  ).toBe('string');
+                  expect(
+                    typeof (capturedResult!.context as { readonly parentId?: string }).parentId
+                  ).toBe('string');
+                  expect(
+                    (capturedResult!.context as { readonly traceId?: string }).traceId!.length
+                  ).toBe(32);
+                  expect(
+                    (capturedResult!.context as { readonly parentId?: string }).parentId!.length
+                  ).toBe(16);
+                })
+              )
+            );
+          }),
+          Effect.scoped
+        )
+      );
+
+      it.effect('ProtocolEvent should include context with traceId and parentId', () =>
+        pipe(
+          setupTestEnvironment,
+          Effect.flatMap(({ server, clientTransport }) => {
+            const parsedMessages: readonly ParsedMessage[] = [];
+
+            const testEventHandler = () => [
+              createTestEvent('test-stream', 1, 'TestEvent', { test: 'data' }, new Date()),
+            ];
+
+            const captureRawEvent = pipe(
+              clientTransport.subscribe(),
+              Effect.flatMap((stream) =>
+                pipe(
+                  stream,
+                  Stream.runForEach((msg) =>
+                    Effect.sync(() => {
+                      const parsed = JSON.parse(msg.payload) as ParsedMessage;
+                      if (parsed.type === 'event') {
+                        parsedMessages.push(parsed);
+                      }
+                    })
+                  ),
+                  Effect.forkScoped
+                )
+              )
+            );
+
+            const subscribeToStream = pipe(
+              Effect.sleep(50),
+              Effect.andThen(subscribe('test-stream')),
+              Effect.flatMap((stream) => pipe(stream, Stream.runDrain, Effect.forkScoped)),
+              Effect.provide(ProtocolLive(clientTransport))
+            );
+
+            return pipe(
+              captureRawEvent,
+              Effect.andThen(createTestServerProtocol(server, undefined, testEventHandler)),
+              Effect.andThen(subscribeToStream),
+              Effect.andThen(Effect.sleep(200)),
+              Effect.andThen(
+                Effect.sync(() => {
+                  expect(parsedMessages.length).toBeGreaterThan(0);
+                  const eventMessage = parsedMessages[0]!;
+                  expect(eventMessage.type).toBe('event');
+                  expect(eventMessage.context).toBeDefined();
+                  expect(
+                    (eventMessage.context as { readonly traceId?: string }).traceId
+                  ).toBeDefined();
+                  expect(
+                    (eventMessage.context as { readonly parentId?: string }).parentId
+                  ).toBeDefined();
+                  expect(
+                    typeof (eventMessage.context as { readonly traceId?: string }).traceId
+                  ).toBe('string');
+                  expect(
+                    typeof (eventMessage.context as { readonly parentId?: string }).parentId
+                  ).toBe('string');
+                  expect(
+                    (eventMessage.context as { readonly traceId?: string }).traceId!.length
+                  ).toBe(32);
+                  expect(
+                    (eventMessage.context as { readonly parentId?: string }).parentId!.length
+                  ).toBe(16);
+                })
+              )
+            );
+          }),
+          Effect.scoped
+        )
+      );
+    });
+  });
 });
