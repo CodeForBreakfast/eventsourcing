@@ -189,40 +189,42 @@ const createStreamFromPubSub = (
     Stream.retry(createRetrySchedule())
   );
 
-const createSubscriptionStream = (
-  streamId: EventStreamId,
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-  >
-): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
-  pipe(
-    getOrCreatePubSub(ref, streamId),
-    Effect.map(createStreamFromPubSub),
-    Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to subscribe to stream'))
-  );
+const createSubscriptionStream =
+  (
+    ref: ReadonlyDeep<
+      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
+    >
+  ) =>
+  (streamId: EventStreamId): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
+    pipe(
+      getOrCreatePubSub(ref, streamId),
+      Effect.map(createStreamFromPubSub),
+      Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to subscribe to stream'))
+    );
 
-const unsubscribeFromStreamWithErrorHandling = (
-  streamId: EventStreamId,
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-  >
-): Effect.Effect<void, EventStoreError, never> =>
-  pipe(
-    removeSubscription(ref, streamId),
-    Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unsubscribe from stream'))
-  );
+const unsubscribeFromStreamWithErrorHandling =
+  (
+    ref: ReadonlyDeep<
+      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
+    >
+  ) =>
+  (streamId: EventStreamId): Effect.Effect<void, EventStoreError, never> =>
+    pipe(
+      removeSubscription(ref, streamId),
+      Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unsubscribe from stream'))
+    );
 
-const publishEventWithErrorHandling = (
-  streamId: EventStreamId,
-  event: string,
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-  >
-): Effect.Effect<void, EventStoreError, never> =>
-  pipe(
-    publishToStream(ref, streamId, event),
-    Effect.mapError(eventStoreError.write(streamId, 'Failed to publish event to subscribers'))
-  );
+const publishEventWithErrorHandling =
+  (
+    ref: ReadonlyDeep<
+      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
+    >
+  ) =>
+  (streamId: EventStreamId, event: string): Effect.Effect<void, EventStoreError, never> =>
+    pipe(
+      publishToStream(ref, streamId, event),
+      Effect.mapError(eventStoreError.write(streamId, 'Failed to publish event to subscribers'))
+    );
 
 /**
  * Implementation of SubscriptionManager service
@@ -233,21 +235,9 @@ export const SubscriptionManagerLive = Layer.effect(
     HashMap.empty(),
     SynchronizedRef.make<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>,
     Effect.map((ref) => ({
-      subscribeToStream: (
-        streamId: EventStreamId
-      ): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
-        createSubscriptionStream(streamId, ref),
-
-      unsubscribeFromStream: (
-        streamId: EventStreamId
-      ): Effect.Effect<void, EventStoreError, never> =>
-        unsubscribeFromStreamWithErrorHandling(streamId, ref),
-
-      publishEvent: (
-        streamId: EventStreamId,
-        event: string
-      ): Effect.Effect<void, EventStoreError, never> =>
-        publishEventWithErrorHandling(streamId, event, ref),
+      subscribeToStream: createSubscriptionStream(ref),
+      unsubscribeFromStream: unsubscribeFromStreamWithErrorHandling(ref),
+      publishEvent: publishEventWithErrorHandling(ref),
     }))
   )
 );

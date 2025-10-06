@@ -89,11 +89,24 @@ const createUpdatedValue =
   });
 
 const updateEventStreamsByIdForEventStream = <V>(
-  eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
   updatedEventStream: EventStream<V>,
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>
-) => pipe(eventStreamsById, updateEventStreamsById(updatedEventStream, streamEnd, newEvents));
+) => updateEventStreamsById(updatedEventStream, streamEnd, newEvents);
+
+const updateAndCreateValue =
+  <V>(
+    allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+    streamEnd: EventStreamPosition,
+    newEvents: Chunk.Chunk<V>
+  ) =>
+  (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>) =>
+  (updatedEventStream: EventStream<V>) =>
+    pipe(
+      eventStreamsById,
+      updateEventStreamsByIdForEventStream(updatedEventStream, streamEnd, newEvents),
+      Effect.map(createUpdatedValue(allEventsStream, newEvents, streamEnd))
+    );
 
 const appendToEventStream =
   <V = never>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
@@ -108,15 +121,7 @@ const appendToEventStream =
         onSome: appendToExistingEventStream<V>(streamEnd, newEvents),
         onNone: () => createOrAppendToStream(streamEnd, newEvents),
       }),
-      Effect.flatMap((updatedEventStream: EventStream<V>) =>
-        updateEventStreamsByIdForEventStream(
-          eventStreamsById,
-          updatedEventStream,
-          streamEnd,
-          newEvents
-        )
-      ),
-      Effect.map(createUpdatedValue(allEventsStream, newEvents, streamEnd))
+      Effect.flatMap(updateAndCreateValue(allEventsStream, streamEnd, newEvents)(eventStreamsById))
     );
 
 const modifyEventStreamsWithEmptyIfMissing =
@@ -131,19 +136,21 @@ const modifyEventStreamsWithEmptyIfMissing =
       })
     );
 
-const modifyEventStreamsForEnsure = <V>(
-  eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
-  streamId: EventStreamId,
-  emptyStream: EventStream<V>
-) => pipe(eventStreamsById, modifyEventStreamsWithEmptyIfMissing(streamId, emptyStream));
+const modifyEventStreamsForEnsure = <V>(streamId: EventStreamId, emptyStream: EventStream<V>) =>
+  modifyEventStreamsWithEmptyIfMissing(streamId, emptyStream);
+
+const modifyEventStreamsAndSucceed =
+  <V>(streamId: EventStreamId, emptyStream: EventStream<V>) =>
+  (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>) =>
+    pipe(eventStreamsById, modifyEventStreamsForEnsure(streamId, emptyStream), Effect.succeed);
 
 const ensureEventStream =
   <V = never>(streamId: EventStreamId) =>
   ({ eventStreamsById, allEventsStream }: Value<V>): Effect.Effect<Value<V>, never, never> =>
     pipe(
       emptyStream<V>(),
-      Effect.map((emptyStream) =>
-        modifyEventStreamsForEnsure(eventStreamsById, streamId, emptyStream)
+      Effect.flatMap((emptyStream) =>
+        modifyEventStreamsAndSucceed(streamId, emptyStream)(eventStreamsById)
       ),
       Effect.map((eventStreamsById) => ({ eventStreamsById, allEventsStream }))
     );

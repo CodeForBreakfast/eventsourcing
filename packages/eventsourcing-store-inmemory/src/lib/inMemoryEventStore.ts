@@ -18,26 +18,23 @@ const dropEventsFromStream =
   (stream: Readonly<Stream.Stream<T, never, never>>) =>
     Stream.drop(stream, count);
 
-const readHistoricalEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
-  pipe(from.streamId, store.getHistorical, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
+const readHistoricalEvents =
+  <T>(store: InMemoryStore<T>) =>
+  (from: EventStreamPosition) =>
+    pipe(from.streamId, store.getHistorical, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
 
-const readAllEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
-  pipe(from.streamId, store.get, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
+const readAllEvents =
+  <T>(store: InMemoryStore<T>) =>
+  (from: EventStreamPosition) =>
+    pipe(from.streamId, store.get, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
 
-const createSubscribeError = (streamId: EventStreamPosition['streamId'], error: unknown) =>
-  pipe(
-    error,
-    eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`)
-  );
+const createSubscribeError = (streamId: EventStreamPosition['streamId']) =>
+  eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(streamId)}`);
 
 const subscribeToStreamWithError =
   <T>(streamId: EventStreamPosition['streamId']) =>
   (store: InMemoryStore<T>) =>
-    pipe(
-      streamId,
-      store.get,
-      Effect.mapError((error) => createSubscribeError(streamId, error))
-    );
+    pipe(streamId, store.get, Effect.mapError(createSubscribeError(streamId)));
 
 export const makeInMemoryEventStore = <T>(
   store: InMemoryStore<T>
@@ -49,8 +46,8 @@ export const makeInMemoryEventStore = <T>(
         () => true,
         (end, chunk) => pipe(chunk, store.append(end))
       ),
-    read: (from: EventStreamPosition) => readHistoricalEvents(store, from),
-    subscribe: (from: EventStreamPosition) => readAllEvents(store, from),
+    read: readHistoricalEvents(store),
+    subscribe: readAllEvents(store),
   });
 
 const addSubscribeMethod =

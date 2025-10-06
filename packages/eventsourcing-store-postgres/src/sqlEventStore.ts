@@ -168,24 +168,22 @@ const concatStreams =
   (historicalStream: Stream.Stream<string, EventStoreError | ParseResult.ParseError, never>) =>
     Stream.concat(historicalStream, liveStream);
 
-const getHistoricalEventsAndConcatWithLive = (
-  eventRows: EventRowServiceInterface,
-  from: EventStreamPosition,
-  liveStream: Stream.Stream<string, EventStoreError, never>
-) =>
-  pipe(
-    from.streamId,
-    eventRows.selectAllEventsInStream,
-    Effect.map((events: readonly EventRow[]) => {
-      const filteredEvents = events
-        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-        .filter((event: EventRow) => event.event_number >= from.eventNumber)
-        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-        .map((event: EventRow) => event.event_payload);
-      return Stream.fromIterable(filteredEvents);
-    }),
-    Effect.map(concatStreams(liveStream))
-  );
+const getHistoricalEventsAndConcatWithLive =
+  (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
+  (liveStream: Stream.Stream<string, EventStoreError, never>) =>
+    pipe(
+      from.streamId,
+      eventRows.selectAllEventsInStream,
+      Effect.map((events: readonly EventRow[]) => {
+        const filteredEvents = events
+          // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
+          .filter((event: EventRow) => event.event_number >= from.eventNumber)
+          // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
+          .map((event: EventRow) => event.event_payload);
+        return Stream.fromIterable(filteredEvents);
+      }),
+      Effect.map(concatStreams(liveStream))
+    );
 
 const publishPayloadToSubscribers = (
   subscriptionManager: SubscriptionManagerService,
@@ -293,10 +291,10 @@ const subscribeToLiveStream = (
   streamId: EventStreamId
 ) => subscriptionManager.subscribeToStream(streamId);
 
-const combineHistoricalAndLiveStreams =
-  (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
-  (liveStream: Stream.Stream<string, EventStoreError, never>) =>
-    getHistoricalEventsAndConcatWithLive(eventRows, from, liveStream);
+const combineHistoricalAndLiveStreams = (
+  eventRows: EventRowServiceInterface,
+  from: EventStreamPosition
+) => getHistoricalEventsAndConcatWithLive(eventRows, from);
 
 const subscribeToStreamWithHistory =
   (
