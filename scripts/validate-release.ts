@@ -3,11 +3,19 @@
 import { Effect, pipe } from 'effect';
 import { Command, FileSystem, Path, Terminal } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
+import { Schema } from 'effect';
 
-interface ChangesetStatus {
-  readonly releases: ReadonlyArray<{ readonly name: string; readonly type: string }>;
-  readonly changesets: ReadonlyArray<unknown>;
-}
+const ChangesetStatus = Schema.Struct({
+  releases: Schema.Array(
+    Schema.Struct({
+      name: Schema.String,
+      type: Schema.String,
+    })
+  ),
+  changesets: Schema.Array(Schema.Unknown),
+});
+
+type ChangesetStatus = typeof ChangesetStatus.Type;
 
 const rootDir = pipe(
   Path.Path,
@@ -16,58 +24,130 @@ const rootDir = pipe(
 
 const getEnvVar = (key: string) =>
   Effect.sync(() => {
-    const env = globalThis as { process?: { env?: Record<string, string> } };
+    const env = globalThis as { readonly process?: { readonly env?: Record<string, string> } };
     return env.process?.env?.[key];
   });
 
 const isChangesetBranch = pipe(
-  getEnvVar('GITHUB_HEAD_REF'),
+  'GITHUB_HEAD_REF',
+  getEnvVar,
   Effect.map((ref) => ref?.startsWith('changeset-release/') ?? false)
 );
 
+const fetchGitOrigin = (root: string, baseBranch: string) =>
+  pipe(
+    Command.make('git', 'fetch', 'origin', `${baseBranch}:${baseBranch}`),
+    Command.workingDirectory(root),
+    Command.exitCode,
+    Effect.catchAll(() => Effect.void)
+  );
+
+const getRootAndBaseBranch = Effect.all([rootDir, getEnvVar('GITHUB_BASE_REF')]);
+
 const fetchBaseBranch = pipe(
-  Effect.all([rootDir, getEnvVar('GITHUB_BASE_REF')]),
+  getRootAndBaseBranch,
   Effect.andThen(([root, baseBranch]) =>
-    baseBranch
-      ? pipe(
-          Command.make('git', 'fetch', 'origin', `${baseBranch}:${baseBranch}`),
-          Command.workingDirectory(root),
-          Command.exitCode,
-          Effect.catchAll(() => Effect.void)
-        )
-      : Effect.void
+    baseBranch ? fetchGitOrigin(root, baseBranch) : Effect.void
   )
 );
 
-const getChangesetStatus = pipe(
-  rootDir,
-  Effect.andThen((root) =>
-    pipe(
-      Command.make('bunx', 'changeset', 'status', '--output=status.json'),
-      Command.workingDirectory(root),
-      Command.exitCode,
-      Effect.andThen(() =>
-        pipe(
-          Path.Path,
-          Effect.andThen((path) => path.join(root, 'status.json')),
-          Effect.andThen((statusPath) =>
-            pipe(
-              FileSystem.FileSystem,
-              Effect.andThen((fs) => fs.readFileString(statusPath)),
-              Effect.map((content) => JSON.parse(content) as ChangesetStatus),
-              Effect.andThen((status) =>
-                pipe(
-                  FileSystem.FileSystem,
-                  Effect.andThen((fs) => fs.remove(statusPath)),
-                  Effect.as(status)
-                )
-              )
-            )
-          )
-        )
-      )
-    )
-  )
+const parseJson = (content: string) => Effect.sync(() => JSON.parse(content));
+
+const parseAndDecodeStatus = (content: string) =>
+  pipe(content, parseJson, Effect.andThen(Schema.decodeUnknown(ChangesetStatus)));
+
+const readStatusFile = (statusPath: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.readFileString(statusPath)),
+    Effect.andThen(parseAndDecodeStatus)
+  );
+
+const removeStatusFile = (statusPath: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.remove(statusPath))
+  );
+
+const cleanupWithStatus = (statusPath: string) => (status: ChangesetStatus) =>
+  pipe(statusPath, removeStatusFile, Effect.as(status));
+
+const readAndCleanupStatus = (statusPath: string) =>
+  pipe(statusPath, readStatusFile, Effect.andThen(cleanupWithStatus(statusPath)));
+
+const resolveStatusPath = (root: string) =>
+  pipe(
+    Path.Path,
+    Effect.andThen((path) => path.join(root, 'status.json'))
+  );
+
+const resolveAndReadStatus = (root: string) =>
+  pipe(root, resolveStatusPath, Effect.andThen(readAndCleanupStatus));
+
+const runChangesetStatus = (root: string) =>
+  pipe(
+    Command.make('bunx', 'changeset', 'status', '--output=status.json'),
+    Command.workingDirectory(root),
+    Command.exitCode,
+    Effect.andThen(() => resolveAndReadStatus(root))
+  );
+
+const getChangesetStatus = pipe(rootDir, Effect.andThen(runChangesetStatus));
+
+const displayPackageList = (terminal: Terminal.Terminal, packageNames: readonly string[]) =>
+  pipe(
+    `📦 Found ${packageNames.length} package(s) to validate:\n`,
+    terminal.display,
+    Effect.andThen(() =>
+      Effect.forEach(packageNames, (pkg) => terminal.display(`   - ${pkg}\n`), {
+        discard: true,
+      })
+    ),
+    Effect.andThen(() => terminal.display('\n')),
+    Effect.as(packageNames)
+  );
+
+const displayPackages = (packageNames: readonly string[]) =>
+  pipe(
+    Terminal.Terminal,
+    Effect.andThen((terminal) => displayPackageList(terminal, packageNames))
+  );
+
+const extractPackageNames = (status: ChangesetStatus) =>
+  Effect.succeed(status.releases.map((release) => release.name));
+
+const handleReleasesFound = (status: ChangesetStatus) =>
+  pipe(status, extractPackageNames, Effect.andThen(displayPackages));
+
+const displayNoPackages = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) =>
+    terminal.display('✅ No packages to release, no validation needed\n\n')
+  ),
+  Effect.as([] as readonly string[])
+);
+
+const displaySkipValidation = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('📦 Skipping validation (version PR)\n')),
+  Effect.as([] as readonly string[])
+);
+
+const displayValidationError = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) =>
+    terminal.display('⚠️  Could not determine packages to validate, skipping pack validation\n\n')
+  ),
+  Effect.as([] as readonly string[])
+);
+
+const determinePackagesToValidate = pipe(
+  fetchBaseBranch,
+  Effect.andThen(() => getChangesetStatus),
+  Effect.andThen((status) =>
+    status.releases && status.releases.length > 0 ? handleReleasesFound(status) : displayNoPackages
+  ),
+  Effect.catchAll(() => displayValidationError)
 );
 
 const getPackagesToValidate = pipe(
@@ -77,152 +157,101 @@ const getPackagesToValidate = pipe(
   ),
   Effect.andThen(() => isChangesetBranch),
   Effect.andThen((isChangeset) =>
-    isChangeset
-      ? pipe(
-          Terminal.Terminal,
-          Effect.andThen((terminal) => terminal.display('📦 Skipping validation (version PR)\n')),
-          Effect.as([] as readonly string[])
-        )
-      : pipe(
-          fetchBaseBranch,
-          Effect.andThen(() => getChangesetStatus),
-          Effect.andThen((status) =>
-            status.releases && status.releases.length > 0
-              ? pipe(
-                  Effect.succeed(status.releases.map((release) => release.name)),
-                  Effect.andThen((packageNames) =>
-                    pipe(
-                      Terminal.Terminal,
-                      Effect.andThen((terminal) =>
-                        pipe(
-                          terminal.display(
-                            `📦 Found ${packageNames.length} package(s) to validate:\n`
-                          ),
-                          Effect.andThen(() =>
-                            Effect.forEach(
-                              packageNames,
-                              (pkg) => terminal.display(`   - ${pkg}\n`),
-                              {
-                                discard: true,
-                              }
-                            )
-                          ),
-                          Effect.andThen(() => terminal.display('\n')),
-                          Effect.as(packageNames)
-                        )
-                      )
-                    )
-                  )
-                )
-              : pipe(
-                  Terminal.Terminal,
-                  Effect.andThen((terminal) =>
-                    terminal.display('✅ No packages to release, no validation needed\n\n')
-                  ),
-                  Effect.as([] as readonly string[])
-                )
-          ),
-          Effect.catchAll(() =>
-            pipe(
-              Terminal.Terminal,
-              Effect.andThen((terminal) =>
-                terminal.display(
-                  '⚠️  Could not determine packages to validate, skipping pack validation\n\n'
-                )
-              ),
-              Effect.as([] as readonly string[])
-            )
-          )
-        )
+    isChangeset ? displaySkipValidation : determinePackagesToValidate
   )
 );
+
+const displayChangesetValidationStart = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('📦 Validating changesets...\n'))
+);
+
+const displayChangesetValidationFailed = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('❌ Changeset validation failed\n')),
+  Effect.andThen(() => Effect.fail('Changeset validation failed'))
+);
+
+const runChangesetValidation = (root: string) =>
+  pipe(
+    Command.make('bun', 'scripts/validate-changesets.ts'),
+    Command.workingDirectory(root),
+    Command.exitCode,
+    Effect.andThen((exitCode) => (exitCode === 0 ? Effect.void : displayChangesetValidationFailed))
+  );
 
 const validateChangesets = pipe(
   Terminal.Terminal,
   Effect.andThen((terminal) => terminal.display('🔍 Starting release validation...\n\n')),
-  Effect.andThen(() =>
-    pipe(
-      Terminal.Terminal,
-      Effect.andThen((terminal) => terminal.display('📦 Validating changesets...\n'))
-    )
-  ),
+  Effect.andThen(() => displayChangesetValidationStart),
   Effect.andThen(() => rootDir),
-  Effect.andThen((root) =>
-    pipe(
-      Command.make('bun', 'scripts/validate-changesets.ts'),
-      Command.workingDirectory(root),
-      Command.exitCode,
-      Effect.andThen((exitCode) =>
-        exitCode === 0
-          ? Effect.void
-          : pipe(
-              Terminal.Terminal,
-              Effect.andThen((terminal) => terminal.display('❌ Changeset validation failed\n')),
-              Effect.andThen(() => Effect.fail('Changeset validation failed'))
-            )
-      )
-    )
+  Effect.andThen(runChangesetValidation)
+);
+
+const displayNoPackagesValidation = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) =>
+    terminal.display('✅ Release validation complete - no packages to validate\n')
   )
 );
 
+const showValidationSuccess = (terminal: Terminal.Terminal) =>
+  pipe(
+    '\n✅ All package validations passed!\n',
+    terminal.display,
+    Effect.andThen(() => terminal.display('   This PR should successfully release when merged.\n'))
+  );
+
+const displayValidationSuccess = pipe(Terminal.Terminal, Effect.andThen(showValidationSuccess));
+
+const showValidationFailure = (terminal: Terminal.Terminal) =>
+  pipe(
+    '\n❌ Package validation failed!\n',
+    terminal.display,
+    Effect.andThen(() => terminal.display('   Fix the validation errors above before merging.\n'))
+  );
+
+const displayValidationFailure = pipe(
+  Terminal.Terminal,
+  Effect.andThen(showValidationFailure),
+  Effect.andThen(() => Effect.fail('Package validation failed'))
+);
+
+const runTurboValidation = (root: string, filterArgs: string) =>
+  pipe(
+    Command.make('bunx', 'turbo', 'run', 'validate:pack', filterArgs),
+    Command.workingDirectory(root),
+    Command.exitCode,
+    Effect.andThen((exitCode) =>
+      exitCode === 0 ? displayValidationSuccess : displayValidationFailure
+    )
+  );
+
+const displayPackageValidationStart = (packagesToValidate: readonly string[]) =>
+  pipe(
+    Terminal.Terminal,
+    Effect.andThen((terminal) =>
+      terminal.display(
+        `🏗️  Running validation for ${packagesToValidate.length} packages using Turbo...\n`
+      )
+    )
+  );
+
+const executePackageValidation = (root: string, packagesToValidate: readonly string[]) => {
+  const filterArgs = packagesToValidate.map((pkg) => `--filter=${pkg}`).join(' ');
+  return pipe(
+    packagesToValidate,
+    displayPackageValidationStart,
+    Effect.andThen(() => runTurboValidation(root, filterArgs))
+  );
+};
+
 const validatePackages = (packagesToValidate: readonly string[]) =>
   packagesToValidate.length === 0
-    ? pipe(
-        Terminal.Terminal,
-        Effect.andThen((terminal) =>
-          terminal.display('✅ Release validation complete - no packages to validate\n')
-        )
-      )
+    ? displayNoPackagesValidation
     : pipe(
         rootDir,
-        Effect.andThen((root) => {
-          const filterArgs = packagesToValidate.map((pkg) => `--filter=${pkg}`).join(' ');
-          return pipe(
-            Terminal.Terminal,
-            Effect.andThen((terminal) =>
-              terminal.display(
-                `🏗️  Running validation for ${packagesToValidate.length} packages using Turbo...\n`
-              )
-            ),
-            Effect.andThen(() =>
-              pipe(
-                Command.make('bunx', 'turbo', 'run', 'validate:pack', filterArgs),
-                Command.workingDirectory(root),
-                Command.exitCode,
-                Effect.andThen((exitCode) =>
-                  exitCode === 0
-                    ? pipe(
-                        Terminal.Terminal,
-                        Effect.andThen((terminal) =>
-                          pipe(
-                            terminal.display('\n✅ All package validations passed!\n'),
-                            Effect.andThen(() =>
-                              terminal.display(
-                                '   This PR should successfully release when merged.\n'
-                              )
-                            )
-                          )
-                        )
-                      )
-                    : pipe(
-                        Terminal.Terminal,
-                        Effect.andThen((terminal) =>
-                          pipe(
-                            terminal.display('\n❌ Package validation failed!\n'),
-                            Effect.andThen(() =>
-                              terminal.display(
-                                '   Fix the validation errors above before merging.\n'
-                              )
-                            )
-                          )
-                        ),
-                        Effect.andThen(() => Effect.fail('Package validation failed'))
-                      )
-                )
-              )
-            )
-          );
-        })
+        Effect.andThen((root) => executePackageValidation(root, packagesToValidate))
       );
 
 const program = pipe(
