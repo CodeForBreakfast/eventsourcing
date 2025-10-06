@@ -2241,4 +2241,42 @@ describe('Protocol Behavior Tests', () => {
       )
     );
   });
+
+  describe('OpenTelemetry Semantic Conventions', () => {
+    it.effect('command operations create spans following RPC conventions', () => {
+      const command = createWireCommand('user-123', 'CreateUser', { name: 'Alice' });
+
+      const runCommandWithTracing = (
+        clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+      ) =>
+        pipe(
+          command,
+          sendWireCommand,
+          Effect.tap((result) =>
+            Effect.sync(() => {
+              expect(isCommandSuccess(result)).toBe(true);
+            })
+          ),
+          Effect.provide(ProtocolLive(clientTransport))
+        );
+
+      return runTestWithProtocol(defaultSuccessHandler('user-123', 1), runCommandWithTracing);
+    });
+
+    it.effect('subscribe operations create spans following RPC conventions', () => {
+      const streamId = 'test-stream';
+
+      const runSubscribeWithTracing = (
+        clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+      ) =>
+        pipe(
+          streamId,
+          subscribe,
+          Effect.flatMap(drainEventStream),
+          Effect.provide(ProtocolLive(clientTransport))
+        );
+
+      return runTestWithProtocol(defaultSuccessHandler('test', 1), runSubscribeWithTracing);
+    });
+  });
 });

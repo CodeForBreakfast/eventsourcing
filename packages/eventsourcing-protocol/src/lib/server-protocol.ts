@@ -206,7 +206,15 @@ const buildAndBroadcastResult = (
         })
       );
     }),
-    Effect.withSpan('server-protocol.send-result', { attributes: { commandId } })
+    Effect.withSpan('eventsourcing.Protocol/SendResult', {
+      kind: 'server',
+      attributes: {
+        'rpc.system': 'eventsourcing',
+        'rpc.service': 'eventsourcing.Protocol',
+        'rpc.method': 'SendResult',
+        'messaging.message.id': commandId,
+      },
+    })
   );
 
 const createResultSender =
@@ -225,7 +233,8 @@ const buildAndBroadcastEvent = (
   server: ReadonlyDeep<Server.Transport>,
   event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
   timestamp: ReadonlyDeep<Date>,
-  context: { readonly traceId: string; readonly parentId: string }
+  context: { readonly traceId: string; readonly parentId: string },
+  messageId: string
 ) => {
   const eventMessage: ProtocolEvent = {
     type: 'event',
@@ -238,7 +247,7 @@ const buildAndBroadcastEvent = (
   };
 
   return server.broadcast(
-    makeTransportMessage(crypto.randomUUID(), 'event', JSON.stringify(eventMessage), {
+    makeTransportMessage(messageId, 'event', JSON.stringify(eventMessage), {
       timestamp: timestamp.toISOString(),
     })
   );
@@ -248,14 +257,26 @@ const broadcastEventWithContext = (
   server: ReadonlyDeep<Server.Transport>,
   event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
   timestamp: ReadonlyDeep<Date>
-) =>
-  pipe(
+) => {
+  const messageId = crypto.randomUUID();
+  return pipe(
     extractSpanContext(),
-    Effect.flatMap((context) => buildAndBroadcastEvent(server, event, timestamp, context)),
-    Effect.withSpan('server-protocol.publish-event', {
-      attributes: { streamId: String(event.streamId), eventType: event.type },
+    Effect.flatMap((context) =>
+      buildAndBroadcastEvent(server, event, timestamp, context, messageId)
+    ),
+    Effect.withSpan(`publish ${String(event.streamId)}`, {
+      kind: 'producer',
+      attributes: {
+        'messaging.system': 'eventsourcing',
+        'messaging.operation.name': 'publish',
+        'messaging.destination.name': String(event.streamId),
+        'messaging.message.id': messageId,
+        'eventsourcing.event.type': event.type,
+        'eventsourcing.event.position': String(event.position),
+      },
     })
   );
+};
 
 const broadcastEventMessage = (
   server: ReadonlyDeep<Server.Transport>,

@@ -375,7 +375,16 @@ const encodeAndPublishCommand = (
         })
       );
     }),
-    Effect.withSpan('protocol.send-command')
+    Effect.withSpan(`eventsourcing.Protocol/${command.name}`, {
+      kind: 'client',
+      attributes: {
+        'rpc.system': 'eventsourcing',
+        'rpc.service': 'eventsourcing.Protocol',
+        'rpc.method': command.name,
+        'messaging.message.id': command.id,
+        'messaging.destination.name': command.target,
+      },
+    })
   );
 
 const publishCommandToTransport = (
@@ -457,7 +466,15 @@ const encodeAndPublishSubscribe = (
         })
       );
     }),
-    Effect.withSpan('protocol.subscribe', { attributes: { streamId } })
+    Effect.withSpan('eventsourcing.Protocol/Subscribe', {
+      kind: 'client',
+      attributes: {
+        'rpc.system': 'eventsourcing',
+        'rpc.service': 'eventsourcing.Protocol',
+        'rpc.method': 'Subscribe',
+        'messaging.destination.name': streamId,
+      },
+    })
   );
 
 const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
