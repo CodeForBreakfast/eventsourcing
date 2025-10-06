@@ -1,60 +1,104 @@
 #!/usr/bin/env bun
 
-/**
- * Orchestrates publish validation by discovering changed packages and running Turbo filtering.
- */
+import { Effect, pipe } from 'effect';
+import { Command, Path, Terminal } from '@effect/platform';
+import { BunContext, BunRuntime } from '@effect/platform-bun';
 
-import { execSync } from 'child_process';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+const rootDir = pipe(
+  Path.Path,
+  Effect.andThen((path) => path.resolve(import.meta.dir, '..'))
+);
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, '..');
+const displayDiscoveryFailure = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('❌ Failed to discover packages\n')),
+  Effect.andThen(() => Effect.fail('Failed to discover packages'))
+);
 
-function main() {
-  console.log('🔍 Discovering packages that need publish validation...\n');
-
-  // Step 1: Discover packages using the discovery script
-  const packagesToValidate: readonly string[] = (() => {
-    try {
-      const output = execSync('bun scripts/validate-publish.ts', {
-        cwd: rootDir,
-        encoding: 'utf-8',
-        stdio: 'pipe',
-      });
-
-      return output
+const runDiscoveryCommand = (root: string) =>
+  pipe(
+    Command.make('bun', 'scripts/validate-publish.ts'),
+    Command.workingDirectory(root),
+    Command.string,
+    Effect.map((output) =>
+      output
         .split('\n')
-        .filter((line) => line.trim() && !line.includes('No changed packages detected'));
-    } catch {
-      console.log('❌ Failed to discover packages');
-      process.exit(1);
-    }
-  })();
+        .filter((line) => line.trim() && !line.includes('No changed packages detected'))
+    ),
+    Effect.catchAll(() => displayDiscoveryFailure)
+  );
 
-  if (packagesToValidate.length === 0) {
-    console.log('✅ No packages need validation');
-    return;
-  }
+const discoverPackages = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) =>
+    terminal.display('🔍 Discovering packages that need publish validation...\n')
+  ),
+  Effect.andThen(() => rootDir),
+  Effect.andThen(runDiscoveryCommand)
+);
 
-  console.log(`📦 Found ${packagesToValidate.length} package(s) to validate:`);
-  packagesToValidate.forEach((pkg) => console.log(`   - ${pkg}`));
-  console.log('');
+const displayNoPackagesMessage = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('✅ No packages need validation\n')),
+  Effect.as(undefined)
+);
 
-  // Step 2: Run validation using Turbo filtering
-  const filterArgs = packagesToValidate.map((pkg) => `--filter=${pkg}`).join(' ');
-  console.log(`🏗️  Running validation using Turbo...`);
+const displayPackageList = (packages: readonly string[], terminal: Terminal.Terminal) => {
+  const displayPackageCount = terminal.display(
+    `📦 Found ${packages.length} package(s) to validate:\n`
+  );
+  return pipe(
+    displayPackageCount,
+    Effect.andThen(() =>
+      Effect.forEach(packages, (pkg) => terminal.display(`   - ${pkg}\n`), {
+        discard: true,
+      })
+    ),
+    Effect.andThen(() => terminal.display('\n')),
+    Effect.andThen(() => terminal.display('🏗️  Running validation using Turbo...\n'))
+  );
+};
 
-  try {
-    execSync(`bunx turbo run validate:pack ${filterArgs}`, {
-      cwd: rootDir,
-      stdio: 'inherit',
-    });
-    console.log('\n✅ All package validations passed!');
-  } catch {
-    console.log('\n❌ Package validation failed!');
-    process.exit(1);
-  }
-}
+const displayValidationSuccess = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('\n✅ All package validations passed!\n'))
+);
 
-main();
+const displayValidationFailure = pipe(
+  Terminal.Terminal,
+  Effect.andThen((terminal) => terminal.display('\n❌ Package validation failed!\n')),
+  Effect.andThen(() => Effect.fail('Package validation failed'))
+);
+
+const runTurboValidation = (root: string, filterArgs: string) =>
+  pipe(
+    Command.make('bunx', 'turbo', 'run', 'validate:pack', filterArgs),
+    Command.workingDirectory(root),
+    Command.exitCode,
+    Effect.andThen((exitCode) =>
+      exitCode === 0 ? displayValidationSuccess : displayValidationFailure
+    )
+  );
+
+const runValidationForPackages = (packages: readonly string[]) =>
+  pipe(
+    Terminal.Terminal,
+    Effect.andThen((terminal) => displayPackageList(packages, terminal)),
+    Effect.andThen(() => rootDir),
+    Effect.andThen((root) => {
+      const filterArgs = packages.map((pkg) => `--filter=${pkg}`).join(' ');
+      return runTurboValidation(root, filterArgs);
+    })
+  );
+
+const validatePackages = (packages: readonly string[]) =>
+  pipe(
+    Effect.if(packages.length === 0, {
+      onTrue: () => displayNoPackagesMessage,
+      onFalse: () => runValidationForPackages(packages),
+    })
+  );
+
+const program = pipe(discoverPackages, Effect.andThen(validatePackages));
+
+BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));

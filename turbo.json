@@ -138,7 +138,7 @@
       "cache": true
     },
     "validate:docs": {
-      "dependsOn": ["^build", "//#scripts:lint"],
+      "dependsOn": ["build", "^build", "//#scripts:lint"],
       "outputs": [],
       "inputs": [
         "**/*.md",

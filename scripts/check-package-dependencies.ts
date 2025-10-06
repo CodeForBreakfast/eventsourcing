@@ -5,75 +5,139 @@
  * Outputs package information for use in changeset validation.
  */
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { Effect, pipe, Array as EffectArray, Option } from 'effect';
+import { FileSystem, Path, Terminal } from '@effect/platform';
+import { BunContext, BunRuntime } from '@effect/platform-bun';
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, '..');
-
-interface Package {
+type PackageInfo = {
   readonly name: string;
   readonly version: string;
-  readonly dependencies: Record<string, string>;
-}
+  readonly dependencies: { readonly [key: string]: string };
+};
 
-function getAllPackages(): readonly Package[] {
-  const packagesDir = join(rootDir, 'packages');
+type PackageDependencyMap = Readonly<Record<string, readonly string[]>>;
 
-  const dirs = readdirSync(packagesDir);
-  return dirs.reduce<readonly Package[]>((packages, dir) => {
-    const packagePath = join(packagesDir, dir, 'package.json');
-    if (!existsSync(packagePath)) {
-      return packages;
-    }
+const getScriptsDir = (currentPath: string) =>
+  pipe(
+    Path.Path,
+    Effect.map((path) => path.dirname(currentPath))
+  );
 
-    const content = readFileSync(packagePath, 'utf-8');
-    const pkg = JSON.parse(content);
-    return [
-      ...packages,
-      {
-        name: pkg.name,
-        version: pkg.version,
-        dependencies: {
-          ...pkg.dependencies,
-          ...pkg.devDependencies,
-          ...pkg.peerDependencies,
-        },
-      },
-    ];
-  }, []);
-}
+const resolveRootDir = (scriptsDir: string) =>
+  pipe(
+    Path.Path,
+    Effect.map((path) => path.resolve(scriptsDir, '..'))
+  );
 
-function getDependentPackages(
+const getCurrentPath = Effect.sync(() => new URL(import.meta.url).pathname);
+
+const getRootDir = pipe(
+  getCurrentPath,
+  Effect.flatMap(getScriptsDir),
+  Effect.flatMap(resolveRootDir)
+);
+
+const parsePackageJson = (content: string): PackageInfo => {
+  const pkg = JSON.parse(content);
+  return {
+    name: pkg.name,
+    version: pkg.version,
+    dependencies: {
+      ...pkg.dependencies,
+      ...pkg.devDependencies,
+      ...pkg.peerDependencies,
+    },
+  };
+};
+
+const readPackageJson = (fs: FileSystem.FileSystem, packagePath: string) =>
+  pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.map(Option.some));
+
+const readPackageIfExists = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  packagesDir: string,
+  dir: string
+) => {
+  const packagePath = path.join(packagesDir, dir, 'package.json');
+  return pipe(
+    packagePath,
+    fs.exists,
+    Effect.flatMap((exists) =>
+      exists ? readPackageJson(fs, packagePath) : Effect.succeed(Option.none<PackageInfo>())
+    )
+  );
+};
+
+const readPackagesFromDirs = (
+  fs: FileSystem.FileSystem,
+  path: Path.Path,
+  packagesDir: string,
+  dirs: readonly string[]
+) =>
+  pipe(
+    dirs,
+    EffectArray.map((dir) => readPackageIfExists(fs, path, packagesDir, dir)),
+    Effect.all,
+    Effect.map(EffectArray.getSomes)
+  );
+
+const readPackagesDir = (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) =>
+  pipe(
+    packagesDir,
+    fs.readDirectory,
+    Effect.flatMap((dirs) => readPackagesFromDirs(fs, path, packagesDir, dirs))
+  );
+
+const getServicesAndRootDir = Effect.all([FileSystem.FileSystem, Path.Path, getRootDir]);
+
+const getAllPackages = pipe(
+  getServicesAndRootDir,
+  Effect.flatMap(([fs, path, rootDir]) => {
+    const packagesDir = path.join(rootDir, 'packages');
+    return readPackagesDir(fs, path, packagesDir);
+  })
+);
+
+const isWorkspaceDependency = (depVersion: string): boolean =>
+  depVersion === 'workspace:*' || depVersion.startsWith('workspace:');
+
+const getDependentNames = (packageName: string, pkg: PackageInfo): readonly string[] => {
+  const hasDependency = Object.entries(pkg.dependencies || {}).some(
+    ([depName, depVersion]) => depName === packageName && isWorkspaceDependency(depVersion)
+  );
+  return hasDependency ? [pkg.name] : [];
+};
+
+const getDependentsForPackage = (
   packageName: string,
-  allPackages: readonly Package[]
-): readonly Package[] {
-  return allPackages.reduce<readonly Package[]>((dependents, pkg) => {
-    const hasDependency = Object.entries(pkg.dependencies || {}).some(
-      ([depName, depVersion]) =>
-        depName === packageName &&
-        (depVersion === 'workspace:*' || depVersion.startsWith('workspace:'))
-    );
+  allPackages: readonly PackageInfo[]
+): readonly string[] =>
+  pipe(
+    allPackages,
+    EffectArray.flatMap((pkg) => getDependentNames(packageName, pkg))
+  );
 
-    return hasDependency ? [...dependents, pkg] : dependents;
-  }, []);
-}
-
-function main() {
-  const packages = getAllPackages();
-
-  const packageDependencyMap: Record<string, readonly string[]> = packages.reduce<
-    Record<string, readonly string[]>
-  >((map, pkg) => {
-    const dependents = getDependentPackages(pkg.name, packages);
+const buildDependencyMap = (packages: readonly PackageInfo[]): PackageDependencyMap =>
+  packages.reduce<PackageDependencyMap>((map, pkg) => {
+    const dependents = getDependentsForPackage(pkg.name, packages);
     return {
       ...map,
-      [pkg.name]: dependents.map((dep) => dep.name),
+      [pkg.name]: dependents,
     };
   }, {});
 
-  console.log(JSON.stringify(packageDependencyMap, null, 2));
-}
+const outputDependencyMap = (dependencyMap: PackageDependencyMap) =>
+  pipe(
+    Terminal.Terminal,
+    Effect.flatMap((terminal) => terminal.display(JSON.stringify(dependencyMap, null, 2) + '\n'))
+  );
 
-main();
+const program = pipe(
+  getAllPackages,
+  Effect.map(buildDependencyMap),
+  Effect.flatMap(outputDependencyMap),
+  Effect.provide(BunContext.layer)
+);
+
+BunRuntime.runMain(program);
