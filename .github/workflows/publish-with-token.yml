@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://json.schemastore.org/github-workflow.json
+name: Manual Publish with NPM Token
+
+on:
+  workflow_dispatch:
+
+concurrency: ${{ github.workflow }}-${{ github.ref }}
+
+jobs:
+  publish:
+    name: Publish packages using NPM_TOKEN
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout
+        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup
+        uses: ./.github/actions/setup
+        with:
+          turbo-cache-key: 'manual-publish'
+
+      - name: Build packages
+        run: bun run build
+
+      - name: Publish to npm
+        run: bunx changeset publish
+        env:
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+
+      - name: Summary
+        run: |
+          echo "## Manual Publish Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Packages were published using NPM_TOKEN authentication." >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "⚠️ **Next Steps:**" >> $GITHUB_STEP_SUMMARY
+          echo "1. Configure OIDC trusted publishing for newly published packages on npmjs.com" >> $GITHUB_STEP_SUMMARY
+          echo "2. Future releases will use OIDC via the regular release workflow" >> $GITHUB_STEP_SUMMARY
