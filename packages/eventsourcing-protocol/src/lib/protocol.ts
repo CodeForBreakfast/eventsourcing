@@ -10,6 +10,7 @@ import {
   Data,
   pipe,
   Option,
+  Either,
   Layer,
   Scope,
   Match,
@@ -319,16 +320,38 @@ const handleMessage =
       Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
     );
 
-const encodeProtocolCommand = (command: ReadonlyDeep<WireCommand>): ProtocolCommand => ({
-  type: 'command',
+const extractCurrentSpanContext = (): Effect.Effect<
+  { readonly traceId: string; readonly parentId: string },
+  never,
+  never
+> =>
+  pipe(
+    Effect.currentSpan,
+    Effect.either,
+    Effect.map(
+      Either.match({
+        onLeft: () => ({
+          traceId: crypto.randomUUID().replace(/-/g, ''),
+          parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+        }),
+        onRight: (span) => ({
+          traceId: span.traceId,
+          parentId: span.spanId,
+        }),
+      })
+    )
+  );
+
+const encodeProtocolCommand = (
+  command: ReadonlyDeep<WireCommand>,
+  context: { readonly traceId: string; readonly parentId: string }
+): ProtocolCommand => ({
+  type: 'command' as const,
   id: command.id,
   target: command.target,
   name: command.name,
   payload: command.payload,
-  context: {
-    traceId: crypto.randomUUID().replace(/-/g, ''),
-    parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-  },
+  context,
 });
 
 const cleanupPendingCommand = (stateRef: Ref.Ref<ProtocolState>, commandId: string) =>
@@ -350,21 +373,30 @@ const registerPendingCommand = (
     Effect.as(deferred)
   );
 
+const encodeAndPublishCommand = (
+  transport: ReadonlyDeep<Client.Transport>,
+  command: ReadonlyDeep<WireCommand>,
+  timestamp: ReadonlyDeep<Date>
+) =>
+  pipe(
+    extractCurrentSpanContext(),
+    Effect.flatMap((context) => {
+      const wireMessage = encodeProtocolCommand(command, context);
+      return transport.publish(
+        makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
+          timestamp: timestamp.toISOString(),
+        })
+      );
+    })
+  );
+
 const publishCommandToTransport = (
   transport: ReadonlyDeep<Client.Transport>,
   command: ReadonlyDeep<WireCommand>
 ) =>
   pipe(
     currentTimestamp(),
-    Effect.map((timestamp) => {
-      const wireMessage = encodeProtocolCommand(command);
-      return transport.publish(
-        makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
-          timestamp: timestamp.toISOString(),
-        })
-      );
-    }),
-    Effect.flatten
+    Effect.flatMap((timestamp) => encodeAndPublishCommand(transport, command, timestamp))
   );
 
 const awaitCommandResultWithTimeout = (
@@ -407,13 +439,13 @@ const createWireCommandSender =
       Effect.flatMap((deferred) => executeWireCommand(stateRef, transport, command, deferred))
     );
 
-const encodeProtocolSubscribe = (streamId: string): ProtocolSubscribe => ({
-  type: 'subscribe',
+const encodeProtocolSubscribe = (
+  streamId: string,
+  context: { readonly traceId: string; readonly parentId: string }
+): ProtocolSubscribe => ({
+  type: 'subscribe' as const,
   streamId,
-  context: {
-    traceId: crypto.randomUUID().replace(/-/g, ''),
-    parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-  },
+  context,
 });
 
 const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string) =>
@@ -422,18 +454,27 @@ const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string)
     subscriptions: HashMap.remove(state.subscriptions, streamId),
   }));
 
-const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
+const encodeAndPublishSubscribe = (
+  transport: ReadonlyDeep<Client.Transport>,
+  streamId: string,
+  timestamp: ReadonlyDeep<Date>
+) =>
   pipe(
-    currentTimestamp(),
-    Effect.map((timestamp) => {
-      const wireMessage = encodeProtocolSubscribe(streamId);
+    extractCurrentSpanContext(),
+    Effect.flatMap((context) => {
+      const wireMessage = encodeProtocolSubscribe(streamId, context);
       return transport.publish(
         makeTransportMessage(crypto.randomUUID(), 'subscribe', JSON.stringify(wireMessage), {
           timestamp: timestamp.toISOString(),
         })
       );
-    }),
-    Effect.flatten
+    })
+  );
+
+const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
+  pipe(
+    currentTimestamp(),
+    Effect.flatMap((timestamp) => encodeAndPublishSubscribe(transport, streamId, timestamp))
   );
 
 const createSubscriptionStream = (
