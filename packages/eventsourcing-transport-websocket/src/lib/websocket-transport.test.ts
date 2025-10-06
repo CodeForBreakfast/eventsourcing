@@ -50,6 +50,7 @@ const createMockWebSocket = (
         try {
           listener(event);
         } catch (error) {
+          // eslint-disable-next-line effect/prefer-effect-platform -- Test helper mock uses console
           console.error('Error in event listener:', error);
         }
       });

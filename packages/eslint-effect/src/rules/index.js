@@ -16,6 +16,7 @@ import noIdentityTransform from './no-identity-transform.js';
 import noPipeFirstArgCall from './no-pipe-first-arg-call.js';
 import noNestedPipe from './no-nested-pipe.js';
 import noNestedPipes from './no-nested-pipes.js';
+import preferEffectPlatform from './prefer-effect-platform.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -36,4 +37,5 @@ export default {
   'no-pipe-first-arg-call': noPipeFirstArgCall,
   'no-nested-pipe': noNestedPipe,
   'no-nested-pipes': noNestedPipes,
+  'prefer-effect-platform': preferEffectPlatform,
 };
