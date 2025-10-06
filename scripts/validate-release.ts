@@ -218,6 +218,8 @@ const runTurboValidation = (root: string, filterArgs: readonly string[]) =>
   pipe(
     Command.make('bunx', 'turbo', 'run', 'validate:pack', ...filterArgs),
     Command.workingDirectory(root),
+    Command.stdout('inherit'),
+    Command.stderr('inherit'),
     Command.exitCode,
     Effect.andThen((exitCode) =>
       exitCode === 0 ? displayValidationSuccess : displayValidationFailure
