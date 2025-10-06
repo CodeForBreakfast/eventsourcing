@@ -5,6 +5,7 @@ const effectRecommendedRules = {
   'effect/no-runPromise': 'error',
   'effect/prefer-andThen': 'error',
   'effect/prefer-as': 'error',
+  'effect/prefer-effect-platform': 'error',
 };
 
 // Opinionated: forbid Effect.gen in favor of pipe composition

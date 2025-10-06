@@ -91,8 +91,10 @@ export const exampleProgram = pipe(
   processUserCommand,
   Effect.map((result) => {
     if (isCommandSuccess(result)) {
+      // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
       console.log('Command processed successfully:', result.position);
     } else {
+      // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
       console.error('Command failed:', result.error);
     }
     return result;
