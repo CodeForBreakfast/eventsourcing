@@ -1,24 +1,8 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe, Array as EffectArray, Console, Option, Schema } from 'effect';
-import { Path, Command, Terminal } from '@effect/platform';
+import { Effect, pipe, Array as EffectArray, Console, Option } from 'effect';
+import { Path, Command, Terminal, FileSystem } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
-import {
-  readdir as nodeReaddir,
-  readFile as nodeReadFile,
-  writeFile as nodeWriteFile,
-  mkdir as nodeMkdir,
-  rm as nodeRm,
-} from 'fs/promises';
-import { join as nodeJoin, relative as nodeRelative } from 'path';
-
-const join = nodeJoin;
-const relative = nodeRelative;
-const readdir = nodeReaddir;
-const readFile = nodeReadFile;
-const writeFile = nodeWriteFile;
-const mkdir = nodeMkdir;
-const rm = nodeRm;
 
 interface CodeBlock {
   readonly code: string;
@@ -143,28 +127,37 @@ const extractCodeBlocks = (content: string, filePath: string) => {
 const shouldSkipEntry = (name: string): boolean =>
   name === 'node_modules' || name === '.git' || name === 'dist';
 
+const joinPath = (...segments: readonly string[]) =>
+  pipe(
+    Path.Path,
+    Effect.andThen((path) => path.join(...segments))
+  );
+
 const processDirectoryEntry =
   (currentDir: string, files: readonly string[]) =>
   (entry: {
     readonly name: string;
     readonly isDirectory: () => boolean;
     readonly isFile: () => boolean;
-  }): Effect.Effect<readonly string[], Error, never> => {
+  }): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> => {
     if (shouldSkipEntry(entry.name)) {
       return Effect.succeed(files);
     }
 
-    const fullPath = join(currentDir, entry.name);
+    return pipe(
+      joinPath(currentDir, entry.name),
+      Effect.flatMap((fullPath) => {
+        if (entry.isDirectory()) {
+          return processDirectory(fullPath, files);
+        }
 
-    if (entry.isDirectory()) {
-      return processDirectory(fullPath, files);
-    }
+        if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
+          return Effect.succeed([...files, fullPath]);
+        }
 
-    if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
-      return Effect.succeed([...files, fullPath]);
-    }
-
-    return Effect.succeed(files);
+        return Effect.succeed(files);
+      })
+    );
   };
 
 const processEntryFiles = (
@@ -185,55 +178,66 @@ const reduceDirectoryEntries = (
   }[],
   files: readonly string[],
   currentDir: string
-): Effect.Effect<readonly string[], Error, never> =>
+): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> =>
   EffectArray.reduce(
     entries,
-    Effect.succeed(files) as Effect.Effect<readonly string[], Error, never>,
+    Effect.succeed(files) as Effect.Effect<
+      readonly string[],
+      Error,
+      FileSystem.FileSystem | Path.Path
+    >,
     (acc, entry) =>
       Effect.flatMap(acc, (currentFiles) => processEntryFiles(currentDir, entry, currentFiles))
   );
 
-const DirEntrySchema = Schema.Struct({
-  name: Schema.String,
-  isDirectory: Schema.Unknown,
-  isFile: Schema.Unknown,
-});
+const checkIsDirectory = (fullPath: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.stat(fullPath)),
+    Effect.map((info) => info.type === 'Directory'),
+    Effect.orElseSucceed(() => false)
+  );
 
-const DirEntriesArraySchema = Schema.Array(DirEntrySchema);
+const checkIsFile = (fullPath: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.stat(fullPath)),
+    Effect.map((info) => info.type === 'File'),
+    Effect.orElseSucceed(() => false)
+  );
 
-type DirEntry = Schema.Schema.Type<typeof DirEntrySchema>;
-
-const createDirEntryWithMethods = (entry: DirEntry) => {
-  const isDirectoryFn = entry.isDirectory;
-  const isFileFn = entry.isFile;
-
-  return {
-    name: entry.name,
-    isDirectory: typeof isDirectoryFn === 'function' ? () => Boolean(isDirectoryFn()) : () => false,
-    isFile: typeof isFileFn === 'function' ? () => Boolean(isFileFn()) : () => false,
-  };
+const checkEntryTypes = (fullPath: string, name: string) => {
+  const checks = [checkIsDirectory(fullPath), checkIsFile(fullPath)] as const;
+  return pipe(
+    checks,
+    Effect.all,
+    Effect.map(([isDir, isFile]) => ({
+      name,
+      isDirectory: () => isDir,
+      isFile: () => isFile,
+    }))
+  );
 };
 
-const validateDirEntries = (entries: unknown) =>
+const createEntryWithChecks = (currentDir: string) => (name: string) =>
   pipe(
-    entries,
-    Schema.decodeUnknown(DirEntriesArraySchema),
-    Effect.mapError((error) => new Error(`Invalid directory entries: ${error}`)),
-    Effect.map((validatedEntries) => validatedEntries.map(createDirEntryWithMethods))
+    joinPath(currentDir, name),
+    Effect.flatMap((fullPath) => checkEntryTypes(fullPath, name))
   );
 
 const processDirectory = (
   currentDir: string,
   files: readonly string[] = []
-): Effect.Effect<readonly string[], Error, never> => {
-  const readdirEffect = Effect.tryPromise({
-    try: () => readdir(currentDir, { withFileTypes: true }),
-    catch: (error) => new Error(`Failed to read directory ${currentDir}: ${error}`),
-  });
+): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> => {
+  const readdirEffect = pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.readDirectory(currentDir)),
+    Effect.mapError((error) => new Error(`Failed to read directory ${currentDir}: ${error}`))
+  );
 
   return pipe(
     readdirEffect,
-    Effect.flatMap(validateDirEntries),
+    Effect.flatMap((names) => Effect.all(names.map(createEntryWithChecks(currentDir)))),
     Effect.flatMap((entries) => reduceDirectoryEntries(entries, files, currentDir))
   );
 };
@@ -246,56 +250,74 @@ interface BlockFile {
   readonly headerLines: number;
 }
 
+const tsConfigContent = JSON.stringify(
+  {
+    compilerOptions: {
+      target: 'ES2022',
+      module: 'ESNext',
+      moduleResolution: 'Bundler',
+      lib: ['ES2022'],
+      strict: true,
+      esModuleInterop: true,
+      skipLibCheck: true,
+      forceConsistentCasingInFileNames: true,
+      resolveJsonModule: true,
+      noEmit: true,
+    },
+    include: ['*.ts'],
+  },
+  null,
+  2
+);
+
+const writeFileString = (path: string, content: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.writeFileString(path, content)),
+    Effect.mapError((error) => new Error(`Failed to write tsconfig: ${error}`))
+  );
+
 const writeTsConfig = (tempDir: string) =>
-  Effect.tryPromise({
-    try: () =>
-      writeFile(
-        join(tempDir, 'tsconfig.json'),
-        JSON.stringify(
-          {
-            compilerOptions: {
-              target: 'ES2022',
-              module: 'ESNext',
-              moduleResolution: 'Bundler',
-              lib: ['ES2022'],
-              strict: true,
-              esModuleInterop: true,
-              skipLibCheck: true,
-              forceConsistentCasingInFileNames: true,
-              resolveJsonModule: true,
-              noEmit: true,
-            },
-            include: ['*.ts'],
-          },
-          null,
-          2
-        )
-      ),
-    catch: (error) => new Error(`Failed to write tsconfig: ${error}`),
-  });
+  pipe(
+    joinPath(tempDir, 'tsconfig.json'),
+    Effect.flatMap((configPath) => writeFileString(configPath, tsConfigContent))
+  );
+
+const writeBlockFileContent = (
+  filepath: string,
+  content: string,
+  filename: string,
+  block: CodeBlock,
+  headerLines: number
+) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.writeFileString(filepath, content)),
+    Effect.mapError((error) => new Error(`Failed to write ${filename}: ${error}`)),
+    Effect.as({ filename, block, headerLines })
+  );
 
 const writeBlockFile = (
   block: CodeBlock,
   index: number,
   tempDir: string
-): Effect.Effect<BlockFile, Error, never> => {
+): Effect.Effect<BlockFile, Error, FileSystem.FileSystem | Path.Path> => {
   const headerLines = 0;
   const filename = `example-${index + 1}.ts`;
-  const filepath = join(tempDir, filename);
   const content = block.code;
 
-  const writeFileEffect = Effect.tryPromise({
-    try: () => writeFile(filepath, content),
-    catch: (error) => new Error(`Failed to write ${filename}: ${error}`),
-  });
-
-  return pipe(writeFileEffect, Effect.as({ filename, block, headerLines }));
+  return pipe(
+    joinPath(tempDir, filename),
+    Effect.flatMap((filepath) =>
+      writeBlockFileContent(filepath, content, filename, block, headerLines)
+    )
+  );
 };
 
 const writeAllBlockFiles = (
   blocks: readonly CodeBlock[],
   tempDir: string
-): Effect.Effect<readonly BlockFile[], Error, never> => {
+): Effect.Effect<readonly BlockFile[], Error, FileSystem.FileSystem | Path.Path> => {
   const writeEffects = blocks.map((block, index) => writeBlockFile(block, index, tempDir));
   return Effect.all(writeEffects);
 };
@@ -303,7 +325,7 @@ const writeAllBlockFiles = (
 const createSeparateTempFiles = (
   blocks: readonly CodeBlock[],
   tempDir: string
-): Effect.Effect<readonly BlockFile[], Error, never> => {
+): Effect.Effect<readonly BlockFile[], Error, FileSystem.FileSystem | Path.Path> => {
   const tsConfigEffect = writeTsConfig(tempDir);
   return pipe(tsConfigEffect, Effect.andThen(writeAllBlockFiles(blocks, tempDir)));
 };
@@ -334,6 +356,13 @@ const createValidationError = (
   };
 };
 
+const displayWarningForMissingBlockFile = (filename: string) =>
+  pipe(
+    Terminal.Terminal,
+    Effect.andThen((t) => t.display(`⚠️  Could not find block file ${filename}\n`)),
+    Effect.provide(BunContext.layer)
+  );
+
 const processErrorLine = (
   line: string,
   blockFiles: readonly BlockFile[]
@@ -350,13 +379,7 @@ const processErrorLine = (
     findBlockFileByFilename(filename, blockFiles),
     Option.match({
       onNone: () => {
-        Effect.runSync(
-          pipe(
-            Terminal.Terminal,
-            Effect.andThen((t) => t.display(`⚠️  Could not find block file ${filename}\n`)),
-            Effect.provide(BunContext.layer)
-          )
-        );
+        Effect.runSync(displayWarningForMissingBlockFile(filename));
         return [];
       },
       onSome: (blockFile) => {
@@ -382,17 +405,13 @@ const parseTypeErrors = (
   );
 };
 
-const cleanupTempDir = (tempDir: string) => {
-  const rmEffect = Effect.tryPromise({
-    try: () => rm(tempDir, { recursive: true, force: true }),
-    catch: () => new Error(`Failed to cleanup temp dir ${tempDir}`),
-  });
-
-  return pipe(
-    rmEffect,
+const cleanupTempDir = (tempDir: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.remove(tempDir, { recursive: true })),
+    Effect.mapError(() => new Error(`Failed to cleanup temp dir ${tempDir}`)),
     Effect.orElseSucceed(() => undefined)
   );
-};
 
 const formatErrorLine = (line: string): Effect.Effect<void, never, never> =>
   !line.includes('example-') || line.includes('error TS')
@@ -419,37 +438,44 @@ const formatError = (error: ValidationError) => {
   );
 };
 
-const cleanTempDirectory = (tempDir: string) => {
-  const rmEffect = Effect.tryPromise({
-    try: () => rm(tempDir, { recursive: true, force: true }),
-    catch: () => new Error(`Failed to clean temp dir`),
-  });
-
-  return pipe(
-    rmEffect,
+const cleanTempDirectory = (tempDir: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.remove(tempDir, { recursive: true })),
+    Effect.mapError(() => new Error(`Failed to clean temp dir`)),
     Effect.orElseSucceed(() => undefined)
   );
-};
 
 const createTempDirectory = (tempDir: string) =>
-  Effect.tryPromise({
-    try: () => mkdir(tempDir, { recursive: true }),
-    catch: (error) => new Error(`Failed to create temp dir: ${error}`),
-  });
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.makeDirectory(tempDir, { recursive: true })),
+    Effect.mapError((error) => new Error(`Failed to create temp dir: ${error}`))
+  );
+
+const getRelativePath = (from: string, to: string) =>
+  pipe(
+    Path.Path,
+    Effect.andThen((path) => path.relative(from, to))
+  );
+
+const readFileAsString = (file: string) =>
+  pipe(
+    FileSystem.FileSystem,
+    Effect.andThen((fs) => fs.readFileString(file)),
+    Effect.mapError((error) => new Error(`Failed to read ${file}: ${error}`))
+  );
 
 const readAndExtractCodeBlocks = (
   file: string,
   packageDir: string,
   blocks: readonly CodeBlock[]
 ) => {
-  const readFileEffect = Effect.tryPromise({
-    try: () => readFile(file, 'utf-8'),
-    catch: (error) => new Error(`Failed to read ${file}: ${error}`),
-  });
-
+  const operations = [readFileAsString(file), getRelativePath(packageDir, file)] as const;
   return pipe(
-    readFileEffect,
-    Effect.flatMap((content) => extractCodeBlocks(content, relative(packageDir, file))),
+    operations,
+    Effect.all,
+    Effect.flatMap(([content, relativePath]) => extractCodeBlocks(content, relativePath)),
     Effect.map((newBlocks) => [...blocks, ...newBlocks])
   );
 };
@@ -460,10 +486,14 @@ const processFileBlocks = (packageDir: string, file: string, blocks: readonly Co
 const collectAllCodeBlocks = (
   markdownFiles: readonly string[],
   packageDir: string
-): Effect.Effect<readonly CodeBlock[], Error, never> =>
+): Effect.Effect<readonly CodeBlock[], Error, FileSystem.FileSystem | Path.Path> =>
   EffectArray.reduce(
     markdownFiles,
-    Effect.succeed([] as readonly CodeBlock[]) as Effect.Effect<readonly CodeBlock[], Error, never>,
+    Effect.succeed([] as readonly CodeBlock[]) as Effect.Effect<
+      readonly CodeBlock[],
+      Error,
+      FileSystem.FileSystem | Path.Path
+    >,
     (acc, file) => Effect.flatMap(acc, (blocks) => processFileBlocks(packageDir, file, blocks))
   );
 
@@ -539,14 +569,21 @@ const runValidation = (packageDir: string, tempDir: string) => {
   );
 };
 
-const getValidationDirs = pipe(
+const resolveCwd = pipe(
   Path.Path,
-  Effect.andThen((path) => path.resolve('.')),
-  Effect.map((cwd) => ({
-    packageDir: cwd,
-    tempDir: join(cwd, 'node_modules', '.cache', 'validate-docs'),
-  }))
+  Effect.andThen((path) => path.resolve('.'))
 );
+
+const createValidationDirPaths = (cwd: string) =>
+  pipe(
+    joinPath(cwd, 'node_modules', '.cache', 'validate-docs'),
+    Effect.map((tempDir) => ({
+      packageDir: cwd,
+      tempDir,
+    }))
+  );
+
+const getValidationDirs = pipe(resolveCwd, Effect.flatMap(createValidationDirPaths));
 
 const validateMarkdownExamples = pipe(
   getValidationDirs,
