@@ -50,7 +50,7 @@
     "@types/bun": "latest",
     "@typescript-eslint/eslint-plugin": "8.45.0",
     "@typescript-eslint/parser": "8.45.0",
-    "dependency-cruiser": "17.0.1",
+    "dependency-cruiser": "17.0.2",
     "effect": "3.18.1",
     "eslint": "9.36.0",
     "eslint-config-prettier": "10.1.8",
