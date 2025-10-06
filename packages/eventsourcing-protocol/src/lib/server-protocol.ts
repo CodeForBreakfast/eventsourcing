@@ -149,9 +149,20 @@ const processIncomingMessage =
       Effect.catchAll(() => Effect.void)
     );
 
-const buildResultMessage = (
+const extractSpanContext = () =>
+  pipe(
+    Effect.currentSpan,
+    Effect.map((span) => ({
+      traceId: span.traceId,
+      parentId: span.spanId,
+    })),
+    Effect.orDie
+  );
+
+const createResultMessageWithContext = (
   commandId: string,
-  result: ReadonlyDeep<CommandResult>
+  result: ReadonlyDeep<CommandResult>,
+  context: { readonly traceId: string; readonly parentId: string }
 ): ProtocolCommandResult =>
   pipe(
     result,
@@ -161,14 +172,41 @@ const buildResultMessage = (
       commandId,
       success: true,
       position: res.position,
+      context,
     })),
     Match.tag('Failure', (res) => ({
       type: 'command_result' as const,
       commandId,
       success: false,
       error: JSON.stringify(res.error),
+      context,
     })),
     Match.exhaustive
+  );
+
+const buildResultMessage = (
+  commandId: string,
+  result: ReadonlyDeep<CommandResult>,
+  context: { readonly traceId: string; readonly parentId: string }
+): ProtocolCommandResult => createResultMessageWithContext(commandId, result, context);
+
+const buildAndBroadcastResult = (
+  server: ReadonlyDeep<Server.Transport>,
+  commandId: string,
+  result: ReadonlyDeep<CommandResult>,
+  timestamp: ReadonlyDeep<Date>
+) =>
+  pipe(
+    extractSpanContext(),
+    Effect.flatMap((context) => {
+      const resultMessage = buildResultMessage(commandId, result, context);
+      return server.broadcast(
+        makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
+          timestamp: timestamp.toISOString(),
+        })
+      );
+    }),
+    Effect.withSpan('server-protocol.send-result', { attributes: { commandId } })
   );
 
 const createResultSender =
@@ -180,16 +218,44 @@ const createResultSender =
   ) =>
     pipe(
       currentTimestamp(),
-      Effect.flatMap((timestamp) => {
-        const resultMessage: ProtocolCommandResult = buildResultMessage(commandId, result);
-
-        return server.broadcast(
-          makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
-            timestamp: timestamp.toISOString(),
-          })
-        );
-      })
+      Effect.flatMap((timestamp) => buildAndBroadcastResult(server, commandId, result, timestamp))
     );
+
+const buildAndBroadcastEvent = (
+  server: ReadonlyDeep<Server.Transport>,
+  event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
+  timestamp: ReadonlyDeep<Date>,
+  context: { readonly traceId: string; readonly parentId: string }
+) => {
+  const eventMessage: ProtocolEvent = {
+    type: 'event',
+    streamId: String(event.streamId),
+    position: event.position,
+    eventType: event.type,
+    data: event.data,
+    timestamp: event.timestamp,
+    context,
+  };
+
+  return server.broadcast(
+    makeTransportMessage(crypto.randomUUID(), 'event', JSON.stringify(eventMessage), {
+      timestamp: timestamp.toISOString(),
+    })
+  );
+};
+
+const broadcastEventWithContext = (
+  server: ReadonlyDeep<Server.Transport>,
+  event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
+  timestamp: ReadonlyDeep<Date>
+) =>
+  pipe(
+    extractSpanContext(),
+    Effect.flatMap((context) => buildAndBroadcastEvent(server, event, timestamp, context)),
+    Effect.withSpan('server-protocol.publish-event', {
+      attributes: { streamId: String(event.streamId), eventType: event.type },
+    })
+  );
 
 const broadcastEventMessage = (
   server: ReadonlyDeep<Server.Transport>,
@@ -197,22 +263,7 @@ const broadcastEventMessage = (
 ) =>
   pipe(
     currentTimestamp(),
-    Effect.flatMap((timestamp) => {
-      const eventMessage: ProtocolEvent = {
-        type: 'event',
-        streamId: String(event.streamId),
-        position: event.position,
-        eventType: event.type,
-        data: event.data,
-        timestamp: event.timestamp,
-      };
-
-      return server.broadcast(
-        makeTransportMessage(crypto.randomUUID(), 'event', JSON.stringify(eventMessage), {
-          timestamp: timestamp.toISOString(),
-        })
-      );
-    })
+    Effect.flatMap((timestamp) => broadcastEventWithContext(server, event, timestamp))
   );
 
 const matchSubscribedConnections = (
