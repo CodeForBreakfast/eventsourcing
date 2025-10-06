@@ -10,12 +10,15 @@ import {
   Schema,
   Context,
   Match,
+  Ref,
+  Option,
 } from 'effect';
 import {
   ProtocolLive,
   sendWireCommand,
   subscribe,
   ProtocolCommandTimeoutError,
+  ProtocolValidationError,
   Event,
 } from './protocol';
 import {
@@ -32,7 +35,9 @@ import {
 import {
   makeTransportMessage,
   type TransportMessage,
+  type TransportError,
   Server,
+  Client,
 } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { type ReadonlyDeep } from 'type-fest';
@@ -2073,329 +2078,549 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('OpenTelemetry Context Propagation', () => {
+    const captureFirstCommandMessage = (
+      server: ReadonlyDeep<InMemoryServer>,
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>
+    ) =>
+      pipe(
+        server.connections,
+        Stream.take(1),
+        Stream.runCollect,
+        Effect.flatMap((connections) => {
+          const connection = Array.from(connections)[0]!;
+          return subscribeAndCaptureCommands(connection, messagesRef);
+        })
+      );
+
+    const subscribeAndCaptureCommands = (
+      connection: Server.ClientConnection,
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>
+    ) =>
+      pipe(
+        connection.transport.subscribe(),
+        Effect.flatMap((stream) => captureCommandMessages(stream, messagesRef))
+      );
+
+    const captureCommandMessages = (
+      stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>,
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>
+    ) =>
+      pipe(
+        stream,
+        Stream.runForEach((msg) => parseAndStoreCommandMessage(msg, messagesRef)),
+        Effect.forkScoped
+      );
+
+    const updateMessagesRef = (
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+      parsed: ParsedMessage
+    ) =>
+      pipe(
+        messagesRef,
+        Ref.update((messages) => [...messages, parsed])
+      );
+
+    const parseCommandPayload = (msg: ReadonlyDeep<TransportMessage>) =>
+      Effect.sync(() => JSON.parse(msg.payload) as ParsedMessage);
+
+    const storeIfCommand = (
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+      parsed: ParsedMessage
+    ) => (parsed.type === 'command' ? updateMessagesRef(messagesRef, parsed) : Effect.void);
+
+    const parseAndStoreCommandMessage = (
+      msg: ReadonlyDeep<TransportMessage>,
+      messagesRef: Ref.Ref<readonly ParsedMessage[]>
+    ) =>
+      pipe(
+        msg,
+        parseCommandPayload,
+        Effect.flatMap((parsed) => storeIfCommand(messagesRef, parsed))
+      );
+
+    const createAndSendTestCommand = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+      pipe(
+        {
+          id: 'cmd-123',
+          target: 'test-target',
+          name: 'TestCommand',
+          payload: { data: 'test' },
+        },
+        sendWireCommand,
+        Effect.provide(ProtocolLive(clientTransport)),
+        Effect.ignore
+      );
+
+    const sendTestCommand = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+      pipe(
+        50,
+        Effect.sleep,
+        Effect.andThen(() => createAndSendTestCommand(clientTransport))
+      );
+
+    const verifyCommandContext = (messages: readonly ParsedMessage[]) =>
+      Effect.sync(() => {
+        expect(messages.length).toBeGreaterThan(0);
+        const commandMessage = messages[0]!;
+        expect(commandMessage.type).toBe('command');
+        expect(commandMessage.context).toBeDefined();
+        expect((commandMessage.context as { readonly traceId?: string }).traceId).toBeDefined();
+        expect((commandMessage.context as { readonly parentId?: string }).parentId).toBeDefined();
+        expect(typeof (commandMessage.context as { readonly traceId?: string }).traceId).toBe(
+          'string'
+        );
+        expect(typeof (commandMessage.context as { readonly parentId?: string }).parentId).toBe(
+          'string'
+        );
+        expect((commandMessage.context as { readonly traceId?: string }).traceId!.length).toBe(32);
+        expect((commandMessage.context as { readonly parentId?: string }).parentId!.length).toBe(
+          16
+        );
+      });
+
+    const runCommandContextTest =
+      (messagesRef: Ref.Ref<readonly ParsedMessage[]>) =>
+      (server: ReadonlyDeep<InMemoryServer>, clientTransport: ReadonlyDeep<Client.Transport>) =>
+        pipe(
+          captureFirstCommandMessage(server, messagesRef),
+          Effect.andThen(sendTestCommand(clientTransport)),
+          Effect.andThen(Effect.sleep(100)),
+          Effect.andThen(Ref.get(messagesRef)),
+          Effect.flatMap(verifyCommandContext)
+        );
+
+    const setupAndRunCommandContextTest = ({
+      server,
+      clientTransport,
+    }: {
+      readonly server: ReadonlyDeep<InMemoryServer>;
+      readonly clientTransport: ReadonlyDeep<Client.Transport>;
+    }) =>
+      pipe(
+        [],
+        (initial) => Ref.make<readonly ParsedMessage[]>(initial),
+        Effect.flatMap((messagesRef) => runCommandContextTest(messagesRef)(server, clientTransport))
+      );
+
     describe('Wire Protocol Schema', () => {
       it.effect('ProtocolCommand should include context with traceId and parentId', () =>
-        pipe(
-          setupTestEnvironment,
-          Effect.flatMap(({ server, clientTransport }) => {
-            const capturedMessages: readonly ParsedMessage[] = [];
+        pipe(setupTestEnvironment, Effect.flatMap(setupAndRunCommandContextTest), Effect.scoped)
+      );
 
-            const captureMessage = (msg: ReadonlyDeep<TransportMessage>) => {
-              const parsed = JSON.parse(msg.payload) as ParsedMessage;
-              if (parsed.type === 'command') {
-                capturedMessages.push(parsed);
-              }
-            };
+      it.effect('ProtocolSubscribe should include context with traceId and parentId', () => {
+        const captureFirstSubscribeMessage = (
+          server: ReadonlyDeep<InMemoryServer>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            server.connections,
+            Stream.take(1),
+            Stream.runCollect,
+            Effect.flatMap((connections) => {
+              const connection = Array.from(connections)[0]!;
+              return subscribeAndCaptureSubscribes(connection, messagesRef);
+            })
+          );
 
-            const setupMessageCapture = pipe(
-              server.connections,
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.flatMap((connections) => {
-                const connection = Array.from(connections)[0]!;
-                return pipe(
-                  connection.transport.subscribe(),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.runForEach((msg) => Effect.sync(() => captureMessage(msg))),
-                      Effect.forkScoped
-                    )
-                  )
-                );
-              })
+        const subscribeAndCaptureSubscribes = (
+          connection: Server.ClientConnection,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            connection.transport.subscribe(),
+            Effect.flatMap((stream) => captureSubscribeMessages(stream, messagesRef))
+          );
+
+        const captureSubscribeMessages = (
+          stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            stream,
+            Stream.runForEach((msg) => parseAndStoreSubscribeMessage(msg, messagesRef)),
+            Effect.forkScoped
+          );
+
+        const updateSubscribeMessagesRef = (
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+          parsed: ParsedMessage
+        ) =>
+          pipe(
+            messagesRef,
+            Ref.update((messages) => [...messages, parsed])
+          );
+
+        const parseSubscribePayload = (msg: ReadonlyDeep<TransportMessage>) =>
+          Effect.sync(() => JSON.parse(msg.payload) as ParsedMessage);
+
+        const storeIfSubscribe = (
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+          parsed: ParsedMessage
+        ) =>
+          parsed.type === 'subscribe'
+            ? updateSubscribeMessagesRef(messagesRef, parsed)
+            : Effect.void;
+
+        const parseAndStoreSubscribeMessage = (
+          msg: ReadonlyDeep<TransportMessage>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            msg,
+            parseSubscribePayload,
+            Effect.flatMap((parsed) => storeIfSubscribe(messagesRef, parsed))
+          );
+
+        const subscribeToTestStream = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            'test-stream',
+            subscribe,
+            Effect.provide(ProtocolLive(clientTransport)),
+            Effect.forkScoped
+          );
+
+        const sendTestSubscribe = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            50,
+            Effect.sleep,
+            Effect.andThen(() => subscribeToTestStream(clientTransport))
+          );
+
+        const verifySubscribeContext = (messages: readonly ParsedMessage[]) =>
+          Effect.sync(() => {
+            expect(messages.length).toBeGreaterThan(0);
+            const subscribeMessage = messages[0]!;
+            expect(subscribeMessage.type).toBe('subscribe');
+            expect(subscribeMessage.context).toBeDefined();
+            expect(
+              (subscribeMessage.context as { readonly traceId?: string }).traceId
+            ).toBeDefined();
+            expect(
+              (subscribeMessage.context as { readonly parentId?: string }).parentId
+            ).toBeDefined();
+            expect(typeof (subscribeMessage.context as { readonly traceId?: string }).traceId).toBe(
+              'string'
             );
+            expect(
+              typeof (subscribeMessage.context as { readonly parentId?: string }).parentId
+            ).toBe('string');
+            expect(
+              (subscribeMessage.context as { readonly traceId?: string }).traceId!.length
+            ).toBe(32);
+            expect(
+              (subscribeMessage.context as { readonly parentId?: string }).parentId!.length
+            ).toBe(16);
+          });
 
-            const sendCommand = pipe(
-              Effect.sleep(50),
-              Effect.andThen(
-                sendWireCommand({
-                  id: 'cmd-123',
-                  target: 'test-target',
-                  name: 'TestCommand',
-                  payload: { data: 'test' },
-                })
-              ),
-              Effect.provide(ProtocolLive(clientTransport)),
-              Effect.ignore
-            );
-
-            return pipe(
-              setupMessageCapture,
-              Effect.andThen(sendCommand),
+        const runSubscribeContextTest =
+          (messagesRef: Ref.Ref<readonly ParsedMessage[]>) =>
+          (server: ReadonlyDeep<InMemoryServer>, clientTransport: ReadonlyDeep<Client.Transport>) =>
+            pipe(
+              captureFirstSubscribeMessage(server, messagesRef),
+              Effect.andThen(sendTestSubscribe(clientTransport)),
               Effect.andThen(Effect.sleep(100)),
-              Effect.andThen(
-                Effect.sync(() => {
-                  expect(capturedMessages.length).toBeGreaterThan(0);
-                  const commandMessage = capturedMessages[0]!;
-                  expect(commandMessage.type).toBe('command');
-                  expect(commandMessage.context).toBeDefined();
-                  expect(
-                    (commandMessage.context as { readonly traceId?: string }).traceId
-                  ).toBeDefined();
-                  expect(
-                    (commandMessage.context as { readonly parentId?: string }).parentId
-                  ).toBeDefined();
-                  expect(
-                    typeof (commandMessage.context as { readonly traceId?: string }).traceId
-                  ).toBe('string');
-                  expect(
-                    typeof (commandMessage.context as { readonly parentId?: string }).parentId
-                  ).toBe('string');
-                  expect(
-                    (commandMessage.context as { readonly traceId?: string }).traceId!.length
-                  ).toBe(32);
-                  expect(
-                    (commandMessage.context as { readonly parentId?: string }).parentId!.length
-                  ).toBe(16);
-                })
-              )
+              Effect.andThen(Ref.get(messagesRef)),
+              Effect.flatMap(verifySubscribeContext)
             );
-          }),
-          Effect.scoped
-        )
-      );
 
-      it.effect('ProtocolSubscribe should include context with traceId and parentId', () =>
-        pipe(
+        const setupAndRunSubscribeContextTest = ({
+          server,
+          clientTransport,
+        }: {
+          readonly server: ReadonlyDeep<InMemoryServer>;
+          readonly clientTransport: ReadonlyDeep<Client.Transport>;
+        }) =>
+          pipe(
+            [],
+            (initial) => Ref.make<readonly ParsedMessage[]>(initial),
+            Effect.flatMap((messagesRef) =>
+              runSubscribeContextTest(messagesRef)(server, clientTransport)
+            )
+          );
+
+        return pipe(
           setupTestEnvironment,
-          Effect.flatMap(({ server, clientTransport }) => {
-            const capturedMessages: readonly ParsedMessage[] = [];
-
-            const captureMessage = (msg: ReadonlyDeep<TransportMessage>) => {
-              const parsed = JSON.parse(msg.payload) as ParsedMessage;
-              if (parsed.type === 'subscribe') {
-                capturedMessages.push(parsed);
-              }
-            };
-
-            const setupMessageCapture = pipe(
-              server.connections,
-              Stream.take(1),
-              Stream.runCollect,
-              Effect.flatMap((connections) => {
-                const connection = Array.from(connections)[0]!;
-                return pipe(
-                  connection.transport.subscribe(),
-                  Effect.flatMap((stream) =>
-                    pipe(
-                      stream,
-                      Stream.runForEach((msg) => Effect.sync(() => captureMessage(msg))),
-                      Effect.forkScoped
-                    )
-                  )
-                );
-              })
-            );
-
-            const sendSubscribe = pipe(
-              Effect.sleep(50),
-              Effect.andThen(subscribe('test-stream')),
-              Effect.provide(ProtocolLive(clientTransport)),
-              Effect.forkScoped
-            );
-
-            return pipe(
-              setupMessageCapture,
-              Effect.andThen(sendSubscribe),
-              Effect.andThen(Effect.sleep(100)),
-              Effect.andThen(
-                Effect.sync(() => {
-                  expect(capturedMessages.length).toBeGreaterThan(0);
-                  const subscribeMessage = capturedMessages[0]!;
-                  expect(subscribeMessage.type).toBe('subscribe');
-                  expect(subscribeMessage.context).toBeDefined();
-                  expect(
-                    (subscribeMessage.context as { readonly traceId?: string }).traceId
-                  ).toBeDefined();
-                  expect(
-                    (subscribeMessage.context as { readonly parentId?: string }).parentId
-                  ).toBeDefined();
-                  expect(
-                    typeof (subscribeMessage.context as { readonly traceId?: string }).traceId
-                  ).toBe('string');
-                  expect(
-                    typeof (subscribeMessage.context as { readonly parentId?: string }).parentId
-                  ).toBe('string');
-                  expect(
-                    (subscribeMessage.context as { readonly traceId?: string }).traceId!.length
-                  ).toBe(32);
-                  expect(
-                    (subscribeMessage.context as { readonly parentId?: string }).parentId!.length
-                  ).toBe(16);
-                })
-              )
-            );
-          }),
+          Effect.flatMap(setupAndRunSubscribeContextTest),
           Effect.scoped
-        )
-      );
+        );
+      });
 
-      it.effect('ProtocolCommandResult should include context with traceId and parentId', () =>
-        pipe(
+      it.effect('ProtocolCommandResult should include context with traceId and parentId', () => {
+        const setupAutoRespondServer = (server: ReadonlyDeep<InMemoryServer>) =>
+          pipe(
+            ServerProtocol,
+            Effect.flatMap((serverProtocol) => handleCommandsAndRespond(serverProtocol)),
+            Effect.provide(ServerProtocolLive(server))
+          );
+
+        const handleCommandsAndRespond = (
+          serverProtocol: Context.Tag.Service<typeof ServerProtocol>
+        ) =>
+          pipe(
+            serverProtocol.onWireCommand,
+            Stream.runForEach((cmd) => respondWithSuccess(serverProtocol, cmd.id)),
+            Effect.forkScoped
+          );
+
+        const respondWithSuccess = (
+          serverProtocol: Context.Tag.Service<typeof ServerProtocol>,
+          commandId: string
+        ) =>
+          serverProtocol.sendResult(commandId, {
+            _tag: 'Success',
+            position: {
+              streamId: unsafeCreateStreamId('test'),
+              eventNumber: 1,
+            },
+          });
+
+        const captureCommandResults = (
+          clientTransport: ReadonlyDeep<Client.Transport>,
+          resultRef: Ref.Ref<Option.Option<ParsedMessage>>
+        ) =>
+          pipe(
+            clientTransport.subscribe(),
+            Effect.flatMap((stream) => captureResultMessages(stream, resultRef))
+          );
+
+        const captureResultMessages = (
+          stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>,
+          resultRef: Ref.Ref<Option.Option<ParsedMessage>>
+        ) =>
+          pipe(
+            stream,
+            Stream.runForEach((msg) => parseAndStoreResultMessage(msg, resultRef)),
+            Effect.forkScoped
+          );
+
+        const setResultRef = (
+          resultRef: Ref.Ref<Option.Option<ParsedMessage>>,
+          parsed: ReadonlyDeep<ParsedMessage>
+        ) => Ref.set(resultRef, Option.some(parsed));
+
+        const parseResultPayload = (msg: ReadonlyDeep<TransportMessage>) =>
+          Effect.sync(() => JSON.parse(msg.payload) as ParsedMessage);
+
+        const storeIfCommandResult = (
+          resultRef: Ref.Ref<Option.Option<ParsedMessage>>,
+          parsed: ReadonlyDeep<ParsedMessage>
+        ) => (parsed.type === 'command_result' ? setResultRef(resultRef, parsed) : Effect.void);
+
+        const parseAndStoreResultMessage = (
+          msg: ReadonlyDeep<TransportMessage>,
+          resultRef: Ref.Ref<Option.Option<ParsedMessage>>
+        ) =>
+          pipe(
+            msg,
+            parseResultPayload,
+            Effect.flatMap((parsed) => storeIfCommandResult(resultRef, parsed))
+          );
+
+        const sendResultTestCommand = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            {
+              id: 'cmd-result-test',
+              target: 'test-target',
+              name: 'TestCommand',
+              payload: { data: 'test' },
+            },
+            sendWireCommand,
+            Effect.provide(ProtocolLive(clientTransport)),
+            Effect.ignore
+          );
+
+        const sendCommandForResult = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            50,
+            Effect.sleep,
+            Effect.andThen(() => sendResultTestCommand(clientTransport))
+          );
+
+        const verifyResultContext = (resultOption: ReadonlyDeep<Option.Option<ParsedMessage>>) =>
+          Effect.sync(() => {
+            expect(Option.isSome(resultOption)).toBe(true);
+            const capturedResult = Option.getOrThrow(resultOption);
+            expect(capturedResult.type).toBe('command_result');
+            expect(capturedResult.context).toBeDefined();
+            expect((capturedResult.context as { readonly traceId?: string }).traceId).toBeDefined();
+            expect(
+              (capturedResult.context as { readonly parentId?: string }).parentId
+            ).toBeDefined();
+            expect(typeof (capturedResult.context as { readonly traceId?: string }).traceId).toBe(
+              'string'
+            );
+            expect(typeof (capturedResult.context as { readonly parentId?: string }).parentId).toBe(
+              'string'
+            );
+            expect((capturedResult.context as { readonly traceId?: string }).traceId!.length).toBe(
+              32
+            );
+            expect(
+              (capturedResult.context as { readonly parentId?: string }).parentId!.length
+            ).toBe(16);
+          });
+
+        const sleep200 = pipe(200, Effect.sleep);
+
+        const runResultContextTest =
+          (resultRef: Ref.Ref<Option.Option<ParsedMessage>>) =>
+          (server: ReadonlyDeep<InMemoryServer>, clientTransport: ReadonlyDeep<Client.Transport>) =>
+            pipe(
+              server,
+              setupAutoRespondServer,
+              Effect.andThen(captureCommandResults(clientTransport, resultRef)),
+              Effect.andThen(sendCommandForResult(clientTransport)),
+              Effect.andThen(sleep200),
+              Effect.andThen(Ref.get(resultRef)),
+              Effect.flatMap(verifyResultContext)
+            );
+
+        const setupAndRunResultContextTest = ({
+          server,
+          clientTransport,
+        }: {
+          readonly server: ReadonlyDeep<InMemoryServer>;
+          readonly clientTransport: ReadonlyDeep<Client.Transport>;
+        }) =>
+          pipe(
+            Option.none(),
+            (initial) => Ref.make<Option.Option<ParsedMessage>>(initial),
+            Effect.flatMap((resultRef) => runResultContextTest(resultRef)(server, clientTransport))
+          );
+
+        return pipe(
           setupTestEnvironment,
-          Effect.flatMap(({ server, clientTransport }) => {
-            let capturedResult: ParsedMessage | null = null;
-
-            const setupServerHandler = pipe(
-              ServerProtocol,
-              Effect.flatMap((serverProtocol) =>
-                pipe(
-                  serverProtocol.onWireCommand,
-                  Stream.runForEach((cmd) =>
-                    serverProtocol.sendResult(cmd.id, {
-                      _tag: 'Success',
-                      position: {
-                        streamId: unsafeCreateStreamId('test'),
-                        eventNumber: 1,
-                      },
-                    })
-                  ),
-                  Effect.forkScoped
-                )
-              ),
-              Effect.provide(ServerProtocolLive(server))
-            );
-
-            const captureCommandResult = pipe(
-              clientTransport.subscribe(),
-              Effect.flatMap((stream) =>
-                pipe(
-                  stream,
-                  Stream.runForEach((msg) =>
-                    Effect.sync(() => {
-                      const parsed = JSON.parse(msg.payload) as ParsedMessage;
-                      if (parsed.type === 'command_result') {
-                        capturedResult = parsed;
-                      }
-                    })
-                  ),
-                  Effect.forkScoped
-                )
-              )
-            );
-
-            const sendCommand = pipe(
-              Effect.sleep(50),
-              Effect.andThen(
-                sendWireCommand({
-                  id: 'cmd-result-test',
-                  target: 'test-target',
-                  name: 'TestCommand',
-                  payload: { data: 'test' },
-                })
-              ),
-              Effect.provide(ProtocolLive(clientTransport)),
-              Effect.ignore
-            );
-
-            return pipe(
-              setupServerHandler,
-              Effect.andThen(captureCommandResult),
-              Effect.andThen(sendCommand),
-              Effect.andThen(Effect.sleep(200)),
-              Effect.andThen(
-                Effect.sync(() => {
-                  expect(capturedResult).not.toBeNull();
-                  expect(capturedResult!.type).toBe('command_result');
-                  expect(capturedResult!.context).toBeDefined();
-                  expect(
-                    (capturedResult!.context as { readonly traceId?: string }).traceId
-                  ).toBeDefined();
-                  expect(
-                    (capturedResult!.context as { readonly parentId?: string }).parentId
-                  ).toBeDefined();
-                  expect(
-                    typeof (capturedResult!.context as { readonly traceId?: string }).traceId
-                  ).toBe('string');
-                  expect(
-                    typeof (capturedResult!.context as { readonly parentId?: string }).parentId
-                  ).toBe('string');
-                  expect(
-                    (capturedResult!.context as { readonly traceId?: string }).traceId!.length
-                  ).toBe(32);
-                  expect(
-                    (capturedResult!.context as { readonly parentId?: string }).parentId!.length
-                  ).toBe(16);
-                })
-              )
-            );
-          }),
+          Effect.flatMap(setupAndRunResultContextTest),
           Effect.scoped
-        )
-      );
+        );
+      });
 
-      it.effect('ProtocolEvent should include context with traceId and parentId', () =>
-        pipe(
-          setupTestEnvironment,
-          Effect.flatMap(({ server, clientTransport }) => {
-            const parsedMessages: readonly ParsedMessage[] = [];
+      it.effect('ProtocolEvent should include context with traceId and parentId', () => {
+        const captureEventMessages = (
+          clientTransport: ReadonlyDeep<Client.Transport>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            clientTransport.subscribe(),
+            Effect.flatMap((stream) => captureEvents(stream, messagesRef))
+          );
 
-            const testEventHandler = () => [
-              createTestEvent('test-stream', 1, 'TestEvent', { test: 'data' }, new Date()),
-            ];
+        const captureEvents = (
+          stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            stream,
+            Stream.runForEach((msg) => parseAndStoreEventMessage(msg, messagesRef)),
+            Effect.forkScoped
+          );
 
-            const captureRawEvent = pipe(
-              clientTransport.subscribe(),
-              Effect.flatMap((stream) =>
-                pipe(
-                  stream,
-                  Stream.runForEach((msg) =>
-                    Effect.sync(() => {
-                      const parsed = JSON.parse(msg.payload) as ParsedMessage;
-                      if (parsed.type === 'event') {
-                        parsedMessages.push(parsed);
-                      }
-                    })
-                  ),
-                  Effect.forkScoped
-                )
-              )
+        const updateEventMessagesRef = (
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+          parsed: ParsedMessage
+        ) =>
+          pipe(
+            messagesRef,
+            Ref.update((messages) => [...messages, parsed])
+          );
+
+        const parseEventPayload = (msg: ReadonlyDeep<TransportMessage>) =>
+          Effect.sync(() => JSON.parse(msg.payload) as ParsedMessage);
+
+        const storeIfEvent = (
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>,
+          parsed: ParsedMessage
+        ) => (parsed.type === 'event' ? updateEventMessagesRef(messagesRef, parsed) : Effect.void);
+
+        const parseAndStoreEventMessage = (
+          msg: ReadonlyDeep<TransportMessage>,
+          messagesRef: Ref.Ref<readonly ParsedMessage[]>
+        ) =>
+          pipe(
+            msg,
+            parseEventPayload,
+            Effect.flatMap((parsed) => storeIfEvent(messagesRef, parsed))
+          );
+
+        const drainEventStream = (stream: Stream.Stream<Event, ProtocolValidationError, never>) =>
+          pipe(stream, Stream.runDrain, Effect.forkScoped);
+
+        const subscribeToTestStreamAndDrain = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            'test-stream',
+            subscribe,
+            Effect.flatMap(drainEventStream),
+            Effect.provide(ProtocolLive(clientTransport))
+          );
+
+        const subscribeAndDrainStream = (clientTransport: ReadonlyDeep<Client.Transport>) =>
+          pipe(
+            50,
+            Effect.sleep,
+            Effect.andThen(() => subscribeToTestStreamAndDrain(clientTransport))
+          );
+
+        const verifyEventContext = (messages: readonly ParsedMessage[]) =>
+          Effect.sync(() => {
+            expect(messages.length).toBeGreaterThan(0);
+            const eventMessage = messages[0]!;
+            expect(eventMessage.type).toBe('event');
+            expect(eventMessage.context).toBeDefined();
+            expect((eventMessage.context as { readonly traceId?: string }).traceId).toBeDefined();
+            expect((eventMessage.context as { readonly parentId?: string }).parentId).toBeDefined();
+            expect(typeof (eventMessage.context as { readonly traceId?: string }).traceId).toBe(
+              'string'
             );
-
-            const subscribeToStream = pipe(
-              Effect.sleep(50),
-              Effect.andThen(subscribe('test-stream')),
-              Effect.flatMap((stream) => pipe(stream, Stream.runDrain, Effect.forkScoped)),
-              Effect.provide(ProtocolLive(clientTransport))
+            expect(typeof (eventMessage.context as { readonly parentId?: string }).parentId).toBe(
+              'string'
             );
+            expect((eventMessage.context as { readonly traceId?: string }).traceId!.length).toBe(
+              32
+            );
+            expect((eventMessage.context as { readonly parentId?: string }).parentId!.length).toBe(
+              16
+            );
+          });
 
-            return pipe(
-              captureRawEvent,
+        const testEventHandler = () => [
+          createTestEvent('test-stream', 1, 'TestEvent', { test: 'data' }, new Date()),
+        ];
+
+        const sleep200ForEvent = pipe(200, Effect.sleep);
+
+        const runEventContextTest =
+          (messagesRef: Ref.Ref<readonly ParsedMessage[]>) =>
+          (server: ReadonlyDeep<InMemoryServer>, clientTransport: ReadonlyDeep<Client.Transport>) =>
+            pipe(
+              captureEventMessages(clientTransport, messagesRef),
               Effect.andThen(createTestServerProtocol(server, undefined, testEventHandler)),
-              Effect.andThen(subscribeToStream),
-              Effect.andThen(Effect.sleep(200)),
-              Effect.andThen(
-                Effect.sync(() => {
-                  expect(parsedMessages.length).toBeGreaterThan(0);
-                  const eventMessage = parsedMessages[0]!;
-                  expect(eventMessage.type).toBe('event');
-                  expect(eventMessage.context).toBeDefined();
-                  expect(
-                    (eventMessage.context as { readonly traceId?: string }).traceId
-                  ).toBeDefined();
-                  expect(
-                    (eventMessage.context as { readonly parentId?: string }).parentId
-                  ).toBeDefined();
-                  expect(
-                    typeof (eventMessage.context as { readonly traceId?: string }).traceId
-                  ).toBe('string');
-                  expect(
-                    typeof (eventMessage.context as { readonly parentId?: string }).parentId
-                  ).toBe('string');
-                  expect(
-                    (eventMessage.context as { readonly traceId?: string }).traceId!.length
-                  ).toBe(32);
-                  expect(
-                    (eventMessage.context as { readonly parentId?: string }).parentId!.length
-                  ).toBe(16);
-                })
-              )
+              Effect.andThen(subscribeAndDrainStream(clientTransport)),
+              Effect.andThen(sleep200ForEvent),
+              Effect.andThen(Ref.get(messagesRef)),
+              Effect.flatMap(verifyEventContext)
             );
-          }),
+
+        const setupAndRunEventContextTest = ({
+          server,
+          clientTransport,
+        }: {
+          readonly server: ReadonlyDeep<InMemoryServer>;
+          readonly clientTransport: ReadonlyDeep<Client.Transport>;
+        }) =>
+          pipe(
+            [],
+            (initial) => Ref.make<readonly ParsedMessage[]>(initial),
+            Effect.flatMap((messagesRef) =>
+              runEventContextTest(messagesRef)(server, clientTransport)
+            )
+          );
+
+        return pipe(
+          setupTestEnvironment,
+          Effect.flatMap(setupAndRunEventContextTest),
           Effect.scoped
-        )
-      );
+        );
+      });
     });
   });
 });

@@ -63,6 +63,15 @@ const currentTimestamp = () =>
   );
 
 // ============================================================================
+// OpenTelemetry Trace Context Schema
+// ============================================================================
+
+const TraceContext = Schema.Struct({
+  traceId: Schema.String,
+  parentId: Schema.String,
+});
+
+// ============================================================================
 // Wire Protocol Messages - What goes over the transport
 // ============================================================================
 
@@ -73,12 +82,14 @@ export const ProtocolCommand = Schema.Struct({
   target: Schema.String,
   name: Schema.String,
   payload: Schema.Unknown,
+  context: TraceContext,
 });
 export type ProtocolCommand = typeof ProtocolCommand.Type;
 
 export const ProtocolSubscribe = Schema.Struct({
   type: Schema.Literal('subscribe'),
   streamId: Schema.String,
+  context: TraceContext,
 });
 export type ProtocolSubscribe = typeof ProtocolSubscribe.Type;
 
@@ -93,6 +104,7 @@ export const ProtocolCommandResult = Schema.Struct({
   success: Schema.Boolean,
   position: Schema.optional(EventStreamPosition),
   error: Schema.optional(Schema.String),
+  context: TraceContext,
 });
 export type ProtocolCommandResult = typeof ProtocolCommandResult.Type;
 
@@ -103,6 +115,7 @@ export const ProtocolEvent = Schema.Struct({
   eventType: Schema.String,
   data: Schema.Unknown,
   timestamp: Schema.DateFromString,
+  context: TraceContext,
 });
 export type ProtocolEvent = typeof ProtocolEvent.Type;
 
@@ -312,6 +325,10 @@ const encodeProtocolCommand = (command: ReadonlyDeep<WireCommand>): ProtocolComm
   target: command.target,
   name: command.name,
   payload: command.payload,
+  context: {
+    traceId: crypto.randomUUID().replace(/-/g, ''),
+    parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+  },
 });
 
 const cleanupPendingCommand = (stateRef: Ref.Ref<ProtocolState>, commandId: string) =>
@@ -393,6 +410,10 @@ const createWireCommandSender =
 const encodeProtocolSubscribe = (streamId: string): ProtocolSubscribe => ({
   type: 'subscribe',
   streamId,
+  context: {
+    traceId: crypto.randomUUID().replace(/-/g, ''),
+    parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+  },
 });
 
 const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string) =>

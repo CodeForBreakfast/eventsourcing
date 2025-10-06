@@ -161,12 +161,20 @@ const buildResultMessage = (
       commandId,
       success: true,
       position: res.position,
+      context: {
+        traceId: crypto.randomUUID().replace(/-/g, ''),
+        parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+      },
     })),
     Match.tag('Failure', (res) => ({
       type: 'command_result' as const,
       commandId,
       success: false,
       error: JSON.stringify(res.error),
+      context: {
+        traceId: crypto.randomUUID().replace(/-/g, ''),
+        parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+      },
     })),
     Match.exhaustive
   );
@@ -205,6 +213,10 @@ const broadcastEventMessage = (
         eventType: event.type,
         data: event.data,
         timestamp: event.timestamp,
+        context: {
+          traceId: crypto.randomUUID().replace(/-/g, ''),
+          parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
+        },
       };
 
       return server.broadcast(
