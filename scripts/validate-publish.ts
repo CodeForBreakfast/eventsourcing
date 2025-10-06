@@ -1,91 +1,128 @@
 #!/usr/bin/env bun
 
-/**
- * Discovers packages that need publish validation based on git changes.
- * Outputs package names for use with Turbo filtering.
- * Does NOT perform validation - that's delegated to Turbo tasks.
- */
+import { Effect, pipe } from 'effect';
+import { Command, FileSystem, Path, Terminal } from '@effect/platform';
+import { BunContext, BunRuntime } from '@effect/platform-bun';
 
-import { readFileSync, readdirSync, existsSync } from 'fs';
-import { join, resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { execSync } from 'child_process';
+const rootDir = pipe(
+  Path.Path,
+  Effect.andThen((path) => path.resolve(import.meta.dir, '..'))
+);
 
-const __dirname = dirname(fileURLToPath(import.meta.url));
-const rootDir = resolve(__dirname, '..');
+const getAllPackages = pipe(
+  rootDir,
+  Effect.andThen((root) =>
+    pipe(
+      Path.Path,
+      Effect.andThen((path) => path.join(root, 'packages'))
+    )
+  ),
+  Effect.andThen((packagesDir) =>
+    pipe(
+      FileSystem.FileSystem,
+      Effect.andThen((fs) => fs.readDirectory(packagesDir)),
+      Effect.andThen((dirs) =>
+        pipe(
+          Effect.forEach(
+            dirs,
+            (dir) =>
+              pipe(
+                Path.Path,
+                Effect.andThen((path) => path.join(packagesDir, dir, 'package.json')),
+                Effect.andThen((packageJsonPath) =>
+                  pipe(
+                    FileSystem.FileSystem,
+                    Effect.andThen((fs) => fs.exists(packageJsonPath)),
+                    Effect.andThen((exists) =>
+                      exists
+                        ? pipe(
+                            FileSystem.FileSystem,
+                            Effect.andThen((fs) => fs.readFileString(packageJsonPath)),
+                            Effect.map((content) => {
+                              const pkg = JSON.parse(content) as { readonly name: string };
+                              return { name: pkg.name, directory: dir } as const;
+                            }),
+                            Effect.map((p) => [p] as const)
+                          )
+                        : Effect.succeed([] as const)
+                    )
+                  )
+                )
+              ),
+            { concurrency: 'unbounded' }
+          ),
+          Effect.map((results) => results.flat())
+        )
+      )
+    )
+  )
+);
 
-interface Package {
-  readonly name: string;
-  readonly directory: string;
-}
+const getBaseBranch = Effect.sync(() => {
+  const env = globalThis as { process?: { env?: Record<string, string> } };
+  return env.process?.env?.['GITHUB_BASE_REF'] ?? 'origin/main';
+});
 
-function getAllPackages(): readonly Package[] {
-  const packagesDir = join(rootDir, 'packages');
+const getChangedPackageNames = pipe(
+  Effect.all([rootDir, getBaseBranch]),
+  Effect.andThen(([root, baseBranch]) =>
+    pipe(
+      Command.make('git', 'diff', '--name-only', `${baseBranch}...HEAD`),
+      Command.workingDirectory(root),
+      Command.string,
+      Effect.map((output) =>
+        output
+          .split('\n')
+          .filter((f) => f.length > 0)
+          .reduce((acc, file) => {
+            const match = file.match(/^packages\/([^\/]+)\//);
+            if (match?.[1]) {
+              return new Set([...acc, match[1]]);
+            }
+            return acc;
+          }, new Set<string>())
+      ),
+      Effect.andThen((changedDirectories) =>
+        changedDirectories.size > 0
+          ? pipe(
+              getAllPackages,
+              Effect.map((allPackages) =>
+                allPackages
+                  .filter((pkg) => changedDirectories.has(pkg.directory))
+                  .map((pkg) => pkg.name)
+              )
+            )
+          : Effect.succeed([] as readonly string[])
+      ),
+      Effect.catchAll(() =>
+        pipe(
+          Terminal.Terminal,
+          Effect.andThen((terminal) =>
+            terminal.display('⚠️  Could not determine changed packages, validating all packages\n')
+          ),
+          Effect.andThen(() => getAllPackages),
+          Effect.map((packages) => packages.map((pkg) => pkg.name))
+        )
+      )
+    )
+  )
+);
 
-  const dirs = readdirSync(packagesDir);
-  return dirs
-    .map((dir) => {
-      const packageJsonPath = join(packagesDir, dir, 'package.json');
-      if (existsSync(packageJsonPath)) {
-        const content = readFileSync(packageJsonPath, 'utf-8');
-        const pkg = JSON.parse(content);
-        return {
-          name: pkg.name,
-          directory: dir,
-        };
-      }
-      return null;
-    })
-    .filter((pkg): pkg is Package => pkg !== null);
-}
+const displayPackages = (changedPackageNames: readonly string[]) =>
+  changedPackageNames.length === 0
+    ? pipe(
+        Terminal.Terminal,
+        Effect.andThen((terminal) => terminal.display('No changed packages detected\n'))
+      )
+    : pipe(
+        Terminal.Terminal,
+        Effect.andThen((terminal) =>
+          Effect.forEach(changedPackageNames, (pkg) => terminal.display(`${pkg}\n`), {
+            discard: true,
+          })
+        )
+      );
 
-function getChangedPackageNames(): readonly string[] {
-  try {
-    // Get changed files in this PR/commit
-    const baseBranch = process.env.GITHUB_BASE_REF || 'origin/main';
-    const output = execSync(`git diff --name-only ${baseBranch}...HEAD`, {
-      encoding: 'utf-8',
-      cwd: rootDir,
-    });
+const program = pipe(getChangedPackageNames, Effect.andThen(displayPackages));
 
-    const changedFiles = output.split('\n').filter((f) => f.length > 0);
-
-    // Identify which package directories have changes
-    const changedDirectories = changedFiles.reduce((acc, file) => {
-      const match = file.match(/^packages\/([^\/]+)\//);
-      if (match && match[1]) {
-        return new Set([...acc, match[1]]);
-      }
-      return acc;
-    }, new Set<string>());
-
-    // Convert directory names to package names
-    if (changedDirectories.size > 0) {
-      const allPackages = getAllPackages();
-      return allPackages
-        .filter((pkg) => changedDirectories.has(pkg.directory))
-        .map((pkg) => pkg.name);
-    }
-
-    return [];
-  } catch {
-    console.warn('⚠️  Could not determine changed packages, validating all packages');
-    // If we can't determine changes, validate everything
-    const packages = getAllPackages();
-    return packages.map((pkg) => pkg.name);
-  }
-}
-
-function main() {
-  const changedPackageNames = getChangedPackageNames();
-
-  if (changedPackageNames.length === 0) {
-    console.log('No changed packages detected');
-    return;
-  }
-
-  // Output package names for use with Turbo filtering
-  changedPackageNames.forEach((pkg) => console.log(pkg));
-}
-
-main();
+BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));

@@ -181,8 +181,6 @@ export default [
       // Allow runPromise/runSync in scripts as they are application entry points
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
-      // Scripts can use native platform APIs
-      'effect/prefer-effect-platform': 'off',
     },
   },
   {

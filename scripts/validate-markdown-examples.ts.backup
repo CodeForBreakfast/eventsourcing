@@ -1,24 +1,8 @@
 #!/usr/bin/env bun
 
 import { Effect, pipe, Array as EffectArray, Console, Option, Schema } from 'effect';
-import { Path, Command, Terminal } from '@effect/platform';
+import { FileSystem, Path, Command, Terminal } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
-import {
-  readdir as nodeReaddir,
-  readFile as nodeReadFile,
-  writeFile as nodeWriteFile,
-  mkdir as nodeMkdir,
-  rm as nodeRm,
-} from 'fs/promises';
-import { join as nodeJoin, relative as nodeRelative } from 'path';
-
-const join = nodeJoin;
-const relative = nodeRelative;
-const readdir = nodeReaddir;
-const readFile = nodeReadFile;
-const writeFile = nodeWriteFile;
-const mkdir = nodeMkdir;
-const rm = nodeRm;
 
 interface CodeBlock {
   readonly code: string;
@@ -308,12 +292,28 @@ const createSeparateTempFiles = (
   return pipe(tsConfigEffect, Effect.andThen(writeAllBlockFiles(blocks, tempDir)));
 };
 
-const typeCheckDirectory = (tempDir: string) =>
-  pipe(
-    Command.make('bun', 'tsc', '--project', tempDir, '--noEmit'),
-    Command.string,
-    Effect.flatMap((output) => (output.trim().length > 0 ? Effect.fail(output) : Effect.void))
+const handleTypeCheckResult = ([exitCode, stdoutText]: readonly [number, string]) =>
+  exitCode !== 0 ? Effect.fail(stdoutText) : Effect.void;
+
+const waitForTypeCheck = (proc: ReturnType<typeof Bun.spawn>) => {
+  const exitAndOutputEffect = Effect.all([
+    Effect.promise(() => proc.exited),
+    Effect.promise(() => new Response(proc.stdout as ReadableStream).text()),
+  ]);
+
+  return pipe(exitAndOutputEffect, Effect.flatMap(handleTypeCheckResult));
+};
+
+const typeCheckDirectory = (tempDir: string) => {
+  const spawnEffect = Effect.sync(() =>
+    Bun.spawn(['bun', 'tsc', '--project', tempDir, '--noEmit'], {
+      stderr: 'pipe',
+      stdout: 'pipe',
+    })
   );
+
+  return pipe(spawnEffect, Effect.flatMap(waitForTypeCheck));
+};
 
 const findBlockFileByFilename = (filename: string, blockFiles: readonly BlockFile[]) =>
   EffectArray.findFirst(blockFiles, (bf) => bf.filename === filename);
@@ -350,13 +350,7 @@ const processErrorLine = (
     findBlockFileByFilename(filename, blockFiles),
     Option.match({
       onNone: () => {
-        Effect.runSync(
-          pipe(
-            Terminal.Terminal,
-            Effect.andThen((t) => t.display(`⚠️  Could not find block file ${filename}\n`)),
-            Effect.provide(BunContext.layer)
-          )
-        );
+        console.warn(`⚠️  Could not find block file ${filename}`);
         return [];
       },
       onSome: (blockFile) => {
@@ -539,14 +533,10 @@ const runValidation = (packageDir: string, tempDir: string) => {
   );
 };
 
-const getValidationDirs = pipe(
-  Path.Path,
-  Effect.andThen((path) => path.resolve('.')),
-  Effect.map((cwd) => ({
-    packageDir: cwd,
-    tempDir: join(cwd, 'node_modules', '.cache', 'validate-docs'),
-  }))
-);
+const getValidationDirs = Effect.sync(() => ({
+  packageDir: process.cwd(),
+  tempDir: join(process.cwd(), 'node_modules', '.cache', 'validate-docs'),
+}));
 
 const validateMarkdownExamples = pipe(
   getValidationDirs,
@@ -560,4 +550,6 @@ const logErrorAndFail = (error: Readonly<Error>) => {
 
 const program = pipe(validateMarkdownExamples, Effect.catchAll(logErrorAndFail));
 
-BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));
+Effect.runPromise(program)
+  .then(() => process.exit(0))
+  .catch(() => process.exit(1));
