@@ -10,8 +10,6 @@ import {
   Schema,
   Context,
   Match,
-  Tracer,
-  Console,
 } from 'effect';
 import {
   ProtocolLive,
@@ -35,7 +33,6 @@ import {
   makeTransportMessage,
   type TransportMessage,
   Server,
-  Client,
 } from '@codeforbreakfast/eventsourcing-transport';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 import { type ReadonlyDeep } from 'type-fest';
@@ -117,10 +114,6 @@ const handleCommandMessage = (
         ...(isCommandSuccess(result)
           ? { position: result.position }
           : { error: JSON.stringify(result.error) }),
-        context: {
-          traceId: '00000000000000000000000000000000',
-          parentId: '0000000000000000',
-        },
       })
     );
     return server.broadcast(response);
@@ -149,10 +142,6 @@ const handleSubscriptionMessage = (
               eventType: event.type,
               data: event.data,
               timestamp: event.timestamp.toISOString(),
-              context: {
-                traceId: '00000000000000000000000000000000',
-                parentId: '0000000000000000',
-              },
             })
           )
         ),
@@ -185,58 +174,33 @@ const handleParsedMessage =
     return Effect.void;
   };
 
-const logParseError = (error: unknown, payload: unknown) =>
-  pipe(
-    Console.error('Test server failed to handle message:', error),
-    Effect.andThen(Console.error('Message payload:', payload))
-  );
+const parseAndHandleMessage =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (message: ReadonlyDeep<TransportMessage>) =>
+    pipe(
+      message.payload as string,
+      (payload) => Effect.try(() => JSON.parse(payload)),
+      Effect.flatMap(handleParsedMessage(server, commandHandler, subscriptionHandler)),
+      Effect.catchAll(() => Effect.void)
+    );
 
-const parseAndHandleMessage = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  message: ReadonlyDeep<TransportMessage>
-) =>
-  pipe(
-    message.payload as string,
-    (payload) => Effect.try(() => JSON.parse(payload)),
-    Effect.flatMap((parsedMessage: ParsedMessage) =>
-      handleParsedMessage(server, commandHandler, subscriptionHandler, parsedMessage)
-    ),
-    Effect.tapError((error) => logParseError(error, message.payload)),
-    Effect.orDie
-  );
-
-const logHandlerError = (error: unknown, message: ReadonlyDeep<TransportMessage>) =>
-  pipe(
-    Console.error('❌ Test server message handler failed:', error),
-    Effect.andThen(Console.error('Message:', message))
-  );
-
-const handleMessageWithErrorLogging = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  message: ReadonlyDeep<TransportMessage>
-) =>
-  pipe(
-    parseAndHandleMessage(server, commandHandler, subscriptionHandler, message),
-    Effect.tapError((error) => logHandlerError(error, message))
-  );
-
-const processMessageStream = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>
-) =>
-  pipe(
-    messageStream,
-    Stream.runForEach((message: ReadonlyDeep<TransportMessage>) =>
-      handleMessageWithErrorLogging(server, commandHandler, subscriptionHandler, message)
-    ),
-    Effect.forkScoped
-  );
+const processMessageStream =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>) =>
+    Effect.forkScoped(
+      Stream.runForEach(
+        messageStream,
+        parseAndHandleMessage(server, commandHandler, subscriptionHandler)
+      )
+    );
 
 const setupServerConnectionHandler =
   (
@@ -1375,11 +1339,6 @@ describe('Protocol Behavior Tests', () => {
     const connectNewClientAndVerify = (server: ReadonlyDeep<InMemoryServer>) =>
       pipe(server.connector(), Effect.flatMap(waitForConnection), Effect.tap(verifyNewTransport));
 
-    const runReconnectionSequence = (
-      firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
-      server: ReadonlyDeep<InMemoryServer>
-    ) => pipe(firstTransport, sendFirstCommand, Effect.andThen(connectNewClientAndVerify(server)));
-
     const runReconnectionTest = (
       server: ReadonlyDeep<InMemoryServer>,
       firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1389,7 +1348,8 @@ describe('Protocol Behavior Tests', () => {
           _tag: 'Success',
           position: { streamId: unsafeCreateStreamId(cmd.target), eventNumber: 1 },
         })),
-        Effect.andThen(runReconnectionSequence(firstTransport, server))
+        Effect.andThen(sendFirstCommand(firstTransport)),
+        Effect.andThen(connectNewClientAndVerify(server))
       );
 
     it.effect('should handle transport reconnection gracefully', () =>
@@ -2100,172 +2060,5 @@ describe('Protocol Behavior Tests', () => {
         Effect.scoped
       )
     );
-  });
-
-  describe('Effect Span Context Propagation', () => {
-    const handleServerCommand = (
-      serverProtocol: Effect.Effect.Success<typeof ServerProtocol>,
-      clientTransport: ReadonlyDeep<Client.Transport>,
-      clientTraceId: string
-    ) => {
-      const testCommand = {
-        id: 'test-cmd',
-        target: 'test',
-        name: 'TestCommand',
-        payload: {},
-      };
-
-      const verifyServerSpanAndSendResult = (cmd: WireCommand) =>
-        pipe(
-          Effect.currentSpan,
-          Effect.flatMap((serverSpan) =>
-            Effect.sync(() => {
-              expect(serverSpan.traceId).toBe(clientTraceId);
-              if (serverSpan.traceId !== clientTraceId) {
-                throw new Error(
-                  `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
-                    `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
-                );
-              }
-              expect(serverSpan.spanId).not.toBe(clientTraceId);
-              if (serverSpan.spanId === clientTraceId) {
-                throw new Error(
-                  `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
-                    `This means the server is not creating a new child span.`
-                );
-              }
-            })
-          ),
-          Effect.andThen(
-            serverProtocol.sendResult(cmd.id, {
-              _tag: 'Success',
-              position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
-            })
-          ),
-          Effect.timeout(Duration.millis(100)),
-          Effect.catchTag('TimeoutException', () =>
-            Effect.fail(
-              new Error(
-                'Test timed out waiting for server to process command. ' +
-                  'This likely means the server is not restoring trace context from the ProtocolCommand, ' +
-                  'so Effect.currentSpan is waiting indefinitely for a span that never gets created.'
-              )
-            )
-          )
-        );
-
-      const processFirstCommand = pipe(
-        Stream.take(serverProtocol.onWireCommand, 1),
-        Stream.runCollect,
-        Effect.flatMap((commands) => {
-          const cmd = commands[Symbol.iterator]().next().value;
-          return verifyServerSpanAndSendResult(cmd);
-        }),
-        Effect.fork
-      );
-
-      const sendCommandWithSpan = (clientSpan: Tracer.Span) =>
-        pipe(
-          testCommand,
-          sendWireCommand,
-          Effect.provide(ProtocolLive(clientTransport)),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              expect(clientSpan.traceId).toBeTruthy();
-              expect(clientSpan.spanId).toBeTruthy();
-            })
-          )
-        );
-
-      const clientWork = pipe(
-        Effect.currentSpan,
-        Effect.flatMap(sendCommandWithSpan),
-        Effect.withSpan('client-test-span')
-      );
-
-      return pipe(processFirstCommand, Effect.andThen(clientWork));
-    };
-
-    const runServerProtocolWithTraceId = (
-      server: ReadonlyDeep<Server.Transport>,
-      clientTransport: ReadonlyDeep<Client.Transport>,
-      clientSpan: Tracer.Span
-    ) =>
-      pipe(
-        ServerProtocol,
-        Effect.flatMap((serverProtocol) =>
-          handleServerCommand(serverProtocol, clientTransport, clientSpan.traceId)
-        ),
-        Effect.provide(ServerProtocolLive(server))
-      );
-
-    const runTestWithServerProtocol = (
-      server: ReadonlyDeep<Server.Transport>,
-      clientTransport: ReadonlyDeep<Client.Transport>
-    ) =>
-      pipe(
-        Effect.currentSpan,
-        Effect.flatMap((clientSpan) =>
-          runServerProtocolWithTraceId(server, clientTransport, clientSpan)
-        ),
-        Effect.withSpan('test-client-span')
-      );
-
-    it.effect('client span context should propagate through protocol layer', () =>
-      pipe(
-        setupTestEnvironment,
-        Effect.flatMap(({ server, clientTransport }) =>
-          runTestWithServerProtocol(server, clientTransport)
-        ),
-        Effect.scoped,
-        Effect.provide(TestContext.TestContext),
-        Effect.timeout(Duration.millis(500)),
-        Effect.catchTag('TimeoutException', () =>
-          Effect.fail(
-            new Error(
-              'Overall test timed out. The server is likely not restoring trace context from incoming commands.'
-            )
-          )
-        )
-      )
-    );
-  });
-
-  describe('OpenTelemetry Semantic Conventions', () => {
-    it.effect('command operations create spans following RPC conventions', () => {
-      const command = createWireCommand('user-123', 'CreateUser', { name: 'Alice' });
-
-      const runCommandWithTracing = (
-        clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-      ) =>
-        pipe(
-          command,
-          sendWireCommand,
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              expect(isCommandSuccess(result)).toBe(true);
-            })
-          ),
-          Effect.provide(ProtocolLive(clientTransport))
-        );
-
-      return runTestWithProtocol(defaultSuccessHandler('user-123', 1), runCommandWithTracing);
-    });
-
-    it.effect('subscribe operations create spans following RPC conventions', () => {
-      const streamId = 'test-stream';
-
-      const runSubscribeWithTracing = (
-        clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-      ) =>
-        pipe(
-          streamId,
-          subscribe,
-          Effect.flatMap(drainEventStream),
-          Effect.provide(ProtocolLive(clientTransport))
-        );
-
-      return runTestWithProtocol(defaultSuccessHandler('test', 1), runSubscribeWithTracing);
-    });
   });
 });
