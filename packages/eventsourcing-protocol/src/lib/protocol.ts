@@ -63,6 +63,15 @@ const currentTimestamp = () =>
   );
 
 // ============================================================================
+// OpenTelemetry Trace Context Schema
+// ============================================================================
+
+const TraceContext = Schema.Struct({
+  traceId: Schema.String,
+  parentId: Schema.String,
+});
+
+// ============================================================================
 // Wire Protocol Messages - What goes over the transport
 // ============================================================================
 
@@ -73,12 +82,14 @@ export const ProtocolCommand = Schema.Struct({
   target: Schema.String,
   name: Schema.String,
   payload: Schema.Unknown,
+  context: TraceContext,
 });
 export type ProtocolCommand = typeof ProtocolCommand.Type;
 
 export const ProtocolSubscribe = Schema.Struct({
   type: Schema.Literal('subscribe'),
   streamId: Schema.String,
+  context: TraceContext,
 });
 export type ProtocolSubscribe = typeof ProtocolSubscribe.Type;
 
@@ -93,6 +104,7 @@ export const ProtocolCommandResult = Schema.Struct({
   success: Schema.Boolean,
   position: Schema.optional(EventStreamPosition),
   error: Schema.optional(Schema.String),
+  context: TraceContext,
 });
 export type ProtocolCommandResult = typeof ProtocolCommandResult.Type;
 
@@ -103,6 +115,7 @@ export const ProtocolEvent = Schema.Struct({
   eventType: Schema.String,
   data: Schema.Unknown,
   timestamp: Schema.DateFromString,
+  context: TraceContext,
 });
 export type ProtocolEvent = typeof ProtocolEvent.Type;
 
@@ -293,12 +306,26 @@ const handleMessage =
       Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
     );
 
-const encodeProtocolCommand = (command: ReadonlyDeep<WireCommand>): ProtocolCommand => ({
-  type: 'command',
+const extractSpanContext = () =>
+  pipe(
+    Effect.currentSpan,
+    Effect.map((span) => ({
+      traceId: span.traceId,
+      parentId: span.spanId,
+    })),
+    Effect.orDie
+  );
+
+const encodeProtocolCommand = (
+  command: ReadonlyDeep<WireCommand>,
+  context: { readonly traceId: string; readonly parentId: string }
+): ProtocolCommand => ({
+  type: 'command' as const,
   id: command.id,
   target: command.target,
   name: command.name,
   payload: command.payload,
+  context,
 });
 
 const cleanupPendingCommand = (stateRef: Ref.Ref<ProtocolState>, commandId: string) =>
@@ -320,21 +347,40 @@ const registerPendingCommand = (
     Effect.as(deferred)
   );
 
-const publishCommandToTransport = (
+const encodeAndPublishCommand = (
   transport: ReadonlyDeep<Client.Transport>,
-  command: ReadonlyDeep<WireCommand>
+  command: ReadonlyDeep<WireCommand>,
+  timestamp: ReadonlyDeep<Date>
 ) =>
   pipe(
-    currentTimestamp(),
-    Effect.map((timestamp) => {
-      const wireMessage = encodeProtocolCommand(command);
+    extractSpanContext(),
+    Effect.flatMap((context) => {
+      const wireMessage = encodeProtocolCommand(command, context);
       return transport.publish(
         makeTransportMessage(command.id, 'command', JSON.stringify(wireMessage), {
           timestamp: timestamp.toISOString(),
         })
       );
     }),
-    Effect.flatten
+    Effect.withSpan(`eventsourcing.Protocol/${command.name}`, {
+      kind: 'client',
+      attributes: {
+        'rpc.system': 'eventsourcing',
+        'rpc.service': 'eventsourcing.Protocol',
+        'rpc.method': command.name,
+        'messaging.message.id': command.id,
+        'messaging.destination.name': command.target,
+      },
+    })
+  );
+
+const publishCommandToTransport = (
+  transport: ReadonlyDeep<Client.Transport>,
+  command: ReadonlyDeep<WireCommand>
+) =>
+  pipe(
+    currentTimestamp(),
+    Effect.flatMap((timestamp) => encodeAndPublishCommand(transport, command, timestamp))
   );
 
 const awaitCommandResultWithTimeout = (
@@ -378,9 +424,13 @@ const createWireCommandSender =
       Effect.flatMap(executeWireCommand(stateRef, transport, command))
     );
 
-const encodeProtocolSubscribe = (streamId: string): ProtocolSubscribe => ({
-  type: 'subscribe',
+const encodeProtocolSubscribe = (
+  streamId: string,
+  context: { readonly traceId: string; readonly parentId: string }
+): ProtocolSubscribe => ({
+  type: 'subscribe' as const,
   streamId,
+  context,
 });
 
 const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string) =>
@@ -389,18 +439,36 @@ const cleanupSubscription = (stateRef: Ref.Ref<ProtocolState>, streamId: string)
     subscriptions: HashMap.remove(state.subscriptions, streamId),
   }));
 
-const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
+const encodeAndPublishSubscribe = (
+  transport: ReadonlyDeep<Client.Transport>,
+  streamId: string,
+  timestamp: ReadonlyDeep<Date>
+) =>
   pipe(
-    currentTimestamp(),
-    Effect.map((timestamp) => {
-      const wireMessage = encodeProtocolSubscribe(streamId);
+    extractSpanContext(),
+    Effect.flatMap((context) => {
+      const wireMessage = encodeProtocolSubscribe(streamId, context);
       return transport.publish(
         makeTransportMessage(crypto.randomUUID(), 'subscribe', JSON.stringify(wireMessage), {
           timestamp: timestamp.toISOString(),
         })
       );
     }),
-    Effect.flatten
+    Effect.withSpan('eventsourcing.Protocol/Subscribe', {
+      kind: 'client',
+      attributes: {
+        'rpc.system': 'eventsourcing',
+        'rpc.service': 'eventsourcing.Protocol',
+        'rpc.method': 'Subscribe',
+        'messaging.destination.name': streamId,
+      },
+    })
+  );
+
+const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
+  pipe(
+    currentTimestamp(),
+    Effect.flatMap((timestamp) => encodeAndPublishSubscribe(transport, streamId, timestamp))
   );
 
 const createSubscriptionStream = (

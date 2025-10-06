@@ -70,9 +70,9 @@ const displayValidationFailure = pipe(
   Effect.andThen(() => Effect.fail('Package validation failed'))
 );
 
-const runTurboValidation = (root: string, filterArgs: string) =>
+const runTurboValidation = (root: string, filterArgs: readonly string[]) =>
   pipe(
-    Command.make('bunx', 'turbo', 'run', 'validate:pack', filterArgs),
+    Command.make('bunx', 'turbo', 'run', 'validate:pack', ...filterArgs),
     Command.workingDirectory(root),
     Command.exitCode,
     Effect.andThen((exitCode) =>
@@ -86,7 +86,7 @@ const runValidationForPackages = (packages: readonly string[]) =>
     Effect.andThen(displayPackageList(packages)),
     Effect.andThen(() => rootDir),
     Effect.andThen((root) => {
-      const filterArgs = packages.map((pkg) => `--filter=${pkg}`).join(' ');
+      const filterArgs = packages.map((pkg) => `--filter=${pkg}`);
       return runTurboValidation(root, filterArgs);
     })
   );
