@@ -3,11 +3,6 @@ name: Manual Publish with NPM Token
 
 on:
   workflow_dispatch:
-    inputs:
-      reason:
-        description: 'Reason for manual publish (e.g., first-time package publish)'
-        required: true
-        type: string
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -40,8 +35,6 @@ jobs:
       - name: Summary
         run: |
           echo "## Manual Publish Complete" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Reason:** ${{ inputs.reason }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "Packages were published using NPM_TOKEN authentication." >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
