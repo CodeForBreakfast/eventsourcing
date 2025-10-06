@@ -26,10 +26,15 @@ jobs:
       - name: Build packages
         run: bun run build
 
+      - name: Configure npm authentication
+        run: |
+          cat << EOF > "$HOME/.npmrc"
+          //registry.npmjs.org/:_authToken=\${NODE_AUTH_TOKEN}
+          EOF
+
       - name: Publish to npm
         run: bunx changeset publish
         env:
-          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
 
       - name: Summary
