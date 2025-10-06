@@ -246,7 +246,10 @@ const executePackageValidation = (root: string, packagesToValidate: readonly str
 const validatePackages = (packagesToValidate: readonly string[]) =>
   packagesToValidate.length === 0
     ? displayNoPackagesValidation
-    : pipe(rootDir, Effect.andThen(executePackageValidation(packagesToValidate)));
+    : pipe(
+        rootDir,
+        Effect.flatMap((root) => executePackageValidation(root, packagesToValidate))
+      );
 
 const program = pipe(
   validateChangesets,
