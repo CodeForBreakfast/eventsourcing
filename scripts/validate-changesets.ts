@@ -304,9 +304,17 @@ const hasCodeChanges = (changedFiles: readonly string[]): boolean => {
   });
 };
 
+const toStringOutput = (value: unknown): string => {
+  if (typeof value === 'string') return value;
+  if (value instanceof Uint8Array) return new TextDecoder().decode(value);
+  return '';
+};
+
 const extractUnpublishablePackages = (error: unknown): readonly string[] => {
-  const errorWithOutput = error as { readonly stdout?: string; readonly stderr?: string };
-  const output = errorWithOutput.stdout || errorWithOutput.stderr || '';
+  const errorWithOutput = error as { readonly stdout?: unknown; readonly stderr?: unknown };
+  const stdout = toStringOutput(errorWithOutput.stdout);
+  const stderr = toStringOutput(errorWithOutput.stderr);
+  const output = stdout || stderr;
   const lines = output.split('\n');
   return lines.reduce<readonly string[]>((unpublishable, line) => {
     if (!line.includes('check:publishable') || !line.includes('FAILED')) {

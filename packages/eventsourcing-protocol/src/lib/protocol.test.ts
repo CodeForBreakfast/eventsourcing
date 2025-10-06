@@ -11,6 +11,7 @@ import {
   Context,
   Match,
   Tracer,
+  Console,
 } from 'effect';
 import {
   ProtocolLive,
@@ -179,6 +180,12 @@ const handleParsedMessage = (
   return Effect.void;
 };
 
+const logParseError = (error: unknown, payload: unknown) =>
+  pipe(
+    Console.error('Test server failed to handle message:', error),
+    Effect.andThen(Console.error('Message payload:', payload))
+  );
+
 const parseAndHandleMessage = (
   server: ReadonlyDeep<InMemoryServer>,
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
@@ -191,13 +198,14 @@ const parseAndHandleMessage = (
     Effect.flatMap((parsedMessage: ParsedMessage) =>
       handleParsedMessage(server, commandHandler, subscriptionHandler, parsedMessage)
     ),
-    Effect.tapError((error) =>
-      Effect.sync(() => {
-        console.error('Test server failed to handle message:', error);
-        console.error('Message payload:', message.payload);
-      })
-    ),
+    Effect.tapError((error) => logParseError(error, message.payload)),
     Effect.orDie
+  );
+
+const logHandlerError = (error: unknown, message: ReadonlyDeep<TransportMessage>) =>
+  pipe(
+    Console.error('❌ Test server message handler failed:', error),
+    Effect.andThen(Console.error('Message:', message))
   );
 
 const handleMessageWithErrorLogging = (
@@ -208,12 +216,7 @@ const handleMessageWithErrorLogging = (
 ) =>
   pipe(
     parseAndHandleMessage(server, commandHandler, subscriptionHandler, message),
-    Effect.tapError((error) =>
-      Effect.sync(() => {
-        console.error('❌ Test server message handler failed:', error);
-        console.error('Message:', message);
-      })
-    )
+    Effect.tapError((error) => logHandlerError(error, message))
   );
 
 const processMessageStream = (
