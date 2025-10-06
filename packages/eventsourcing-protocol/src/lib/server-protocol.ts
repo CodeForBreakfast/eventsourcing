@@ -8,7 +8,6 @@ import {
   HashMap,
   pipe,
   Option,
-  Either,
   Match,
   Scope,
   Clock,
@@ -150,26 +149,14 @@ const processIncomingMessage =
       Effect.catchAll(() => Effect.void)
     );
 
-const extractCurrentSpanContext = (): Effect.Effect<
-  { readonly traceId: string; readonly parentId: string },
-  never,
-  never
-> =>
+const extractSpanContext = () =>
   pipe(
     Effect.currentSpan,
-    Effect.either,
-    Effect.map(
-      Either.match({
-        onLeft: () => ({
-          traceId: crypto.randomUUID().replace(/-/g, ''),
-          parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-        }),
-        onRight: (span) => ({
-          traceId: span.traceId,
-          parentId: span.spanId,
-        }),
-      })
-    )
+    Effect.map((span) => ({
+      traceId: span.traceId,
+      parentId: span.spanId,
+    })),
+    Effect.orDie
   );
 
 const createResultMessageWithContext = (
@@ -210,7 +197,7 @@ const buildAndBroadcastResult = (
   timestamp: ReadonlyDeep<Date>
 ) =>
   pipe(
-    extractCurrentSpanContext(),
+    extractSpanContext(),
     Effect.flatMap((context) => {
       const resultMessage = buildResultMessage(commandId, result, context);
       return server.broadcast(
@@ -218,7 +205,8 @@ const buildAndBroadcastResult = (
           timestamp: timestamp.toISOString(),
         })
       );
-    })
+    }),
+    Effect.withSpan('server-protocol.send-result', { attributes: { commandId } })
   );
 
 const createResultSender =
@@ -262,8 +250,11 @@ const broadcastEventWithContext = (
   timestamp: ReadonlyDeep<Date>
 ) =>
   pipe(
-    extractCurrentSpanContext(),
-    Effect.flatMap((context) => buildAndBroadcastEvent(server, event, timestamp, context))
+    extractSpanContext(),
+    Effect.flatMap((context) => buildAndBroadcastEvent(server, event, timestamp, context)),
+    Effect.withSpan('server-protocol.publish-event', {
+      attributes: { streamId: String(event.streamId), eventType: event.type },
+    })
   );
 
 const broadcastEventMessage = (

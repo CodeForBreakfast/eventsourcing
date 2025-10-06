@@ -10,7 +10,6 @@ import {
   Data,
   pipe,
   Option,
-  Either,
   Layer,
   Scope,
   Match,
@@ -320,26 +319,14 @@ const handleMessage =
       Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
     );
 
-const extractCurrentSpanContext = (): Effect.Effect<
-  { readonly traceId: string; readonly parentId: string },
-  never,
-  never
-> =>
+const extractSpanContext = () =>
   pipe(
     Effect.currentSpan,
-    Effect.either,
-    Effect.map(
-      Either.match({
-        onLeft: () => ({
-          traceId: crypto.randomUUID().replace(/-/g, ''),
-          parentId: crypto.randomUUID().replace(/-/g, '').slice(0, 16),
-        }),
-        onRight: (span) => ({
-          traceId: span.traceId,
-          parentId: span.spanId,
-        }),
-      })
-    )
+    Effect.map((span) => ({
+      traceId: span.traceId,
+      parentId: span.spanId,
+    })),
+    Effect.orDie
   );
 
 const encodeProtocolCommand = (
@@ -379,7 +366,7 @@ const encodeAndPublishCommand = (
   timestamp: ReadonlyDeep<Date>
 ) =>
   pipe(
-    extractCurrentSpanContext(),
+    extractSpanContext(),
     Effect.flatMap((context) => {
       const wireMessage = encodeProtocolCommand(command, context);
       return transport.publish(
@@ -387,7 +374,8 @@ const encodeAndPublishCommand = (
           timestamp: timestamp.toISOString(),
         })
       );
-    })
+    }),
+    Effect.withSpan('protocol.send-command')
   );
 
 const publishCommandToTransport = (
@@ -460,7 +448,7 @@ const encodeAndPublishSubscribe = (
   timestamp: ReadonlyDeep<Date>
 ) =>
   pipe(
-    extractCurrentSpanContext(),
+    extractSpanContext(),
     Effect.flatMap((context) => {
       const wireMessage = encodeProtocolSubscribe(streamId, context);
       return transport.publish(
@@ -468,7 +456,8 @@ const encodeAndPublishSubscribe = (
           timestamp: timestamp.toISOString(),
         })
       );
-    })
+    }),
+    Effect.withSpan('protocol.subscribe', { attributes: { streamId } })
   );
 
 const publishSubscribeMessage = (transport: ReadonlyDeep<Client.Transport>, streamId: string) =>

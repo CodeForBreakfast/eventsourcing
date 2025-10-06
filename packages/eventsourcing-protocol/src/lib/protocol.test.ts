@@ -22,7 +22,6 @@ import {
 import {
   WireCommand,
   CommandResult,
-  CommandSuccess,
   isCommandSuccess,
   isCommandFailure,
 } from '@codeforbreakfast/eventsourcing-commands';
@@ -117,6 +116,10 @@ const handleCommandMessage = (
         ...(isCommandSuccess(result)
           ? { position: result.position }
           : { error: JSON.stringify(result.error) }),
+        context: {
+          traceId: '00000000000000000000000000000000',
+          parentId: '0000000000000000',
+        },
       })
     );
     return server.broadcast(response);
@@ -145,6 +148,10 @@ const handleSubscriptionMessage = (
               eventType: event.type,
               data: event.data,
               timestamp: event.timestamp.toISOString(),
+              context: {
+                traceId: '00000000000000000000000000000000',
+                parentId: '0000000000000000',
+              },
             })
           )
         ),
@@ -184,7 +191,29 @@ const parseAndHandleMessage = (
     Effect.flatMap((parsedMessage: ParsedMessage) =>
       handleParsedMessage(server, commandHandler, subscriptionHandler, parsedMessage)
     ),
-    Effect.catchAll(() => Effect.void)
+    Effect.tapError((error) =>
+      Effect.sync(() => {
+        console.error('Test server failed to handle message:', error);
+        console.error('Message payload:', message.payload);
+      })
+    ),
+    Effect.orDie
+  );
+
+const handleMessageWithErrorLogging = (
+  server: ReadonlyDeep<InMemoryServer>,
+  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+  subscriptionHandler: (streamId: string) => readonly Event[],
+  message: ReadonlyDeep<TransportMessage>
+) =>
+  pipe(
+    parseAndHandleMessage(server, commandHandler, subscriptionHandler, message),
+    Effect.tapError((error) =>
+      Effect.sync(() => {
+        console.error('❌ Test server message handler failed:', error);
+        console.error('Message:', message);
+      })
+    )
   );
 
 const processMessageStream = (
@@ -193,10 +222,12 @@ const processMessageStream = (
   subscriptionHandler: (streamId: string) => readonly Event[],
   messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>
 ) =>
-  Effect.forkScoped(
-    Stream.runForEach(messageStream, (message: ReadonlyDeep<TransportMessage>) =>
-      parseAndHandleMessage(server, commandHandler, subscriptionHandler, message)
-    )
+  pipe(
+    messageStream,
+    Stream.runForEach((message: ReadonlyDeep<TransportMessage>) =>
+      handleMessageWithErrorLogging(server, commandHandler, subscriptionHandler, message)
+    ),
+    Effect.forkScoped
   );
 
 const setupServerConnectionHandler = (
@@ -1348,6 +1379,11 @@ describe('Protocol Behavior Tests', () => {
     const connectNewClientAndVerify = (server: ReadonlyDeep<InMemoryServer>) =>
       pipe(server.connector(), Effect.flatMap(waitForConnection), Effect.tap(verifyNewTransport));
 
+    const runReconnectionSequence = (
+      firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
+      server: ReadonlyDeep<InMemoryServer>
+    ) => pipe(firstTransport, sendFirstCommand, Effect.andThen(connectNewClientAndVerify(server)));
+
     const runReconnectionTest = (
       server: ReadonlyDeep<InMemoryServer>,
       firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1357,8 +1393,7 @@ describe('Protocol Behavior Tests', () => {
           _tag: 'Success',
           position: { streamId: unsafeCreateStreamId(cmd.target), eventNumber: 1 },
         })),
-        Effect.andThen(sendFirstCommand(firstTransport)),
-        Effect.andThen(connectNewClientAndVerify(server))
+        Effect.andThen(runReconnectionSequence(firstTransport, server))
       );
 
     it.effect('should handle transport reconnection gracefully', () =>
@@ -2078,7 +2113,8 @@ describe('Protocol Behavior Tests', () => {
   describe('Effect Span Context Propagation', () => {
     const handleServerCommand = (
       serverProtocol: Effect.Effect.Success<typeof ServerProtocol>,
-      clientTransport: ReadonlyDeep<Client.Transport>
+      clientTransport: ReadonlyDeep<Client.Transport>,
+      clientTraceId: string
     ) => {
       const testCommand = {
         id: 'test-cmd',
@@ -2087,16 +2123,51 @@ describe('Protocol Behavior Tests', () => {
         payload: {},
       };
 
+      const verifyServerSpanAndSendResult = (cmd: WireCommand) =>
+        pipe(
+          Effect.currentSpan,
+          Effect.flatMap((serverSpan) =>
+            Effect.sync(() => {
+              expect(serverSpan.traceId).toBe(clientTraceId);
+              if (serverSpan.traceId !== clientTraceId) {
+                throw new Error(
+                  `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
+                    `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
+                );
+              }
+              expect(serverSpan.spanId).not.toBe(clientTraceId);
+              if (serverSpan.spanId === clientTraceId) {
+                throw new Error(
+                  `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
+                    `This means the server is not creating a new child span.`
+                );
+              }
+            })
+          ),
+          Effect.andThen(
+            serverProtocol.sendResult(cmd.id, {
+              _tag: 'Success',
+              position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
+            })
+          ),
+          Effect.timeout(Duration.millis(100)),
+          Effect.catchTag('TimeoutException', () =>
+            Effect.fail(
+              new Error(
+                'Test timed out waiting for server to process command. ' +
+                  'This likely means the server is not restoring trace context from the ProtocolCommand, ' +
+                  'so Effect.currentSpan is waiting indefinitely for a span that never gets created.'
+              )
+            )
+          )
+        );
+
       const processFirstCommand = pipe(
         Stream.take(serverProtocol.onWireCommand, 1),
         Stream.runCollect,
         Effect.flatMap((commands) => {
           const cmd = commands[Symbol.iterator]().next().value;
-          const successResult: CommandSuccess = {
-            _tag: 'Success',
-            position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
-          };
-          return serverProtocol.sendResult(cmd.id, successResult);
+          return verifyServerSpanAndSendResult(cmd);
         }),
         Effect.fork
       );
@@ -2123,14 +2194,29 @@ describe('Protocol Behavior Tests', () => {
       return pipe(processFirstCommand, Effect.andThen(clientWork));
     };
 
+    const runServerProtocolWithTraceId = (
+      server: ReadonlyDeep<Server.Transport>,
+      clientTransport: ReadonlyDeep<Client.Transport>,
+      clientSpan: Tracer.Span
+    ) =>
+      pipe(
+        ServerProtocol,
+        Effect.flatMap((serverProtocol) =>
+          handleServerCommand(serverProtocol, clientTransport, clientSpan.traceId)
+        ),
+        Effect.provide(ServerProtocolLive(server))
+      );
+
     const runTestWithServerProtocol = (
       server: ReadonlyDeep<Server.Transport>,
       clientTransport: ReadonlyDeep<Client.Transport>
     ) =>
       pipe(
-        ServerProtocol,
-        Effect.flatMap((serverProtocol) => handleServerCommand(serverProtocol, clientTransport)),
-        Effect.provide(ServerProtocolLive(server))
+        Effect.currentSpan,
+        Effect.flatMap((clientSpan) =>
+          runServerProtocolWithTraceId(server, clientTransport, clientSpan)
+        ),
+        Effect.withSpan('test-client-span')
       );
 
     it.effect('client span context should propagate through protocol layer', () =>
@@ -2140,7 +2226,15 @@ describe('Protocol Behavior Tests', () => {
           runTestWithServerProtocol(server, clientTransport)
         ),
         Effect.scoped,
-        Effect.provide(TestContext.TestContext)
+        Effect.provide(TestContext.TestContext),
+        Effect.timeout(Duration.millis(500)),
+        Effect.catchTag('TimeoutException', () =>
+          Effect.fail(
+            new Error(
+              'Overall test timed out. The server is likely not restoring trace context from incoming commands.'
+            )
+          )
+        )
       )
     );
   });
