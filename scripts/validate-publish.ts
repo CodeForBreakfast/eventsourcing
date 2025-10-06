@@ -41,47 +41,36 @@ const parsePackageJson = (content: string) => {
   return { name: pkg.name, directory: '' };
 };
 
-const buildPackageMetadata = (content: string, dir: string) => {
+const buildPackageMetadata = (dir: string) => (content: string) => {
   const pkgData = parsePackageJson(content);
   return [{ name: pkgData.name, directory: dir }];
 };
 
-const readPackageMetadataIfExists = (exists: boolean, packageJsonPath: string, dir: string) =>
+const readPackageMetadataIfExists = (packageJsonPath: string, dir: string) => (exists: boolean) =>
   exists
-    ? pipe(
-        packageJsonPath,
-        readFileAsString,
-        Effect.map((content) => buildPackageMetadata(content, dir))
-      )
+    ? pipe(packageJsonPath, readFileAsString, Effect.map(buildPackageMetadata(dir)))
     : Effect.succeed([]);
 
-const checkExistsAndRead = (packageJsonPath: string, dir: string) =>
+const checkExistsAndRead = (dir: string) => (packageJsonPath: string) =>
   pipe(
     packageJsonPath,
     checkFileExists,
-    Effect.andThen((exists) => readPackageMetadataIfExists(exists, packageJsonPath, dir))
+    Effect.andThen(readPackageMetadataIfExists(packageJsonPath, dir))
   );
 
-const readPackageMetadata = (packagesDir: string, dir: string) =>
-  pipe(
-    joinToPath(packagesDir, dir, 'package.json'),
-    Effect.andThen((packageJsonPath) => checkExistsAndRead(packageJsonPath, dir))
-  );
+const readPackageMetadata = (packagesDir: string) => (dir: string) =>
+  pipe(joinToPath(packagesDir, dir, 'package.json'), Effect.andThen(checkExistsAndRead(dir)));
 
-const processPackageDirectories = (dirs: ReadonlyArray<string>, packagesDir: string) =>
+const processPackageDirectories = (packagesDir: string) => (dirs: ReadonlyArray<string>) =>
   pipe(
-    Effect.forEach(dirs, (dir) => readPackageMetadata(packagesDir, dir), {
+    Effect.forEach(dirs, readPackageMetadata(packagesDir), {
       concurrency: 'unbounded',
     }),
     Effect.map((results) => results.flat())
   );
 
 const readAndProcessPackages = (packagesDir: string) =>
-  pipe(
-    packagesDir,
-    readDirectoryContents,
-    Effect.andThen((dirs) => processPackageDirectories(dirs, packagesDir))
-  );
+  pipe(packagesDir, readDirectoryContents, Effect.andThen(processPackageDirectories(packagesDir)));
 
 const getAllPackages = pipe(
   rootDir,
@@ -116,17 +105,14 @@ const runGitDiffCommand = (root: string, baseBranch: string) =>
     Effect.map(extractChangedDirectories)
   );
 
-const filterPackagesByDirectory = (
-  allPackages: ReadonlyArray<{ readonly name: string; readonly directory: string }>,
-  changedDirectories: ReadonlySet<string>
-) => allPackages.filter((pkg) => changedDirectories.has(pkg.directory)).map((pkg) => pkg.name);
+const filterPackagesByDirectory =
+  (changedDirectories: ReadonlySet<string>) =>
+  (allPackages: ReadonlyArray<{ readonly name: string; readonly directory: string }>) =>
+    allPackages.filter((pkg) => changedDirectories.has(pkg.directory)).map((pkg) => pkg.name);
 
 const getPackagesForChangedDirs = (changedDirectories: ReadonlySet<string>) =>
   changedDirectories.size > 0
-    ? pipe(
-        getAllPackages,
-        Effect.map((allPackages) => filterPackagesByDirectory(allPackages, changedDirectories))
-      )
+    ? pipe(getAllPackages, Effect.map(filterPackagesByDirectory(changedDirectories)))
     : Effect.succeed([]);
 
 const displayWarningAndGetAllPackages = pipe(
@@ -138,7 +124,7 @@ const displayWarningAndGetAllPackages = pipe(
   Effect.map((packages) => packages.map((pkg) => pkg.name))
 );
 
-const processGitDiffResult = (root: string, baseBranch: string) =>
+const processGitDiffResult = (root: string) => (baseBranch: string) =>
   pipe(
     runGitDiffCommand(root, baseBranch),
     Effect.andThen(getPackagesForChangedDirs),
@@ -146,10 +132,7 @@ const processGitDiffResult = (root: string, baseBranch: string) =>
   );
 
 const combineRootWithBaseBranch = (root: string) =>
-  pipe(
-    getBaseBranch,
-    Effect.andThen((baseBranch) => processGitDiffResult(root, baseBranch))
-  );
+  pipe(getBaseBranch, Effect.andThen(processGitDiffResult(root)));
 
 const getChangedPackageNames = pipe(rootDir, Effect.andThen(combineRootWithBaseBranch));
 

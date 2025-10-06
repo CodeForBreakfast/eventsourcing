@@ -43,7 +43,7 @@ const displayNoPackagesMessage = pipe(
   Effect.as(undefined)
 );
 
-const displayPackageList = (packages: readonly string[], terminal: Terminal.Terminal) => {
+const displayPackageList = (packages: readonly string[]) => (terminal: Terminal.Terminal) => {
   const displayPackageCount = terminal.display(
     `📦 Found ${packages.length} package(s) to validate:\n`
   );
@@ -83,7 +83,7 @@ const runTurboValidation = (root: string, filterArgs: string) =>
 const runValidationForPackages = (packages: readonly string[]) =>
   pipe(
     Terminal.Terminal,
-    Effect.andThen((terminal) => displayPackageList(packages, terminal)),
+    Effect.andThen(displayPackageList(packages)),
     Effect.andThen(() => rootDir),
     Effect.andThen((root) => {
       const filterArgs = packages.map((pkg) => `--filter=${pkg}`).join(' ');

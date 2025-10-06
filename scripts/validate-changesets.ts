@@ -64,11 +64,15 @@ const readPackageIfExists = (
   return pipe(packagePath, fs.exists, Effect.flatMap(checkAndReadPackage(fs, packagePath)));
 };
 
+const readPackage =
+  (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) => (dir: string) =>
+    readPackageIfExists(fs, path, packagesDir, dir);
+
 const readAllPackageDirectories =
   (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) => (dirs: readonly string[]) =>
     pipe(
       dirs,
-      EffectArray.map((dir) => readPackageIfExists(fs, path, packagesDir, dir)),
+      EffectArray.map(readPackage(fs, path, packagesDir)),
       Effect.all,
       Effect.map(EffectArray.getSomes)
     );
@@ -370,52 +374,32 @@ const displaySinglePackage = (terminal: Terminal.Terminal) => (p: PackageInterna
 const displayPackages = (terminal: Terminal.Terminal, packages: readonly PackageInternal[]) =>
   pipe(packages, EffectArray.map(displaySinglePackage(terminal)), Effect.all, Effect.asVoid);
 
-const showValidationFailureMessages = (
-  terminal: Terminal.Terminal,
-  errors: readonly string[],
-  packages: readonly PackageInternal[]
-) =>
-  pipe(
-    terminal,
-    (t) => t.display('❌ Invalid changesets detected!\n\n'),
-    Effect.andThen(displayErrors(terminal, errors)),
-    Effect.andThen(
-      terminal.display(
-        '\nThis would cause the release workflow to fail with:\n"Found changeset for package which is not in the workspace"\n\nTo fix this issue:\n1. Remove or update the invalid changeset file(s)\n2. Only reference packages that exist in packages/ directory\n3. Never reference the monorepo root package\n\nValid packages are:\n'
-      )
-    ),
-    Effect.andThen(displayPackages(terminal, packages)),
-    Effect.andThen(Effect.fail('Invalid changesets detected'))
-  );
+const showValidationFailureMessages =
+  (errors: readonly string[], packages: readonly PackageInternal[]) =>
+  (terminal: Terminal.Terminal) =>
+    pipe(
+      terminal,
+      (t) => t.display('❌ Invalid changesets detected!\n\n'),
+      Effect.andThen(displayErrors(terminal, errors)),
+      Effect.andThen(
+        terminal.display(
+          '\nThis would cause the release workflow to fail with:\n"Found changeset for package which is not in the workspace"\n\nTo fix this issue:\n1. Remove or update the invalid changeset file(s)\n2. Only reference packages that exist in packages/ directory\n3. Never reference the monorepo root package\n\nValid packages are:\n'
+        )
+      ),
+      Effect.andThen(displayPackages(terminal, packages)),
+      Effect.andThen(Effect.fail('Invalid changesets detected'))
+    );
 
 const displayValidationFailure = (
   errors: readonly string[],
   packages: readonly PackageInternal[]
-) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.flatMap((terminal) => showValidationFailureMessages(terminal, errors, packages))
-  );
+) => pipe(Terminal.Terminal, Effect.flatMap(showValidationFailureMessages(errors, packages)));
 
 const displaySingleFile = (terminal: Terminal.Terminal) => (file: string) =>
   terminal.display(`   - ${file}\n`);
 
 const displayFileList = (terminal: Terminal.Terminal, files: readonly string[]) =>
   pipe(files, EffectArray.map(displaySingleFile(terminal)), Effect.all, Effect.asVoid);
-
-const showChangedFilesList = (terminal: Terminal.Terminal, changedFiles: readonly string[]) => {
-  const filesToShow = changedFiles
-    .filter((f) => !f.startsWith('.changeset/') || f === '.changeset/config.json')
-    .slice(0, 10);
-  const moreFilesMessage =
-    changedFiles.length > 10 ? `   ... and ${changedFiles.length - 10} more files\n\n` : '\n';
-  return pipe(
-    terminal,
-    (t) => t.display('📝 Code changes detected in:\n'),
-    Effect.andThen(displayFileList(terminal, filesToShow)),
-    Effect.andThen(terminal.display(moreFilesMessage))
-  );
-};
 
 const showMissingChangesetMessages = (terminal: Terminal.Terminal) =>
   pipe(
@@ -454,25 +438,23 @@ const displayUnpublishablePackages = (
     Effect.asVoid
   );
 
-const showUnpublishableMessages = (terminal: Terminal.Terminal, unpublishable: readonly string[]) =>
-  pipe(
-    terminal,
-    (t) => t.display('❌ Validation Failed!\n\n'),
-    Effect.andThen(terminal.display('The following package versions already exist on npm:\n')),
-    Effect.andThen(displayUnpublishablePackages(terminal, unpublishable)),
-    Effect.andThen(
-      terminal.display(
-        '\nThe release workflow would fail trying to republish these versions.\nYou must create a changeset to bump the versions.\n\n'
-      )
-    ),
-    Effect.andThen(Effect.fail('Unpublishable packages'))
-  );
+const showUnpublishableMessages =
+  (unpublishable: readonly string[]) => (terminal: Terminal.Terminal) =>
+    pipe(
+      terminal,
+      (t) => t.display('❌ Validation Failed!\n\n'),
+      Effect.andThen(terminal.display('The following package versions already exist on npm:\n')),
+      Effect.andThen(displayUnpublishablePackages(terminal, unpublishable)),
+      Effect.andThen(
+        terminal.display(
+          '\nThe release workflow would fail trying to republish these versions.\nYou must create a changeset to bump the versions.\n\n'
+        )
+      ),
+      Effect.andThen(Effect.fail('Unpublishable packages'))
+    );
 
 const displayUnpublishableError = (unpublishable: readonly string[]) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.flatMap((terminal) => showUnpublishableMessages(terminal, unpublishable))
-  );
+  pipe(Terminal.Terminal, Effect.flatMap(showUnpublishableMessages(unpublishable)));
 
 const displayDocOnlyInfo = (terminal: Terminal.Terminal) =>
   pipe(
@@ -486,15 +468,13 @@ const displayDocOnlyInfo = (terminal: Terminal.Terminal) =>
     Effect.andThen(terminal.display('   - Prevent potential CI issues\n\n'))
   );
 
-const showDocOnlyMessages = (
-  terminal: Terminal.Terminal,
-  changesets: readonly ChangesetInfoInternal[]
-) =>
-  pipe(
-    terminal,
-    (t) => t.display('📄 Only documentation changes detected - changesets optional\n'),
-    Effect.andThen(changesets.length === 0 ? displayDocOnlyInfo(terminal) : Effect.void)
-  );
+const showDocOnlyMessages =
+  (changesets: readonly ChangesetInfoInternal[]) => (terminal: Terminal.Terminal) =>
+    pipe(
+      terminal,
+      (t) => t.display('📄 Only documentation changes detected - changesets optional\n'),
+      Effect.andThen(changesets.length === 0 ? displayDocOnlyInfo(terminal) : Effect.void)
+    );
 
 const displaySinglePackageName = (terminal: Terminal.Terminal) => (pkg: string) =>
   terminal.display(`   - ${pkg}\n`);
@@ -502,24 +482,22 @@ const displaySinglePackageName = (terminal: Terminal.Terminal) => (pkg: string) 
 const displayPackageList = (terminal: Terminal.Terminal, packages: readonly string[]) =>
   pipe(packages, EffectArray.map(displaySinglePackageName(terminal)), Effect.all, Effect.asVoid);
 
-const showChangesetPackagesList = (
-  terminal: Terminal.Terminal,
-  changesets: readonly ChangesetInfoInternal[]
-) => {
-  const changedPackages = changesets.reduce<ReadonlySet<string>>(
-    (acc, changeset) =>
-      changeset.packages.reduce((packageSet, pkg) => new Set([...packageSet, pkg]), acc),
-    new Set<string>()
-  );
+const showChangesetPackagesList =
+  (changesets: readonly ChangesetInfoInternal[]) => (terminal: Terminal.Terminal) => {
+    const changedPackages = changesets.reduce<ReadonlySet<string>>(
+      (acc, changeset) =>
+        changeset.packages.reduce((packageSet, pkg) => new Set([...packageSet, pkg]), acc),
+      new Set<string>()
+    );
 
-  return pipe(
-    terminal,
-    (t) => t.display('📦 Packages with changesets:\n'),
-    Effect.andThen(displayPackageList(terminal, Array.from(changedPackages))),
-    Effect.andThen(terminal.display('\n')),
-    Effect.as(changedPackages)
-  );
-};
+    return pipe(
+      terminal,
+      (t) => t.display('📦 Packages with changesets:\n'),
+      Effect.andThen(displayPackageList(terminal, Array.from(changedPackages))),
+      Effect.andThen(terminal.display('\n')),
+      Effect.as(changedPackages)
+    );
+  };
 
 const displaySingleMissingDependency = (terminal: Terminal.Terminal) => (dep: string) =>
   terminal.display(`       - ${dep}\n`);
@@ -532,7 +510,7 @@ const showMissingDependencies = (terminal: Terminal.Terminal, missing: readonly 
     Effect.asVoid
   );
 
-const displayDependencyError = (terminal: Terminal.Terminal, error: MissingDependentError) =>
+const displayDependencyError = (terminal: Terminal.Terminal) => (error: MissingDependentError) =>
   pipe(
     terminal,
     (t) => t.display(`  📦 ${error.changed} is being changed\n`),
@@ -541,8 +519,7 @@ const displayDependencyError = (terminal: Terminal.Terminal, error: MissingDepen
     Effect.andThen(terminal.display('\n'))
   );
 
-const showSingleDependencyError = (terminal: Terminal.Terminal) => (error: MissingDependentError) =>
-  displayDependencyError(terminal, error);
+const showSingleDependencyError = (terminal: Terminal.Terminal) => displayDependencyError(terminal);
 
 const displayDependencyErrors = (
   terminal: Terminal.Terminal,
@@ -576,81 +553,66 @@ const showDependencyValidationFailure = (
     Effect.andThen(Effect.fail('Missing dependent changesets'))
   );
 
-const checkDependencyErrors = (
-  terminal: Terminal.Terminal,
-  changedPackages: ReadonlySet<string>,
-  packageDependencyMap: Record<string, readonly string[]>
-) => {
-  const dependencyErrors = Array.from(changedPackages).reduce<readonly MissingDependentError[]>(
-    (errors, changedPackage) => {
-      const dependentNames = packageDependencyMap[changedPackage] || [];
-      const missingDependents = dependentNames.filter((dep) => !changedPackages.has(dep));
+const checkDependencyErrors =
+  (changedPackages: ReadonlySet<string>, packageDependencyMap: Record<string, readonly string[]>) =>
+  (terminal: Terminal.Terminal) => {
+    const dependencyErrors = Array.from(changedPackages).reduce<readonly MissingDependentError[]>(
+      (errors, changedPackage) => {
+        const dependentNames = packageDependencyMap[changedPackage] || [];
+        const missingDependents = dependentNames.filter((dep) => !changedPackages.has(dep));
 
-      if (missingDependents.length === 0) {
-        return errors;
-      }
+        if (missingDependents.length === 0) {
+          return errors;
+        }
 
-      return [
-        ...errors,
-        {
-          changed: changedPackage,
-          missing: missingDependents,
-        },
-      ];
-    },
-    []
-  );
+        return [
+          ...errors,
+          {
+            changed: changedPackage,
+            missing: missingDependents,
+          },
+        ];
+      },
+      []
+    );
 
-  if (dependencyErrors.length === 0) {
-    return Effect.void;
-  }
+    if (dependencyErrors.length === 0) {
+      return Effect.void;
+    }
 
-  return showDependencyValidationFailure(terminal, dependencyErrors);
-};
+    return showDependencyValidationFailure(terminal, dependencyErrors);
+  };
 
-const validateDependencies = (
-  changedPackages: ReadonlySet<string>,
-  packageDependencyMap: Record<string, readonly string[]>
-) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.flatMap((terminal) =>
-      checkDependencyErrors(terminal, changedPackages, packageDependencyMap)
-    )
-  );
-
-const showSuccessMessages = (
-  terminal: Terminal.Terminal,
-  changesets: readonly ChangesetInfoInternal[]
-) =>
-  pipe(
-    terminal,
-    (t) => t.display('✅ Changeset validation passed!\n'),
-    Effect.andThen(
-      changesets.length > 0
-        ? terminal.display('   All changesets include necessary dependent packages.\n')
-        : Effect.void
-    )
-  );
+const showSuccessMessages =
+  (changesets: readonly ChangesetInfoInternal[]) => (terminal: Terminal.Terminal) =>
+    pipe(
+      terminal,
+      (t) => t.display('✅ Changeset validation passed!\n'),
+      Effect.andThen(
+        changesets.length > 0
+          ? terminal.display('   All changesets include necessary dependent packages.\n')
+          : Effect.void
+      )
+    );
 
 const displaySuccess = (changesets: readonly ChangesetInfoInternal[]) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.flatMap((terminal) => showSuccessMessages(terminal, changesets))
-  );
+  pipe(Terminal.Terminal, Effect.flatMap(showSuccessMessages(changesets)));
+
+const validateDependencies =
+  (changedPackages: ReadonlySet<string>) =>
+  (packageDependencyMap: Record<string, readonly string[]>) =>
+    pipe(
+      Terminal.Terminal,
+      Effect.flatMap(checkDependencyErrors(changedPackages, packageDependencyMap))
+    );
 
 const validatePackageDependencies = (changedPackages: ReadonlySet<string>) =>
-  pipe(
-    getPackageDependencyMap,
-    Effect.flatMap((packageDependencyMap) =>
-      validateDependencies(changedPackages, packageDependencyMap)
-    )
-  );
+  pipe(getPackageDependencyMap, Effect.flatMap(validateDependencies(changedPackages)));
 
 const validateChangesetsFlow = (changesets: readonly ChangesetInfoInternal[]) =>
   pipe(
     Terminal.Terminal,
-    Effect.flatMap((terminal) => showChangesetPackagesList(terminal, changesets)),
+    Effect.flatMap(showChangesetPackagesList(changesets)),
     Effect.flatMap(validatePackageDependencies),
     Effect.andThen(displaySuccess(changesets))
   );
@@ -658,19 +620,28 @@ const validateChangesetsFlow = (changesets: readonly ChangesetInfoInternal[]) =>
 const validateWithChangesets = (changesets: readonly ChangesetInfoInternal[]) =>
   validateChangesetsFlow(changesets);
 
-const checkUnpublishableWhenNoChangesets = (
-  unpublishable: readonly string[],
-  changesets: readonly ChangesetInfoInternal[]
-) =>
-  unpublishable.length > 0 && changesets.length === 0
-    ? displayUnpublishableError(unpublishable)
-    : Effect.void;
+const checkUnpublishableWhenNoChangesets =
+  (changesets: readonly ChangesetInfoInternal[]) => (unpublishable: readonly string[]) =>
+    unpublishable.length > 0 && changesets.length === 0
+      ? displayUnpublishableError(unpublishable)
+      : Effect.void;
 
 const validateAfterCheckingPublishable = (changesets: readonly ChangesetInfoInternal[]) =>
-  pipe(
-    checkForUnpublishedPackages,
-    Effect.flatMap((unpublishable) => checkUnpublishableWhenNoChangesets(unpublishable, changesets))
+  pipe(checkForUnpublishedPackages, Effect.flatMap(checkUnpublishableWhenNoChangesets(changesets)));
+
+const showChangedFilesList = (changedFiles: readonly string[]) => (terminal: Terminal.Terminal) => {
+  const filesToShow = changedFiles
+    .filter((f) => !f.startsWith('.changeset/') || f === '.changeset/config.json')
+    .slice(0, 10);
+  const moreFilesMessage =
+    changedFiles.length > 10 ? `   ... and ${changedFiles.length - 10} more files\n\n` : '\n';
+  return pipe(
+    terminal,
+    (t) => t.display('📝 Code changes detected in:\n'),
+    Effect.andThen(displayFileList(terminal, filesToShow)),
+    Effect.andThen(terminal.display(moreFilesMessage))
   );
+};
 
 const validateCodeChanges = (
   changedFiles: readonly string[],
@@ -678,7 +649,7 @@ const validateCodeChanges = (
 ) =>
   pipe(
     Terminal.Terminal,
-    Effect.flatMap((terminal) => showChangedFilesList(terminal, changedFiles)),
+    Effect.flatMap(showChangedFilesList(changedFiles)),
     Effect.andThen(
       changesets.length === 0
         ? displayMissingChangesetError
@@ -690,35 +661,36 @@ const validateCodeChanges = (
 const validateDocChanges = (changesets: readonly ChangesetInfoInternal[]) =>
   pipe(
     Terminal.Terminal,
-    Effect.flatMap((terminal) => showDocOnlyMessages(terminal, changesets)),
+    Effect.flatMap(showDocOnlyMessages(changesets)),
     Effect.andThen(changesets.length > 0 ? validateWithChangesets(changesets) : Effect.void)
   );
 
-const validateChangesetLogic = (
-  packages: readonly PackageInternal[],
-  changesets: readonly ChangesetInfoInternal[],
-  changedFiles: readonly string[],
-  rootPackageJson: { readonly name: string }
-) => {
-  const errors = validateChangesetPackages(changesets, packages, rootPackageJson);
+const validateChangesetLogic =
+  (
+    packages: readonly PackageInternal[],
+    changesets: readonly ChangesetInfoInternal[],
+    changedFiles: readonly string[]
+  ) =>
+  (rootPackageJson: { readonly name: string }) => {
+    const errors = validateChangesetPackages(changesets, packages, rootPackageJson);
 
-  if (errors.length > 0) {
-    return displayValidationFailure(errors, packages);
-  }
+    if (errors.length > 0) {
+      return displayValidationFailure(errors, packages);
+    }
 
-  if (changedFiles.length > 0 && hasCodeChanges(changedFiles)) {
-    return validateCodeChanges(changedFiles, changesets);
-  } else if (changedFiles.length === 0) {
-    return pipe(
-      Terminal.Terminal,
-      Effect.flatMap((t) =>
-        t.display('No changes detected. This might not be a PR or might be the first commit.\n')
-      )
-    );
-  } else {
-    return validateDocChanges(changesets);
-  }
-};
+    if (changedFiles.length > 0 && hasCodeChanges(changedFiles)) {
+      return validateCodeChanges(changedFiles, changesets);
+    } else if (changedFiles.length === 0) {
+      return pipe(
+        Terminal.Terminal,
+        Effect.flatMap((t) =>
+          t.display('No changes detected. This might not be a PR or might be the first commit.\n')
+        )
+      );
+    } else {
+      return validateDocChanges(changesets);
+    }
+  };
 
 const parseRootPackageJson = (content: string) => JSON.parse(content);
 
@@ -743,9 +715,7 @@ const validateWithRootPackage = (
 ) =>
   pipe(
     readRootPackageJson(fs, path, rootDir),
-    Effect.flatMap((rootPackageJson) =>
-      validateChangesetLogic(packages, changesets, changedFiles, rootPackageJson)
-    )
+    Effect.flatMap(validateChangesetLogic(packages, changesets, changedFiles))
   );
 
 const runValidationLogic = ([packages, changesets, changedFiles, [fs, path, rootDir]]: readonly [

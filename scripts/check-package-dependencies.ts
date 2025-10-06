@@ -53,6 +53,10 @@ const parsePackageJson = (content: string): PackageInfo => {
 const readPackageJson = (fs: FileSystem.FileSystem, packagePath: string) =>
   pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.map(Option.some));
 
+const checkAndReadPackage =
+  (fs: FileSystem.FileSystem, packagePath: string) => (exists: boolean) =>
+    exists ? readPackageJson(fs, packagePath) : Effect.succeed(Option.none<PackageInfo>());
+
 const readPackageIfExists = (
   fs: FileSystem.FileSystem,
   path: Path.Path,
@@ -60,34 +64,24 @@ const readPackageIfExists = (
   dir: string
 ) => {
   const packagePath = path.join(packagesDir, dir, 'package.json');
-  return pipe(
-    packagePath,
-    fs.exists,
-    Effect.flatMap((exists) =>
-      exists ? readPackageJson(fs, packagePath) : Effect.succeed(Option.none<PackageInfo>())
-    )
-  );
+  return pipe(packagePath, fs.exists, Effect.flatMap(checkAndReadPackage(fs, packagePath)));
 };
 
-const readPackagesFromDirs = (
-  fs: FileSystem.FileSystem,
-  path: Path.Path,
-  packagesDir: string,
-  dirs: readonly string[]
-) =>
-  pipe(
-    dirs,
-    EffectArray.map((dir) => readPackageIfExists(fs, path, packagesDir, dir)),
-    Effect.all,
-    Effect.map(EffectArray.getSomes)
-  );
+const readPackage =
+  (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) => (dir: string) =>
+    readPackageIfExists(fs, path, packagesDir, dir);
+
+const readPackagesFromDirs =
+  (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) => (dirs: readonly string[]) =>
+    pipe(
+      dirs,
+      EffectArray.map(readPackage(fs, path, packagesDir)),
+      Effect.all,
+      Effect.map(EffectArray.getSomes)
+    );
 
 const readPackagesDir = (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) =>
-  pipe(
-    packagesDir,
-    fs.readDirectory,
-    Effect.flatMap((dirs) => readPackagesFromDirs(fs, path, packagesDir, dirs))
-  );
+  pipe(packagesDir, fs.readDirectory, Effect.flatMap(readPackagesFromDirs(fs, path, packagesDir)));
 
 const getServicesAndRootDir = Effect.all([FileSystem.FileSystem, Path.Path, getRootDir]);
 
@@ -102,21 +96,19 @@ const getAllPackages = pipe(
 const isWorkspaceDependency = (depVersion: string): boolean =>
   depVersion === 'workspace:*' || depVersion.startsWith('workspace:');
 
-const getDependentNames = (packageName: string, pkg: PackageInfo): readonly string[] => {
-  const hasDependency = Object.entries(pkg.dependencies || {}).some(
-    ([depName, depVersion]) => depName === packageName && isWorkspaceDependency(depVersion)
-  );
-  return hasDependency ? [pkg.name] : [];
-};
+const getDependentNames =
+  (packageName: string) =>
+  (pkg: PackageInfo): readonly string[] => {
+    const hasDependency = Object.entries(pkg.dependencies || {}).some(
+      ([depName, depVersion]) => depName === packageName && isWorkspaceDependency(depVersion)
+    );
+    return hasDependency ? [pkg.name] : [];
+  };
 
 const getDependentsForPackage = (
   packageName: string,
   allPackages: readonly PackageInfo[]
-): readonly string[] =>
-  pipe(
-    allPackages,
-    EffectArray.flatMap((pkg) => getDependentNames(packageName, pkg))
-  );
+): readonly string[] => pipe(allPackages, EffectArray.flatMap(getDependentNames(packageName)));
 
 const buildDependencyMap = (packages: readonly PackageInfo[]): PackageDependencyMap =>
   packages.reduce<PackageDependencyMap>((map, pkg) => {

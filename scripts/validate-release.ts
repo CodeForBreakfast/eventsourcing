@@ -94,7 +94,7 @@ const runChangesetStatus = (root: string) =>
 
 const getChangesetStatus = pipe(rootDir, Effect.andThen(runChangesetStatus));
 
-const displayPackageList = (terminal: Terminal.Terminal, packageNames: readonly string[]) =>
+const displayPackageList = (packageNames: readonly string[]) => (terminal: Terminal.Terminal) =>
   pipe(
     `📦 Found ${packageNames.length} package(s) to validate:\n`,
     terminal.display,
@@ -108,10 +108,7 @@ const displayPackageList = (terminal: Terminal.Terminal, packageNames: readonly 
   );
 
 const displayPackages = (packageNames: readonly string[]) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.andThen((terminal) => displayPackageList(terminal, packageNames))
-  );
+  pipe(Terminal.Terminal, Effect.andThen(displayPackageList(packageNames)));
 
 const extractPackageNames = (status: ChangesetStatus) =>
   Effect.succeed(status.releases.map((release) => release.name));
@@ -237,7 +234,7 @@ const displayPackageValidationStart = (packagesToValidate: readonly string[]) =>
     )
   );
 
-const executePackageValidation = (root: string, packagesToValidate: readonly string[]) => {
+const executePackageValidation = (packagesToValidate: readonly string[]) => (root: string) => {
   const filterArgs = packagesToValidate.map((pkg) => `--filter=${pkg}`).join(' ');
   return pipe(
     packagesToValidate,
@@ -249,10 +246,7 @@ const executePackageValidation = (root: string, packagesToValidate: readonly str
 const validatePackages = (packagesToValidate: readonly string[]) =>
   packagesToValidate.length === 0
     ? displayNoPackagesValidation
-    : pipe(
-        rootDir,
-        Effect.andThen((root) => executePackageValidation(root, packagesToValidate))
-      );
+    : pipe(rootDir, Effect.andThen(executePackageValidation(packagesToValidate)));
 
 const program = pipe(
   validateChangesets,
