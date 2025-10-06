@@ -48,9 +48,7 @@ const createListenConnection = pipe(
       error,
     })
   ),
-  Effect.mapError((error) =>
-    connectionError.retryable('establish notification listener connection', error)
-  )
+  Effect.mapError(connectionError.retryable('establish notification listener connection'))
 );
 
 const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
@@ -67,9 +65,7 @@ const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
     Effect.tapError((error) =>
       Effect.logError('PostgreSQL notification listener health check failed', { error })
     ),
-    Effect.mapError((error) =>
-      connectionError.retryable('health check notification listener', error)
-    ),
+    Effect.mapError(connectionError.retryable('health check notification listener')),
     Effect.as(undefined)
   );
 
@@ -87,7 +83,7 @@ const executeShutdown = (listenConnection: PgClient.PgClient) =>
     Effect.tapError((error) =>
       Effect.logError('Failed to close PostgreSQL notification listener connection', { error })
     ),
-    Effect.mapError((error) => connectionError.fatal('shutdown notification listener', error)),
+    Effect.mapError(connectionError.fatal('shutdown notification listener')),
     Effect.as(undefined)
   );
 

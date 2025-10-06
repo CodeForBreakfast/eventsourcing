@@ -215,23 +215,22 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.map((chunk) => Array.from(chunk))
     );
 
-  const verifyMultipleClientStates = (
-    state1: Readonly<Option.Option<ConnectionState>>,
-    state2: Readonly<Option.Option<ConnectionState>>,
-    connections: ReadonlyArray<{ readonly clientId: string }>
-  ) =>
-    Effect.sync(() => {
-      expect(Option.isSome(state1)).toBe(true);
-      expect(Option.isSome(state2)).toBe(true);
-      if (Option.isSome(state1) && Option.isSome(state2)) {
-        expect(state1.value).toBe('connected');
-        expect(state2.value).toBe('connected');
-      }
-      expect(connections).toHaveLength(2);
-      expect(connections[0]!.clientId).toBeDefined();
-      expect(connections[1]!.clientId).toBeDefined();
-      expect(connections[0]!.clientId).not.toBe(connections[1]!.clientId);
-    });
+  const verifyMultipleClientStates =
+    (state1: Readonly<Option.Option<ConnectionState>>) =>
+    (state2: Readonly<Option.Option<ConnectionState>>) =>
+    (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+      Effect.sync(() => {
+        expect(Option.isSome(state1)).toBe(true);
+        expect(Option.isSome(state2)).toBe(true);
+        if (Option.isSome(state1) && Option.isSome(state2)) {
+          expect(state1.value).toBe('connected');
+          expect(state2.value).toBe('connected');
+        }
+        expect(connections).toHaveLength(2);
+        expect(connections[0]!.clientId).toBeDefined();
+        expect(connections[1]!.clientId).toBeDefined();
+        expect(connections[0]!.clientId).not.toBe(connections[1]!.clientId);
+      });
 
   const verifyConnectionsAfterStates = (
     server: InMemoryServer,
@@ -241,7 +240,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     pipe(
       server,
       collectServerConnections,
-      Effect.flatMap((connections) => verifyMultipleClientStates(state1, state2, connections))
+      Effect.flatMap(verifyMultipleClientStates(state1)(state2))
     );
 
   const verifyTwoClientsConnected = (
@@ -296,37 +295,35 @@ describe('In-Memory Client-Server Specific Tests', () => {
         expect(messages[0]!.type).toBe(testMessage.type);
       });
 
-  const broadcastAndCollect = (
-    server: InMemoryServer,
-    testMessage: TransportMessage,
-    messageStream: Stream.Stream<TransportMessage>
-  ) =>
-    pipe(
-      testMessage,
-      server.broadcast,
-      Effect.andThen(collectFirstMessage(messageStream)),
-      Effect.flatMap(verifyTestMessage(testMessage))
-    );
+  const broadcastAndCollect =
+    (server: InMemoryServer) =>
+    (testMessage: TransportMessage) =>
+    (messageStream: Stream.Stream<TransportMessage>) =>
+      pipe(
+        testMessage,
+        server.broadcast,
+        Effect.andThen(collectFirstMessage(messageStream)),
+        Effect.flatMap(verifyTestMessage(testMessage))
+      );
 
-  const subscribeAndTest = (
-    server: InMemoryServer,
-    client: {
+  const subscribeAndTest =
+    (server: InMemoryServer) =>
+    (client: {
       readonly connectionState: Stream.Stream<ConnectionState>;
       readonly subscribe: () => Effect.Effect<Stream.Stream<TransportMessage>, Error>;
-    },
-    testMessage: TransportMessage
-  ) =>
-    pipe(
-      client,
-      waitForConnected,
-      Effect.andThen(client.subscribe()),
-      Effect.flatMap((messageStream) => broadcastAndCollect(server, testMessage, messageStream))
-    );
+    }) =>
+    (testMessage: TransportMessage) =>
+      pipe(
+        client,
+        waitForConnected,
+        Effect.andThen(client.subscribe()),
+        Effect.flatMap(broadcastAndCollect(server)(testMessage))
+      );
 
-  const testInstantMessageDelivery = (server: InMemoryServer, testMessage: TransportMessage) =>
+  const testInstantMessageDelivery = (testMessage: TransportMessage) => (server: InMemoryServer) =>
     pipe(
       server.connector(),
-      Effect.flatMap((client) => subscribeAndTest(server, client, testMessage))
+      Effect.flatMap((client) => subscribeAndTest(server)(client)(testMessage))
     );
 
   it.effect('in-memory transport should support instant message delivery', () => {
@@ -339,7 +336,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     return pipe(
       InMemoryAcceptor.make(),
       Effect.flatMap((acceptor) => acceptor.start()),
-      Effect.flatMap((server) => testInstantMessageDelivery(server, testMessage)),
+      Effect.flatMap(testInstantMessageDelivery(testMessage)),
       Effect.scoped
     );
   });

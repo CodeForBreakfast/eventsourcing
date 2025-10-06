@@ -39,20 +39,11 @@ const parseNotificationPayload = (
     (str) =>
       Effect.try({
         try: () => JSON.parse(str) as NotificationPayload,
-        catch: (error) =>
-          eventStoreError.read(
-            undefined,
-            `Failed to parse notification payload: ${String(error)}`,
-            error
-          ),
+        catch: eventStoreError.read(undefined, 'Failed to parse notification payload'),
       }),
     Effect.flatMap(decodeNotificationSchema),
-    Effect.mapError((error) =>
-      eventStoreError.read(
-        undefined,
-        `Failed to validate notification payload schema: ${String(error)}`,
-        error
-      )
+    Effect.mapError(
+      eventStoreError.read(undefined, 'Failed to validate notification payload schema')
     )
   );
 
@@ -207,23 +198,22 @@ const activateAndListen = (
 const logStartListen = (streamId: EventStreamId) =>
   Effect.logDebug(`Starting LISTEN for stream: ${streamId}`);
 
-const startListenForStream = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-  }>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    streamId,
-    logStartListen,
-    Effect.andThen(activateAndListen(activeChannels, client, notificationQueue, streamId)),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(streamId, `Failed to listen to stream: ${String(error)}`, error)
-    )
-  );
+const startListenForStream =
+  (
+    activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+    client: PgClient.PgClient,
+    notificationQueue: Queue.Queue<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+    }>
+  ) =>
+  (streamId: EventStreamId) =>
+    pipe(
+      streamId,
+      logStartListen,
+      Effect.andThen(activateAndListen(activeChannels, client, notificationQueue, streamId)),
+      Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to listen to stream'))
+    );
 
 const removeChannelFromActive = (
   activeChannels: Ref.Ref<HashSet.HashSet<string>>,
@@ -241,18 +231,14 @@ const removeChannelForStream = (
 const logStopListen = (streamId: EventStreamId) =>
   Effect.logDebug(`Stopping LISTEN for stream: ${streamId}`);
 
-const stopListenForStream = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    streamId,
-    logStopListen,
-    Effect.andThen(removeChannelForStream(activeChannels, streamId)),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(streamId, `Failed to unlisten from stream: ${String(error)}`, error)
-    )
-  );
+const stopListenForStream =
+  (activeChannels: Ref.Ref<HashSet.HashSet<string>>) => (streamId: EventStreamId) =>
+    pipe(
+      streamId,
+      logStopListen,
+      Effect.andThen(removeChannelForStream(activeChannels, streamId)),
+      Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unlisten from stream'))
+    );
 
 const createNotificationsStream = (
   notificationQueue: Queue.Queue<{
@@ -264,9 +250,7 @@ const createNotificationsStream = (
     notificationQueue,
     Queue.take,
     Stream.repeatEffect,
-    Stream.mapError((error) =>
-      eventStoreError.read(undefined, `Failed to read notification queue: ${String(error)}`, error)
-    )
+    Stream.mapError(eventStoreError.read(undefined, 'Failed to read notification queue'))
   );
 
 const logListenerStarted = Effect.logInfo(
@@ -308,10 +292,9 @@ export const NotificationListenerLive = Layer.effect(
   pipe(
     createNotificationListenerDependencies,
     Effect.map(({ client, activeChannels, notificationQueue }) => ({
-      listen: (streamId: EventStreamId) =>
-        startListenForStream(activeChannels, client, notificationQueue, streamId),
+      listen: startListenForStream(activeChannels, client, notificationQueue),
 
-      unlisten: (streamId: EventStreamId) => stopListenForStream(activeChannels, streamId),
+      unlisten: stopListenForStream(activeChannels),
 
       notifications: createNotificationsStream(notificationQueue),
 

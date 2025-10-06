@@ -88,10 +88,9 @@ export interface CommitOptions<TId extends string> {
  * @throws {ConcurrencyConflictError} If the event number doesn't match the stream position
  * @throws {EventStoreError} If writing to the store fails
  */
-const createStreamPosition = (
-  streamId: EventStreamPosition['streamId'],
-  eventNumber: EventNumber
-) => pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
+const createStreamPosition =
+  (eventNumber: EventNumber) => (streamId: EventStreamPosition['streamId']) =>
+    pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
 
 const writeEventsToPosition =
   <TEvent>(events: Chunk.Chunk<TEvent>, position: EventStreamPosition) =>
@@ -104,7 +103,7 @@ const commitToEventStore =
     pipe(
       id,
       toStreamId,
-      Effect.flatMap((streamId) => createStreamPosition(streamId, eventNumber)),
+      Effect.flatMap(createStreamPosition(eventNumber)),
       Effect.flatMap((position) => writeEventsToPosition(events, position)(eventstore))
     );
 
@@ -169,32 +168,27 @@ const foldEventsIntoState =
       Effect.andThen(Ref.get(stateRef))
     );
 
-const processEventStream = <TState, TEvent>(
-  apply: (
-    state: Readonly<Option.Option<TState>>
-  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-  stream: Stream.Stream<TEvent, unknown>
-) =>
-  pipe(
-    { nextEventNumber: 0, data: Option.none<TState>() },
-    Ref.make,
-    Effect.flatMap(foldEventsIntoState(apply, stream))
-  );
+const processEventStream =
+  <TState, TEvent>(
+    apply: (
+      state: Readonly<Option.Option<TState>>
+    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
+  ) =>
+  (stream: Stream.Stream<TEvent, unknown>) =>
+    pipe(
+      { nextEventNumber: 0, data: Option.none<TState>() },
+      Ref.make,
+      Effect.flatMap(foldEventsIntoState(apply, stream))
+    );
 
-const createDecodedResult = (
-  decodedEventNumber: EventNumber,
-  data: Readonly<Option.Option<unknown>>
-) => ({ nextEventNumber: decodedEventNumber, data }) as const;
+const createDecodedResult =
+  (data: Readonly<Option.Option<unknown>>) => (decodedEventNumber: EventNumber) =>
+    ({ nextEventNumber: decodedEventNumber, data }) as const;
 
 const decodeEventNumber = (
   nextEventNumber: Readonly<number>,
   data: Readonly<Option.Option<unknown>>
-) =>
-  pipe(
-    nextEventNumber,
-    Schema.decode(EventNumber),
-    Effect.map((decodedEventNumber: EventNumber) => createDecodedResult(decodedEventNumber, data))
-  );
+) => pipe(nextEventNumber, Schema.decode(EventNumber), Effect.map(createDecodedResult(data)));
 
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(
@@ -214,7 +208,7 @@ const loadAggregateState =
   (eventStore: EventStore<TEvent>) =>
     pipe(
       loadStreamEvents(eventStore, id),
-      Effect.flatMap((stream) => processEventStream(apply, stream)),
+      Effect.flatMap(processEventStream(apply)),
       Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
     );
 

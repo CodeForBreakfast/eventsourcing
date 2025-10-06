@@ -41,25 +41,26 @@ const applyEventAndAnnotate = <TEvent, TData>(
     Effect.withSpan('apply event')
   );
 
-const foldEvents = <TEvent, TData>(
-  apply: (
-    data: ReadonlyDeep<Option.Option<TData>>
-  ) => (
-    event: ReadonlyDeep<TEvent>
-  ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>,
-  stream: Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>
-) =>
-  pipe(
-    stream,
-    Stream.run(
-      Sink.foldLeftEffect(
-        { nextEventNumber: 0, data: Option.none<TData>() },
-        ({ nextEventNumber, data: before }, event) =>
-          applyEventAndAnnotate(apply, nextEventNumber, before, event)
-      )
-    ),
-    Effect.withSpan('apply events')
-  );
+const foldEvents =
+  <TEvent, TData>(
+    apply: (
+      data: ReadonlyDeep<Option.Option<TData>>
+    ) => (
+      event: ReadonlyDeep<TEvent>
+    ) => Effect.Effect<TData, ParseResult.ParseError | MissingProjectionError>
+  ) =>
+  (stream: Stream.Stream<TEvent, ParseResult.ParseError | EventStoreError>) =>
+    pipe(
+      stream,
+      Stream.run(
+        Sink.foldLeftEffect(
+          { nextEventNumber: 0, data: Option.none<TData>() },
+          ({ nextEventNumber, data: before }, event) =>
+            applyEventAndAnnotate(apply, nextEventNumber, before, event)
+        )
+      ),
+      Effect.withSpan('apply events')
+    );
 
 const decodeProjectionEventNumber = <TData>(
   nextEventNumber: number,
@@ -102,7 +103,7 @@ const loadAndProcessEvents =
       ),
       Effect.flatMap(eventstore.read),
       Effect.flatMap(limitStreamToMaxSafeInteger),
-      Effect.flatMap((stream) => foldEvents(apply, stream)),
+      Effect.flatMap(foldEvents(apply)),
       Effect.flatMap(({ nextEventNumber, data }) =>
         decodeProjectionEventNumber(nextEventNumber, data)
       )

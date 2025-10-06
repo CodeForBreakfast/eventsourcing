@@ -72,15 +72,19 @@ describe('Service Definitions', () => {
         })
       );
 
+    const createReadError = (streamId: string | undefined) =>
+      pipe(undefined, eventStoreError.read(streamId, 'Not implemented'));
+
+    const failWithReadError = (streamId: string | undefined) =>
+      Effect.fail(createReadError(streamId));
+
     pipe(
       Layer.succeed(EventStoreService, {
         append: () => {
           throw new Error('Not implemented');
         },
-        read: (from: EventStreamPosition) =>
-          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
-        subscribe: (from: EventStreamPosition) =>
-          Effect.fail(eventStoreError.read(from.streamId, 'Not implemented')),
+        read: (from: EventStreamPosition) => failWithReadError(from.streamId),
+        subscribe: (from: EventStreamPosition) => failWithReadError(from.streamId),
       } as EventStore<unknown>),
       it.layer,
       (layeredIt) =>
@@ -210,14 +214,19 @@ describe('Service Definitions', () => {
         })
       );
 
+    const createUndefinedReadError = () =>
+      pipe(undefined, eventStoreError.read(undefined, 'Not implemented'));
+
+    const failWithUndefinedReadError = () => Effect.fail(createUndefinedReadError());
+
     pipe(
       Layer.mergeAll(
         Layer.succeed(EventStoreService, {
           append: () => {
             throw new Error('Not implemented');
           },
-          read: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
-          subscribe: () => Effect.fail(eventStoreError.read(undefined, 'Not implemented')),
+          read: failWithUndefinedReadError,
+          subscribe: failWithUndefinedReadError,
         } as EventStore<unknown>),
         Layer.succeed(ProjectionStoreService, {
           get: () => Effect.succeed(null),

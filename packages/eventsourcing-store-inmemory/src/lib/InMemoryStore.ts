@@ -53,38 +53,47 @@ const logAppendedEvents = (newEvents: Chunk.Chunk<unknown>, streamEnd: EventStre
 const publishEventsToStream = <V>(pubsub: PubSub.PubSub<V>, newEvents: Chunk.Chunk<V>) =>
   pipe(pubsub, PubSub.publishAll(newEvents));
 
-const updateEventStreamsById = <V>(
-  eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
-  updatedEventStream: EventStream<V>,
-  streamEnd: EventStreamPosition,
-  newEvents: Chunk.Chunk<V>
-) =>
-  pipe(
-    eventStreamsById,
-    HashMap.set(streamEnd.streamId, updatedEventStream),
-    Effect.succeed,
-    Effect.tap(() => logAppendedEvents(newEvents, streamEnd)),
-    Effect.tap(() => publishEventsToStream(updatedEventStream.pubsub, newEvents))
-  );
+const updateEventStreamsById =
+  <V>(
+    updatedEventStream: EventStream<V>,
+    streamEnd: EventStreamPosition,
+    newEvents: Chunk.Chunk<V>
+  ) =>
+  (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>) =>
+    pipe(
+      eventStreamsById,
+      HashMap.set(streamEnd.streamId, updatedEventStream),
+      Effect.succeed,
+      Effect.tap(() => logAppendedEvents(newEvents, streamEnd)),
+      Effect.tap(() => publishEventsToStream(updatedEventStream.pubsub, newEvents))
+    );
 
 const tagEventsWithStreamId = <V>(newEvents: Chunk.Chunk<V>, streamId: EventStreamId) =>
   Chunk.map(newEvents, (event) => ({ streamId, event }));
 
-const createUpdatedValue = <V>(
+const createUpdatedValue =
+  <V>(
+    allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+    newEvents: Chunk.Chunk<V>,
+    streamEnd: EventStreamPosition
+  ) =>
+  (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>): Value<V> => ({
+    eventStreamsById,
+    allEventsStream: {
+      events: pipe(
+        allEventsStream.events,
+        Chunk.appendAll(tagEventsWithStreamId(newEvents, streamEnd.streamId))
+      ),
+      pubsub: allEventsStream.pubsub,
+    },
+  });
+
+const updateEventStreamsByIdForEventStream = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
-  allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
-  newEvents: Chunk.Chunk<V>,
-  streamEnd: EventStreamPosition
-): Value<V> => ({
-  eventStreamsById,
-  allEventsStream: {
-    events: pipe(
-      allEventsStream.events,
-      Chunk.appendAll(tagEventsWithStreamId(newEvents, streamEnd.streamId))
-    ),
-    pubsub: allEventsStream.pubsub,
-  },
-});
+  updatedEventStream: EventStream<V>,
+  streamEnd: EventStreamPosition,
+  newEvents: Chunk.Chunk<V>
+) => pipe(eventStreamsById, updateEventStreamsById(updatedEventStream, streamEnd, newEvents));
 
 const appendToEventStream =
   <V = never>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
@@ -100,26 +109,33 @@ const appendToEventStream =
         onNone: () => createOrAppendToStream(streamEnd, newEvents),
       }),
       Effect.flatMap((updatedEventStream: EventStream<V>) =>
-        updateEventStreamsById(eventStreamsById, updatedEventStream, streamEnd, newEvents)
+        updateEventStreamsByIdForEventStream(
+          eventStreamsById,
+          updatedEventStream,
+          streamEnd,
+          newEvents
+        )
       ),
-      Effect.map((eventStreamsById) =>
-        createUpdatedValue(eventStreamsById, allEventsStream, newEvents, streamEnd)
-      )
+      Effect.map(createUpdatedValue(allEventsStream, newEvents, streamEnd))
     );
 
-const modifyEventStreamsWithEmptyIfMissing = <V>(
+const modifyEventStreamsWithEmptyIfMissing =
+  <V>(streamId: EventStreamId, emptyStream: EventStream<V>) =>
+  (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>) =>
+    HashMap.modifyAt(
+      eventStreamsById,
+      streamId,
+      Option.match({
+        onNone: () => Option.some(emptyStream),
+        onSome: (existing: EventStream<V>) => Option.some(existing),
+      })
+    );
+
+const modifyEventStreamsForEnsure = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
   streamId: EventStreamId,
   emptyStream: EventStream<V>
-) =>
-  HashMap.modifyAt(
-    eventStreamsById,
-    streamId,
-    Option.match({
-      onNone: () => Option.some(emptyStream),
-      onSome: (existing: EventStream<V>) => Option.some(existing),
-    })
-  );
+) => pipe(eventStreamsById, modifyEventStreamsWithEmptyIfMissing(streamId, emptyStream));
 
 const ensureEventStream =
   <V = never>(streamId: EventStreamId) =>
@@ -127,7 +143,7 @@ const ensureEventStream =
     pipe(
       emptyStream<V>(),
       Effect.map((emptyStream) =>
-        modifyEventStreamsWithEmptyIfMissing(eventStreamsById, streamId, emptyStream)
+        modifyEventStreamsForEnsure(eventStreamsById, streamId, emptyStream)
       ),
       Effect.map((eventStreamsById) => ({ eventStreamsById, allEventsStream }))
     );
@@ -199,43 +215,39 @@ const getEventStreamAndCreateHistorical = <V>(
     )
   );
 
-const appendEventsAndUpdatePosition = <V>(
-  value: SynchronizedRef.SynchronizedRef<Value<V>>,
-  streamEnd: EventStreamPosition,
-  newEvents: Chunk.Chunk<V>
-) =>
-  pipe(
-    value,
-    SynchronizedRef.updateEffect(appendToEventStream(streamEnd, newEvents)),
-    Effect.as({
-      ...streamEnd,
-      eventNumber: streamEnd.eventNumber + newEvents.length,
-    })
-  );
+const appendEventsAndUpdatePosition =
+  <V>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
+  (value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+    pipe(
+      value,
+      SynchronizedRef.updateEffect(appendToEventStream(streamEnd, newEvents)),
+      Effect.as({
+        ...streamEnd,
+        eventNumber: streamEnd.eventNumber + newEvents.length,
+      })
+    );
 
-const getLiveStreamForId = <V>(
-  value: SynchronizedRef.SynchronizedRef<Value<V>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    value,
-    SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
-    Effect.flatMap(({ eventStreamsById }) =>
-      getEventStreamAndCreateLive(eventStreamsById, streamId)
-    )
-  );
+const getLiveStreamForId =
+  <V>(streamId: EventStreamId) =>
+  (value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+    pipe(
+      value,
+      SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
+      Effect.flatMap(({ eventStreamsById }) =>
+        getEventStreamAndCreateLive(eventStreamsById, streamId)
+      )
+    );
 
-const getHistoricalStreamForId = <V>(
-  value: SynchronizedRef.SynchronizedRef<Value<V>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    value,
-    SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
-    Effect.flatMap(({ eventStreamsById }) =>
-      getEventStreamAndCreateHistorical(eventStreamsById, streamId)
-    )
-  );
+const getHistoricalStreamForId =
+  <V>(streamId: EventStreamId) =>
+  (value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+    pipe(
+      value,
+      SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
+      Effect.flatMap(({ eventStreamsById }) =>
+        getEventStreamAndCreateHistorical(eventStreamsById, streamId)
+      )
+    );
 
 const getAllEventsStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
@@ -250,6 +262,22 @@ const getAllEventsStream = <V>(
     Effect.map(({ allEventsStream }) => createLiveEventStream(allEventsStream))
   );
 
+const appendForStore =
+  <V>(value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+  (streamEnd: EventStreamPosition) =>
+  (newEvents: Chunk.Chunk<V>) =>
+    pipe(value, appendEventsAndUpdatePosition(streamEnd, newEvents));
+
+const getForStore =
+  <V>(value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+  (streamId: EventStreamId) =>
+    pipe(value, getLiveStreamForId(streamId));
+
+const getHistoricalForStore =
+  <V>(value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
+  (streamId: EventStreamId) =>
+    pipe(value, getHistoricalStreamForId(streamId));
+
 export const make = <V>() =>
   pipe(
     emptyStream<{ readonly streamId: EventStreamId; readonly event: V }>(),
@@ -262,10 +290,9 @@ export const make = <V>() =>
     ),
     Effect.map(
       (value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({
-        append: (streamEnd) => (newEvents) =>
-          appendEventsAndUpdatePosition(value, streamEnd, newEvents),
-        get: (streamId: EventStreamId) => getLiveStreamForId(value, streamId),
-        getHistorical: (streamId: EventStreamId) => getHistoricalStreamForId(value, streamId),
+        append: appendForStore(value),
+        get: getForStore(value),
+        getHistorical: getHistoricalForStore(value),
         getAll: () => getAllEventsStream(value),
       })
     )

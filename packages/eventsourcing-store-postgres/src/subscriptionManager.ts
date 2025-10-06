@@ -71,32 +71,34 @@ const createPubSubAndUpdateHashMap = <T>(
   );
 };
 
-const getOrCreateSubscription = <T>(
-  streamId: EventStreamId,
-  subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => {
-  const streamIdOption = pipe(subs, HashMap.get(streamId));
-  return pipe(
-    streamIdOption,
-    Option.match({
-      onNone: () => createPubSubAndUpdateHashMap(streamId, subs),
-      onSome: () => subs,
-    })
-  );
-};
+const getOrCreateSubscription =
+  <T>(streamId: EventStreamId) =>
+  (
+    subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
+  ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => {
+    const streamIdOption = pipe(subs, HashMap.get(streamId));
+    return pipe(
+      streamIdOption,
+      Option.match({
+        onNone: () => createPubSubAndUpdateHashMap(streamId, subs),
+        onSome: () => subs,
+      })
+    );
+  };
 
-const extractSubscriptionData = <T>(
-  streamId: EventStreamId,
-  subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): Effect.Effect<SubscriptionData<T>, never, never> =>
-  pipe(
-    subscriptions,
-    HashMap.get(streamId),
-    Option.match({
-      onNone: () => Effect.die("Subscription should exist but doesn't"),
-      onSome: (data: ReadonlyDeep<SubscriptionData<T>>) => Effect.succeed(data),
-    })
-  );
+const extractSubscriptionData =
+  <T>(streamId: EventStreamId) =>
+  (
+    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
+  ): Effect.Effect<SubscriptionData<T>, never, never> =>
+    pipe(
+      subscriptions,
+      HashMap.get(streamId),
+      Option.match({
+        onNone: () => Effect.die("Subscription should exist but doesn't"),
+        onSome: (data: ReadonlyDeep<SubscriptionData<T>>) => Effect.succeed(data),
+      })
+    );
 
 /**
  * Get or create a PubSub for a stream ID
@@ -108,18 +110,16 @@ const getOrCreatePubSub = <T>(
   streamId: EventStreamId
 ): Effect.Effect<SubscriptionData<T>, never, never> =>
   pipe(
-    SynchronizedRef.updateAndGet(ref, (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
-      getOrCreateSubscription(streamId, subs)
-    ),
-    Effect.flatMap((subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
-      extractSubscriptionData(streamId, subscriptions)
-    )
+    SynchronizedRef.updateAndGet(ref, getOrCreateSubscription(streamId)),
+    Effect.flatMap(extractSubscriptionData(streamId))
   );
 
-const removeStreamFromHashMap = <T>(
-  streamId: EventStreamId,
-  subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => HashMap.remove(subscriptions, streamId);
+const removeStreamFromHashMap =
+  <T>(streamId: EventStreamId) =>
+  (
+    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
+  ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
+    HashMap.remove(subscriptions, streamId);
 
 /**
  * Remove a subscription for a stream ID
@@ -130,43 +130,35 @@ const removeSubscription = <T>(
   >,
   streamId: EventStreamId
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    SynchronizedRef.update(ref, (subscriptions) =>
-      removeStreamFromHashMap(streamId, subscriptions)
-    ),
-    Effect.as(undefined)
-  );
+  pipe(SynchronizedRef.update(ref, removeStreamFromHashMap(streamId)), Effect.as(undefined));
 
-const publishEventToPubSub = <T>(
-  event: T,
-  streamId: EventStreamId,
-  subData: ReadonlyDeep<SubscriptionData<T>>
-): Effect.Effect<void, never, never> =>
-  pipe(
-    subData.pubsub,
-    PubSub.publish(event),
-    Effect.tapError((error) =>
-      Effect.logError('Failed to publish event to subscribers', {
-        error,
-        streamId,
+const publishEventToPubSub =
+  <T>(event: T, streamId: EventStreamId) =>
+  (subData: ReadonlyDeep<SubscriptionData<T>>): Effect.Effect<void, never, never> =>
+    pipe(
+      subData.pubsub,
+      PubSub.publish(event),
+      Effect.tapError((error) =>
+        Effect.logError('Failed to publish event to subscribers', {
+          error,
+          streamId,
+        })
+      )
+    );
+
+const publishToSubscriptionIfExists =
+  <T>(streamId: EventStreamId, event: T) =>
+  (
+    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
+  ): Effect.Effect<void, never, never> =>
+    pipe(
+      subscriptions,
+      HashMap.get(streamId),
+      Option.match({
+        onNone: () => Effect.succeed(undefined),
+        onSome: publishEventToPubSub(event, streamId),
       })
-    )
-  );
-
-const publishToSubscriptionIfExists = <T>(
-  streamId: EventStreamId,
-  event: T,
-  subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): Effect.Effect<void, never, never> =>
-  pipe(
-    subscriptions,
-    HashMap.get(streamId),
-    Option.match({
-      onNone: () => Effect.succeed(undefined),
-      onSome: (subData: ReadonlyDeep<SubscriptionData<T>>) =>
-        publishEventToPubSub(event, streamId, subData),
-    })
-  );
+    );
 
 /**
  * Publish an event to subscribers of a stream
@@ -180,11 +172,7 @@ const publishToStream = <T>(
   streamId: EventStreamId,
   event: T
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    ref,
-    getSubscriptions,
-    Effect.flatMap((subscriptions) => publishToSubscriptionIfExists(streamId, event, subscriptions))
-  );
+  pipe(ref, getSubscriptions, Effect.flatMap(publishToSubscriptionIfExists(streamId, event)));
 
 const createRetrySchedule = (): Schedule.Schedule<Duration.Duration, unknown, never> =>
   pipe(
@@ -210,9 +198,7 @@ const createSubscriptionStream = (
   pipe(
     getOrCreatePubSub(ref, streamId),
     Effect.map(createStreamFromPubSub),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`, error)
-    )
+    Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to subscribe to stream'))
   );
 
 const unsubscribeFromStreamWithErrorHandling = (
@@ -223,13 +209,7 @@ const unsubscribeFromStreamWithErrorHandling = (
 ): Effect.Effect<void, EventStoreError, never> =>
   pipe(
     removeSubscription(ref, streamId),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(
-        streamId,
-        `Failed to unsubscribe from stream: ${String(error)}`,
-        error
-      )
-    )
+    Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unsubscribe from stream'))
   );
 
 const publishEventWithErrorHandling = (
@@ -241,13 +221,7 @@ const publishEventWithErrorHandling = (
 ): Effect.Effect<void, EventStoreError, never> =>
   pipe(
     publishToStream(ref, streamId, event),
-    Effect.mapError((error) =>
-      eventStoreError.write(
-        streamId,
-        `Failed to publish event to subscribers: ${String(error)}`,
-        error
-      )
-    )
+    Effect.mapError(eventStoreError.write(streamId, 'Failed to publish event to subscribers'))
   );
 
 /**

@@ -151,63 +151,68 @@ const handleSubscriptionMessage = (
   return Effect.void;
 };
 
-const handleParsedMessage = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  parsedMessage: ParsedMessage
-) => {
-  const commandEffect = handleCommandMessage(server, commandHandler, parsedMessage);
-  const subscriptionEffect = handleSubscriptionMessage(server, subscriptionHandler, parsedMessage);
+const handleParsedMessage =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (parsedMessage: ParsedMessage) => {
+    const commandEffect = handleCommandMessage(server, commandHandler, parsedMessage);
+    const subscriptionEffect = handleSubscriptionMessage(
+      server,
+      subscriptionHandler,
+      parsedMessage
+    );
 
-  if (parsedMessage.type === 'command') {
-    return commandEffect;
-  }
-  if (parsedMessage.type === 'subscribe') {
-    return subscriptionEffect;
-  }
-  return Effect.void;
-};
+    if (parsedMessage.type === 'command') {
+      return commandEffect;
+    }
+    if (parsedMessage.type === 'subscribe') {
+      return subscriptionEffect;
+    }
+    return Effect.void;
+  };
 
-const parseAndHandleMessage = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  message: ReadonlyDeep<TransportMessage>
-) =>
-  pipe(
-    message.payload as string,
-    (payload) => Effect.try(() => JSON.parse(payload)),
-    Effect.flatMap((parsedMessage: ParsedMessage) =>
-      handleParsedMessage(server, commandHandler, subscriptionHandler, parsedMessage)
-    ),
-    Effect.catchAll(() => Effect.void)
-  );
+const parseAndHandleMessage =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (message: ReadonlyDeep<TransportMessage>) =>
+    pipe(
+      message.payload as string,
+      (payload) => Effect.try(() => JSON.parse(payload)),
+      Effect.flatMap(handleParsedMessage(server, commandHandler, subscriptionHandler)),
+      Effect.catchAll(() => Effect.void)
+    );
 
-const processMessageStream = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>
-) =>
-  Effect.forkScoped(
-    Stream.runForEach(messageStream, (message: ReadonlyDeep<TransportMessage>) =>
-      parseAndHandleMessage(server, commandHandler, subscriptionHandler, message)
-    )
-  );
+const processMessageStream =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>) =>
+    Effect.forkScoped(
+      Stream.runForEach(
+        messageStream,
+        parseAndHandleMessage(server, commandHandler, subscriptionHandler)
+      )
+    );
 
-const setupServerConnectionHandler = (
-  server: ReadonlyDeep<InMemoryServer>,
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  serverConnection: ReadonlyDeep<Server.ClientConnection>
-) =>
-  pipe(
-    serverConnection.transport.subscribe(),
-    Effect.flatMap((messageStream: ReadonlyDeep<Stream.Stream<TransportMessage>>) =>
-      processMessageStream(server, commandHandler, subscriptionHandler, messageStream)
-    )
-  );
+const setupServerConnectionHandler =
+  (
+    server: ReadonlyDeep<InMemoryServer>,
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[]
+  ) =>
+  (serverConnection: ReadonlyDeep<Server.ClientConnection>) =>
+    pipe(
+      serverConnection.transport.subscribe(),
+      Effect.flatMap(processMessageStream(server, commandHandler, subscriptionHandler))
+    );
 
 const getFirstConnection = (connections: ReadonlyDeep<Iterable<Server.ClientConnection>>) =>
   Array.from(connections)[0]!;
@@ -226,9 +231,7 @@ const createTestServerProtocol = (
     Stream.take(1),
     Stream.runCollect,
     Effect.map(getFirstConnection),
-    Effect.flatMap((serverConnection: ReadonlyDeep<Server.ClientConnection>) =>
-      setupServerConnectionHandler(server, commandHandler, subscriptionHandler, serverConnection)
-    ),
+    Effect.flatMap(setupServerConnectionHandler(server, commandHandler, subscriptionHandler)),
     Effect.asVoid
   );
 
@@ -271,18 +274,16 @@ const verifyFailureResult =
       }
     });
 
-const sendCommandWithVerification = (
-  command: ReadonlyDeep<WireCommand>,
-  clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
-  verify: (result: CommandResult) => Effect.Effect<void>
-) =>
-  pipe(
-    command,
-    sendWireCommand,
-    Effect.tap(verify),
-    Effect.provide(ProtocolLive(clientTransport)),
-    Effect.asVoid
-  );
+const sendCommandWithVerification =
+  (command: ReadonlyDeep<WireCommand>, verify: (result: CommandResult) => Effect.Effect<void>) =>
+  (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+    pipe(
+      command,
+      sendWireCommand,
+      Effect.tap(verify),
+      Effect.provide(ProtocolLive(clientTransport)),
+      Effect.asVoid
+    );
 
 const sendMultipleCommands = (
   commands: readonly WireCommand[],
@@ -345,16 +346,14 @@ const collectEventStream =
   (eventStream: Stream.Stream<Event, E, R>) =>
     pipe(eventStream, Stream.take(count), Stream.runCollect);
 
-const subscribeAndDrain = (
-  streamId: string,
-  clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-) =>
-  pipe(
-    streamId,
-    subscribe,
-    Effect.flatMap(drainEventStream),
-    Effect.provide(ProtocolLive(clientTransport))
-  );
+const subscribeAndDrain =
+  (streamId: string) => (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+    pipe(
+      streamId,
+      subscribe,
+      Effect.flatMap(drainEventStream),
+      Effect.provide(ProtocolLive(clientTransport))
+    );
 
 const subscribeAndCollect = (
   streamId: string,
@@ -370,42 +369,44 @@ const subscribeAndCollect = (
 
 const collectEventsAsArray = (events: ReadonlyDeep<Iterable<Event>>) => Array.from(events);
 
-const runTestWithServerProtocol = <A, E, R>(
-  {
+const runTestWithServerProtocol =
+  <A, E, R>(
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    testLogic: (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => Effect.Effect<A, E, R>
+  ) =>
+  ({
     server,
     clientTransport,
   }: {
     readonly server: ReadonlyDeep<InMemoryServer>;
     readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
-  },
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  testLogic: (
-    clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-  ) => Effect.Effect<A, E, R>
-) =>
-  pipe(
-    createTestServerProtocol(server, commandHandler),
-    Effect.andThen(testLogic(clientTransport))
-  );
+  }) =>
+    pipe(
+      createTestServerProtocol(server, commandHandler),
+      Effect.andThen(testLogic(clientTransport))
+    );
 
-const runTestWithFullServerProtocol = <A, E, R>(
-  {
+const runTestWithFullServerProtocol =
+  <A, E, R>(
+    commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
+    subscriptionHandler: (streamId: string) => readonly Event[],
+    testLogic: (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => Effect.Effect<A, E, R>
+  ) =>
+  ({
     server,
     clientTransport,
   }: {
     readonly server: ReadonlyDeep<InMemoryServer>;
     readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
-  },
-  commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
-  subscriptionHandler: (streamId: string) => readonly Event[],
-  testLogic: (
-    clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-  ) => Effect.Effect<A, E, R>
-) =>
-  pipe(
-    createTestServerProtocol(server, commandHandler, subscriptionHandler),
-    Effect.andThen(testLogic(clientTransport))
-  );
+  }) =>
+    pipe(
+      createTestServerProtocol(server, commandHandler, subscriptionHandler),
+      Effect.andThen(testLogic(clientTransport))
+    );
 
 const createTestEvent = (
   streamId: string,
@@ -436,7 +437,7 @@ const runTestWithProtocol = <A, E, R>(
   testLogic: (
     clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
   ) => Effect.Effect<A, E, R>
-) => runTest((env) => runTestWithServerProtocol(env, commandHandler, testLogic));
+) => runTest(runTestWithServerProtocol(commandHandler, testLogic));
 
 const runTestWithFullProtocol = <A, E, R>(
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
@@ -444,10 +445,7 @@ const runTestWithFullProtocol = <A, E, R>(
   testLogic: (
     clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
   ) => Effect.Effect<A, E, R>
-) =>
-  runTest((env) =>
-    runTestWithFullServerProtocol(env, commandHandler, subscriptionHandler, testLogic)
-  );
+) => runTest(runTestWithFullServerProtocol(commandHandler, subscriptionHandler, testLogic));
 
 const defaultSuccessHandler =
   (streamId: string, eventNumber: number) => (_cmd: ReadonlyDeep<WireCommand>) => ({
@@ -532,10 +530,10 @@ const sendAndVerifyCommandAfterNoise = (
 describe('Protocol Behavior Tests', () => {
   describe('WireCommand Sending and Results', () => {
     it.effect('should send command and receive success result', () =>
-      runTestWithProtocol(defaultSuccessHandler('user-123', 42), (clientTransport) =>
+      runTestWithProtocol(
+        defaultSuccessHandler('user-123', 42),
         sendCommandWithVerification(
           createWireCommand('user-123', 'UpdateProfile', { name: 'John Doe' }),
-          clientTransport,
           verifySuccessResult('user-123', 42)
         )
       )
@@ -552,12 +550,10 @@ describe('Protocol Behavior Tests', () => {
             validationErrors: ['Name is required'],
           },
         }),
-        (clientTransport) =>
-          sendCommandWithVerification(
-            createWireCommand('user-123', 'UpdateProfile', { name: '' }),
-            clientTransport,
-            verifyFailureResult('ValidationError', ['Name is required'])
-          )
+        sendCommandWithVerification(
+          createWireCommand('user-123', 'UpdateProfile', { name: '' }),
+          verifyFailureResult('ValidationError', ['Name is required'])
+        )
       )
     );
 
@@ -624,9 +620,7 @@ describe('Protocol Behavior Tests', () => {
 
   describe('Event Subscription', () => {
     it.effect('should successfully create subscriptions without timeout', () =>
-      runTestWithProtocol(defaultSuccessHandler('test', 1), (clientTransport) =>
-        subscribeAndDrain('user-123', clientTransport)
-      )
+      runTestWithProtocol(defaultSuccessHandler('test', 1), subscribeAndDrain('user-123'))
     );
 
     it.effect('should receive events for subscribed streams', () =>
@@ -1419,29 +1413,28 @@ describe('Protocol Behavior Tests', () => {
           }
         });
 
-    const runServerProtocolCommandTest = (
-      serverProtocol: Context.Tag.Service<ServerProtocol>,
-      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-    ) => {
-      const command: WireCommand = {
-        id: crypto.randomUUID(),
-        target: 'user-123',
-        name: 'CreateUser',
-        payload: { name: 'Alice', email: 'alice@example.com' },
-      };
+    const runServerProtocolCommandTest =
+      (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+      (serverProtocol: Context.Tag.Service<ServerProtocol>) => {
+        const command: WireCommand = {
+          id: crypto.randomUUID(),
+          target: 'user-123',
+          name: 'CreateUser',
+          payload: { name: 'Alice', email: 'alice@example.com' },
+        };
 
-      return pipe(
-        Effect.all(
-          [
-            listenForWireCommand(serverProtocol),
-            sendCommandAsEitherAfterDelay(command, clientTransport),
-            TestClock.adjust(Duration.seconds(11)),
-          ],
-          { concurrency: 'unbounded' }
-        ),
-        Effect.tap(verifyCommandReceivedAndTimedOut(command))
-      );
-    };
+        return pipe(
+          Effect.all(
+            [
+              listenForWireCommand(serverProtocol),
+              sendCommandAsEitherAfterDelay(command, clientTransport),
+              TestClock.adjust(Duration.seconds(11)),
+            ],
+            { concurrency: 'unbounded' }
+          ),
+          Effect.tap(verifyCommandReceivedAndTimedOut(command))
+        );
+      };
 
     const runServerProtocolTest = (
       server: ReadonlyDeep<InMemoryServer>,
@@ -1449,9 +1442,7 @@ describe('Protocol Behavior Tests', () => {
     ) =>
       pipe(
         ServerProtocol,
-        Effect.flatMap((serverProtocol) =>
-          runServerProtocolCommandTest(serverProtocol, clientTransport)
-        ),
+        Effect.flatMap(runServerProtocolCommandTest(clientTransport)),
         Effect.provide(ServerProtocolLive(server))
       );
 
@@ -1522,36 +1513,35 @@ describe('Protocol Behavior Tests', () => {
         }
       });
 
-    const runSendResultTest = (
-      serverProtocol: Context.Tag.Service<ServerProtocol>,
-      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-    ) => {
-      const command: WireCommand = {
-        id: crypto.randomUUID(),
-        target: 'user-456',
-        name: 'UpdateProfile',
-        payload: { name: 'Bob', email: 'bob@example.com' },
-      };
+    const runSendResultTest =
+      (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+      (serverProtocol: Context.Tag.Service<ServerProtocol>) => {
+        const command: WireCommand = {
+          id: crypto.randomUUID(),
+          target: 'user-456',
+          name: 'UpdateProfile',
+          payload: { name: 'Bob', email: 'bob@example.com' },
+        };
 
-      const successResult: CommandResult = {
-        _tag: 'Success',
-        position: {
-          streamId: unsafeCreateStreamId('user-456'),
-          eventNumber: 99,
-        },
-      };
+        const successResult: CommandResult = {
+          _tag: 'Success',
+          position: {
+            streamId: unsafeCreateStreamId('user-456'),
+            eventNumber: 99,
+          },
+        };
 
-      return pipe(
-        Effect.all(
-          [
-            sendCommandViaProtocol(command, clientTransport),
-            processCommandAndSendResult(serverProtocol, command, successResult),
-          ],
-          { concurrency: 'unbounded' }
-        ),
-        Effect.tap(verifyClientResult)
-      );
-    };
+        return pipe(
+          Effect.all(
+            [
+              sendCommandViaProtocol(command, clientTransport),
+              processCommandAndSendResult(serverProtocol, command, successResult),
+            ],
+            { concurrency: 'unbounded' }
+          ),
+          Effect.tap(verifyClientResult)
+        );
+      };
 
     const runServerSendResultTest = (
       server: ReadonlyDeep<InMemoryServer>,
@@ -1559,7 +1549,7 @@ describe('Protocol Behavior Tests', () => {
     ) =>
       pipe(
         ServerProtocol,
-        Effect.flatMap((serverProtocol) => runSendResultTest(serverProtocol, clientTransport)),
+        Effect.flatMap(runSendResultTest(clientTransport)),
         Effect.provide(ServerProtocolLive(server))
       );
 

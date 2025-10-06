@@ -13,38 +13,31 @@ export interface SubscribableEventStore<T> extends EventStore<T> {
   ) => Effect.Effect<Stream.Stream<T, never>, EventStoreError, Scope.Scope>;
 }
 
-const dropEventsFromStream = <T>(stream: Readonly<Stream.Stream<T, never, never>>, count: number) =>
-  Stream.drop(stream, count);
+const dropEventsFromStream =
+  <T>(count: number) =>
+  (stream: Readonly<Stream.Stream<T, never, never>>) =>
+    Stream.drop(stream, count);
 
 const readHistoricalEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
-  pipe(
-    from.streamId,
-    store.getHistorical,
-    Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-      dropEventsFromStream(stream, from.eventNumber)
-    )
-  );
+  pipe(from.streamId, store.getHistorical, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
 
 const readAllEvents = <T>(store: InMemoryStore<T>, from: EventStreamPosition) =>
+  pipe(from.streamId, store.get, Effect.map(dropEventsFromStream<T>(from.eventNumber)));
+
+const createSubscribeError = (streamId: EventStreamPosition['streamId'], error: unknown) =>
   pipe(
-    from.streamId,
-    store.get,
-    Effect.map((stream: Readonly<Stream.Stream<T, never, never>>) =>
-      dropEventsFromStream(stream, from.eventNumber)
-    )
+    error,
+    eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`)
   );
 
-const subscribeToStreamWithError = <T>(
-  store: InMemoryStore<T>,
-  streamId: EventStreamPosition['streamId']
-) =>
-  pipe(
-    streamId,
-    store.get,
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`, error)
-    )
-  );
+const subscribeToStreamWithError =
+  <T>(streamId: EventStreamPosition['streamId']) =>
+  (store: InMemoryStore<T>) =>
+    pipe(
+      streamId,
+      store.get,
+      Effect.mapError((error) => createSubscribeError(streamId, error))
+    );
 
 export const makeInMemoryEventStore = <T>(
   store: InMemoryStore<T>
@@ -60,20 +53,15 @@ export const makeInMemoryEventStore = <T>(
     subscribe: (from: EventStreamPosition) => readAllEvents(store, from),
   });
 
-const addSubscribeMethod = <T>(
-  baseStore: EventStore<T>,
-  store: InMemoryStore<T>
-): SubscribableEventStore<T> => ({
-  ...baseStore,
-  subscribeToStream: (streamId: EventStreamPosition['streamId']) =>
-    subscribeToStreamWithError(store, streamId),
-});
+const addSubscribeMethod =
+  <T>(store: InMemoryStore<T>) =>
+  (baseStore: EventStore<T>): SubscribableEventStore<T> => ({
+    ...baseStore,
+    subscribeToStream: (streamId: EventStreamPosition['streamId']) =>
+      pipe(store, subscribeToStreamWithError(streamId)),
+  });
 
 export const makeSubscribableInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<SubscribableEventStore<T>, never, never> =>
-  pipe(
-    store,
-    makeInMemoryEventStore,
-    Effect.map((baseStore) => addSubscribeMethod(baseStore, store))
-  );
+  pipe(store, makeInMemoryEventStore, Effect.map(addSubscribeMethod(store)));
