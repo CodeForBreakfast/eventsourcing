@@ -4,24 +4,29 @@
 
 This document describes how OpenTelemetry trace context flows through the event sourcing system, from client command through to event delivery.
 
+**IMPORTANT**: We use **Effect's OpenTelemetry API only** (`@effect/opentelemetry`). We do NOT use `@opentelemetry/api` directly. All span creation, context extraction, and trace propagation is done through Effect's integration.
+
 ## Key Principles
 
 1. **Commands use child spans** - Command processing continues the client's trace with a child span
 2. **Events use new traces** - Event delivery creates a new trace (async/decoupled from commands)
 3. **Links are added programmatically** - Span links are created when reading event metadata, NOT transmitted over the wire
 4. **Context is minimal** - Wire protocol only carries `{traceId, parentId}`, no links
+5. **Effect's OTel API only** - All telemetry operations use `@effect/opentelemetry`, not raw OpenTelemetry APIs
 
 ## The Flow
 
 ### 1. Client Context Origin
 
-The client has an active OpenTelemetry span from the operation that triggered the command (e.g., user interaction, API call).
+The client has an active Effect span (using `@effect/opentelemetry`) from the operation that triggered the command (e.g., user interaction, API call).
 
 **Client span:** `{traceId: 'A', spanId: '1'}`
 
+The protocol layer extracts the current trace context using Effect's OpenTelemetry API.
+
 ### 2. Client → Server (ProtocolCommand)
 
-The client propagates its current span context in the command message.
+The client propagates its current span context in the command message using Effect's trace context extraction.
 
 **Wire format:**
 
@@ -48,11 +53,12 @@ Server extracts the context and creates a **child span** for command processing:
 - Parent span ID is `'1'` (client's span)
 
 ```typescript
-// Server creates span from context
-const span = tracer.startSpan('process_command', {
-  parent: extractedContext, // {traceId: 'A', spanId: '1'}
+// Server creates child span from extracted context using Effect's API
+Effect.withSpan('process_command', { parent: extractedContext })(
+  // Command processing happens within this span
   // This creates spanId: '2' as child of '1'
-});
+  processCommand(command)
+);
 ```
 
 ### 4. Event Persistence
@@ -87,17 +93,20 @@ Event {
 When the store notifies the server about a new event, the server creates a **NEW trace** for the event delivery flow (async/decoupled):
 
 ```typescript
-// Server creates NEW span for event delivery
-const eventSpan = tracer.startSpan('deliver_event', {
+// Server creates NEW span for event delivery using Effect's API
+Effect.withSpan('deliver_event', {
   // No parent - this is a new trace
   // Creates: {traceId: 'B', spanId: '3'}
-});
-
-// Add link to command that caused this event (from event metadata)
-eventSpan.addLink({
-  traceId: event.metadata.origin.context.traceId, // 'A'
-  spanId: event.metadata.origin.context.parentId, // '2'
-});
+  links: [
+    {
+      // Link to command that caused this event (from event metadata)
+      context: {
+        traceId: event.metadata.origin.context.traceId, // 'A'
+        spanId: event.metadata.origin.context.parentId, // '2'
+      },
+    },
+  ],
+})(deliverEvent(event));
 ```
 
 ### 6. Server → Client (ProtocolEvent)
@@ -125,11 +134,11 @@ Send the event with the **new delivery context** (no links transmitted):
 Client receives the event and creates a **child span** of the delivery context:
 
 ```typescript
-// Client creates span from delivered context
-const span = tracer.startSpan('process_event', {
+// Client creates child span from delivered context using Effect's API
+Effect.withSpan('process_event', {
   parent: { traceId: 'B', spanId: '3' },
   // This creates spanId: '4' as child of '3'
-});
+})(handleEvent(event));
 
 // Client can see via observability backend that trace B
 // has a link to trace A (added server-side in step 5)
@@ -311,6 +320,11 @@ The transport layer is context-agnostic - it just carries messages. The existing
 
 ### What NOT to Test
 
-- OpenTelemetry SDK internals (span creation, propagation) - trust the SDK
+- Effect's OpenTelemetry implementation internals - trust Effect
 - Trace context serialization format - trust W3C spec compliance
 - Observability backend behavior - out of scope
+
+### Dependencies
+
+- `@effect/opentelemetry` - Effect's OpenTelemetry integration (provides span creation, context extraction, etc.)
+- No direct dependency on `@opentelemetry/api` - we only use Effect's API
