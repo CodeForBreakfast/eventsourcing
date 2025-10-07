@@ -323,11 +323,10 @@ const writeBlockFile =
   ): Effect.Effect<BlockFile, Error, FileSystem.FileSystem | Path.Path> => {
     const headerLines = 0;
     const filename = `example-${index + 1}.ts`;
-    const content = block.code;
 
     return pipe(
       joinPath(tempDir, filename),
-      Effect.flatMap(writeBlockFileContent(content, filename, block, headerLines))
+      Effect.flatMap(writeBlockFileContent(block.code, filename, block, headerLines))
     );
   };
 
