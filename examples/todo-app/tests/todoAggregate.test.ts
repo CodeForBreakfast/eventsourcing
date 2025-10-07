@@ -28,11 +28,10 @@ describe('TodoAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          const firstEvent = events[0];
-          if (!firstEvent) throw new Error('Expected first event');
-          expect(firstEvent.type).toBe('TodoCreated');
-          expect(firstEvent.data.title).toBe('Buy milk');
-          expect(firstEvent.metadata.originator).toBe(TEST_USER);
+          if (!events[0]) throw new Error('Expected first event');
+          expect(events[0].type).toBe('TodoCreated');
+          expect(events[0].data.title).toBe('Buy milk');
+          expect(events[0].metadata.originator).toBe(TEST_USER);
         })
       )
     );
@@ -46,10 +45,9 @@ describe('TodoAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          const firstEvent = events[0];
-          if (!firstEvent) throw new Error('Expected first event');
-          expect(firstEvent.type).toBe('TodoTitleChanged');
-          expect(firstEvent.data.title).toBe('Buy bread');
+          if (!events[0]) throw new Error('Expected first event');
+          expect(events[0].type).toBe('TodoTitleChanged');
+          expect(events[0].data.title).toBe('Buy bread');
         })
       )
     );
@@ -88,9 +86,8 @@ describe('TodoAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          const firstEvent = events[0];
-          if (!firstEvent) throw new Error('Expected first event');
-          expect(firstEvent.type).toBe('TodoCompleted');
+          if (!events[0]) throw new Error('Expected first event');
+          expect(events[0].type).toBe('TodoCompleted');
         })
       );
     });
@@ -117,9 +114,8 @@ describe('TodoAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          const firstEvent = events[0];
-          if (!firstEvent) throw new Error('Expected first event');
-          expect(firstEvent.type).toBe('TodoUncompleted');
+          if (!events[0]) throw new Error('Expected first event');
+          expect(events[0].type).toBe('TodoUncompleted');
         })
       );
     });
@@ -146,9 +142,8 @@ describe('TodoAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          const firstEvent = events[0];
-          if (!firstEvent) throw new Error('Expected first event');
-          expect(firstEvent.type).toBe('TodoDeleted');
+          if (!events[0]) throw new Error('Expected first event');
+          expect(events[0].type).toBe('TodoDeleted');
         })
       );
     });
