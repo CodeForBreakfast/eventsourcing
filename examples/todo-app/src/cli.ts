@@ -71,9 +71,6 @@ const handleConditional = <E, R>(
   whenFalse: Readonly<Effect.Effect<void, E, R>>
 ): Effect.Effect<void, E, R> => (events.length > 0 ? whenTrue : whenFalse);
 
-const createTodoCommand = (userId: UserId, title: string) =>
-  TodoAggregateRoot.commands.createTodo(userId, title);
-
 const commitAndReturnId =
   (todoId: TodoId, eventNumber: number, title: string) =>
   (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -82,17 +79,15 @@ const commitAndReturnId =
       Effect.as(todoId)
     );
 
-const executeCreateCommand = (userId: UserId, title: string) => {
-  const cmd = createTodoCommand(userId, title);
-  return cmd();
-};
+const executeCreateTodo = (userId: UserId, title: string) =>
+  TodoAggregateRoot.commands.createTodo(userId, title)();
 
 const createTodo = (title: string) => {
   const todoId = `todo-${Date.now()}` as TodoId;
   const state = TodoAggregateRoot.new();
 
   return pipe(
-    executeCreateCommand(CURRENT_USER, title),
+    executeCreateTodo(CURRENT_USER, title),
     Effect.flatMap(commitAndReturnId(todoId, state.nextEventNumber, title))
   );
 };
@@ -108,9 +103,6 @@ const handleCompleteEvents =
       Console.log(`⚠ TODO ${todoId} is already completed`)
     );
 
-const executeCompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  pipe(completeCommand(userId, state));
-
 const processCompleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -120,7 +112,7 @@ const processCompleteState =
     }>
   ) =>
     pipe(
-      executeCompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      completeCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
     );
 
@@ -140,9 +132,6 @@ const handleUncompleteEvents =
       Console.log(`⚠ TODO ${todoId} is already uncompleted`)
     );
 
-const executeUncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  pipe(uncompleteCommand(userId, state));
-
 const processUncompleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -152,7 +141,7 @@ const processUncompleteState =
     }>
   ) =>
     pipe(
-      executeUncompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      uncompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
     );
 
@@ -172,9 +161,6 @@ const handleDeleteEvents =
       Console.log(`⚠ TODO ${todoId} is already deleted`)
     );
 
-const executeDeleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  pipe(deleteCommand(userId, state));
-
 const processDeleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -184,7 +170,7 @@ const processDeleteState =
     }>
   ) =>
     pipe(
-      executeDeleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      deleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
     );
 
@@ -249,9 +235,7 @@ const processListProjection = (projection: Readonly<Projection<TodoListProjectio
   );
 };
 
-const loadTodoListProjectionEffect = () => pipe(loadTodoListProjection());
-
-const listTodos = () => pipe(loadTodoListProjectionEffect(), Effect.flatMap(processListProjection));
+const listTodos = () => pipe(loadTodoListProjection(), Effect.flatMap(processListProjection));
 
 const showHelp = () =>
   Console.log(`
@@ -274,18 +258,12 @@ Examples:
   bun run src/cli.ts list
 `);
 
-const logErrorMessage = (message: string) => Console.error(message);
-
-const logUsage = (usage: string) => Console.log(usage);
-
-const failWithError = (message: string) => Effect.fail(new Error(message));
-
 const missingArgError = (message: string, usage: string) =>
   pipe(
     message,
-    logErrorMessage,
-    Effect.andThen(logUsage(usage)),
-    Effect.andThen(failWithError(message))
+    Console.error,
+    Effect.andThen(Console.log(usage)),
+    Effect.andThen(Effect.fail(new Error(message)))
   );
 
 const runCommand = (
