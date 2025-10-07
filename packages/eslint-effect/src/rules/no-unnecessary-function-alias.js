@@ -67,6 +67,10 @@ export default {
 
         if (!isDirectAlias) return;
 
+        if (node.init.type === 'MemberExpression' && node.init.computed) {
+          return;
+        }
+
         if (isExported(node.parent.parent)) return;
 
         const aliasName = node.id.name;
