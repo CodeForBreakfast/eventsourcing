@@ -25,11 +25,7 @@ const getCurrentLastEvent = (
   streamId: EventStreamId
 ): number => Option.getOrElse(HashMap.get(lastEvents, streamId), () => -1);
 
-const updateLastEvents = (
-  lastEvents: HashMap.HashMap<EventStreamId, number>,
-  streamId: EventStreamId,
-  eventNumber: number
-): HashMap.HashMap<EventStreamId, number> => HashMap.set(lastEvents, streamId, eventNumber);
+const updateLastEvents = HashMap.set;
 
 const processEventWithTracking =
   <T>(
