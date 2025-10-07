@@ -83,13 +83,13 @@ const TodoProjectionEventStore = Context.GenericTag<ProjectionEventStore<TodoEve
   'TodoProjectionEventStore'
 );
 
-const loadTodoProjectionEffect = (todoId: TodoId) =>
+const createLoadProjection = (todoId: TodoId) => () =>
   loadProjection(TodoProjectionEventStore, applyEvent(todoId))(todoId);
 
 const loadProjectionWithStore =
   (todoId: TodoId) => (projectionStore: ProjectionEventStore<TodoEvent>) =>
     pipe(
-      loadTodoProjectionEffect(todoId),
+      createLoadProjection(todoId)(),
       Effect.provideService(TodoProjectionEventStore, projectionStore)
     );
 

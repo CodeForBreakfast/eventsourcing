@@ -9,11 +9,11 @@ import { TodoListEvent } from '../domain/todoListEvents';
 import { TodoListAggregate } from '../domain/todoListAggregate';
 import type { ReadonlyDeep } from 'type-fest';
 
-export interface TodoListItem {
-  readonly todoId: TodoId;
-  readonly title: string;
-  readonly addedAt: ReadonlyDeep<Date>;
-}
+export type TodoListItem = ReadonlyDeep<{
+  todoId: TodoId;
+  title: string;
+  addedAt: Date;
+}>;
 
 export interface TodoListProjection {
   readonly todos: readonly TodoListItem[];
@@ -55,16 +55,17 @@ const TodoListProjectionEventStore = Context.GenericTag<ProjectionEventStore<Tod
   'TodoListProjectionEventStore'
 );
 
+const createLoadProjection = (listId: string) => () =>
+  loadProjection(TodoListProjectionEventStore, applyEvent)(listId);
+
 const loadProjectionForList = (
   projectionStore: ProjectionEventStore<TodoListEvent>,
   listId: string
-) => {
-  const loadProjectionEffect = loadProjection(TodoListProjectionEventStore, applyEvent)(listId);
-  return pipe(
-    loadProjectionEffect,
+) =>
+  pipe(
+    createLoadProjection(listId)(),
     Effect.provideService(TodoListProjectionEventStore, projectionStore)
   );
-};
 
 export const loadTodoListProjection = () =>
   pipe(
