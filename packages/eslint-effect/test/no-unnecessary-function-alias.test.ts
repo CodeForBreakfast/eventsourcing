@@ -49,6 +49,20 @@ const wrappedFunction = (x: number) => Effect.succeed(x * 2);
 const notAnAlias = (x: number) => wrappedFunction(x);
 
 // ============================================================================
+// SHOULD NOT TRIGGER - Computed member expressions add semantic value
+// ============================================================================
+
+const events = [{ type: 'created' }, { type: 'updated' }];
+const firstEvent = events[0];
+const secondEvent = events[1];
+
+const useIndexedAccess = () => {
+  if (!firstEvent) throw new Error('Expected first event');
+  if (!secondEvent) throw new Error('Expected second event');
+  return [firstEvent.type, secondEvent.type];
+};
+
+// ============================================================================
 // DEMONSTRATES THE RULE - This will trigger a warning
 // ============================================================================
 
