@@ -79,6 +79,22 @@ const applyEvent =
     );
   };
 
+const requireExistingTodo = <A, E, R>(
+  operation: string,
+  onSome: (state: TodoState) => Effect.Effect<A, E, R>
+): ((state: Readonly<Option.Option<TodoState>>) => Effect.Effect<A, E | Error, R>) =>
+  Option.match({
+    onNone: () => Effect.fail(new Error(`Cannot ${operation} non-existent TODO`)),
+    onSome,
+  });
+
+const failIfDeletedTodo =
+  (operation: string) =>
+  (state: TodoState): Effect.Effect<TodoState, Error> =>
+    state.deleted
+      ? Effect.fail(new Error(`Cannot ${operation} deleted TODO`))
+      : Effect.succeed(state);
+
 const createTodo = (userId: UserId, title: string) => () =>
   Effect.succeed([
     {
@@ -89,27 +105,27 @@ const createTodo = (userId: UserId, title: string) => () =>
   ]);
 
 const changeTitle = (userId: UserId, title: string) =>
-  Option.match({
-    onNone: () => Effect.fail(new Error('Cannot change title of non-existent TODO')),
-    onSome: (current: TodoState) =>
-      current.deleted
-        ? Effect.fail(new Error('Cannot change title of deleted TODO'))
-        : Effect.succeed([
-            {
-              type: 'TodoTitleChanged' as const,
-              metadata: { occurredAt: new Date(), originator: userId },
-              data: { title, changedAt: new Date() },
-            } satisfies TodoTitleChanged,
-          ]),
-  });
+  requireExistingTodo('change title', (current) =>
+    pipe(
+      current,
+      failIfDeletedTodo('change title'),
+      Effect.as([
+        {
+          type: 'TodoTitleChanged' as const,
+          metadata: { occurredAt: new Date(), originator: userId },
+          data: { title, changedAt: new Date() },
+        } satisfies TodoTitleChanged,
+      ])
+    )
+  );
 
 const complete = (userId: UserId) =>
-  Option.match({
-    onNone: () => Effect.fail(new Error('Cannot complete non-existent TODO')),
-    onSome: (current: TodoState) =>
-      current.deleted
-        ? Effect.fail(new Error('Cannot complete deleted TODO'))
-        : current.completed
+  requireExistingTodo('complete', (current) =>
+    pipe(
+      current,
+      failIfDeletedTodo('complete'),
+      Effect.flatMap((state) =>
+        state.completed
           ? Effect.succeed([])
           : Effect.succeed([
               {
@@ -117,40 +133,42 @@ const complete = (userId: UserId) =>
                 metadata: { occurredAt: new Date(), originator: userId },
                 data: { completedAt: new Date() },
               } satisfies TodoCompleted,
-            ]),
-  });
+            ])
+      )
+    )
+  );
 
 const uncomplete = (userId: UserId) =>
-  Option.match({
-    onNone: () => Effect.fail(new Error('Cannot uncomplete non-existent TODO')),
-    onSome: (current: TodoState) =>
-      current.deleted
-        ? Effect.fail(new Error('Cannot uncomplete deleted TODO'))
-        : !current.completed
-          ? Effect.succeed([])
-          : Effect.succeed([
+  requireExistingTodo('uncomplete', (current) =>
+    pipe(
+      current,
+      failIfDeletedTodo('uncomplete'),
+      Effect.flatMap((state) =>
+        state.completed
+          ? Effect.succeed([
               {
                 type: 'TodoUncompleted' as const,
                 metadata: { occurredAt: new Date(), originator: userId },
                 data: { uncompletedAt: new Date() },
               } satisfies TodoUncompleted,
-            ]),
-  });
+            ])
+          : Effect.succeed([])
+      )
+    )
+  );
 
 const deleteTodo = (userId: UserId) =>
-  Option.match({
-    onNone: () => Effect.fail(new Error('Cannot delete non-existent TODO')),
-    onSome: (current: TodoState) =>
-      current.deleted
-        ? Effect.succeed([])
-        : Effect.succeed([
-            {
-              type: 'TodoDeleted' as const,
-              metadata: { occurredAt: new Date(), originator: userId },
-              data: { deletedAt: new Date() },
-            } satisfies TodoDeleted,
-          ]),
-  });
+  requireExistingTodo('delete', (current) =>
+    current.deleted
+      ? Effect.succeed([])
+      : Effect.succeed([
+          {
+            type: 'TodoDeleted' as const,
+            metadata: { occurredAt: new Date(), originator: userId },
+            data: { deletedAt: new Date() },
+          } satisfies TodoDeleted,
+        ])
+  );
 
 export const TodoAggregateRoot = makeAggregateRoot(
   TodoId,
