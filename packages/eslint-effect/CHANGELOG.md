@@ -1,5 +1,13 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.5.1
+
+### Patch Changes
+
+- [#230](https://github.com/CodeForBreakfast/eventsourcing/pull/230) [`edc306f`](https://github.com/CodeForBreakfast/eventsourcing/commit/edc306f9e10377560102b4c90dca2d8cdb358bdd) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix no-unnecessary-function-alias rule to allow computed member expressions
+
+  The rule now correctly excludes aliases for computed member expressions (bracket notation) like `const firstEvent = events[0]` or `const command = args[0]`. These aliases provide semantic value by giving meaningful names to array/object access patterns and should not be flagged as unnecessary.
+
 ## 0.5.0
 
 ### Minor Changes
