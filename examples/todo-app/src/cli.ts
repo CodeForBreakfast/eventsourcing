@@ -42,6 +42,17 @@ const publishEventsWithBus =
 const publishEvents = (todoId: TodoId, events: ReadonlyArray<TodoEvent>) =>
   pipe(EventBus, Effect.flatMap(publishEventsWithBus(todoId, events)));
 
+const commitTodoEvents = (
+  todoId: TodoId,
+  eventNumber: number,
+  events: Readonly<ReadonlyArray<TodoEvent>>
+) =>
+  TodoAggregateRoot.commit({
+    id: todoId,
+    eventNumber,
+    events: Chunk.fromIterable(events),
+  });
+
 const commitAndPublish = (
   todoId: TodoId,
   eventNumber: number,
@@ -49,13 +60,9 @@ const commitAndPublish = (
   successMessage: string
 ) =>
   pipe(
-    TodoAggregateRoot.commit({
-      id: todoId,
-      eventNumber,
-      events: Chunk.fromIterable(events),
-    }),
-    Effect.flatMap(() => publishEvents(todoId, events)),
-    Effect.flatMap(() => Console.log(successMessage))
+    commitTodoEvents(todoId, eventNumber, events),
+    Effect.andThen(publishEvents(todoId, events)),
+    Effect.andThen(Console.log(successMessage))
   );
 
 const handleConditional = <E, R>(
@@ -64,8 +71,8 @@ const handleConditional = <E, R>(
   whenFalse: Readonly<Effect.Effect<void, E, R>>
 ): Effect.Effect<void, E, R> => (events.length > 0 ? whenTrue : whenFalse);
 
-const createTodoCommand = (userId: UserId, title: string) => () =>
-  TodoAggregateRoot.commands.createTodo(userId, title)();
+const createTodoCommand = (userId: UserId, title: string) =>
+  TodoAggregateRoot.commands.createTodo(userId, title);
 
 const commitAndReturnId =
   (todoId: TodoId, eventNumber: number, title: string) =>
@@ -85,7 +92,7 @@ const createTodo = (title: string) => {
   );
 };
 
-const completeCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+const completeCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.complete(userId)(state);
 
 const handleCompleteEvents =
@@ -96,6 +103,9 @@ const handleCompleteEvents =
       Console.log(`⚠ TODO ${todoId} is already completed`)
     );
 
+const executeCompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
+  pipe(completeCommand(userId, state));
+
 const processCompleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -105,14 +115,16 @@ const processCompleteState =
     }>
   ) =>
     pipe(
-      completeCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      executeCompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
     );
 
-const completeTodo = (todoId: TodoId) =>
-  pipe(TodoAggregateRoot.load(todoId), Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+const loadTodoForComplete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
 
-const uncompleteCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+const completeTodo = (todoId: TodoId) =>
+  pipe(loadTodoForComplete(todoId), Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+
+const uncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.uncomplete(userId)(state);
 
 const handleUncompleteEvents =
@@ -123,6 +135,9 @@ const handleUncompleteEvents =
       Console.log(`⚠ TODO ${todoId} is already uncompleted`)
     );
 
+const executeUncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
+  pipe(uncompleteCommand(userId, state));
+
 const processUncompleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -132,17 +147,16 @@ const processUncompleteState =
     }>
   ) =>
     pipe(
-      uncompleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      executeUncompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
     );
 
-const uncompleteTodo = (todoId: TodoId) =>
-  pipe(
-    TodoAggregateRoot.load(todoId),
-    Effect.flatMap(processUncompleteState(todoId, CURRENT_USER))
-  );
+const loadTodoForUncomplete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
 
-const deleteCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+const uncompleteTodo = (todoId: TodoId) =>
+  pipe(loadTodoForUncomplete(todoId), Effect.flatMap(processUncompleteState(todoId, CURRENT_USER)));
+
+const deleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.deleteTodo(userId)(state);
 
 const handleDeleteEvents =
@@ -153,6 +167,9 @@ const handleDeleteEvents =
       Console.log(`⚠ TODO ${todoId} is already deleted`)
     );
 
+const executeDeleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
+  pipe(deleteCommand(userId, state));
+
 const processDeleteState =
   (todoId: TodoId, userId: UserId) =>
   (
@@ -162,12 +179,14 @@ const processDeleteState =
     }>
   ) =>
     pipe(
-      deleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      executeDeleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
     );
 
+const loadTodoForDelete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
+
 const deleteTodo = (todoId: TodoId) =>
-  pipe(TodoAggregateRoot.load(todoId), Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+  pipe(loadTodoForDelete(todoId), Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
 
 const formatAndLogTodo = (todoId: TodoId) => (todo: Readonly<TodoState>) =>
   pipe(
@@ -187,22 +206,27 @@ const processProjectionData = (todoId: TodoId) => (data: Readonly<Option.Option<
     })
   );
 
+const loadTodoProjectionForId = (todoId: TodoId) => pipe(loadTodoProjection(todoId));
+
+const processTodoProjection =
+  (todoId: TodoId) => (todoProjection: Readonly<Projection<TodoState>>) =>
+    processProjectionData(todoId)(todoProjection.data);
+
 const loadAndFormatTodo = (todoId: TodoId) =>
-  pipe(
-    loadTodoProjection(todoId),
-    Effect.flatMap((todoProjection) => processProjectionData(todoId)(todoProjection.data))
-  );
+  pipe(loadTodoProjectionForId(todoId), Effect.flatMap(processTodoProjection(todoId)));
+
+const forEachTodoItem = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
+  Effect.forEach(todos, (item) => loadAndFormatTodo(item.todoId));
+
+const logTodoListHeader = () => Console.log('\n📝 Your TODOs:\n');
+
+const logTodoListFooter = () => Console.log('');
 
 const formatTodoList = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
   pipe(
-    Console.log('\n📝 Your TODOs:\n'),
-    Effect.flatMap(() =>
-      pipe(
-        todos,
-        Effect.forEach((item) => loadAndFormatTodo(item.todoId))
-      )
-    ),
-    Effect.flatMap(() => Console.log(''))
+    logTodoListHeader(),
+    Effect.andThen(forEachTodoItem(todos)),
+    Effect.andThen(logTodoListFooter())
   );
 
 const processListProjection = (projection: Readonly<Projection<TodoListProjection>>) => {
@@ -218,7 +242,9 @@ const processListProjection = (projection: Readonly<Projection<TodoListProjectio
   );
 };
 
-const listTodos = () => pipe(loadTodoListProjection(), Effect.flatMap(processListProjection));
+const loadTodoListProjectionEffect = () => pipe(loadTodoListProjection());
+
+const listTodos = () => pipe(loadTodoListProjectionEffect(), Effect.flatMap(processListProjection));
 
 const showHelp = () =>
   Console.log(`
@@ -241,11 +267,17 @@ Examples:
   bun run src/cli.ts list
 `);
 
+const logErrorMessage = (message: string) => Console.error(message);
+
+const logUsage = (usage: string) => Console.log(usage);
+
+const failWithError = (message: string) => Effect.fail(new Error(message));
+
 const missingArgError = (message: string, usage: string) =>
   pipe(
-    Console.error(message),
-    Effect.flatMap(() => Console.log(usage)),
-    Effect.flatMap(() => Effect.fail(new Error(message)))
+    logErrorMessage(message),
+    Effect.andThen(logUsage(usage)),
+    Effect.andThen(failWithError(message))
   );
 
 const runCommand = (
@@ -294,24 +326,30 @@ const runCommand = (
   }
 };
 
+const forkProcessManager = () => Effect.fork(startProcessManager());
+
+const sleep100Millis = () => Effect.sleep('100 millis');
+
+const sleep500Millis = () => Effect.sleep('500 millis');
+
 const runWithProcessManager = (args: ReadonlyArray<string>) =>
   pipe(
-    Effect.all([Effect.fork(startProcessManager()), Effect.sleep('100 millis')]),
-    Effect.flatMap(() => runCommand(args)),
+    Effect.all([forkProcessManager(), sleep100Millis()]),
+    Effect.andThen(runCommand(args)),
     Effect.asVoid,
-    Effect.flatMap(() => Effect.sleep('500 millis'))
+    Effect.andThen(sleep500Millis())
   );
 
-const main = (args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> =>
+const scopeAndProvide = (args: ReadonlyArray<string>) =>
   pipe(Effect.scoped(runWithProcessManager(args)), Effect.provide(AppLive)) as Effect.Effect<
     void,
     unknown,
     never
   >;
 
-Effect.runPromise(
-  pipe(
-    Effect.sync(() => process.argv.slice(2)),
-    Effect.flatMap(main)
-  )
-).catch(console.error);
+const main = (args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> =>
+  scopeAndProvide(args);
+
+const getProcessArgs = () => process.argv.slice(2);
+
+pipe(getProcessArgs(), main, Effect.runPromise).catch(console.error);

@@ -11,7 +11,7 @@ import { TodoListAggregate } from '../domain/todoListAggregate';
 export type TodoListItem = {
   readonly todoId: TodoId;
   readonly title: string;
-  readonly addedAt: Date;
+  readonly addedAt: Readonly<Date>;
 };
 
 export interface TodoListProjection {

@@ -16,9 +16,9 @@ const isTodoDeleted = (event: unknown): event is TodoDeleted =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoDeleted';
 
 const addTodoAndCommit = (
-  state: AggregateState<TodoListState>,
+  state: Readonly<AggregateState<TodoListState>>,
   streamId: string,
-  event: TodoCreated
+  event: Readonly<TodoCreated>
 ) =>
   pipe(
     TodoListAggregateRoot.commands.addTodo(
@@ -37,18 +37,18 @@ const addTodoAndCommit = (
     )
   );
 
-const handleTodoCreated = (streamId: string, event: TodoCreated) =>
+const handleTodoCreated = (streamId: string, event: Readonly<TodoCreated>) =>
   pipe(
     TodoListAggregateRoot.load(TODO_LIST_ID_BRANDED),
     Effect.flatMap((state) =>
-      addTodoAndCommit(state as AggregateState<TodoListState>, streamId, event)
+      addTodoAndCommit(state as Readonly<AggregateState<TodoListState>>, streamId, event)
     )
   );
 
 const removeTodoAndCommit = (
-  state: AggregateState<TodoListState>,
+  state: Readonly<AggregateState<TodoListState>>,
   streamId: string,
-  event: TodoDeleted
+  event: Readonly<TodoDeleted>
 ) =>
   pipe(
     TodoListAggregateRoot.commands.removeTodo(
@@ -66,40 +66,60 @@ const removeTodoAndCommit = (
     )
   );
 
-const handleTodoDeleted = (streamId: string, event: TodoDeleted) =>
+const handleTodoDeleted = (streamId: string, event: Readonly<TodoDeleted>) =>
   pipe(
     TodoListAggregateRoot.load(TODO_LIST_ID_BRANDED),
     Effect.flatMap((state) =>
-      removeTodoAndCommit(state as AggregateState<TodoListState>, streamId, event)
+      removeTodoAndCommit(state as Readonly<AggregateState<TodoListState>>, streamId, event)
     )
   );
 
-const handleCreatedWithLogging = ({ streamId, event }: { streamId: string; event: TodoCreated }) =>
+const handleCreatedWithLogging = ({
+  streamId,
+  event,
+}: {
+  readonly streamId: string;
+  readonly event: TodoCreated;
+}) =>
   pipe(
     handleTodoCreated(streamId, event),
     Effect.catchAll((error) => Effect.logError(`Failed to handle TodoCreated: ${String(error)}`))
   );
 
-const handleDeletedWithLogging = ({ streamId, event }: { streamId: string; event: TodoDeleted }) =>
+const handleDeletedWithLogging = ({
+  streamId,
+  event,
+}: {
+  readonly streamId: string;
+  readonly event: TodoDeleted;
+}) =>
   pipe(
     handleTodoDeleted(streamId, event),
     Effect.catchAll((error) => Effect.logError(`Failed to handle TodoDeleted: ${String(error)}`))
   );
 
 const runCreatedStream = (
-  stream: Stream.Stream<{ streamId: string; event: TodoCreated }, unknown, unknown>
+  stream: Stream.Stream<
+    { readonly streamId: string; readonly event: TodoCreated },
+    unknown,
+    unknown
+  >
 ) => pipe(stream, Stream.mapEffect(handleCreatedWithLogging), Stream.runDrain);
 
 const runDeletedStream = (
-  stream: Stream.Stream<{ streamId: string; event: TodoDeleted }, unknown, unknown>
+  stream: Stream.Stream<
+    { readonly streamId: string; readonly event: TodoDeleted },
+    unknown,
+    unknown
+  >
 ) => pipe(stream, Stream.mapEffect(handleDeletedWithLogging), Stream.runDrain);
 
 const subscribeToStreams = (eventBus: EventBusService) =>
   Effect.all([eventBus.subscribe(isTodoCreated), eventBus.subscribe(isTodoDeleted)]);
 
 const runBothStreams = ([createdStream, deletedStream]: readonly [
-  Stream.Stream<{ streamId: string; event: TodoCreated }, unknown, unknown>,
-  Stream.Stream<{ streamId: string; event: TodoDeleted }, unknown, unknown>,
+  Stream.Stream<{ readonly streamId: string; readonly event: TodoCreated }, unknown, unknown>,
+  Stream.Stream<{ readonly streamId: string; readonly event: TodoDeleted }, unknown, unknown>,
 ]) =>
   Effect.all([runCreatedStream(createdStream), runDeletedStream(deletedStream)], {
     concurrency: 'unbounded',
