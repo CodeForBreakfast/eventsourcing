@@ -1,5 +1,17 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.3.9
+
+### Patch Changes
+
+- [#228](https://github.com/CodeForBreakfast/eventsourcing/pull/228) [`2f58e66`](https://github.com/CodeForBreakfast/eventsourcing/commit/2f58e665f90f3296f1e1b58bff89a7838365221a) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved code quality and maintainability by eliminating unnecessary function wrappers throughout the codebase. These internal refactoring changes improve code readability and consistency without affecting any public APIs or behavior. All packages continue to work exactly as before with no breaking changes.
+
+- [#222](https://github.com/CodeForBreakfast/eventsourcing/pull/222) [`6ea70b0`](https://github.com/CodeForBreakfast/eventsourcing/commit/6ea70b083d217cbda2bf1bbae23279db60570b00) Thanks [@GraemeF](https://github.com/GraemeF)! - Protocol operations now automatically create Effect spans for distributed tracing. All commands, subscriptions, events, and results include W3C Trace Context fields (traceId, parentId). The protocol creates spans named 'protocol.send-command', 'protocol.subscribe', 'server-protocol.send-result', and 'server-protocol.publish-event' with relevant attributes, enabling end-to-end tracing across the event sourcing system.
+
+- Updated dependencies [[`2f58e66`](https://github.com/CodeForBreakfast/eventsourcing/commit/2f58e665f90f3296f1e1b58bff89a7838365221a), [`26ed0a0`](https://github.com/CodeForBreakfast/eventsourcing/commit/26ed0a0421106b73ad787f7e22ce110690104296), [`238623c`](https://github.com/CodeForBreakfast/eventsourcing/commit/238623c4106cc0f0ca535211a69f65ffb07c86bb), [`6ea70b0`](https://github.com/CodeForBreakfast/eventsourcing/commit/6ea70b083d217cbda2bf1bbae23279db60570b00)]:
+  - @codeforbreakfast/eventsourcing-protocol@0.4.2
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.4.3
+
 ## 0.3.8
 
 ### Patch Changes

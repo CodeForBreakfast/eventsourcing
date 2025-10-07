@@ -1,5 +1,12 @@
 # @codeforbreakfast/eventsourcing-store-inmemory
 
+## 0.2.7
+
+### Patch Changes
+
+- Updated dependencies [[`238623c`](https://github.com/CodeForBreakfast/eventsourcing/commit/238623c4106cc0f0ca535211a69f65ffb07c86bb)]:
+  - @codeforbreakfast/eventsourcing-store@0.8.2
+
 ## 0.2.6
 
 ### Patch Changes

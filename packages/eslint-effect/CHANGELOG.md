@@ -1,5 +1,29 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.5.0
+
+### Minor Changes
+
+- [#229](https://github.com/CodeForBreakfast/eventsourcing/pull/229) [`7a6b022`](https://github.com/CodeForBreakfast/eventsourcing/commit/7a6b0222ad29d49cca2bc99d47eda0538d1f0e5a) Thanks [@GraemeF](https://github.com/GraemeF)! - Added two new ESLint rules to enforce functional programming best practices:
+  - `no-eta-expansion` - Detects unnecessary function wrappers (eta-expansion) that only pass parameters directly to another function. Encourages point-free style by flagging patterns like `(x) => fn(x)` which can be simplified to just `fn`. This helps reduce code noise and improve readability in functional compositions.
+  - `no-unnecessary-function-alias` - Detects unnecessary function aliases that provide no semantic value. When a constant is assigned directly to another function without adding clarity or abstraction, it should be inlined at the call site. The rule is configurable with a `maxReferences` option to allow aliases that improve code reuse.
+
+  Both rules are included in the recommended configuration and support ESLint's disable comments for legitimate use cases where the expanded form adds necessary clarity.
+
+### Patch Changes
+
+- [#227](https://github.com/CodeForBreakfast/eventsourcing/pull/227) [`9634b47`](https://github.com/CodeForBreakfast/eventsourcing/commit/9634b47f99e559022c30336bdac98254a7b6d770) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved the `suggest-currying-opportunity` rule to be more conservative and avoid problematic suggestions:
+  - By default, the rule no longer suggests currying when it would require reordering parameters (which can break semantic ordering). This can be enabled with the `allowReordering` option.
+  - The rule now limits currying depth to single-level by default to prevent unreadable multi-level currying like `(a) => (b) => (c) => ...`. This can be configured with the `maxCurriedParams` option (max 3).
+  - Updated the rule message to be clearer about the benefits of currying in pipe contexts.
+
+  Fixed the `no-curried-calls` rule to properly catch all curried function call patterns:
+  - The rule now detects both member expression patterns (`Schema.decode()()`) and plain identifier patterns (`foo()()`).
+  - This works in tandem with `no-nested-pipe` to encourage extraction of named, composable functions instead of inline arrow functions with complex logic.
+  - Forces proper functional decomposition and creates reusable, testable function compositions.
+
+  These changes reduce false positives in the currying suggestion rule while strengthening enforcement of idiomatic Effect pipe composition patterns.
+
 ## 0.4.0
 
 ### Minor Changes

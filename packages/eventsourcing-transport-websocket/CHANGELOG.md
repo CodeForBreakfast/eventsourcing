@@ -1,5 +1,11 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
+## 0.4.3
+
+### Patch Changes
+
+- [#225](https://github.com/CodeForBreakfast/eventsourcing/pull/225) [`238623c`](https://github.com/CodeForBreakfast/eventsourcing/commit/238623c4106cc0f0ca535211a69f65ffb07c86bb) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactored test utilities to use Effect.sleep instead of setTimeout for more consistent and testable async behavior. This change only affects test code and does not impact public APIs.
+
 ## 0.4.2
 
 ### Patch Changes
