@@ -37,6 +37,21 @@
         "typescript": "5.9.3",
       },
     },
+    "examples/todo-app": {
+      "name": "@codeforbreakfast/eventsourcing-example-todo",
+      "version": "0.1.0",
+      "dependencies": {
+        "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
+        "@codeforbreakfast/eventsourcing-commands": "workspace:*",
+        "@codeforbreakfast/eventsourcing-projections": "workspace:*",
+        "@codeforbreakfast/eventsourcing-store": "workspace:*",
+        "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
+        "effect": "^3.18.1",
+      },
+      "devDependencies": {
+        "@types/bun": "latest",
+      },
+    },
     "packages/buntest": {
       "name": "@codeforbreakfast/buntest",
       "version": "0.2.4",
@@ -338,6 +353,8 @@
     "@codeforbreakfast/eventsourcing-aggregates": ["@codeforbreakfast/eventsourcing-aggregates@workspace:packages/eventsourcing-aggregates"],
 
     "@codeforbreakfast/eventsourcing-commands": ["@codeforbreakfast/eventsourcing-commands@workspace:packages/eventsourcing-commands"],
+
+    "@codeforbreakfast/eventsourcing-example-todo": ["@codeforbreakfast/eventsourcing-example-todo@workspace:examples/todo-app"],
 
     "@codeforbreakfast/eventsourcing-projections": ["@codeforbreakfast/eventsourcing-projections@workspace:packages/eventsourcing-projections"],
 

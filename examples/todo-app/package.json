@@ -1,0 +1,28 @@
+{
+  "name": "@codeforbreakfast/eventsourcing-example-todo",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "exports": {
+    ".": {
+      "import": "./src/cli.ts"
+    }
+  },
+  "scripts": {
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
+  },
+  "dependencies": {
+    "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
+    "@codeforbreakfast/eventsourcing-projections": "workspace:*",
+    "@codeforbreakfast/eventsourcing-store": "workspace:*",
+    "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
+    "effect": "^3.18.1"
+  },
+  "devDependencies": {
+    "@types/bun": "latest"
+  }
+}
