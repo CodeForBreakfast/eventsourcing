@@ -16,10 +16,11 @@ describe('TodoListAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          if (!events[0]) throw new Error('Expected first event');
-          expect(events[0].type).toBe('TodoAddedToList');
-          expect(events[0].data.todoId).toBe(TEST_TODO_ID);
-          expect(events[0].data.title).toBe('Buy milk');
+          const firstEvent = events[0];
+          if (!firstEvent) throw new Error('Expected first event');
+          expect(firstEvent.type).toBe('TodoAddedToList');
+          expect(firstEvent.data.todoId).toBe(TEST_TODO_ID);
+          expect(firstEvent.data.title).toBe('Buy milk');
         })
       );
     });
@@ -34,8 +35,9 @@ describe('TodoListAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          if (!events[0]) throw new Error('Expected first event');
-          expect(events[0].data.todoId).toBe(TEST_TODO_ID);
+          const firstEvent = events[0];
+          if (!firstEvent) throw new Error('Expected first event');
+          expect(firstEvent.data.todoId).toBe(TEST_TODO_ID);
         })
       );
     });
@@ -66,9 +68,10 @@ describe('TodoListAggregate', () => {
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
-          if (!events[0]) throw new Error('Expected first event');
-          expect(events[0].type).toBe('TodoRemovedFromList');
-          expect(events[0].data.todoId).toBe(TEST_TODO_ID);
+          const firstEvent = events[0];
+          if (!firstEvent) throw new Error('Expected first event');
+          expect(firstEvent.type).toBe('TodoRemovedFromList');
+          expect(firstEvent.data.todoId).toBe(TEST_TODO_ID);
         })
       );
     });
