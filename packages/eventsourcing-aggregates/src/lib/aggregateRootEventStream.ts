@@ -89,7 +89,7 @@ export interface CommitOptions<TId extends string> {
  * @throws {EventStoreError} If writing to the store fails
  */
 const createStreamPosition =
-  (eventNumber: EventNumber) => (streamId: EventStreamPosition['streamId']) =>
+  (streamId: EventStreamPosition['streamId']) => (eventNumber: EventNumber) =>
     pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
 
 const writeEventsToPosition =
@@ -103,7 +103,7 @@ const commitToEventStore =
     pipe(
       id,
       toStreamId,
-      Effect.flatMap(createStreamPosition(eventNumber)),
+      Effect.flatMap((streamId) => createStreamPosition(streamId)(eventNumber)),
       Effect.flatMap((position) => writeEventsToPosition(events, position)(eventstore))
     );
 
@@ -181,14 +181,20 @@ const processEventStream =
       Effect.flatMap(foldEventsIntoState(apply, stream))
     );
 
-const createDecodedResult =
-  (data: Readonly<Option.Option<unknown>>) => (decodedEventNumber: EventNumber) =>
-    ({ nextEventNumber: decodedEventNumber, data }) as const;
+const createDecodedResult = (
+  decodedEventNumber: EventNumber,
+  data: Readonly<Option.Option<unknown>>
+) => ({ nextEventNumber: decodedEventNumber, data }) as const;
 
 const decodeEventNumber = (
   nextEventNumber: Readonly<number>,
   data: Readonly<Option.Option<unknown>>
-) => pipe(nextEventNumber, Schema.decode(EventNumber), Effect.map(createDecodedResult(data)));
+) =>
+  pipe(
+    nextEventNumber,
+    Schema.decode(EventNumber),
+    Effect.map((decodedEventNumber) => createDecodedResult(decodedEventNumber, data))
+  );
 
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(
