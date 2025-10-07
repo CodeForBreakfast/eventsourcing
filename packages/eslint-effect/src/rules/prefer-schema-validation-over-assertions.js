@@ -67,8 +67,22 @@ export default {
       return false;
     };
 
+    const isConstAssertion = (node) => {
+      return (
+        node.typeAnnotation &&
+        node.typeAnnotation.type === 'TSTypeReference' &&
+        node.typeAnnotation.typeName &&
+        node.typeAnnotation.typeName.type === 'Identifier' &&
+        node.typeAnnotation.typeName.name === 'const'
+      );
+    };
+
     return {
       TSAsExpression(node) {
+        if (isConstAssertion(node)) {
+          return;
+        }
+
         if (isInsideEffectCallback(node)) {
           context.report({
             node,

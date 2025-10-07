@@ -52,3 +52,34 @@ const noTypeAssertion = pipe(
   Effect.succeed<ProtocolMessage>({ type: 'command', id: '123' }),
   Effect.map((msg) => msg.id)
 );
+
+// Should NOT fail - as const in Effect callback (safe literal type narrowing)
+const constAssertionInCallback = pipe(
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
+  Effect.succeed(1),
+  Effect.as({ type: 'TodoCompleted' as const, data: { completedAt: new Date() } })
+);
+
+// Should NOT fail - as const in object within Effect.flatMap
+const constAssertionInFlatMap = pipe(
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
+  Effect.succeed(true),
+  Effect.flatMap((completed) =>
+    completed
+      ? Effect.succeed([
+          {
+            type: 'TodoCompleted' as const,
+            metadata: { occurredAt: new Date() },
+            data: { completedAt: new Date() },
+          },
+        ])
+      : Effect.succeed([])
+  )
+);
+
+// Should NOT fail - as const for string literal
+const constAssertionStringLiteral = pipe(
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
+  Effect.succeed('test'),
+  Effect.as('TodoCreated' as const)
+);
