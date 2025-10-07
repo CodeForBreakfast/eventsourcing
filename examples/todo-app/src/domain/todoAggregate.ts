@@ -1,4 +1,4 @@
-import { Effect, Option, ParseResult, Schema, pipe } from 'effect';
+import { Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
 import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId } from './types';
@@ -21,6 +21,40 @@ export class TodoAggregate extends Effect.Tag('TodoAggregate')<
   TodoAggregate,
   EventStore<TodoEvent>
 >() {}
+
+const applyEventToExistingState = (
+  currentState: TodoState,
+  event: Readonly<TodoEvent>
+): Effect.Effect<TodoState, ParseResult.ParseError> =>
+  pipe(
+    event,
+    Match.value,
+    Match.when({ type: 'TodoTitleChanged' }, (event) =>
+      Effect.succeed({
+        ...currentState,
+        title: event.data.title,
+      })
+    ),
+    Match.when({ type: 'TodoCompleted' }, () =>
+      Effect.succeed({
+        ...currentState,
+        completed: true,
+      })
+    ),
+    Match.when({ type: 'TodoUncompleted' }, () =>
+      Effect.succeed({
+        ...currentState,
+        completed: false,
+      })
+    ),
+    Match.when({ type: 'TodoDeleted' }, () =>
+      Effect.succeed({
+        ...currentState,
+        deleted: true,
+      })
+    ),
+    Match.orElse(() => Effect.succeed(currentState))
+  );
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoState>>) =>
@@ -45,36 +79,7 @@ const applyEvent =
               ),
             })
           ),
-        onSome: (currentState) => {
-          switch (event.type) {
-            case 'TodoTitleChanged':
-              return Effect.succeed({
-                ...currentState,
-                title: event.data.title,
-              });
-
-            case 'TodoCompleted':
-              return Effect.succeed({
-                ...currentState,
-                completed: true,
-              });
-
-            case 'TodoUncompleted':
-              return Effect.succeed({
-                ...currentState,
-                completed: false,
-              });
-
-            case 'TodoDeleted':
-              return Effect.succeed({
-                ...currentState,
-                deleted: true,
-              });
-
-            default:
-              return Effect.succeed(currentState);
-          }
-        },
+        onSome: (currentState) => applyEventToExistingState(currentState, event),
       })
     );
   };

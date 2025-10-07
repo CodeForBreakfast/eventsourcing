@@ -288,16 +288,14 @@ const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep
   pipe(stateRef, Ref.get, Effect.flatMap(offerEventToQueue(message)));
 
 const routeWireMessage =
-  (stateRef: Ref.Ref<ProtocolState>) => (wireMessage: ReadonlyDeep<ProtocolIncoming>) => {
-    switch (wireMessage.type) {
-      case 'command_result':
-        return pipe(wireMessage, handleCommandResult(stateRef));
-      case 'event':
-        return pipe(wireMessage, handleEvent(stateRef));
-      default:
-        return Effect.void;
-    }
-  };
+  (stateRef: Ref.Ref<ProtocolState>) => (wireMessage: ReadonlyDeep<ProtocolIncoming>) =>
+    pipe(
+      wireMessage,
+      Match.value,
+      Match.when({ type: 'command_result' }, handleCommandResult(stateRef)),
+      Match.when({ type: 'event' }, handleEvent(stateRef)),
+      Match.orElse(() => Effect.void)
+    );
 
 const handleMessage =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<TransportMessage>) =>

@@ -18,7 +18,7 @@ if (option._tag === 'Some') {
 // eslint-disable-next-line effect/no-direct-tag-access, effect/prefer-effect-platform -- Testing _tag in ternary, test file uses console
 console.log(either._tag === 'Left' ? 'left' : 'right');
 
-// eslint-disable-next-line effect/no-switch-on-tag, effect/no-direct-tag-access -- Testing switch on _tag
+// eslint-disable-next-line effect/no-switch-statement, effect/no-direct-tag-access -- Testing switch on _tag
 switch (either._tag) {
   case 'Right':
     break;

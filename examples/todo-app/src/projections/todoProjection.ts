@@ -1,4 +1,4 @@
-import { Context, Effect, Option, pipe } from 'effect';
+import { Context, Effect, Match, Option, pipe } from 'effect';
 import {
   loadProjection,
   makeProjectionEventStore,
@@ -16,6 +16,44 @@ export interface TodoProjection {
   readonly createdAt: Date;
   readonly updatedAt: Date;
 }
+
+const applyEventToExistingState = (
+  currentState: TodoProjection,
+  event: Readonly<TodoEvent>
+): Effect.Effect<TodoProjection> =>
+  pipe(
+    event,
+    Match.value,
+    Match.when({ type: 'TodoTitleChanged' }, (event) =>
+      Effect.succeed({
+        ...currentState,
+        title: event.data.title,
+        updatedAt: event.data.changedAt,
+      })
+    ),
+    Match.when({ type: 'TodoCompleted' }, (event) =>
+      Effect.succeed({
+        ...currentState,
+        completed: true,
+        updatedAt: event.data.completedAt,
+      })
+    ),
+    Match.when({ type: 'TodoUncompleted' }, (event) =>
+      Effect.succeed({
+        ...currentState,
+        completed: false,
+        updatedAt: event.data.uncompletedAt,
+      })
+    ),
+    Match.when({ type: 'TodoDeleted' }, (event) =>
+      Effect.succeed({
+        ...currentState,
+        deleted: true,
+        updatedAt: event.data.deletedAt,
+      })
+    ),
+    Match.orElse(() => Effect.succeed(currentState))
+  );
 
 const applyEvent =
   (todoId: TodoId) =>
@@ -42,40 +80,7 @@ const applyEvent =
           createdAt: new Date(),
           updatedAt: new Date(),
         }),
-      onSome: (currentState) => {
-        switch (event.type) {
-          case 'TodoTitleChanged':
-            return Effect.succeed({
-              ...currentState,
-              title: event.data.title,
-              updatedAt: event.data.changedAt,
-            });
-
-          case 'TodoCompleted':
-            return Effect.succeed({
-              ...currentState,
-              completed: true,
-              updatedAt: event.data.completedAt,
-            });
-
-          case 'TodoUncompleted':
-            return Effect.succeed({
-              ...currentState,
-              completed: false,
-              updatedAt: event.data.uncompletedAt,
-            });
-
-          case 'TodoDeleted':
-            return Effect.succeed({
-              ...currentState,
-              deleted: true,
-              updatedAt: event.data.deletedAt,
-            });
-
-          default:
-            return Effect.succeed(currentState);
-        }
-      },
+      onSome: (currentState) => applyEventToExistingState(currentState, event),
     });
   };
 
