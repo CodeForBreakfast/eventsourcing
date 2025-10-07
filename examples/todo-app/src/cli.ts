@@ -82,12 +82,17 @@ const commitAndReturnId =
       Effect.as(todoId)
     );
 
+const executeCreateCommand = (userId: UserId, title: string) => {
+  const cmd = createTodoCommand(userId, title);
+  return cmd();
+};
+
 const createTodo = (title: string) => {
   const todoId = `todo-${Date.now()}` as TodoId;
   const state = TodoAggregateRoot.new();
 
   return pipe(
-    createTodoCommand(CURRENT_USER, title)(),
+    executeCreateCommand(CURRENT_USER, title),
     Effect.flatMap(commitAndReturnId(todoId, state.nextEventNumber, title))
   );
 };
@@ -119,10 +124,10 @@ const processCompleteState =
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForComplete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
+const loadTodoForComplete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
 
 const completeTodo = (todoId: TodoId) =>
-  pipe(loadTodoForComplete(todoId), Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+  pipe(todoId, loadTodoForComplete, Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
 
 const uncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.uncomplete(userId)(state);
@@ -151,10 +156,10 @@ const processUncompleteState =
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForUncomplete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
+const loadTodoForUncomplete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
 
 const uncompleteTodo = (todoId: TodoId) =>
-  pipe(loadTodoForUncomplete(todoId), Effect.flatMap(processUncompleteState(todoId, CURRENT_USER)));
+  pipe(todoId, loadTodoForUncomplete, Effect.flatMap(processUncompleteState(todoId, CURRENT_USER)));
 
 const deleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.deleteTodo(userId)(state);
@@ -183,37 +188,39 @@ const processDeleteState =
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForDelete = (todoId: TodoId) => pipe(TodoAggregateRoot.load(todoId));
+const loadTodoForDelete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
 
 const deleteTodo = (todoId: TodoId) =>
-  pipe(loadTodoForDelete(todoId), Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+  pipe(todoId, loadTodoForDelete, Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+
+const logTodo = (todoId: TodoId, todo: Readonly<TodoState>) =>
+  Console.log(
+    `  ${todo.completed ? '✓' : '○'} [${todoId}] ${todo.completed ? `\x1b[2m${todo.title}\x1b[0m` : todo.title}`
+  );
 
 const formatAndLogTodo = (todoId: TodoId) => (todo: Readonly<TodoState>) =>
-  pipe(
-    Console.log(
-      `  ${todo.completed ? '✓' : '○'} [${todoId}] ${todo.completed ? `\x1b[2m${todo.title}\x1b[0m` : todo.title}`
-    ),
-    Effect.as(Option.some(todo))
-  );
+  pipe(logTodo(todoId, todo), Effect.as(Option.some(todo)));
+
+const filterDeleted = (t: TodoState) => !t.deleted;
 
 const processProjectionData = (todoId: TodoId) => (data: Readonly<Option.Option<TodoState>>) =>
   pipe(
     data,
-    Option.filter((t) => !t.deleted),
+    Option.filter(filterDeleted),
     Option.match({
       onNone: () => Effect.succeed(Option.none()),
       onSome: formatAndLogTodo(todoId),
     })
   );
 
-const loadTodoProjectionForId = (todoId: TodoId) => pipe(loadTodoProjection(todoId));
+const loadTodoProjectionForId = (todoId: TodoId) => loadTodoProjection(todoId);
 
 const processTodoProjection =
   (todoId: TodoId) => (todoProjection: Readonly<Projection<TodoState>>) =>
-    processProjectionData(todoId)(todoProjection.data);
+    pipe(todoProjection.data, processProjectionData(todoId));
 
 const loadAndFormatTodo = (todoId: TodoId) =>
-  pipe(loadTodoProjectionForId(todoId), Effect.flatMap(processTodoProjection(todoId)));
+  pipe(todoId, loadTodoProjectionForId, Effect.flatMap(processTodoProjection(todoId)));
 
 const forEachTodoItem = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
   Effect.forEach(todos, (item) => loadAndFormatTodo(item.todoId));
@@ -275,7 +282,8 @@ const failWithError = (message: string) => Effect.fail(new Error(message));
 
 const missingArgError = (message: string, usage: string) =>
   pipe(
-    logErrorMessage(message),
+    message,
+    logErrorMessage,
     Effect.andThen(logUsage(usage)),
     Effect.andThen(failWithError(message))
   );
@@ -334,14 +342,15 @@ const sleep500Millis = () => Effect.sleep('500 millis');
 
 const runWithProcessManager = (args: ReadonlyArray<string>) =>
   pipe(
-    Effect.all([forkProcessManager(), sleep100Millis()]),
+    [forkProcessManager(), sleep100Millis()],
+    Effect.all,
     Effect.andThen(runCommand(args)),
     Effect.asVoid,
     Effect.andThen(sleep500Millis())
   );
 
 const scopeAndProvide = (args: ReadonlyArray<string>) =>
-  pipe(Effect.scoped(runWithProcessManager(args)), Effect.provide(AppLive)) as Effect.Effect<
+  pipe(args, runWithProcessManager, Effect.scoped, Effect.provide(AppLive)) as Effect.Effect<
     void,
     unknown,
     never
@@ -350,6 +359,7 @@ const scopeAndProvide = (args: ReadonlyArray<string>) =>
 const main = (args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> =>
   scopeAndProvide(args);
 
-const getProcessArgs = () => process.argv.slice(2);
+// eslint-disable-next-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
+const args = process.argv.slice(2);
 
-pipe(getProcessArgs(), main, Effect.runPromise).catch(console.error);
+pipe(args, main, Effect.runPromise).catch(console.error);

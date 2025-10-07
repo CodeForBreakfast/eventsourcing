@@ -1,4 +1,4 @@
-import { Effect, Option, Schema } from 'effect';
+import { Effect, Option, Schema, pipe } from 'effect';
 import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId } from './types';
@@ -83,7 +83,7 @@ const removeTodo =
   };
 
 export const TodoListAggregateRoot = makeAggregateRoot(
-  Schema.String.pipe(Schema.brand('TodoListId')),
+  pipe(Schema.String, Schema.brand('TodoListId')),
   Schema.String,
   applyEvent,
   TodoListAggregate,

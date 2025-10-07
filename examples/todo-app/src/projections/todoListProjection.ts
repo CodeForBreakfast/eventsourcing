@@ -8,11 +8,12 @@ import { TodoId, TODO_LIST_ID } from '../domain/types';
 import { TodoListEvent } from '../domain/todoListEvents';
 import { TodoListAggregate } from '../domain/todoListAggregate';
 
-export type TodoListItem = {
+// eslint-disable-next-line functional/type-declaration-immutability -- Branded types with Date properties are detected as ReadonlyShallow by eslint-plugin-functional
+export interface TodoListItem {
   readonly todoId: TodoId;
   readonly title: string;
   readonly addedAt: Readonly<Date>;
-};
+}
 
 export interface TodoListProjection {
   readonly todos: readonly TodoListItem[];
