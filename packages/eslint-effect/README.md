@@ -59,6 +59,49 @@ const handler = processData;
 
 **Rationale**: In functional programming, eta-reduction (λx.f(x) → f) eliminates unnecessary indirection. When a function only passes its parameters directly to another function without any transformation, the wrapper adds no value and reduces readability.
 
+### `no-unnecessary-function-alias`
+
+Detects unnecessary function aliases that provide no semantic value. When a constant is assigned directly to another function without adding clarity or abstraction, it should be inlined at the call site.
+
+❌ Bad:
+
+```typescript
+const getState = Ref.get;
+const transform = Array.map;
+
+// Used only once or twice
+useOnce(getState(ref));
+useTwice(transform((x) => x * 2, arr));
+```
+
+✅ Good:
+
+```typescript
+// Inline when used infrequently
+useOnce(Ref.get(ref));
+useTwice(Array.map((x) => x * 2, arr));
+
+// OR keep the alias if it adds semantic value
+// eslint-disable-next-line effect/no-unnecessary-function-alias -- Alias clarifies stream processing context
+const collectStreamResults = Stream.runCollect;
+```
+
+**Configuration:**
+
+- `maxReferences` (default: `2`) - Maximum number of references before alias is considered justified
+
+```javascript
+{
+  rules: {
+    'effect/no-unnecessary-function-alias': ['warn', {
+      maxReferences: 3,  // Allow aliases used 3+ times
+    }]
+  }
+}
+```
+
+**Rationale**: Function aliases that are used only once or twice add cognitive overhead without meaningful benefit. They force readers to jump between the alias definition and usage site. Direct function calls are more straightforward. However, aliases that are used frequently (3+ times) or that add semantic clarity through their name should be kept.
+
 ### `prefer-match-tag`
 
 Enforces `Match.tag()` over `Match.when()` for `_tag` discriminators.
@@ -348,6 +391,7 @@ export default [
 - `effect/no-gen` - Forbid Effect.gen (opt-in via `noGen` config)
 - `effect/no-unnecessary-pipe-wrapper` - Detect unnecessary pipe wrappers
 - `effect/no-eta-expansion` - Detect unnecessary function wrappers (prefer point-free style)
+- `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions

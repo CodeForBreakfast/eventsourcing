@@ -102,6 +102,7 @@ export const functionalImmutabilityRules = {
 const pluginRulesOnly = {
   'effect/no-unnecessary-pipe-wrapper': 'error',
   'effect/no-eta-expansion': 'error',
+  'effect/no-unnecessary-function-alias': 'warn',
   'effect/prefer-match-tag': 'error',
   'effect/prefer-match-over-conditionals': 'error',
   'effect/prefer-schema-validation-over-assertions': 'error',
