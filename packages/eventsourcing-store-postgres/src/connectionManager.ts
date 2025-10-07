@@ -75,7 +75,7 @@ const executeShutdown = (listenConnection: PgClient.PgClient) =>
     Effect.succeed,
     Effect.flatMap((client) =>
       Effect.tryPromise({
-        try: () => (client as PgClientWithQuery).end(),
+        try: (client as PgClientWithQuery).end,
         catch: (error) => error,
       })
     ),
