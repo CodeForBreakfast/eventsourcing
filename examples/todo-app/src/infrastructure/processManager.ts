@@ -29,7 +29,7 @@ const executeAddTodoCommand = (
     )
   );
 
-const commitAddTodoEvents = (eventNumber: number, events: Readonly<ReadonlyArray<unknown>>) =>
+const commitAddTodoEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
   events.length > 0
     ? TodoListAggregateRoot.commit({
         id: TODO_LIST_ID_BRANDED,
@@ -46,7 +46,7 @@ const addTodoAndCommit = (
   pipe(
     state.data,
     (data) => executeAddTodoCommand(data, streamId, event),
-    Effect.flatMap((events) => commitAddTodoEvents(state.nextEventNumber, events))
+    Effect.flatMap(commitAddTodoEvents(state.nextEventNumber))
   );
 
 const castToAggregateState = (state: {
@@ -75,14 +75,15 @@ const executeRemoveTodoCommand = (
     )
   );
 
-const commitRemoveTodoEvents = (eventNumber: number, events: Readonly<ReadonlyArray<unknown>>) =>
-  events.length > 0
-    ? TodoListAggregateRoot.commit({
-        id: TODO_LIST_ID_BRANDED,
-        eventNumber,
-        events: Chunk.fromIterable(events),
-      })
-    : Effect.void;
+const commitRemoveTodoEvents =
+  (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
+    events.length > 0
+      ? TodoListAggregateRoot.commit({
+          id: TODO_LIST_ID_BRANDED,
+          eventNumber,
+          events: Chunk.fromIterable(events),
+        })
+      : Effect.void;
 
 const removeTodoAndCommit = (
   state: Readonly<AggregateState<TodoListState>>,
@@ -92,7 +93,7 @@ const removeTodoAndCommit = (
   pipe(
     state.data,
     (data) => executeRemoveTodoCommand(data, streamId, event),
-    Effect.flatMap((events) => commitRemoveTodoEvents(state.nextEventNumber, events))
+    Effect.flatMap(commitRemoveTodoEvents(state.nextEventNumber))
   );
 
 const handleTodoDeleted = (streamId: string, event: Readonly<TodoDeleted>) =>
