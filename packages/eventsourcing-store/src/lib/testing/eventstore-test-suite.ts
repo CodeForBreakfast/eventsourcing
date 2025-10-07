@@ -4,7 +4,7 @@ import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
 import { type EventStore, ConcurrencyConflictError } from '../eventstore';
 
 // Helper functions for converting stream events
-const toArraySafely = <A>(chunk: Chunk.Chunk<A>): readonly A[] => Chunk.toReadonlyArray(chunk);
+const toArraySafely = Chunk.toReadonlyArray;
 
 const Id = {
   randomPart: () => Math.random().toString(36).substring(7),
@@ -22,7 +22,7 @@ const readStreamFromBeginning =
     pipe(
       streamId,
       Effect.flatMap(beginning),
-      Effect.flatMap((position) => eventstore.read(position)),
+      Effect.flatMap(eventstore.read),
       Effect.flatMap(Stream.runCollect)
     );
 
@@ -53,7 +53,7 @@ const readFromPosition =
     pipe(
       streamId,
       Effect.map((streamId) => ({ streamId, eventNumber })),
-      Effect.flatMap((position) => eventstore.read(position)),
+      Effect.flatMap(eventstore.read),
       Effect.flatMap(takeAndCollectStreamEvents(2))
     );
 
@@ -70,11 +70,7 @@ const createWrongEndPosition = (streamId: EventStreamId) =>
 const subscribeFromBeginning =
   (streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>) =>
   (eventstore: EventStore<FooEvent>) =>
-    pipe(
-      streamId,
-      Effect.flatMap(beginning),
-      Effect.flatMap((position) => eventstore.subscribe(position))
-    );
+    pipe(streamId, Effect.flatMap(beginning), Effect.flatMap(eventstore.subscribe));
 
 const takeZeroAndDrain =
   (receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>) =>
@@ -95,7 +91,7 @@ const readAndTakeZeroEvents =
     pipe(
       streamId,
       Effect.flatMap(beginning),
-      Effect.flatMap((position) => eventstore.read(position)),
+      Effect.flatMap(eventstore.read),
       Effect.flatMap(takeZeroAndDrain(receivedEventsRef))
     );
 

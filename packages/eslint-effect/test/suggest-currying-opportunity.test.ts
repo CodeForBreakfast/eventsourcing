@@ -64,6 +64,7 @@ const processWithPrefixReorder = Effect.map(myEffect, (data: string) =>
 const validPattern1 = Effect.map(myEffect, (x: string) => x.length * 2);
 
 // Using Effect library function - should not suggest currying
+// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
 const validPattern2 = Effect.flatMap(myEffect, (x: string) => Effect.succeed(x));
 
 // Param in the middle - would require reordering (filtered out by default)

@@ -184,12 +184,6 @@ const createResultMessageWithContext = (
     Match.exhaustive
   );
 
-const buildResultMessage = (
-  commandId: string,
-  result: ReadonlyDeep<CommandResult>,
-  context: { readonly traceId: string; readonly parentId: string }
-): ProtocolCommandResult => createResultMessageWithContext(commandId, result, context);
-
 const buildAndBroadcastResult = (
   server: ReadonlyDeep<Server.Transport>,
   commandId: string,
@@ -199,7 +193,7 @@ const buildAndBroadcastResult = (
   pipe(
     extractSpanContext(),
     Effect.flatMap((context) => {
-      const resultMessage = buildResultMessage(commandId, result, context);
+      const resultMessage = createResultMessageWithContext(commandId, result, context);
       return server.broadcast(
         makeTransportMessage(commandId, 'command_result', JSON.stringify(resultMessage), {
           timestamp: timestamp.toISOString(),

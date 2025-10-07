@@ -15,7 +15,6 @@ import {
 } from './index';
 
 import * as Logger from 'effect/Logger';
-const LoggerLive = Logger.pretty;
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
@@ -29,7 +28,7 @@ export const FooEventStoreLive = Layer.effect(
 // Complete test layer with all dependencies
 const TestLayer = pipe(
   FooEventStoreLive,
-  Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, LoggerLive)),
+  Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, Logger.pretty)),
   Layer.provide(PostgresLive),
   Layer.provide(makePgConfigurationLive('TEST_PG')),
   Layer.provide(BunContext.layer)

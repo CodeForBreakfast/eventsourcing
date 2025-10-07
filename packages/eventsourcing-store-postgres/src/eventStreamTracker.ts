@@ -25,12 +25,6 @@ const getCurrentLastEvent = (
   streamId: EventStreamId
 ): number => Option.getOrElse(HashMap.get(lastEvents, streamId), () => -1);
 
-const updateLastEvents = (
-  lastEvents: HashMap.HashMap<EventStreamId, number>,
-  streamId: EventStreamId,
-  eventNumber: number
-): HashMap.HashMap<EventStreamId, number> => HashMap.set(lastEvents, streamId, eventNumber);
-
 const processEventWithTracking =
   <T>(
     lastEventNumbers: ReadonlyDeep<
@@ -48,7 +42,7 @@ const processEventWithTracking =
           if (eventNumber > currentLastEvent) {
             return [
               Option.some(event), // Return the event
-              updateLastEvents(lastEvents, streamId, eventNumber),
+              HashMap.set(lastEvents, streamId, eventNumber),
             ];
           }
 

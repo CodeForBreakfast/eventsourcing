@@ -210,9 +210,8 @@ describe('Command Processing Service', () => {
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         if (isCommandFailure(result)) {
-          const error = result.error;
-          if (isUnknownError(error)) {
-            expect(error.message).toContain('No handler found');
+          if (isUnknownError(result.error)) {
+            expect(result.error.message).toContain('No handler found');
           } else {
             expect(true).toBe(false);
           }
@@ -234,9 +233,8 @@ describe('Command Processing Service', () => {
       Effect.flatMap((service) => service.processCommand(testCommand)),
       Effect.map((result) => {
         if (isCommandFailure(result)) {
-          const error = result.error;
-          if (isUnknownError(error)) {
-            expect(error.message).toContain('Handler execution failed');
+          if (isUnknownError(result.error)) {
+            expect(result.error.message).toContain('Handler execution failed');
           } else {
             expect(true).toBe(false);
           }
@@ -308,7 +306,7 @@ describe('Command Processing Service', () => {
       readonly processCommand: (
         command: Readonly<WireCommand>
       ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
-    }) => Effect.all(testCommands.map((cmd) => service.processCommand(cmd)));
+    }) => Effect.all(testCommands.map(service.processCommand));
 
     return pipe(
       router,

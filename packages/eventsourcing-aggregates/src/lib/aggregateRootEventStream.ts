@@ -202,12 +202,7 @@ const decodeEventNumber = (
   );
 
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
-  pipe(
-    id,
-    toStreamId,
-    Effect.flatMap(beginning),
-    Effect.flatMap((position: Readonly<EventStreamPosition>) => eventStore.read(position))
-  );
+  pipe(id, toStreamId, Effect.flatMap(beginning), Effect.flatMap(eventStore.read));
 
 const loadAggregateState =
   <TId extends string, TState, TEvent>(

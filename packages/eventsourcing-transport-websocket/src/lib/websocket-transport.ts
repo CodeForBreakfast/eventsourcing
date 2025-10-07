@@ -421,7 +421,7 @@ const setupSocketWriter =
   (socket: Readonly<Socket.Socket>) =>
     pipe(
       socket.writer,
-      Effect.tap((writer) => Ref.set(writerRef, (data: string) => writer(data))),
+      Effect.tap((writer) => Ref.set(writerRef, writer)),
       Effect.andThen(
         startSocketAndWaitForConnection(socket, stateRef, writerRef, connectedDeferred, url)
       )

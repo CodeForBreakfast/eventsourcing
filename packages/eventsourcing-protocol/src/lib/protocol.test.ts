@@ -246,9 +246,6 @@ const setupServerConnectionHandler = (
     )
   );
 
-const getFirstConnection = (connections: ReadonlyDeep<Iterable<Server.ClientConnection>>) =>
-  Array.from(connections)[0]!;
-
 const createTestServerProtocol = (
   server: ReadonlyDeep<InMemoryServer>,
 
@@ -262,7 +259,9 @@ const createTestServerProtocol = (
     server.connections,
     Stream.take(1),
     Stream.runCollect,
-    Effect.map(getFirstConnection),
+    Effect.map(
+      (connections: ReadonlyDeep<Iterable<Server.ClientConnection>>) => Array.from(connections)[0]!
+    ),
     Effect.flatMap((serverConnection: ReadonlyDeep<Server.ClientConnection>) =>
       setupServerConnectionHandler(server, commandHandler, subscriptionHandler, serverConnection)
     ),
@@ -382,16 +381,14 @@ const collectEventStream =
   (eventStream: Stream.Stream<Event, E, R>) =>
     pipe(eventStream, Stream.take(count), Stream.runCollect);
 
-const subscribeAndDrain = (
-  streamId: string,
-  clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-) =>
-  pipe(
-    streamId,
-    subscribe,
-    Effect.flatMap(drainEventStream),
-    Effect.provide(ProtocolLive(clientTransport))
-  );
+const subscribeAndDrain =
+  (streamId: string) => (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
+    pipe(
+      streamId,
+      subscribe,
+      Effect.flatMap(drainEventStream),
+      Effect.provide(ProtocolLive(clientTransport))
+    );
 
 const subscribeAndCollect = (
   streamId: string,
@@ -404,8 +401,6 @@ const subscribeAndCollect = (
     Effect.flatMap(collectEventStream(count)),
     Effect.provide(ProtocolLive(clientTransport))
   );
-
-const collectEventsAsArray = (events: ReadonlyDeep<Iterable<Event>>) => Array.from(events);
 
 const runTestWithServerProtocol = <A, E, R>(
   {
@@ -528,7 +523,7 @@ const subscribeCollectAndVerify =
   (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
     pipe(
       subscribeAndCollect(streamId, count, clientTransport),
-      Effect.map(collectEventsAsArray),
+      Effect.map(Array.from<Event>),
       Effect.tap(verify),
       Effect.asVoid
     );
@@ -661,9 +656,7 @@ describe('Protocol Behavior Tests', () => {
 
   describe('Event Subscription', () => {
     it.effect('should successfully create subscriptions without timeout', () =>
-      runTestWithProtocol(defaultSuccessHandler('test', 1), (clientTransport) =>
-        subscribeAndDrain('user-123', clientTransport)
-      )
+      runTestWithProtocol(defaultSuccessHandler('test', 1), subscribeAndDrain('user-123'))
     );
 
     it.effect('should receive events for subscribed streams', () =>
@@ -1069,7 +1062,7 @@ describe('Protocol Behavior Tests', () => {
       'persistent-stream',
       subscribe,
       Effect.flatMap(collectEventStream(2)),
-      Effect.map(collectEventsAsArray)
+      Effect.map(Array.from<Event>)
     );
 
     const verifyFirstBatch = (firstBatch: readonly Event[]) =>
@@ -1414,7 +1407,7 @@ describe('Protocol Behavior Tests', () => {
         serverProtocol.onWireCommand,
         Stream.take(1),
         Stream.runCollect,
-        Effect.map((commands) => Array.from(commands))
+        Effect.map(Array.from<WireCommand>)
       );
 
     const sendCommandWithProtocol = (
@@ -1615,12 +1608,7 @@ describe('Protocol Behavior Tests', () => {
     );
 
     const collectProductEvents = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
-      pipe(
-        eventStream,
-        Stream.take(1),
-        Stream.runCollect,
-        Effect.map((events) => Array.from(events))
-      );
+      pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.map(Array.from<Event>));
 
     const verifyProductEvent = (receivedEvents: readonly Event[]) =>
       Effect.sync(() => {
@@ -2126,7 +2114,7 @@ describe('Protocol Behavior Tests', () => {
         payload: {},
       };
 
-      const verifyServerSpanAndSendResult = (cmd: WireCommand) =>
+      const verifySpanAndSendResultForCommand = (commands: ReadonlyDeep<Iterable<WireCommand>>) =>
         pipe(
           Effect.currentSpan,
           Effect.flatMap((serverSpan) =>
@@ -2148,7 +2136,7 @@ describe('Protocol Behavior Tests', () => {
             })
           ),
           Effect.andThen(
-            serverProtocol.sendResult(cmd.id, {
+            serverProtocol.sendResult(Array.from(commands)[0]!.id, {
               _tag: 'Success',
               position: { streamId: unsafeCreateStreamId('test'), eventNumber: 1 },
             })
@@ -2168,10 +2156,7 @@ describe('Protocol Behavior Tests', () => {
       const processFirstCommand = pipe(
         Stream.take(serverProtocol.onWireCommand, 1),
         Stream.runCollect,
-        Effect.flatMap((commands) => {
-          const cmd = commands[Symbol.iterator]().next().value;
-          return verifyServerSpanAndSendResult(cmd);
-        }),
+        Effect.flatMap(verifySpanAndSendResultForCommand),
         Effect.fork
       );
 

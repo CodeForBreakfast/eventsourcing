@@ -25,7 +25,7 @@ export const connect = (
   const protocolLayer = pipe(
     url,
     WebSocketConnector.connect,
-    Effect.map((transport) => ProtocolLive(transport)),
+    Effect.map(ProtocolLive),
     Layer.unwrapScoped
   );
 
@@ -44,10 +44,5 @@ export const connect = (
 export const makeWebSocketProtocolLayer = (
   url: string
 ): Layer.Layer<Protocol, TransportError | ConnectionError, Scope> => {
-  return pipe(
-    url,
-    WebSocketConnector.connect,
-    Effect.map((transport) => ProtocolLive(transport)),
-    Layer.unwrapScoped
-  );
+  return pipe(url, WebSocketConnector.connect, Effect.map(ProtocolLive), Layer.unwrapScoped);
 };

@@ -259,8 +259,6 @@ const logListenerStarted = Effect.logInfo(
 
 const startListenerService = pipe(logListenerStarted, Effect.asVoid);
 
-const getActiveChannels = Ref.get;
-
 const clearActiveChannels = Ref.set(HashSet.empty<string>());
 
 const logListenerStopped = Effect.logInfo('PostgreSQL notification listener stopped');
@@ -268,7 +266,7 @@ const logListenerStopped = Effect.logInfo('PostgreSQL notification listener stop
 const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
   pipe(
     logListenerStopped,
-    Effect.andThen(getActiveChannels(activeChannels)),
+    Effect.andThen(Ref.get(activeChannels)),
     Effect.flatMap((channels) =>
       Effect.forEach(Array.from(channels), (channelName) =>
         Effect.logDebug(`Cleaning up channel: ${channelName}`)

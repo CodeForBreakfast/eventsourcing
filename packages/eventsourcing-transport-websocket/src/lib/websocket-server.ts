@@ -250,9 +250,7 @@ const addClientToServerState = (
 ): Effect.Effect<void, never, never> =>
   Ref.update(serverStateRef, createAddClientToServerStateUpdater(clientState));
 
-const getServerState = (
-  serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>
-): Effect.Effect<ServerState, never, never> => Ref.get(serverStateRef);
+const getServerState = Ref.get;
 
 const offerNewConnection =
   (clientState: ClientState) =>

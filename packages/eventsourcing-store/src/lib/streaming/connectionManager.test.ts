@@ -17,6 +17,7 @@ const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
   );
 
 const verifyManagerAndApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
+  // eslint-disable-next-line effect/no-eta-expansion -- Thunk required for Effect.sync to defer execution
   pipe(() => expect(manager).toBeDefined(), Effect.sync, Effect.andThen(verifyApiPort(manager)));
 
 describe('ConnectionManager', () => {

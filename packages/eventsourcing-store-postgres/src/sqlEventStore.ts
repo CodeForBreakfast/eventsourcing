@@ -131,17 +131,11 @@ export const NotificationInfrastructureLive = pipe(
   Layer.provide(ConnectionManagerLive)
 );
 
-const mergeSubscriptionLayers = (
-  a: typeof SubscriptionManagerLive,
-  b: typeof EventTrackingLive,
-  c: typeof NotificationInfrastructureLive
-) => Layer.mergeAll(a, b, c);
-
 /**
  * Combined layer that provides all the required services for real-time event subscriptions
  * Organized into logical groups for better understanding and testability
  */
-export const EventSubscriptionServicesLive = mergeSubscriptionLayers(
+export const EventSubscriptionServicesLive = Layer.mergeAll(
   SubscriptionManagerLive,
   EventTrackingLive,
   NotificationInfrastructureLive
@@ -291,11 +285,6 @@ const subscribeToLiveStream = (
   streamId: EventStreamId
 ) => subscriptionManager.subscribeToStream(streamId);
 
-const combineHistoricalAndLiveStreams = (
-  eventRows: EventRowServiceInterface,
-  from: EventStreamPosition
-) => getHistoricalEventsAndConcatWithLive(eventRows, from);
-
 const subscribeToStreamWithHistory =
   (
     eventRows: EventRowServiceInterface,
@@ -309,7 +298,7 @@ const subscribeToStreamWithHistory =
       from.streamId,
       notificationListener.listen,
       Effect.andThen(subscribeToLiveStream(subscriptionManager, from.streamId)),
-      Effect.flatMap(combineHistoricalAndLiveStreams(eventRows, from)),
+      Effect.flatMap(getHistoricalEventsAndConcatWithLive(eventRows, from)),
       Effect.map((stream) =>
         Stream.mapError(
           stream,
@@ -332,8 +321,7 @@ const appendEventToStream =
         if (events.length === 0) {
           return -1;
         }
-        const lastEvent = events[events.length - 1];
-        return lastEvent?.event_number;
+        return events[events.length - 1]?.event_number;
       }),
       Effect.flatMap((last) => {
         return (end.eventNumber === 0 && last === -1) ||
@@ -399,13 +387,6 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       startBridge(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
-      const readWithEventRows = readHistoricalEvents(eventRows);
-      const subscribeWithDependencies = subscribeToStreamWithHistory(
-        eventRows,
-        subscriptionManager,
-        notificationListener
-      );
-
       const eventStore: EventStore<string> = {
         append: (to: EventStreamPosition) => {
           const sink = Sink.foldEffect(
@@ -421,20 +402,12 @@ export const makeSqlEventStoreWithSubscriptionManager = (
             EventStoreError | ConcurrencyConflictError | ParseResult.ParseError
           >;
         },
-        read: (
-          from: EventStreamPosition
-        ): Effect.Effect<
-          Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
-          EventStoreError,
-          never
-        > => readWithEventRows(from),
-        subscribe: (
-          from: EventStreamPosition
-        ): Effect.Effect<
-          Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
-          EventStoreError,
-          never
-        > => subscribeWithDependencies(from),
+        read: readHistoricalEvents(eventRows),
+        subscribe: subscribeToStreamWithHistory(
+          eventRows,
+          subscriptionManager,
+          notificationListener
+        ),
       };
 
       return eventStore;

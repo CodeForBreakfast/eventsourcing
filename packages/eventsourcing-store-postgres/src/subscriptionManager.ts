@@ -96,7 +96,7 @@ const extractSubscriptionData =
       HashMap.get(streamId),
       Option.match({
         onNone: () => Effect.die("Subscription should exist but doesn't"),
-        onSome: (data: ReadonlyDeep<SubscriptionData<T>>) => Effect.succeed(data),
+        onSome: Effect.succeed,
       })
     );
 
@@ -163,8 +163,6 @@ const publishToSubscriptionIfExists =
 /**
  * Publish an event to subscribers of a stream
  */
-const getSubscriptions = SynchronizedRef.get;
-
 const publishToStream = <T>(
   ref: ReadonlyDeep<
     SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
@@ -172,7 +170,7 @@ const publishToStream = <T>(
   streamId: EventStreamId,
   event: T
 ): Effect.Effect<void, never, never> =>
-  pipe(ref, getSubscriptions, Effect.flatMap(publishToSubscriptionIfExists(streamId, event)));
+  pipe(ref, SynchronizedRef.get, Effect.flatMap(publishToSubscriptionIfExists(streamId, event)));
 
 const createRetrySchedule = (): Schedule.Schedule<Duration.Duration, unknown, never> =>
   pipe(

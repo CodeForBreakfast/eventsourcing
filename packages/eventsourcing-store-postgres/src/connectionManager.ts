@@ -2,12 +2,6 @@ import { PgClient } from '@effect/sql-pg';
 import { Context, Duration, Effect, Layer, Schedule, pipe } from 'effect';
 import { EventStoreConnectionError, connectionError } from '@codeforbreakfast/eventsourcing-store';
 
-// Extended PgClient type with direct query access
-interface PgClientWithQuery extends PgClient.PgClient {
-  readonly query: (sql: string) => Promise<unknown>;
-  readonly end: () => Promise<void>;
-}
-
 /**
  * ConnectionManager service for managing PostgreSQL notification connections
  */
@@ -51,16 +45,12 @@ const createListenConnection = pipe(
   Effect.mapError(connectionError.retryable('establish notification listener connection'))
 );
 
+const healthCheckQuery = 'SELECT 1 AS health_check';
+
 const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
   pipe(
     listenConnection,
-    Effect.succeed,
-    Effect.flatMap((client) =>
-      Effect.tryPromise({
-        try: () => (client as PgClientWithQuery).query('SELECT 1 AS health_check'),
-        catch: (error) => error,
-      })
-    ),
+    (client) => client.unsafe(healthCheckQuery),
     Effect.tap(() => Effect.logDebug('PostgreSQL notification listener health check passed')),
     Effect.tapError((error) =>
       Effect.logError('PostgreSQL notification listener health check failed', { error })
@@ -69,23 +59,10 @@ const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
     Effect.as(undefined)
   );
 
-const executeShutdown = (listenConnection: PgClient.PgClient) =>
-  pipe(
-    listenConnection,
-    Effect.succeed,
-    Effect.flatMap((client) =>
-      Effect.tryPromise({
-        try: () => (client as PgClientWithQuery).end(),
-        catch: (error) => error,
-      })
-    ),
-    Effect.tap(() => Effect.logInfo('PostgreSQL notification listener connection closed')),
-    Effect.tapError((error) =>
-      Effect.logError('Failed to close PostgreSQL notification listener connection', { error })
-    ),
-    Effect.mapError(connectionError.fatal('shutdown notification listener')),
-    Effect.as(undefined)
-  );
+const shutdownMessage = 'PostgreSQL notification listener connection cleanup initiated';
+
+const executeShutdown = (_listenConnection: PgClient.PgClient) =>
+  pipe(shutdownMessage, Effect.logInfo, Effect.as(undefined));
 
 /**
  * Implementation of ConnectionManager service

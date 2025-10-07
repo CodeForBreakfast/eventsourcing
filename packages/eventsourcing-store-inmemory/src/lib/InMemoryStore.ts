@@ -88,11 +88,7 @@ const createUpdatedValue =
     },
   });
 
-const updateEventStreamsByIdForEventStream = <V>(
-  updatedEventStream: EventStream<V>,
-  streamEnd: EventStreamPosition,
-  newEvents: Chunk.Chunk<V>
-) => updateEventStreamsById(updatedEventStream, streamEnd, newEvents);
+const updateEventStreamsByIdForEventStream = updateEventStreamsById;
 
 const applyUpdatedEventStreamToValue =
   <V>(
@@ -134,12 +130,11 @@ const modifyEventStreamsWithEmptyIfMissing =
       streamId,
       Option.match({
         onNone: () => Option.some(emptyStream),
-        onSome: (existing: EventStream<V>) => Option.some(existing),
+        onSome: Option.some,
       })
     );
 
-const modifyEventStreamsForEnsure = <V>(streamId: EventStreamId, emptyStream: EventStream<V>) =>
-  modifyEventStreamsWithEmptyIfMissing(streamId, emptyStream);
+const modifyEventStreamsForEnsure = modifyEventStreamsWithEmptyIfMissing;
 
 const modifyEventStreamsByIdWithEmptyStream = <V>(
   streamId: EventStreamId,
@@ -209,7 +204,7 @@ const findEventStreamOrDie = <V>(
         Effect.dieMessage(
           'Event stream not found - this should not happen because we ensure it exists'
         ),
-      onSome: (eventStream: EventStream<V>) => Effect.succeed(eventStream),
+      onSome: Effect.succeed,
     })
   );
 
@@ -217,21 +212,13 @@ const getEventStreamAndCreateLive = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
   streamId: EventStreamId
 ): Effect.Effect<Stream.Stream<V, never, never>, never, never> =>
-  pipe(
-    findEventStreamOrDie(eventStreamsById, streamId),
-    Effect.map((eventStream): Stream.Stream<V, never, never> => createLiveEventStream(eventStream))
-  );
+  pipe(findEventStreamOrDie(eventStreamsById, streamId), Effect.map(createLiveEventStream));
 
 const getEventStreamAndCreateHistorical = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
   streamId: EventStreamId
 ): Effect.Effect<Stream.Stream<V, never, never>, never, never> =>
-  pipe(
-    findEventStreamOrDie(eventStreamsById, streamId),
-    Effect.map(
-      (eventStream): Stream.Stream<V, never, never> => createHistoricalEventStream(eventStream)
-    )
-  );
+  pipe(findEventStreamOrDie(eventStreamsById, streamId), Effect.map(createHistoricalEventStream));
 
 const appendEventsAndUpdatePosition =
   <V>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>

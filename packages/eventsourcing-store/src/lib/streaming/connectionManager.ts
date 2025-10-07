@@ -253,7 +253,7 @@ const findStatusInMap = (url: string) => (statusMap: HashMap.HashMap<string, Con
 const matchStatusOption = (url: string) => (status: Readonly<Option.Option<ConnectionStatus>>) =>
   Option.match(status, {
     onNone: () => Effect.fail(new ConnectionError({ message: `No connection status for ${url}` })),
-    onSome: (s: Readonly<ConnectionStatus>) => Effect.succeed(s),
+    onSome: Effect.succeed,
   });
 
 const getStatusFromRef =
