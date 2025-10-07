@@ -18,6 +18,7 @@ import noNestedPipe from './no-nested-pipe.js';
 import noNestedPipes from './no-nested-pipes.js';
 import preferEffectPlatform from './prefer-effect-platform.js';
 import suggestCurryingOpportunity from './suggest-currying-opportunity.js';
+import noEtaExpansion from './no-eta-expansion.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -40,4 +41,5 @@ export default {
   'no-nested-pipes': noNestedPipes,
   'prefer-effect-platform': preferEffectPlatform,
   'suggest-currying-opportunity': suggestCurryingOpportunity,
+  'no-eta-expansion': noEtaExpansion,
 };

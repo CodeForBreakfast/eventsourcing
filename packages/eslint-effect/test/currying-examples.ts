@@ -62,6 +62,7 @@ const example4 = Effect.map(Effect.succeed(50), (value) =>
 // =============================================================================
 
 // Rule doesn't trigger on Effect library functions
+// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
 const validExample1 = Effect.flatMap(myEffect, (x) => Effect.succeed(x));
 
 // =============================================================================

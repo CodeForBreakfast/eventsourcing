@@ -53,8 +53,7 @@ const addSubscriptionDataToMap =
   (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
     HashMap.set(subs, streamId, { pubsub, subscribers: 0 });
 
-const addSubscriptionToMap = <T>(streamId: EventStreamId, pubsub: PubSub.PubSub<T>) =>
-  addSubscriptionDataToMap(streamId, pubsub);
+const addSubscriptionToMap = addSubscriptionDataToMap;
 
 const addPubsubToSubs =
   <T>(subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>, streamId: EventStreamId) =>
@@ -95,7 +94,7 @@ const extractSubscriptionData =
               cause: 'Failed to create subscription data',
             })
           ),
-        onSome: (data: Readonly<SubscriptionData<T>>) => Effect.succeed(data),
+        onSome: Effect.succeed,
       })
     );
 

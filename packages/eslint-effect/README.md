@@ -37,6 +37,28 @@ const fn = (x) => pipe(x, transform);
 const fn = transform;
 ```
 
+### `no-eta-expansion`
+
+Detects unnecessary function wrappers (eta-expansion) that only pass parameters directly to another function. Also known as "prefer point-free style."
+
+❌ Bad:
+
+```typescript
+const logError = (msg: string) => Console.error(msg);
+const transform = (x: number) => doSomething(x);
+const handler = (a: string, b: number) => processData(a, b);
+```
+
+✅ Good:
+
+```typescript
+const logError = Console.error;
+const transform = doSomething;
+const handler = processData;
+```
+
+**Rationale**: In functional programming, eta-reduction (λx.f(x) → f) eliminates unnecessary indirection. When a function only passes its parameters directly to another function without any transformation, the wrapper adds no value and reduces readability.
+
 ### `prefer-match-tag`
 
 Enforces `Match.tag()` over `Match.when()` for `_tag` discriminators.
@@ -325,6 +347,7 @@ export default [
 - `effect/prefer-as` - Use as over map(() => value)
 - `effect/no-gen` - Forbid Effect.gen (opt-in via `noGen` config)
 - `effect/no-unnecessary-pipe-wrapper` - Detect unnecessary pipe wrappers
+- `effect/no-eta-expansion` - Detect unnecessary function wrappers (prefer point-free style)
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions

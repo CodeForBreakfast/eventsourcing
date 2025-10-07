@@ -405,7 +405,7 @@ const setupClientConnection = (
 const addCleanupFinalizer = (transport: Client.Transport, cleanup: () => Effect.Effect<void>) =>
   pipe(
     Effect.void,
-    Effect.tap(() => Effect.addFinalizer(() => cleanup())),
+    Effect.tap(() => Effect.addFinalizer(cleanup)),
     Effect.as(transport)
   );
 
@@ -509,13 +509,7 @@ const createInMemoryServerTransport = (): Effect.Effect<
   },
   never,
   Scope.Scope
-> =>
-  pipe(
-    Queue.unbounded<Server.ClientConnection>(),
-    Effect.flatMap((connectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>) =>
-      buildServerStateAndTransport(connectionsQueue)
-    )
-  );
+> => pipe(Queue.unbounded<Server.ClientConnection>(), Effect.flatMap(buildServerStateAndTransport));
 
 // =============================================================================
 // Exports (Pure Functional Interface)
@@ -532,6 +526,6 @@ export const InMemoryAcceptor = {
     readonly start: () => Effect.Effect<InMemoryServer, never, Scope.Scope>;
   }> =>
     Effect.succeed({
-      start: () => createInMemoryServerTransport(),
+      start: createInMemoryServerTransport,
     }),
 };

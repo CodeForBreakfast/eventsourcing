@@ -37,7 +37,7 @@ export const dispatchCommand = (
  * Helper to create a command matcher using Effect's pattern matching
  * Since our commands use 'name' instead of '_tag', this provides a convenient API
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept all command payload types
+// eslint-disable-next-line @typescript-eslint/no-explicit-any, effect/no-eta-expansion -- Generic constraint requires any to accept all command payload types; wrapper required for type inference
 export const createCommandMatcher = <TCommands extends DomainCommand<any>>() =>
   Match.type<TCommands>();
 

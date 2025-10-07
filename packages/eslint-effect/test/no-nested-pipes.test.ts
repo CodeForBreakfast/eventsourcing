@@ -67,6 +67,7 @@ const multipleExtractedCalls = (x: number, y: string) =>
     x,
     extractedPipeFunction,
     (n) => n + 5,
+    // eslint-disable-next-line effect/no-eta-expansion -- Testing nested pipes, keeping lambda for clarity
     (n) => String(n),
     (s) => s + y
   );

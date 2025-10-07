@@ -32,7 +32,7 @@ export interface ProjectionEventStore<TEvent> {
 export const makeProjectionEventStore = <TEvent>(
   original: FullEventStore<TEvent>
 ): ProjectionEventStore<TEvent> => ({
-  read: (from: EventStreamPosition) => original.read(from),
+  read: original.read,
 });
 
 export { EventNumber, EventStreamId, EventStreamPosition, EventStoreError };

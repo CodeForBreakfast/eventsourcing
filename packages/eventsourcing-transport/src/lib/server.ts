@@ -82,4 +82,5 @@ export class Acceptor extends Context.Tag('@transport/Server.Acceptor')<
 /**
  * Creates a client ID from a string
  */
+// eslint-disable-next-line effect/no-eta-expansion -- Public API wrapper providing explicit name for brand constructor
 export const makeClientId = (id: string): ClientId => ClientId(id);

@@ -32,7 +32,7 @@ const resolveDirFromUrl = (path: Path.Path) =>
   pipe(
     () => new URL(import.meta.url).pathname,
     Effect.sync,
-    Effect.map((currentPath) => path.dirname(currentPath)),
+    Effect.map(path.dirname),
     Effect.map((scriptsDir) => path.resolve(scriptsDir, '..'))
   );
 
@@ -236,6 +236,8 @@ const getChangesets = pipe(
   Effect.flatMap(readChangesetsFromDirectory)
 );
 
+// Wrapper provides type safety for JSON.parse (returns any)
+// eslint-disable-next-line effect/no-eta-expansion
 const parsePackageDependencyOutput = (output: string): Record<string, readonly string[]> =>
   JSON.parse(output);
 
@@ -527,7 +529,7 @@ const displayDependencyError = (terminal: Terminal.Terminal) => (error: MissingD
     Effect.andThen(terminal.display('\n'))
   );
 
-const showSingleDependencyError = (terminal: Terminal.Terminal) => displayDependencyError(terminal);
+const showSingleDependencyError = displayDependencyError;
 
 const displayDependencyErrors = (
   terminal: Terminal.Terminal,
@@ -625,8 +627,7 @@ const validateChangesetsFlow = (changesets: readonly ChangesetInfoInternal[]) =>
     Effect.andThen(displaySuccess(changesets))
   );
 
-const validateWithChangesets = (changesets: readonly ChangesetInfoInternal[]) =>
-  validateChangesetsFlow(changesets);
+const validateWithChangesets = validateChangesetsFlow;
 
 const checkUnpublishableWhenNoChangesets =
   (changesets: readonly ChangesetInfoInternal[]) => (unpublishable: readonly string[]) =>
@@ -700,6 +701,8 @@ const validateChangesetLogic =
     }
   };
 
+// Wrapper provides type safety for JSON.parse (returns any)
+// eslint-disable-next-line effect/no-eta-expansion
 const parseRootPackageJson = (content: string) => JSON.parse(content);
 
 const readRootPackageJson = (fs: FileSystem.FileSystem, path: Path.Path, rootDir: string) =>

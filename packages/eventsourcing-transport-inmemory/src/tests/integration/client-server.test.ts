@@ -212,6 +212,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       server.connections,
       Stream.take(2),
       Stream.runCollect,
+      // eslint-disable-next-line effect/no-eta-expansion -- Lambda preserves type information for TypeScript inference
       Effect.map((chunk) => Array.from(chunk))
     );
 
@@ -280,6 +281,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       messageStream,
       Stream.take(1),
       Stream.runCollect,
+      // eslint-disable-next-line effect/no-eta-expansion -- Lambda preserves type information for TypeScript inference
       Effect.map((chunk) => Array.from(chunk)),
       Effect.timeout(100)
     );

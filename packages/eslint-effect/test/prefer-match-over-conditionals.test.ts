@@ -9,6 +9,7 @@ const handleCommand = (msg: { readonly _tag: 'Command'; readonly id: string }) =
   Effect.succeed(msg.id);
 const handleSubscribe = (msg: { readonly _tag: 'Subscribe'; readonly streamId: string }) =>
   Effect.succeed(msg.streamId);
+// eslint-disable-next-line effect/no-eta-expansion -- Simple test helper function
 const handleMessage = (msg: MessageType) => Effect.succeed(msg);
 
 // Should fail - if statement in Effect.flatMap checking _tag discriminator
