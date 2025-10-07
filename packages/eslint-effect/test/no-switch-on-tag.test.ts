@@ -2,10 +2,12 @@ import { Either } from 'effect';
 
 const either = Either.right(42);
 
-type Event = { type: 'Created'; name: string } | { type: 'Updated'; name: string };
+type Event =
+  | { readonly type: 'Created'; readonly name: string }
+  | { readonly type: 'Updated'; readonly name: string };
 const event: Event = { type: 'Created', name: 'test' } as Event;
 
-// eslint-disable-next-line effect/no-switch-on-tag -- Testing switch on _tag
+// eslint-disable-next-line effect/no-switch-on-tag, effect/no-direct-tag-access -- Testing switch on _tag
 switch (either._tag) {
   case 'Right':
     break;
