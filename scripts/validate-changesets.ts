@@ -146,8 +146,7 @@ const parsePackagesFromFrontmatter = (
 
   return matches.reduce<ParseResult>(
     (acc, match) => {
-      const packageName = match[1];
-      if (!packageName) {
+      if (!match[1]) {
         return acc;
       }
 
@@ -160,7 +159,7 @@ const parsePackagesFromFrontmatter = (
             : acc.changeType;
 
       return {
-        packages: [...acc.packages, packageName],
+        packages: [...acc.packages, match[1]],
         changeType: newChangeType,
       };
     },
@@ -237,7 +236,7 @@ const getChangesets = pipe(
 );
 
 // Wrapper provides type safety for JSON.parse (returns any)
-// eslint-disable-next-line effect/no-eta-expansion
+// eslint-disable-next-line effect/no-eta-expansion -- JSON.parse is external and cannot be inlined
 const parsePackageDependencyOutput = (output: string): Record<string, readonly string[]> =>
   JSON.parse(output);
 
@@ -529,15 +528,13 @@ const displayDependencyError = (terminal: Terminal.Terminal) => (error: MissingD
     Effect.andThen(terminal.display('\n'))
   );
 
-const showSingleDependencyError = displayDependencyError;
-
 const displayDependencyErrors = (
   terminal: Terminal.Terminal,
   dependencyErrors: readonly MissingDependentError[]
 ) =>
   pipe(
     dependencyErrors,
-    EffectArray.map(showSingleDependencyError(terminal)),
+    EffectArray.map(displayDependencyError(terminal)),
     Effect.all,
     Effect.asVoid
   );
@@ -627,8 +624,6 @@ const validateChangesetsFlow = (changesets: readonly ChangesetInfoInternal[]) =>
     Effect.andThen(displaySuccess(changesets))
   );
 
-const validateWithChangesets = validateChangesetsFlow;
-
 const checkUnpublishableWhenNoChangesets =
   (changesets: readonly ChangesetInfoInternal[]) => (unpublishable: readonly string[]) =>
     unpublishable.length > 0 && changesets.length === 0
@@ -664,14 +659,14 @@ const validateCodeChanges = (
         ? displayMissingChangesetError
         : validateAfterCheckingPublishable(changesets)
     ),
-    Effect.andThen(changesets.length > 0 ? validateWithChangesets(changesets) : Effect.void)
+    Effect.andThen(changesets.length > 0 ? validateChangesetsFlow(changesets) : Effect.void)
   );
 
 const validateDocChanges = (changesets: readonly ChangesetInfoInternal[]) =>
   pipe(
     Terminal.Terminal,
     Effect.flatMap(showDocOnlyMessages(changesets)),
-    Effect.andThen(changesets.length > 0 ? validateWithChangesets(changesets) : Effect.void)
+    Effect.andThen(changesets.length > 0 ? validateChangesetsFlow(changesets) : Effect.void)
   );
 
 const validateChangesetLogic =
@@ -702,7 +697,7 @@ const validateChangesetLogic =
   };
 
 // Wrapper provides type safety for JSON.parse (returns any)
-// eslint-disable-next-line effect/no-eta-expansion
+// eslint-disable-next-line effect/no-eta-expansion -- JSON.parse is external and cannot be inlined
 const parseRootPackageJson = (content: string) => JSON.parse(content);
 
 const readRootPackageJson = (fs: FileSystem.FileSystem, path: Path.Path, rootDir: string) =>
