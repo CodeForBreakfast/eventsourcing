@@ -1,4 +1,4 @@
-import { Effect, PubSub, Stream, Scope } from 'effect';
+import { Effect, PubSub, Stream, Scope, pipe } from 'effect';
 import { TodoEvent } from '../domain/todoEvents';
 import { TodoListEvent } from '../domain/todoListEvents';
 
@@ -24,22 +24,21 @@ export interface EventBusService {
 
 export class EventBus extends Effect.Tag('EventBus')<EventBus, EventBusService>() {}
 
+const createServiceFromPubSub = (pubsub: PubSub.PubSub<DomainEvent>): EventBusService => ({
+  publish: (streamId: string, event: TodoEvent | TodoListEvent) =>
+    PubSub.publish(pubsub, { streamId, event }),
+
+  subscribe: <TEvent extends DomainEvent['event']>(
+    filter: (event: DomainEvent['event']) => event is TEvent
+  ) =>
+    Effect.map(
+      PubSub.subscribe(pubsub),
+      Stream.filter(
+        (domainEvent): domainEvent is { readonly streamId: string; readonly event: TEvent } =>
+          filter(domainEvent.event)
+      )
+    ),
+});
+
 export const makeEventBus = (): Effect.Effect<EventBusService, never, never> =>
-  Effect.gen(function* () {
-    const pubsub = yield* PubSub.unbounded<DomainEvent>();
-
-    return {
-      publish: (streamId: string, event: TodoEvent | TodoListEvent) =>
-        PubSub.publish(pubsub, { streamId, event }),
-
-      subscribe: <TEvent extends DomainEvent['event']>(
-        filter: (event: DomainEvent['event']) => event is TEvent
-      ) =>
-        Effect.map(
-          PubSub.subscribe(pubsub),
-          Stream.filter((domainEvent): domainEvent is { streamId: string; event: TEvent } =>
-            filter(domainEvent.event)
-          )
-        ),
-    };
-  });
+  pipe(PubSub.unbounded<DomainEvent>(), Effect.map(createServiceFromPubSub));
