@@ -2,7 +2,7 @@ version: '3.8'
 
 services:
   postgres:
-    image: postgres:17.6-alpine@sha256:5d14c08a257610d8e27c52ce0f10de5d9cce4c232e1277d44d7d6fb628b3d1a7
+    image: postgres:18.0-alpine@sha256:70b32afe0c274b4d93098fd724fcdaab3aba47270a4f1e63cbf9cc69d7bf1be4
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
