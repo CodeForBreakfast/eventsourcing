@@ -58,7 +58,7 @@ const TodoListProjectionEventStore = Context.GenericTag<ProjectionEventStore<Tod
 const loadProjectionForList = (
   projectionStore: ProjectionEventStore<TodoListEvent>,
   listId: string
-): Effect.Effect<TodoListProjection, never, never> => {
+) => {
   const loadProjectionEffect = loadProjection(TodoListProjectionEventStore, applyEvent)(listId);
   return pipe(
     loadProjectionEffect,

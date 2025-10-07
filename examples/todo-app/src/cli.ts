@@ -1,16 +1,17 @@
 #!/usr/bin/env bun
 
 import { Effect, Layer, Console, Option, Chunk, pipe } from 'effect';
+import { Projection } from '@codeforbreakfast/eventsourcing-projections';
 import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { TodoAggregate, TodoAggregateRoot } from './domain/todoAggregate';
+import { TodoAggregate, TodoAggregateRoot, TodoState } from './domain/todoAggregate';
 import { TodoListAggregate } from './domain/todoListAggregate';
-import { EventBus, makeEventBus } from './infrastructure/eventBus';
+import { EventBus, EventBusService, makeEventBus } from './infrastructure/eventBus';
 import { startProcessManager } from './infrastructure/processManager';
 import { loadTodoProjection } from './projections/todoProjection';
-import { loadTodoListProjection } from './projections/todoListProjection';
+import { loadTodoListProjection, TodoListProjection } from './projections/todoListProjection';
 import { TodoId, UserId } from './domain/types';
 import type { TodoEvent } from './domain/todoEvents';
 import type { TodoListEvent } from './domain/todoListEvents';
@@ -31,16 +32,15 @@ const TodoListEventStoreLive = Layer.effect(
 
 const AppLive = Layer.mergeAll(EventBusLive, TodoEventStoreLive, TodoListEventStoreLive);
 
+const publishEventsWithBus =
+  (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: EventBusService) =>
+    pipe(
+      events,
+      Effect.forEach((event) => eventBus.publish(todoId, event))
+    );
+
 const publishEvents = (todoId: TodoId, events: ReadonlyArray<TodoEvent>) =>
-  pipe(
-    EventBus,
-    Effect.flatMap((eventBus) =>
-      pipe(
-        events,
-        Effect.forEach((event) => eventBus.publish(todoId, event))
-      )
-    )
-  );
+  pipe(EventBus, Effect.flatMap(publishEventsWithBus(todoId, events)));
 
 const commitAndPublish = (
   todoId: TodoId,
@@ -64,135 +64,145 @@ const handleConditional = <E, R>(
   whenFalse: Effect.Effect<void, E, R>
 ): Effect.Effect<void, E, R> => (events.length > 0 ? whenTrue : whenFalse);
 
+const createTodoCommand = (userId: UserId, title: string) => () =>
+  TodoAggregateRoot.commands.createTodo(userId, title)();
+
+const commitAndReturnId =
+  (todoId: TodoId, eventNumber: number, title: string) => (events: ReadonlyArray<TodoEvent>) =>
+    pipe(
+      commitAndPublish(todoId, eventNumber, events, `✓ Created TODO: ${title} (${todoId})`),
+      Effect.as(todoId)
+    );
+
 const createTodo = (title: string) => {
   const todoId = `todo-${Date.now()}` as TodoId;
   const state = TodoAggregateRoot.new();
 
   return pipe(
-    TodoAggregateRoot.commands.createTodo(CURRENT_USER, title)(),
-    Effect.flatMap((events) =>
-      pipe(
-        commitAndPublish(
-          todoId,
-          state.nextEventNumber,
-          events,
-          `✓ Created TODO: ${title} (${todoId})`
-        ),
-        Effect.as(todoId)
-      )
-    )
+    createTodoCommand(CURRENT_USER, title)(),
+    Effect.flatMap(commitAndReturnId(todoId, state.nextEventNumber, title))
   );
 };
 
+const completeCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+  TodoAggregateRoot.commands.complete(userId)(state);
+
+const handleCompleteEvents =
+  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+    handleConditional(
+      events,
+      commitAndPublish(todoId, eventNumber, events, `✓ Completed TODO: ${todoId}`),
+      Console.log(`⚠ TODO ${todoId} is already completed`)
+    );
+
+const processCompleteState =
+  (todoId: TodoId, userId: UserId) =>
+  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+    pipe(
+      completeCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
+    );
+
 const completeTodo = (todoId: TodoId) =>
-  pipe(
-    TodoAggregateRoot.load(todoId),
-    Effect.flatMap((state) =>
-      pipe(
-        TodoAggregateRoot.commands.complete(CURRENT_USER)(
-          state.data as Readonly<Option.Option<import('./domain/todoAggregate').TodoState>>
-        ),
-        Effect.flatMap((events: ReadonlyArray<TodoEvent>) =>
-          handleConditional(
-            events,
-            commitAndPublish(todoId, state.nextEventNumber, events, `✓ Completed TODO: ${todoId}`),
-            Console.log(`⚠ TODO ${todoId} is already completed`)
-          )
-        )
-      )
-    )
-  );
+  pipe(TodoAggregateRoot.load(todoId), Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+
+const uncompleteCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+  TodoAggregateRoot.commands.uncomplete(userId)(state);
+
+const handleUncompleteEvents =
+  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+    handleConditional(
+      events,
+      commitAndPublish(todoId, eventNumber, events, `✓ Uncompleted TODO: ${todoId}`),
+      Console.log(`⚠ TODO ${todoId} is already uncompleted`)
+    );
+
+const processUncompleteState =
+  (todoId: TodoId, userId: UserId) =>
+  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+    pipe(
+      uncompleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
+    );
 
 const uncompleteTodo = (todoId: TodoId) =>
   pipe(
     TodoAggregateRoot.load(todoId),
-    Effect.flatMap((state) =>
-      pipe(
-        TodoAggregateRoot.commands.uncomplete(CURRENT_USER)(
-          state.data as Readonly<Option.Option<import('./domain/todoAggregate').TodoState>>
-        ),
-        Effect.flatMap((events: ReadonlyArray<TodoEvent>) =>
-          handleConditional(
-            events,
-            commitAndPublish(
-              todoId,
-              state.nextEventNumber,
-              events,
-              `✓ Uncompleted TODO: ${todoId}`
-            ),
-            Console.log(`⚠ TODO ${todoId} is already uncompleted`)
-          )
-        )
-      )
-    )
+    Effect.flatMap(processUncompleteState(todoId, CURRENT_USER))
   );
 
+const deleteCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
+  TodoAggregateRoot.commands.deleteTodo(userId)(state);
+
+const handleDeleteEvents =
+  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+    handleConditional(
+      events,
+      commitAndPublish(todoId, eventNumber, events, `✓ Deleted TODO: ${todoId}`),
+      Console.log(`⚠ TODO ${todoId} is already deleted`)
+    );
+
+const processDeleteState =
+  (todoId: TodoId, userId: UserId) =>
+  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+    pipe(
+      deleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
+      Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
+    );
+
 const deleteTodo = (todoId: TodoId) =>
+  pipe(TodoAggregateRoot.load(todoId), Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+
+const formatAndLogTodo = (todoId: TodoId) => (todo: TodoState) =>
   pipe(
-    TodoAggregateRoot.load(todoId),
-    Effect.flatMap((state) =>
-      pipe(
-        TodoAggregateRoot.commands.deleteTodo(CURRENT_USER)(
-          state.data as Readonly<Option.Option<import('./domain/todoAggregate').TodoState>>
-        ),
-        Effect.flatMap((events: ReadonlyArray<TodoEvent>) =>
-          handleConditional(
-            events,
-            commitAndPublish(todoId, state.nextEventNumber, events, `✓ Deleted TODO: ${todoId}`),
-            Console.log(`⚠ TODO ${todoId} is already deleted`)
-          )
-        )
-      )
-    )
+    Console.log(
+      `  ${todo.completed ? '✓' : '○'} [${todoId}] ${todo.completed ? `\x1b[2m${todo.title}\x1b[0m` : todo.title}`
+    ),
+    Effect.as(Option.some(todo))
+  );
+
+const processProjectionData = (todoId: TodoId) => (data: Readonly<Option.Option<TodoState>>) =>
+  pipe(
+    data,
+    Option.filter((t) => !t.deleted),
+    Option.match({
+      onNone: () => Effect.succeed(Option.none()),
+      onSome: formatAndLogTodo(todoId),
+    })
   );
 
 const loadAndFormatTodo = (todoId: TodoId) =>
   pipe(
     loadTodoProjection(todoId),
-    Effect.flatMap((todoProjection) =>
-      pipe(
-        todoProjection.data,
-        Option.filter((t) => !t.deleted),
-        Option.match({
-          onNone: () => Effect.succeed(Option.none()),
-          onSome: (todo) => {
-            const status = todo.completed ? '✓' : '○';
-            const title = todo.completed ? `\x1b[2m${todo.title}\x1b[0m` : todo.title;
-            return pipe(
-              Console.log(`  ${status} [${todoId}] ${title}`),
-              Effect.as(Option.some(todo))
-            );
-          },
-        })
-      )
-    )
+    Effect.flatMap((todoProjection) => processProjectionData(todoId)(todoProjection.data))
   );
 
-const listTodos = () =>
+const formatTodoList = (todos: ReadonlyArray<{ readonly todoId: TodoId }>) =>
   pipe(
-    loadTodoListProjection(),
-    Effect.flatMap((projection) => {
-      const list = pipe(
-        projection.data,
-        Option.getOrElse(() => ({ todos: [] as const }))
-      );
-
-      return handleConditional(
-        list.todos,
-        pipe(
-          Console.log('\n📝 Your TODOs:\n'),
-          Effect.flatMap(() =>
-            pipe(
-              list.todos,
-              Effect.forEach((item) => loadAndFormatTodo(item.todoId))
-            )
-          ),
-          Effect.flatMap(() => Console.log(''))
-        ),
-        Console.log('No TODOs yet. Create one with: bun run src/cli.ts create "My task"')
-      );
-    })
+    Console.log('\n📝 Your TODOs:\n'),
+    Effect.flatMap(() =>
+      pipe(
+        todos,
+        Effect.forEach((item) => loadAndFormatTodo(item.todoId))
+      )
+    ),
+    Effect.flatMap(() => Console.log(''))
   );
+
+const processListProjection = (projection: Projection<TodoListProjection>) => {
+  const list = pipe(
+    projection.data,
+    Option.getOrElse(() => ({ todos: [] as const }))
+  );
+
+  return handleConditional(
+    list.todos,
+    formatTodoList(list.todos),
+    Console.log('No TODOs yet. Create one with: bun run src/cli.ts create "My task"')
+  );
+};
+
+const listTodos = () => pipe(loadTodoListProjection(), Effect.flatMap(processListProjection));
 
 const showHelp = () =>
   Console.log(`
@@ -268,18 +278,20 @@ const runCommand = (
   }
 };
 
-const main = (args: ReadonlyArray<string>) =>
+const runWithProcessManager = (args: ReadonlyArray<string>) =>
   pipe(
-    Effect.scoped(
-      pipe(
-        Effect.all([Effect.fork(startProcessManager()), Effect.sleep('100 millis')]),
-        Effect.flatMap(() => runCommand(args)),
-        Effect.asVoid,
-        Effect.flatMap(() => Effect.sleep('500 millis'))
-      )
-    ),
-    Effect.provide(AppLive)
+    Effect.all([Effect.fork(startProcessManager()), Effect.sleep('100 millis')]),
+    Effect.flatMap(() => runCommand(args)),
+    Effect.asVoid,
+    Effect.flatMap(() => Effect.sleep('500 millis'))
   );
+
+const main = (args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> =>
+  pipe(Effect.scoped(runWithProcessManager(args)), Effect.provide(AppLive)) as Effect.Effect<
+    void,
+    unknown,
+    never
+  >;
 
 Effect.runPromise(
   pipe(
