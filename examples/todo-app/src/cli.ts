@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, Layer, Console, Option, Chunk, pipe } from 'effect';
+import { Effect, Layer, Console, Option, Chunk, pipe, Match } from 'effect';
 import { Projection } from '@codeforbreakfast/eventsourcing-projections';
 import {
   makeInMemoryEventStore,
@@ -262,22 +262,22 @@ const runCommand = (
 ): Effect.Effect<unknown, unknown, TodoAggregate | TodoListAggregate | EventBus> => {
   const command = args[0];
 
-  switch (command) {
-    case 'create': {
+  return pipe(
+    command,
+    Match.value,
+    Match.when('create', () => {
       const title = args[1];
       return title
         ? createTodo(title)
         : missingArgError('Error: Title is required', 'Usage: bun run src/cli.ts create <title>');
-    }
-
-    case 'complete': {
+    }),
+    Match.when('complete', () => {
       const id = args[1];
       return id
         ? completeTodo(id as TodoId)
         : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts complete <id>');
-    }
-
-    case 'uncomplete': {
+    }),
+    Match.when('uncomplete', () => {
       const id = args[1];
       return id
         ? uncompleteTodo(id as TodoId)
@@ -285,22 +285,16 @@ const runCommand = (
             'Error: TODO ID is required',
             'Usage: bun run src/cli.ts uncomplete <id>'
           );
-    }
-
-    case 'delete': {
+    }),
+    Match.when('delete', () => {
       const id = args[1];
       return id
         ? deleteTodo(id as TodoId)
         : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts delete <id>');
-    }
-
-    case 'list':
-      return listTodos();
-
-    case 'help':
-    default:
-      return showHelp();
-  }
+    }),
+    Match.when('list', listTodos),
+    Match.orElse(showHelp)
+  );
 };
 
 const forkProcessManager = () => Effect.fork(startProcessManager());
