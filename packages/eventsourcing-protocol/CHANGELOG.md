@@ -1,5 +1,19 @@
 # @codeforbreakfast/eventsourcing-protocol-default
 
+## 0.4.2
+
+### Patch Changes
+
+- [#228](https://github.com/CodeForBreakfast/eventsourcing/pull/228) [`2f58e66`](https://github.com/CodeForBreakfast/eventsourcing/commit/2f58e665f90f3296f1e1b58bff89a7838365221a) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved code quality and maintainability by eliminating unnecessary function wrappers throughout the codebase. These internal refactoring changes improve code readability and consistency without affecting any public APIs or behavior. All packages continue to work exactly as before with no breaking changes.
+
+- [#224](https://github.com/CodeForBreakfast/eventsourcing/pull/224) [`26ed0a0`](https://github.com/CodeForBreakfast/eventsourcing/commit/26ed0a0421106b73ad787f7e22ce110690104296) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved OpenTelemetry span naming and attributes to follow semantic conventions. Protocol spans now use standardized naming (`eventsourcing.Protocol/<method>`) and include proper RPC and messaging attributes for better observability and integration with OTEL tooling.
+
+- [#222](https://github.com/CodeForBreakfast/eventsourcing/pull/222) [`6ea70b0`](https://github.com/CodeForBreakfast/eventsourcing/commit/6ea70b083d217cbda2bf1bbae23279db60570b00) Thanks [@GraemeF](https://github.com/GraemeF)! - Protocol operations now automatically create Effect spans for distributed tracing. All commands, subscriptions, events, and results include W3C Trace Context fields (traceId, parentId). The protocol creates spans named 'protocol.send-command', 'protocol.subscribe', 'server-protocol.send-result', and 'server-protocol.publish-event' with relevant attributes, enabling end-to-end tracing across the event sourcing system.
+
+- Updated dependencies [[`238623c`](https://github.com/CodeForBreakfast/eventsourcing/commit/238623c4106cc0f0ca535211a69f65ffb07c86bb)]:
+  - @codeforbreakfast/eventsourcing-store@0.8.2
+  - @codeforbreakfast/eventsourcing-commands@0.4.2
+
 ## 0.4.1
 
 ### Patch Changes
