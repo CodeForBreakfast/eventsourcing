@@ -399,6 +399,13 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       startBridge(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
+      const readWithEventRows = readHistoricalEvents(eventRows);
+      const subscribeWithDependencies = subscribeToStreamWithHistory(
+        eventRows,
+        subscriptionManager,
+        notificationListener
+      );
+
       const eventStore: EventStore<string> = {
         append: (to: EventStreamPosition) => {
           const sink = Sink.foldEffect(
@@ -420,15 +427,14 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
           never
-        > => readHistoricalEvents(eventRows)(from),
+        > => readWithEventRows(from),
         subscribe: (
           from: EventStreamPosition
         ): Effect.Effect<
           Stream.Stream<string, ParseResult.ParseError | EventStoreError>,
           EventStoreError,
           never
-        > =>
-          subscribeToStreamWithHistory(eventRows, subscriptionManager, notificationListener)(from),
+        > => subscribeWithDependencies(from),
       };
 
       return eventStore;

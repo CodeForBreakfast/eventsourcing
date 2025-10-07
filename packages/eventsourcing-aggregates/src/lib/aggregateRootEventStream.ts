@@ -88,14 +88,15 @@ export interface CommitOptions<TId extends string> {
  * @throws {ConcurrencyConflictError} If the event number doesn't match the stream position
  * @throws {EventStoreError} If writing to the store fails
  */
-const createStreamPosition =
-  (streamId: EventStreamPosition['streamId']) => (eventNumber: EventNumber) =>
+const decodeStreamPositionFromEventNumber =
+  (eventNumber: EventNumber) => (streamId: EventStreamPosition['streamId']) =>
     pipe({ streamId, eventNumber }, Schema.decode(EventStreamPosition));
 
-const writeEventsToPosition =
-  <TEvent>(events: Chunk.Chunk<TEvent>, position: EventStreamPosition) =>
-  (eventstore: EventStore<TEvent>) =>
-    pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
+const appendEventsAtPosition = <TEvent>(
+  events: Chunk.Chunk<TEvent>,
+  position: EventStreamPosition,
+  eventstore: EventStore<TEvent>
+) => pipe(events, Stream.fromChunk, Stream.run(eventstore.append(position)));
 
 const commitToEventStore =
   <TId extends string, TEvent>(id: TId, eventNumber: EventNumber, events: Chunk.Chunk<TEvent>) =>
@@ -103,8 +104,8 @@ const commitToEventStore =
     pipe(
       id,
       toStreamId,
-      Effect.flatMap((streamId) => createStreamPosition(streamId)(eventNumber)),
-      Effect.flatMap((position) => writeEventsToPosition(events, position)(eventstore))
+      Effect.flatMap(decodeStreamPositionFromEventNumber(eventNumber)),
+      Effect.flatMap((position) => appendEventsAtPosition(events, position, eventstore))
     );
 
 const commit =
@@ -119,40 +120,44 @@ const commit =
       )
     );
 
-const updateStateWithEvent = <TState>(newState: TState) =>
-  Ref.update<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>(() => ({
-    nextEventNumber: 0,
-    data: Option.some(newState),
-  }));
+const setStateToNewValue = <TState>(
+  newState: TState,
+  stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>
+) =>
+  pipe(
+    stateRef,
+    Ref.update(() => ({
+      nextEventNumber: 0,
+      data: Option.some(newState),
+    }))
+  );
 
-const applyAndUpdateState =
-  <TState, TEvent>(
-    apply: (
-      state: Readonly<Option.Option<TState>>
-    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-    before: Readonly<Option.Option<TState>>,
-    event: Readonly<TEvent>
-  ) =>
-  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
-    pipe(
-      event,
-      apply(before),
-      Effect.flatMap((newState) => updateStateWithEvent(newState)(stateRef))
-    );
+const applyEventAndUpdateRef = <TState, TEvent>(
+  apply: (
+    state: Readonly<Option.Option<TState>>
+  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+  before: Readonly<Option.Option<TState>>,
+  event: Readonly<TEvent>,
+  stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>
+) =>
+  pipe(
+    event,
+    apply(before),
+    Effect.flatMap((newState) => setStateToNewValue(newState, stateRef))
+  );
 
-const applyEventToState =
-  <TState, TEvent>(
-    apply: (
-      state: Readonly<Option.Option<TState>>
-    ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-    event: Readonly<TEvent>
-  ) =>
-  (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
-    pipe(
-      stateRef,
-      Ref.get,
-      Effect.flatMap(({ data: before }) => applyAndUpdateState(apply, before, event)(stateRef))
-    );
+const processEventWithRef = <TState, TEvent>(
+  apply: (
+    state: Readonly<Option.Option<TState>>
+  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
+  event: Readonly<TEvent>,
+  stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>
+) =>
+  pipe(
+    stateRef,
+    Ref.get,
+    Effect.flatMap(({ data: before }) => applyEventAndUpdateRef(apply, before, event, stateRef))
+  );
 
 const foldEventsIntoState =
   <TState, TEvent>(
@@ -164,7 +169,7 @@ const foldEventsIntoState =
   (stateRef: Ref.Ref<{ readonly nextEventNumber: number; readonly data: Option.Option<TState> }>) =>
     pipe(
       stream,
-      Stream.runForEach((event) => applyEventToState(apply, event)(stateRef)),
+      Stream.runForEach((event) => processEventWithRef(apply, event, stateRef)),
       Effect.andThen(Ref.get(stateRef))
     );
 

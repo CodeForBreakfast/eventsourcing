@@ -110,17 +110,24 @@ const finalizeParserState =
     return logUnclosedBlock(filePath, state);
   };
 
-const processLineWithState =
-  (filePath: string, index: number, line: string) => (state: ParserState) =>
-    processMarkdownLine(filePath, index)(state, line);
+const processLineWithState = (filePath: string, index: number, line: string) => {
+  const processor = processMarkdownLine(filePath, index);
+  return (state: ParserState) => processor(state, line);
+};
+
+const flatMapProcessLine = (filePath: string, index: number, line: string) =>
+  Effect.flatMap(processLineWithState(filePath, index, line));
+
+const reduceLineToParserState =
+  (filePath: string) =>
+  (accEffect: Effect.Effect<ParserState, never, never>, line: string, index: number) =>
+    pipe(accEffect, flatMapProcessLine(filePath, index, line));
 
 const extractCodeBlocks = (content: string, filePath: string) => {
   const lines = content.split('\n');
   return pipe(
     lines,
-    EffectArray.reduce(Effect.succeed(initialParserState), (accEffect, line, index) =>
-      Effect.flatMap(accEffect, processLineWithState(filePath, index, line))
-    ),
+    EffectArray.reduce(Effect.succeed(initialParserState), reduceLineToParserState(filePath)),
     Effect.flatMap(finalizeParserState(filePath))
   );
 };
@@ -161,27 +168,17 @@ const processDirectoryEntry =
     );
   };
 
-const processEntryFiles =
-  (
-    currentDir: string,
-    entry: {
-      readonly name: string;
-      readonly isDirectory: () => boolean;
-      readonly isFile: () => boolean;
-    }
-  ) =>
-  (currentFiles: readonly string[]) =>
-    processDirectoryEntry(currentDir, currentFiles)(entry);
-
-const processEntry =
+const applyEntryToFiles =
   (currentDir: string) =>
   (entry: {
     readonly name: string;
     readonly isDirectory: () => boolean;
     readonly isFile: () => boolean;
   }) =>
-  (currentFiles: readonly string[]) =>
-    processEntryFiles(currentDir, entry)(currentFiles);
+  (currentFiles: readonly string[]) => {
+    const processor = processDirectoryEntry(currentDir, currentFiles);
+    return processor(entry);
+  };
 
 const checkIsDirectory = (fullPath: string) =>
   pipe(
@@ -218,6 +215,18 @@ const createEntryWithChecks = (currentDir: string) => (name: string) =>
 const mapNamesToEntries = (currentDir: string) => (names: readonly string[]) =>
   Effect.all(names.map(createEntryWithChecks(currentDir)));
 
+const flatMapEntryProcessor =
+  (currentDir: string) =>
+  (entry: {
+    readonly name: string;
+    readonly isDirectory: () => boolean;
+    readonly isFile: () => boolean;
+  }) => {
+    const entryApplier = applyEntryToFiles(currentDir);
+    const entryProcessor = entryApplier(entry);
+    return Effect.flatMap(entryProcessor);
+  };
+
 const reduceDirectoryEntries =
   (files: readonly string[], currentDir: string) =>
   (
@@ -234,7 +243,11 @@ const reduceDirectoryEntries =
         Error,
         FileSystem.FileSystem | Path.Path
       >,
-      (acc, entry) => Effect.flatMap(acc, processEntry(currentDir)(entry))
+      (acc, entry) => {
+        const flatMapProcessor = flatMapEntryProcessor(currentDir);
+        const flatMapper = flatMapProcessor(entry);
+        return pipe(acc, flatMapper);
+      }
     );
 
 const processDirectory = (
@@ -322,7 +335,10 @@ const writeAllBlockFiles = (
   blocks: readonly CodeBlock[],
   tempDir: string
 ): Effect.Effect<readonly BlockFile[], Error, FileSystem.FileSystem | Path.Path> => {
-  const writeEffects = blocks.map((block, index) => writeBlockFile(tempDir)(block, index));
+  const writeEffects = blocks.map((block, index) => {
+    const writer = writeBlockFile(tempDir);
+    return writer(block, index);
+  });
   return Effect.all(writeEffects);
 };
 

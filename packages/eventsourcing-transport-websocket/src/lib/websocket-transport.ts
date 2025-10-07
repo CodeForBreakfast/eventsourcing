@@ -105,12 +105,22 @@ const getStateAndWriter = (
   never
 > => Effect.all([getWebSocketInternalState(stateRef), getWriter(writerRef)]);
 
-const serializeMessageWithWriter =
+const validateConnectionAndSendMessage =
   (message: Readonly<TransportMessage>) =>
-  (
-    writer: (data: string) => Effect.Effect<void, Socket.SocketError>
-  ): Effect.Effect<void, TransportError, never> =>
-    serializeAndSend(writer)(message);
+  ([state, writer]: readonly [
+    WebSocketInternalState,
+    ((data: string) => Effect.Effect<void, Socket.SocketError>) | null,
+  ]): Effect.Effect<void, TransportError, never> => {
+    if (!writer || state.connectionState !== 'connected') {
+      return Effect.fail(
+        new TransportError({
+          message: 'Cannot publish message: WebSocket is not connected',
+        })
+      );
+    }
+
+    return pipe(message, serializeAndSend(writer));
+  };
 
 const publishMessage =
   (
@@ -120,17 +130,7 @@ const publishMessage =
   (message: Readonly<TransportMessage>): Effect.Effect<void, TransportError, never> =>
     pipe(
       getStateAndWriter(stateRef, writerRef),
-      Effect.flatMap(([state, writer]) => {
-        if (!writer || state.connectionState !== 'connected') {
-          return Effect.fail(
-            new TransportError({
-              message: 'Cannot publish message: WebSocket is not connected',
-            })
-          );
-        }
-
-        return serializeMessageWithWriter(message)(writer);
-      })
+      Effect.flatMap(validateConnectionAndSendMessage(message))
     );
 
 const applyFilterSafely =

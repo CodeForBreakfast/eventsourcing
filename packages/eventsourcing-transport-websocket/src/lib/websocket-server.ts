@@ -289,6 +289,11 @@ const registerClientAndTransition =
       Effect.flatMap(offerNewConnection(clientState))
     );
 
+const handleMessageForClient =
+  (message: ReadonlyDeep<string>) =>
+  (clientState: ReadonlyDeep<ClientState>): Effect.Effect<void, never, never> =>
+    pipe(message, handleClientMessage(clientState));
+
 const processClientMessage = (
   state: ServerState,
   clientId: Server.ClientId,
@@ -297,7 +302,7 @@ const processClientMessage = (
   pipe(
     state.clients,
     HashMap.get(clientId),
-    Effect.flatMap((clientState) => handleClientMessage(clientState)(message)),
+    Effect.flatMap(handleMessageForClient(message)),
     Effect.orElse(() => Effect.void)
   );
 

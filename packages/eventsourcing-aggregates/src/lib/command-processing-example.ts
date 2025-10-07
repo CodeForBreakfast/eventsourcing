@@ -66,9 +66,11 @@ const createRouter = (): CommandRouter<UserEvent> => ({
 });
 
 // Example: Create the service layer
+const createUserCommandProcessingService = createCommandProcessingService(UserEventStore);
+
 export const CommandProcessingServiceLive = Layer.effect(
   CommandProcessingService,
-  createCommandProcessingService(UserEventStore)(createRouter())
+  createUserCommandProcessingService(createRouter())
 );
 
 // Example: Usage in application code

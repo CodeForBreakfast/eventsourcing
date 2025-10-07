@@ -149,12 +149,15 @@ const createMockWebSocket =
     } as globalThis.WebSocket;
   };
 
-// Test WebSocketConstructor that creates MockWebSockets
+const applyConfigToMockWebSocket =
+  (config: TestSocketConfig) =>
+  (mockFactory: (config: TestSocketConfig) => Readonly<globalThis.WebSocket>) =>
+    mockFactory(config);
+
 const createTestWebSocketConstructor =
   (config: TestSocketConfig) =>
-  (url: string, protocols?: string | readonly string[]): Readonly<globalThis.WebSocket> => {
-    return createMockWebSocket(url, protocols)(config);
-  };
+  (url: string, protocols?: string | readonly string[]): Readonly<globalThis.WebSocket> =>
+    pipe(createMockWebSocket(url, protocols), applyConfigToMockWebSocket(config));
 
 const createTestSocketLayer = (config: TestSocketConfig = {}) =>
   Layer.succeed(Socket.WebSocketConstructor, createTestWebSocketConstructor(config));
