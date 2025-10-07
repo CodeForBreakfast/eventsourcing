@@ -287,22 +287,25 @@ const offerEventToQueue = (message: ReadonlyDeep<ProtocolEvent>) => (state: Prot
 const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<ProtocolEvent>) =>
   pipe(stateRef, Ref.get, Effect.flatMap(offerEventToQueue(message)));
 
+const routeWireMessage =
+  (stateRef: Ref.Ref<ProtocolState>) => (wireMessage: ReadonlyDeep<ProtocolIncoming>) => {
+    switch (wireMessage.type) {
+      case 'command_result':
+        return pipe(wireMessage, handleCommandResult(stateRef));
+      case 'event':
+        return pipe(wireMessage, handleEvent(stateRef));
+      default:
+        return Effect.void;
+    }
+  };
+
 const handleMessage =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<TransportMessage>) =>
     pipe(
       message,
       parseTransportPayload,
       Effect.flatMap(validateIncomingMessage),
-      Effect.flatMap((wireMessage) => {
-        switch (wireMessage.type) {
-          case 'command_result':
-            return handleCommandResult(stateRef)(wireMessage);
-          case 'event':
-            return handleEvent(stateRef)(wireMessage);
-          default:
-            return Effect.void;
-        }
-      }),
+      Effect.flatMap(routeWireMessage(stateRef)),
       Effect.catchAll(() => Effect.void) // Silently ignore malformed messages
     );
 

@@ -3,13 +3,30 @@ export default {
     type: 'suggestion',
     docs: {
       description:
-        'Suggest currying opportunities where arrow functions pass parameters through to user-defined functions. Example: (error) => logError(error, ctx) could be reordered and curried as logError(ctx)(error)',
+        'Suggest currying opportunities where arrow functions pass parameters through to user-defined functions. Example: (error) => logError(error, ctx) could be curried as logError(ctx)(error) when parameters are already in the right order.',
     },
     messages: {
       suggestCurrying:
-        'Consider currying {{functionName}} to eliminate this arrow function. {{reorderMessage}}Change {{functionName}} signature to: {{curriedSignature}}, then use {{functionName}}({{partialArgs}}) directly.',
+        'This arrow function can be eliminated by currying {{functionName}}. Change signature to {{curriedSignature}}, then use {{functionName}}({{partialArgs}}) directly in the pipe.',
     },
-    schema: [],
+    schema: [
+      {
+        type: 'object',
+        properties: {
+          allowReordering: {
+            type: 'boolean',
+            default: false,
+          },
+          maxCurriedParams: {
+            type: 'number',
+            default: 1,
+            minimum: 1,
+            maximum: 3,
+          },
+        },
+        additionalProperties: false,
+      },
+    ],
   },
 
   create(context) {
@@ -145,22 +162,33 @@ export default {
       const lastNonParamIndex = Math.max(...argsNotFromParams.map((item) => item.index));
       const needsReordering = lastNonParamIndex > lastParamArgIndex;
 
+      const options = context.options[0] || {};
+      const allowReordering = options.allowReordering ?? false;
+      const maxCurriedParams = options.maxCurriedParams ?? 1;
+
+      // Don't suggest currying if reordering is needed and not allowed (default behavior)
+      // This prevents breaking semantic parameter order
+      if (needsReordering && !allowReordering) {
+        return null;
+      }
+
       const curriedArgTexts = argsNotFromParams
         .sort((a, b) => a.index - b.index)
         .map((item) => sourceCode.getText(item.arg));
+
+      // Limit currying depth to prevent unreadable multi-level currying
+      if (curriedArgTexts.length > maxCurriedParams) {
+        return null;
+      }
+
       const paramArgTexts = argsFromParams
         .sort((a, b) => a.index - b.index)
         .map((item) => sourceCode.getText(item.arg));
-
-      const reorderMessage = needsReordering
-        ? 'Reorder parameters so curried args come first. '
-        : '';
 
       const curriedSignature = `(${curriedArgTexts.join(', ')}) => (${paramArgTexts.join(', ')}) => ...`;
 
       return {
         functionName,
-        reorderMessage,
         curriedSignature,
         partialArgs: curriedArgTexts.join(', '),
       };

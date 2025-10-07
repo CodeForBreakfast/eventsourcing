@@ -99,13 +99,13 @@ const readAndTakeZeroEvents =
       Effect.flatMap(takeZeroAndDrain(receivedEventsRef))
     );
 
+const appendEventsAtPosition =
+  (events: readonly FooEvent[], store: EventStore<FooEvent>) => (pos: EventStreamPosition) =>
+    pipe(store, appendEventsToStream(events, pos));
+
 const writeEventsAtBeginning =
   (streamId: EventStreamId, events: readonly FooEvent[]) => (store: EventStore<FooEvent>) =>
-    pipe(
-      streamId,
-      beginning,
-      Effect.flatMap((pos) => appendEventsToStream(events, pos)(store))
-    );
+    pipe(streamId, beginning, Effect.flatMap(appendEventsAtPosition(events, store)));
 
 const subscribeAtPosition =
   (position: EventStreamPosition, receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>) =>
@@ -114,18 +114,19 @@ const subscribeAtPosition =
     return pipe(subscription, Effect.flatMap(subscribeAndTakeEvents(3, receivedEventsRef)));
   };
 
+const expectConflictError = (error: unknown) => {
+  expect(error).toBeInstanceOf(ConcurrencyConflictError);
+};
+
 const appendAndExpectConflict =
   (events: readonly FooEvent[], position: EventStreamPosition) =>
-  (eventstore: EventStore<FooEvent>) => {
-    const appendEffect = appendEventsToStream(events, position)(eventstore);
-    return pipe(
-      appendEffect,
+  (eventstore: EventStore<FooEvent>) =>
+    pipe(
+      eventstore,
+      appendEventsToStream(events, position),
       Effect.flip,
-      Effect.map((error) => {
-        expect(error).toBeInstanceOf(ConcurrencyConflictError);
-      })
+      Effect.map(expectConflictError)
     );
-  };
 
 const subscribeFromBeginningAndTake =
   (
@@ -133,10 +134,12 @@ const subscribeFromBeginningAndTake =
     count: number,
     receivedEventsRef: Ref.Ref<Chunk.Chunk<FooEvent>>
   ) =>
-  (eventstore: EventStore<FooEvent>) => {
-    const subscribeEffect = subscribeFromBeginning(streamId)(eventstore);
-    return pipe(subscribeEffect, Effect.flatMap(subscribeAndTakeEvents(count, receivedEventsRef)));
-  };
+  (eventstore: EventStore<FooEvent>) =>
+    pipe(
+      eventstore,
+      subscribeFromBeginning(streamId),
+      Effect.flatMap(subscribeAndTakeEvents(count, receivedEventsRef))
+    );
 
 export class FooEventStore extends Effect.Tag('FooEventStore')<
   FooEventStore,

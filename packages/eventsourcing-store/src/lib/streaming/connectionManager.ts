@@ -1,4 +1,4 @@
-import { Config, Context, Data, Effect, Layer, Option, Schedule, Ref, HashMap } from 'effect';
+import { Config, Context, Data, Effect, Layer, Option, Schedule, Ref, HashMap, pipe } from 'effect';
 
 /**
  * Configuration for API port and WebSocket connections
@@ -175,7 +175,7 @@ const updateAndExtractStatus =
   (connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>) =>
     Effect.map(
       Ref.updateAndGet(connectionStatuses, (statusMap) => {
-        const current = getOrCreateDefaultStatus(url)(statusMap);
+        const current = pipe(statusMap, getOrCreateDefaultStatus(url));
         const newStatus: ConnectionStatus = {
           isConnected: updates.isConnected ?? current.isConnected,
           lastHeartbeat: updates.lastHeartbeat ?? current.lastHeartbeat,
@@ -214,10 +214,13 @@ const connectAndUpdateStatus =
     Effect.mapError(
       Effect.retry(
         Effect.tap(mockConnect(url, options), () =>
-          updateAndExtractStatus(url, {
-            isConnected: true,
-            lastHeartbeat: Option.some(new Date()),
-          })(connectionStatuses)
+          pipe(
+            connectionStatuses,
+            updateAndExtractStatus(url, {
+              isConnected: true,
+              lastHeartbeat: Option.some(new Date()),
+            })
+          )
         ),
         retryPolicy
       ),
@@ -234,11 +237,14 @@ const resetAndConnect =
     connectionStatuses: Ref.Ref<HashMap.HashMap<string, ConnectionStatus>>
   ): Effect.Effect<ConnectionHandle, ConnectionError, never> =>
     Effect.flatMap(
-      updateAndExtractStatus(url, {
-        isConnected: false,
-        reconnectAttempts: 0,
-      })(connectionStatuses),
-      () => connectAndUpdateStatus(url, options, retryPolicy)(connectionStatuses)
+      pipe(
+        connectionStatuses,
+        updateAndExtractStatus(url, {
+          isConnected: false,
+          reconnectAttempts: 0,
+        })
+      ),
+      () => pipe(connectionStatuses, connectAndUpdateStatus(url, options, retryPolicy))
     );
 
 const findStatusInMap = (url: string) => (statusMap: HashMap.HashMap<string, ConnectionStatus>) =>
@@ -263,9 +269,12 @@ const repeatHeartbeat =
     Effect.map(
       Effect.forkDaemon(
         Effect.repeat(
-          updateAndExtractStatus(url, {
-            lastHeartbeat: Option.some(new Date()),
-          })(connectionStatuses),
+          pipe(
+            connectionStatuses,
+            updateAndExtractStatus(url, {
+              lastHeartbeat: Option.some(new Date()),
+            })
+          ),
           Schedule.spaced(config.heartbeatIntervalMs)
         )
       ),
@@ -279,10 +288,10 @@ const buildConnectionManager =
   ): ConnectionManagerService => ({
     getApiPort: () => Effect.succeed(config.apiPort),
     connectWithRetry: (url: string, options?: Readonly<Record<string, unknown>>) =>
-      resetAndConnect(url, options, createRetryPolicy(config))(connectionStatuses),
-    getConnectionStatus: (url: string) => getStatusFromRef(url)(connectionStatuses),
+      pipe(connectionStatuses, resetAndConnect(url, options, createRetryPolicy(config))),
+    getConnectionStatus: (url: string) => pipe(connectionStatuses, getStatusFromRef(url)),
     setupHeartbeat: (_connection: Readonly<ConnectionHandle>, url: string) =>
-      repeatHeartbeat(config, url)(connectionStatuses),
+      pipe(connectionStatuses, repeatHeartbeat(config, url)),
   });
 
 /**

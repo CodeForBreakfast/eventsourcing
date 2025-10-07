@@ -88,6 +88,60 @@ Effect.map((x) => handler(x as MyType));
 (Effect.flatMap(Schema.decodeUnknown(MyTypeSchema)), Effect.map(handler));
 ```
 
+### `suggest-currying-opportunity`
+
+Suggests currying user-defined functions to eliminate arrow function wrappers in pipe chains. By default, only suggests currying when parameters are already in the right order (no reordering needed) and limits to single-level currying for readability.
+
+#### ✅ Will Suggest (good pattern - params already at end):
+
+```typescript
+// Before
+Effect.catchAll(myEffect, (error) => logError('Failed', error));
+
+// After currying (params already in right order)
+const logError = (message: string) => (error: unknown) =>
+  Effect.sync(() => console.error(message, error));
+
+Effect.catchAll(myEffect, logError('Failed'));
+```
+
+#### ⚠️ Won't Suggest by Default (would require parameter reordering):
+
+```typescript
+// This would break semantic order - error should come before message
+Effect.catchAll(myEffect, (error) => logError(error, 'Failed'));
+
+// Would require changing to: logError = (message) => (error) => ...
+// But semantically, error should come first in the return object
+```
+
+#### ⚠️ Won't Suggest by Default (would create deep currying):
+
+```typescript
+// Would create 2-level currying: (prefix) => (suffix) => (data) => ...
+Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
+
+// Too many parentheses at call site: processData('prefix')('suffix')
+```
+
+**Configuration Options:**
+
+- `allowReordering` (default: `false`) - Allow suggestions even when parameters would need reordering
+- `maxCurriedParams` (default: `1`, max: `3`) - Maximum number of curried parameters to suggest
+
+```javascript
+{
+  rules: {
+    'effect/suggest-currying-opportunity': ['warn', {
+      allowReordering: true,    // Allow parameter reordering suggestions
+      maxCurriedParams: 2,      // Allow up to 2-level currying
+    }]
+  }
+}
+```
+
+**Note:** This rule only triggers on user-defined functions, not Effect library functions.
+
 ## Rule Presets
 
 ### Recommended Presets
@@ -274,6 +328,7 @@ export default [
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
+- `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
 
 ## Available Exports
 
