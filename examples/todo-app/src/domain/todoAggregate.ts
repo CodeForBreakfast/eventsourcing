@@ -88,82 +88,69 @@ const createTodo = (userId: UserId, title: string) => () =>
     } satisfies TodoCreated,
   ]);
 
-const changeTitle =
-  (userId: UserId, title: string) => (state: Readonly<Option.Option<TodoState>>) =>
-    pipe(
-      state,
-      Option.match({
-        onNone: () => Effect.fail(new Error('Cannot change title of non-existent TODO')),
-        onSome: (current) =>
-          current.deleted
-            ? Effect.fail(new Error('Cannot change title of deleted TODO'))
-            : Effect.succeed([
-                {
-                  type: 'TodoTitleChanged' as const,
-                  metadata: { occurredAt: new Date(), originator: userId },
-                  data: { title, changedAt: new Date() },
-                } satisfies TodoTitleChanged,
-              ]),
-      })
-    );
+const changeTitle = (userId: UserId, title: string) =>
+  Option.match({
+    onNone: () => Effect.fail(new Error('Cannot change title of non-existent TODO')),
+    onSome: (current: TodoState) =>
+      current.deleted
+        ? Effect.fail(new Error('Cannot change title of deleted TODO'))
+        : Effect.succeed([
+            {
+              type: 'TodoTitleChanged' as const,
+              metadata: { occurredAt: new Date(), originator: userId },
+              data: { title, changedAt: new Date() },
+            } satisfies TodoTitleChanged,
+          ]),
+  });
 
-const complete = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    Option.match({
-      onNone: () => Effect.fail(new Error('Cannot complete non-existent TODO')),
-      onSome: (current) =>
-        current.deleted
-          ? Effect.fail(new Error('Cannot complete deleted TODO'))
-          : current.completed
-            ? Effect.succeed([])
-            : Effect.succeed([
-                {
-                  type: 'TodoCompleted' as const,
-                  metadata: { occurredAt: new Date(), originator: userId },
-                  data: { completedAt: new Date() },
-                } satisfies TodoCompleted,
-              ]),
-    })
-  );
-
-const uncomplete = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    Option.match({
-      onNone: () => Effect.fail(new Error('Cannot uncomplete non-existent TODO')),
-      onSome: (current) =>
-        current.deleted
-          ? Effect.fail(new Error('Cannot uncomplete deleted TODO'))
-          : !current.completed
-            ? Effect.succeed([])
-            : Effect.succeed([
-                {
-                  type: 'TodoUncompleted' as const,
-                  metadata: { occurredAt: new Date(), originator: userId },
-                  data: { uncompletedAt: new Date() },
-                } satisfies TodoUncompleted,
-              ]),
-    })
-  );
-
-const deleteTodo = (userId: UserId) => (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    Option.match({
-      onNone: () => Effect.fail(new Error('Cannot delete non-existent TODO')),
-      onSome: (current) =>
-        current.deleted
+const complete = (userId: UserId) =>
+  Option.match({
+    onNone: () => Effect.fail(new Error('Cannot complete non-existent TODO')),
+    onSome: (current: TodoState) =>
+      current.deleted
+        ? Effect.fail(new Error('Cannot complete deleted TODO'))
+        : current.completed
           ? Effect.succeed([])
           : Effect.succeed([
               {
-                type: 'TodoDeleted' as const,
+                type: 'TodoCompleted' as const,
                 metadata: { occurredAt: new Date(), originator: userId },
-                data: { deletedAt: new Date() },
-              } satisfies TodoDeleted,
+                data: { completedAt: new Date() },
+              } satisfies TodoCompleted,
             ]),
-    })
-  );
+  });
+
+const uncomplete = (userId: UserId) =>
+  Option.match({
+    onNone: () => Effect.fail(new Error('Cannot uncomplete non-existent TODO')),
+    onSome: (current: TodoState) =>
+      current.deleted
+        ? Effect.fail(new Error('Cannot uncomplete deleted TODO'))
+        : !current.completed
+          ? Effect.succeed([])
+          : Effect.succeed([
+              {
+                type: 'TodoUncompleted' as const,
+                metadata: { occurredAt: new Date(), originator: userId },
+                data: { uncompletedAt: new Date() },
+              } satisfies TodoUncompleted,
+            ]),
+  });
+
+const deleteTodo = (userId: UserId) =>
+  Option.match({
+    onNone: () => Effect.fail(new Error('Cannot delete non-existent TODO')),
+    onSome: (current: TodoState) =>
+      current.deleted
+        ? Effect.succeed([])
+        : Effect.succeed([
+            {
+              type: 'TodoDeleted' as const,
+              metadata: { occurredAt: new Date(), originator: userId },
+              data: { deletedAt: new Date() },
+            } satisfies TodoDeleted,
+          ]),
+  });
 
 export const TodoAggregateRoot = makeAggregateRoot(
   TodoId,
