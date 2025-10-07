@@ -116,10 +116,8 @@ const processCompleteState =
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForComplete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
-
 const completeTodo = (todoId: TodoId) =>
-  pipe(todoId, loadTodoForComplete, Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
 
 const uncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.uncomplete(userId)(state);
@@ -145,10 +143,12 @@ const processUncompleteState =
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForUncomplete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
-
 const uncompleteTodo = (todoId: TodoId) =>
-  pipe(todoId, loadTodoForUncomplete, Effect.flatMap(processUncompleteState(todoId, CURRENT_USER)));
+  pipe(
+    todoId,
+    TodoAggregateRoot.load,
+    Effect.flatMap(processUncompleteState(todoId, CURRENT_USER))
+  );
 
 const deleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
   TodoAggregateRoot.commands.deleteTodo(userId)(state);
@@ -174,10 +174,8 @@ const processDeleteState =
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
     );
 
-const loadTodoForDelete = (todoId: TodoId) => TodoAggregateRoot.load(todoId);
-
 const deleteTodo = (todoId: TodoId) =>
-  pipe(todoId, loadTodoForDelete, Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
 
 const logTodo = (todoId: TodoId, todo: Readonly<TodoState>) =>
   Console.log(
@@ -199,27 +197,22 @@ const processProjectionData = (todoId: TodoId) => (data: Readonly<Option.Option<
     })
   );
 
-const loadTodoProjectionForId = (todoId: TodoId) => loadTodoProjection(todoId);
-
 const processTodoProjection =
   (todoId: TodoId) => (todoProjection: Readonly<Projection<TodoState>>) =>
     pipe(todoProjection.data, processProjectionData(todoId));
 
 const loadAndFormatTodo = (todoId: TodoId) =>
-  pipe(todoId, loadTodoProjectionForId, Effect.flatMap(processTodoProjection(todoId)));
+  pipe(todoId, loadTodoProjection, Effect.flatMap(processTodoProjection(todoId)));
 
 const forEachTodoItem = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
   Effect.forEach(todos, (item) => loadAndFormatTodo(item.todoId));
 
-const logTodoListHeader = () => Console.log('\n📝 Your TODOs:\n');
-
-const logTodoListFooter = () => Console.log('');
-
 const formatTodoList = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
   pipe(
-    logTodoListHeader(),
+    Effect.void,
+    Effect.andThen(Console.log('\n📝 Your TODOs:\n')),
     Effect.andThen(forEachTodoItem(todos)),
-    Effect.andThen(logTodoListFooter())
+    Effect.andThen(Console.log(''))
   );
 
 const processListProjection = (projection: Readonly<Projection<TodoListProjection>>) => {
@@ -260,9 +253,7 @@ Examples:
 
 const missingArgError = (message: string, usage: string) =>
   pipe(
-    message,
-    Console.error,
-    Effect.andThen(Console.log(usage)),
+    Effect.all([Console.error(message), Console.log(usage)], { concurrency: 'unbounded' }),
     Effect.andThen(Effect.fail(new Error(message)))
   );
 
@@ -314,17 +305,13 @@ const runCommand = (
 
 const forkProcessManager = () => Effect.fork(startProcessManager());
 
-const sleep100Millis = () => Effect.sleep('100 millis');
-
-const sleep500Millis = () => Effect.sleep('500 millis');
-
 const runWithProcessManager = (args: ReadonlyArray<string>) =>
   pipe(
-    [forkProcessManager(), sleep100Millis()],
+    [forkProcessManager(), Effect.sleep('100 millis')],
     Effect.all,
     Effect.andThen(runCommand(args)),
     Effect.asVoid,
-    Effect.andThen(sleep500Millis())
+    Effect.andThen(Effect.sleep('500 millis'))
   );
 
 const scopeAndProvide = (args: ReadonlyArray<string>) =>
@@ -334,10 +321,7 @@ const scopeAndProvide = (args: ReadonlyArray<string>) =>
     never
   >;
 
-const main = (args: ReadonlyArray<string>): Effect.Effect<void, unknown, never> =>
-  scopeAndProvide(args);
-
 // eslint-disable-next-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
 const args = process.argv.slice(2);
 
-pipe(args, main, Effect.runPromise).catch(console.error);
+pipe(args, scopeAndProvide, Effect.runPromise).catch(console.error);
