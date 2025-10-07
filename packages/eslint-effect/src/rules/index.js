@@ -9,7 +9,7 @@ import preferAndThen from './prefer-andThen.js';
 import preferAs from './prefer-as.js';
 import noGen from './no-gen.js';
 import noDirectTagAccess from './no-direct-tag-access.js';
-import noSwitchOnTag from './no-switch-on-tag.js';
+import noSwitchStatement from './no-switch-statement.js';
 import noMethodPipe from './no-method-pipe.js';
 import noCurriedCalls from './no-curried-calls.js';
 import noIdentityTransform from './no-identity-transform.js';
@@ -33,7 +33,7 @@ export default {
   'prefer-as': preferAs,
   'no-gen': noGen,
   'no-direct-tag-access': noDirectTagAccess,
-  'no-switch-on-tag': noSwitchOnTag,
+  'no-switch-statement': noSwitchStatement,
   'no-method-pipe': noMethodPipe,
   'no-curried-calls': noCurriedCalls,
   'no-identity-transform': noIdentityTransform,

@@ -42,7 +42,6 @@
       "version": "0.1.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
-        "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-projections": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",

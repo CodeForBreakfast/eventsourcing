@@ -137,7 +137,7 @@ Effect.flatMap((x) => {
 Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
 ```
 
-### `no-switch-on-tag`
+### `no-switch-statement`
 
 Forbids switch statements in functional Effect code. Switch statements are imperative and don't provide exhaustiveness checking. Use `Match` for type-safe, exhaustive pattern matching.
 
@@ -433,7 +433,7 @@ export default [
 - `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
-- `effect/no-switch-on-tag` - Forbid ALL switch statements (use Match.value instead)
+- `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
 
