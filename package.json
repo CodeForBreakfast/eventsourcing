@@ -28,7 +28,8 @@
     "release:validate": "bun scripts/validate-release.ts"
   },
   "workspaces": [
-    "packages/*"
+    "packages/*",
+    "examples/*"
   ],
   "lint-staged": {
     "*.{js,jsx,ts,tsx,mjs,cjs}": [
