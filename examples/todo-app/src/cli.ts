@@ -33,7 +33,7 @@ const TodoListEventStoreLive = Layer.effect(
 const AppLive = Layer.mergeAll(EventBusLive, TodoEventStoreLive, TodoListEventStoreLive);
 
 const publishEventsWithBus =
-  (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: EventBusService) =>
+  (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: Readonly<EventBusService>) =>
     pipe(
       events,
       Effect.forEach((event) => eventBus.publish(todoId, event))
@@ -45,7 +45,7 @@ const publishEvents = (todoId: TodoId, events: ReadonlyArray<TodoEvent>) =>
 const commitAndPublish = (
   todoId: TodoId,
   eventNumber: number,
-  events: ReadonlyArray<TodoEvent>,
+  events: Readonly<ReadonlyArray<TodoEvent>>,
   successMessage: string
 ) =>
   pipe(
@@ -59,16 +59,17 @@ const commitAndPublish = (
   );
 
 const handleConditional = <E, R>(
-  events: ReadonlyArray<unknown>,
-  whenTrue: Effect.Effect<void, E, R>,
-  whenFalse: Effect.Effect<void, E, R>
+  events: Readonly<ReadonlyArray<unknown>>,
+  whenTrue: Readonly<Effect.Effect<void, E, R>>,
+  whenFalse: Readonly<Effect.Effect<void, E, R>>
 ): Effect.Effect<void, E, R> => (events.length > 0 ? whenTrue : whenFalse);
 
 const createTodoCommand = (userId: UserId, title: string) => () =>
   TodoAggregateRoot.commands.createTodo(userId, title)();
 
 const commitAndReturnId =
-  (todoId: TodoId, eventNumber: number, title: string) => (events: ReadonlyArray<TodoEvent>) =>
+  (todoId: TodoId, eventNumber: number, title: string) =>
+  (events: Readonly<ReadonlyArray<TodoEvent>>) =>
     pipe(
       commitAndPublish(todoId, eventNumber, events, `✓ Created TODO: ${title} (${todoId})`),
       Effect.as(todoId)
@@ -88,7 +89,7 @@ const completeCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoS
   TodoAggregateRoot.commands.complete(userId)(state);
 
 const handleCompleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
     handleConditional(
       events,
       commitAndPublish(todoId, eventNumber, events, `✓ Completed TODO: ${todoId}`),
@@ -97,7 +98,12 @@ const handleCompleteEvents =
 
 const processCompleteState =
   (todoId: TodoId, userId: UserId) =>
-  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+  (
+    state: Readonly<{
+      readonly nextEventNumber: number;
+      readonly data: Readonly<Option.Option<unknown>>;
+    }>
+  ) =>
     pipe(
       completeCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
@@ -110,7 +116,7 @@ const uncompleteCommand = (userId: UserId) => (state: Readonly<Option.Option<Tod
   TodoAggregateRoot.commands.uncomplete(userId)(state);
 
 const handleUncompleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
     handleConditional(
       events,
       commitAndPublish(todoId, eventNumber, events, `✓ Uncompleted TODO: ${todoId}`),
@@ -119,7 +125,12 @@ const handleUncompleteEvents =
 
 const processUncompleteState =
   (todoId: TodoId, userId: UserId) =>
-  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+  (
+    state: Readonly<{
+      readonly nextEventNumber: number;
+      readonly data: Readonly<Option.Option<unknown>>;
+    }>
+  ) =>
     pipe(
       uncompleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
@@ -135,7 +146,7 @@ const deleteCommand = (userId: UserId) => (state: Readonly<Option.Option<TodoSta
   TodoAggregateRoot.commands.deleteTodo(userId)(state);
 
 const handleDeleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: ReadonlyArray<TodoEvent>) =>
+  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
     handleConditional(
       events,
       commitAndPublish(todoId, eventNumber, events, `✓ Deleted TODO: ${todoId}`),
@@ -144,7 +155,12 @@ const handleDeleteEvents =
 
 const processDeleteState =
   (todoId: TodoId, userId: UserId) =>
-  (state: { readonly nextEventNumber: number; readonly data: Readonly<Option.Option<unknown>> }) =>
+  (
+    state: Readonly<{
+      readonly nextEventNumber: number;
+      readonly data: Readonly<Option.Option<unknown>>;
+    }>
+  ) =>
     pipe(
       deleteCommand(userId)(state.data as Readonly<Option.Option<TodoState>>),
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
@@ -153,7 +169,7 @@ const processDeleteState =
 const deleteTodo = (todoId: TodoId) =>
   pipe(TodoAggregateRoot.load(todoId), Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
 
-const formatAndLogTodo = (todoId: TodoId) => (todo: TodoState) =>
+const formatAndLogTodo = (todoId: TodoId) => (todo: Readonly<TodoState>) =>
   pipe(
     Console.log(
       `  ${todo.completed ? '✓' : '○'} [${todoId}] ${todo.completed ? `\x1b[2m${todo.title}\x1b[0m` : todo.title}`
@@ -177,7 +193,7 @@ const loadAndFormatTodo = (todoId: TodoId) =>
     Effect.flatMap((todoProjection) => processProjectionData(todoId)(todoProjection.data))
   );
 
-const formatTodoList = (todos: ReadonlyArray<{ readonly todoId: TodoId }>) =>
+const formatTodoList = (todos: Readonly<ReadonlyArray<{ readonly todoId: TodoId }>>) =>
   pipe(
     Console.log('\n📝 Your TODOs:\n'),
     Effect.flatMap(() =>
@@ -189,7 +205,7 @@ const formatTodoList = (todos: ReadonlyArray<{ readonly todoId: TodoId }>) =>
     Effect.flatMap(() => Console.log(''))
   );
 
-const processListProjection = (projection: Projection<TodoListProjection>) => {
+const processListProjection = (projection: Readonly<Projection<TodoListProjection>>) => {
   const list = pipe(
     projection.data,
     Option.getOrElse(() => ({ todos: [] as const }))
