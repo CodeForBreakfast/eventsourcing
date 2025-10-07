@@ -7,11 +7,12 @@ import {
 import { TodoId, TODO_LIST_ID } from '../domain/types';
 import { TodoListEvent } from '../domain/todoListEvents';
 import { TodoListAggregate } from '../domain/todoListAggregate';
+import type { ReadonlyDeep } from 'type-fest';
 
 export interface TodoListItem {
   readonly todoId: TodoId;
   readonly title: string;
-  readonly addedAt: Date;
+  readonly addedAt: ReadonlyDeep<Date>;
 }
 
 export interface TodoListProjection {
@@ -54,14 +55,20 @@ const TodoListProjectionEventStore = Context.GenericTag<ProjectionEventStore<Tod
   'TodoListProjectionEventStore'
 );
 
+const loadProjectionForList = (
+  projectionStore: ProjectionEventStore<TodoListEvent>,
+  listId: string
+): Effect.Effect<TodoListProjection, never, never> => {
+  const loadProjectionEffect = loadProjection(TodoListProjectionEventStore, applyEvent)(listId);
+  return pipe(
+    loadProjectionEffect,
+    Effect.provideService(TodoListProjectionEventStore, projectionStore)
+  );
+};
+
 export const loadTodoListProjection = () =>
   pipe(
     TodoListAggregate,
     Effect.map(makeProjectionEventStore),
-    Effect.flatMap((projectionStore) =>
-      pipe(
-        loadProjection(TodoListProjectionEventStore, applyEvent)(TODO_LIST_ID),
-        Effect.provideService(TodoListProjectionEventStore, projectionStore)
-      )
-    )
+    Effect.flatMap((projectionStore) => loadProjectionForList(projectionStore, TODO_LIST_ID))
   );
