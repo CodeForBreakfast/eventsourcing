@@ -1,5 +1,15 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.6.0
+
+### Minor Changes
+
+- [#235](https://github.com/CodeForBreakfast/eventsourcing/pull/235) [`1291e92`](https://github.com/CodeForBreakfast/eventsourcing/commit/1291e92ea26360c9071d07775d8dd57f799fdf9c) Thanks [@GraemeF](https://github.com/GraemeF)! - The `no-switch-statement` rule (renamed from `no-switch-on-tag`) now forbids ALL switch statements in strict mode, not just switches on `_tag`. Switch statements are imperative and don't provide exhaustiveness checking. Use `Match.value` for type-safe, exhaustive pattern matching on discriminated unions instead.
+
+### Patch Changes
+
+- [#232](https://github.com/CodeForBreakfast/eventsourcing/pull/232) [`328c762`](https://github.com/CodeForBreakfast/eventsourcing/commit/328c7623d162b4def2558db94297c81193da314e) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix `prefer-schema-validation-over-assertions` rule to allow safe `as const` type assertions. The rule now correctly distinguishes between unsafe type casts (which should use Schema validation) and safe const assertions used for literal type narrowing in discriminated unions.
+
 ## 0.5.1
 
 ### Patch Changes
