@@ -13,11 +13,10 @@ const countEventsAndCreatePosition =
       Schema.decode(EventStreamPosition)
     );
 
-const readAndCountEvents = <TEvent>(
-  eventStore: EventStore<TEvent>,
-  streamId: EventStreamId,
-  startPos: EventStreamPosition
-) => Effect.flatMap(eventStore.read(startPos), countEventsAndCreatePosition(streamId));
+const readAndCountEvents =
+  <TEvent>(eventStore: EventStore<TEvent>, streamId: EventStreamId) =>
+  (startPos: EventStreamPosition) =>
+    Effect.flatMap(eventStore.read(startPos), countEventsAndCreatePosition(streamId));
 
 /**
  * Gets the current end position of a stream
@@ -38,9 +37,7 @@ const readAndCountEvents = <TEvent>(
 export const currentEnd =
   <TEvent>(eventStore: EventStore<TEvent>) =>
   (streamId: EventStreamId) =>
-    Effect.flatMap(beginning(streamId), (startPos) =>
-      readAndCountEvents(eventStore, streamId, startPos)
-    );
+    pipe(streamId, beginning, Effect.flatMap(readAndCountEvents(eventStore, streamId)));
 
 /**
  * Creates an EventStreamPosition from a stream ID and event number
@@ -77,17 +74,15 @@ export { ConcurrencyConflictError } from './errors';
 const decodeStreamEvents = <A, I>(schema: Schema.Schema<A, I>) =>
   Stream.flatMap(Schema.decode(schema));
 
-const readAndDecodeEvents = <A, I>(
-  schema: Schema.Schema<A, I>,
-  eventstore: Readonly<EventStore<I>>,
-  from: EventStreamPosition
-) => Effect.map(eventstore.read(from), decodeStreamEvents(schema));
+const readAndDecodeEvents =
+  <A, I>(schema: Schema.Schema<A, I>, eventstore: Readonly<EventStore<I>>) =>
+  (from: EventStreamPosition) =>
+    Effect.map(eventstore.read(from), decodeStreamEvents(schema));
 
-const subscribeAndDecodeEvents = <A, I>(
-  schema: Schema.Schema<A, I>,
-  eventstore: Readonly<EventStore<I>>,
-  from: EventStreamPosition
-) => Effect.map(eventstore.subscribe(from), decodeStreamEvents(schema));
+const subscribeAndDecodeEvents =
+  <A, I>(schema: Schema.Schema<A, I>, eventstore: Readonly<EventStore<I>>) =>
+  (from: EventStreamPosition) =>
+    Effect.map(eventstore.subscribe(from), decodeStreamEvents(schema));
 
 const createEncodingSink = <A, I>(
   schema: Schema.Schema<A, I>,
@@ -135,6 +130,6 @@ export const encodedEventStore =
   (eventstore: Readonly<EventStore<I>>): EventStore<A> => ({
     append: (toPosition: EventStreamPosition) =>
       createEncodingSink(schema, eventstore.append(toPosition)),
-    read: (from: EventStreamPosition) => readAndDecodeEvents(schema, eventstore, from),
-    subscribe: (from: EventStreamPosition) => subscribeAndDecodeEvents(schema, eventstore, from),
+    read: readAndDecodeEvents(schema, eventstore),
+    subscribe: subscribeAndDecodeEvents(schema, eventstore),
   });

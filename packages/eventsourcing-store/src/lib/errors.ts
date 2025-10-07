@@ -148,7 +148,7 @@ export const isEventSourcingError = (
 
 // Error creation helpers
 export const eventStoreError = {
-  read: (streamId: string | undefined, details: string, cause?: unknown) =>
+  read: (streamId: string | undefined, details: string) => (cause?: unknown) =>
     new EventStoreError({
       operation: 'read',
       ...(streamId !== undefined && { streamId }),
@@ -156,7 +156,7 @@ export const eventStoreError = {
       ...(cause !== undefined && { cause }),
       recoveryHint: 'Check if the stream exists and you have read permissions',
     }),
-  write: (streamId: string | undefined, details: string, cause?: unknown) =>
+  write: (streamId: string | undefined, details: string) => (cause?: unknown) =>
     new EventStoreError({
       operation: 'write',
       ...(streamId !== undefined && { streamId }),
@@ -164,7 +164,7 @@ export const eventStoreError = {
       ...(cause !== undefined && { cause }),
       recoveryHint: 'Ensure the stream is not locked and you have write permissions',
     }),
-  subscribe: (streamId: string | undefined, details: string, cause?: unknown) =>
+  subscribe: (streamId: string | undefined, details: string) => (cause?: unknown) =>
     new EventStoreError({
       operation: 'subscribe',
       ...(streamId !== undefined && { streamId }),
@@ -175,7 +175,7 @@ export const eventStoreError = {
 };
 
 export const connectionError = {
-  retryable: (operation: string, cause: unknown, connectionString?: string) =>
+  retryable: (operation: string) => (cause: unknown, connectionString?: string) =>
     new EventStoreConnectionError({
       operation,
       ...(connectionString !== undefined && { connectionString }),
@@ -183,7 +183,7 @@ export const connectionError = {
       retryable: true,
       recoveryHint: 'The connection will be retried automatically',
     }),
-  fatal: (operation: string, cause: unknown, connectionString?: string) =>
+  fatal: (operation: string) => (cause: unknown, connectionString?: string) =>
     new EventStoreConnectionError({
       operation,
       ...(connectionString !== undefined && { connectionString }),

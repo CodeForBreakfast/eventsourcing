@@ -159,36 +159,34 @@ const offerMessageToClientQueue =
   (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
     Queue.offer(queue, message);
 
-const distributeMessageToSubscribers = (
-  clientState: ReadonlyDeep<ClientState>,
-  message: TransportMessage
-): Effect.Effect<void, never, never> =>
-  pipe(
-    clientState.subscribersRef,
-    Ref.get,
-    Effect.flatMap((subscribers) =>
-      Effect.forEach(subscribers, offerMessageToClientQueue(message), {
-        discard: true,
-      })
-    ),
-    Effect.asVoid
-  );
+const distributeMessageToSubscribers =
+  (clientState: ReadonlyDeep<ClientState>) =>
+  (message: TransportMessage): Effect.Effect<void, never, never> =>
+    pipe(
+      clientState.subscribersRef,
+      Ref.get,
+      Effect.flatMap((subscribers) =>
+        Effect.forEach(subscribers, offerMessageToClientQueue(message), {
+          discard: true,
+        })
+      ),
+      Effect.asVoid
+    );
 
 const parseJsonString = (data: ReadonlyDeep<string>) => Effect.try(() => JSON.parse(data));
 
 const parseClientMessageData = (data: ReadonlyDeep<string>) =>
   pipe(data, parseJsonString, Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema)));
 
-const handleClientMessage = (
-  clientState: ReadonlyDeep<ClientState>,
-  data: ReadonlyDeep<string>
-): Effect.Effect<void, never, never> =>
-  pipe(
-    data,
-    parseClientMessageData,
-    Effect.flatMap((message) => distributeMessageToSubscribers(clientState, message)),
-    Effect.catchAll(() => Effect.void)
-  );
+const handleClientMessage =
+  (clientState: ReadonlyDeep<ClientState>) =>
+  (data: ReadonlyDeep<string>): Effect.Effect<void, never, never> =>
+    pipe(
+      data,
+      parseClientMessageData,
+      Effect.flatMap(distributeMessageToSubscribers(clientState)),
+      Effect.catchAll(() => Effect.void)
+    );
 
 // =============================================================================
 // WebSocket Server Implementation
@@ -215,33 +213,31 @@ const createClientResources = (): Effect.Effect<
     subscribersRef: createEmptySubscribersRef(),
   });
 
-const buildClientState = (
-  clientId: Server.ClientId,
-  connectedAt: ReadonlyDeep<Date>,
-  ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
-  resources: {
+const buildClientState =
+  (
+    clientId: Server.ClientId,
+    connectedAt: ReadonlyDeep<Date>,
+    ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
+  ) =>
+  (resources: {
     readonly connectionStateQueue: Queue.Queue<ConnectionState>;
     readonly connectionStateRef: Ref.Ref<ConnectionState>;
     readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
-  }
-): ClientState => ({
-  id: clientId,
-  socket: ws,
-  connectionStateRef: resources.connectionStateRef,
-  connectionStateQueue: resources.connectionStateQueue,
-  subscribersRef: resources.subscribersRef,
-  connectedAt,
-});
+  }): ClientState => ({
+    id: clientId,
+    socket: ws,
+    connectionStateRef: resources.connectionStateRef,
+    connectionStateQueue: resources.connectionStateQueue,
+    subscribersRef: resources.subscribersRef,
+    connectedAt,
+  });
 
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
 ): Effect.Effect<ClientState, never, never> =>
-  pipe(
-    createClientResources(),
-    Effect.map((resources) => buildClientState(clientId, connectedAt, ws, resources))
-  );
+  pipe(createClientResources(), Effect.map(buildClientState(clientId, connectedAt, ws)));
 
 const createAddClientToServerStateUpdater = (clientState: ClientState) => (state: ServerState) => ({
   ...state,
@@ -301,8 +297,7 @@ const processClientMessage = (
   pipe(
     state.clients,
     HashMap.get(clientId),
-    Effect.map((clientState) => handleClientMessage(clientState, message)),
-    Effect.flatten,
+    Effect.flatMap((clientState) => handleClientMessage(clientState)(message)),
     Effect.orElse(() => Effect.void)
   );
 

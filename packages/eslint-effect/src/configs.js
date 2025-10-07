@@ -104,6 +104,7 @@ const pluginRulesOnly = {
   'effect/prefer-match-tag': 'error',
   'effect/prefer-match-over-conditionals': 'error',
   'effect/prefer-schema-validation-over-assertions': 'error',
+  'effect/suggest-currying-opportunity': 'warn',
 };
 
 // Recommended: Core Effect + basic pipe best practices

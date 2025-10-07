@@ -155,48 +155,43 @@ describe('Command Processing Service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
 
-    const collectEventsFromStream = (
-      startPosition: {
+    const collectEventsFromStream =
+      (eventStore: EventStore<TestEvent>) =>
+      (startPosition: {
         readonly streamId: string & Brand.Brand<'EventStreamId'>;
         readonly eventNumber: number;
-      },
-      eventStore: EventStore<TestEvent>
-    ) =>
-      pipe(
-        startPosition,
-        eventStore.read,
-        Stream.runCollect,
-        Effect.map((eventArray) => {
-          expect(eventArray).toHaveLength(1);
-        })
-      );
+      }) =>
+        pipe(
+          startPosition,
+          eventStore.read,
+          Stream.runCollect,
+          Effect.map((eventArray) => {
+            expect(eventArray).toHaveLength(1);
+          })
+        );
 
     const readEventsFromStore = (eventStore: EventStore<TestEvent>) =>
       pipe(
         'user',
         toStreamId,
         Effect.flatMap(beginning),
-        Effect.flatMap((startPosition) => collectEventsFromStream(startPosition, eventStore))
+        Effect.flatMap(collectEventsFromStream(eventStore))
       );
 
-    const processCommandAndReadEvents = (
-      eventStore: EventStore<TestEvent>,
-      service: {
+    const processCommandAndReadEvents =
+      (service: {
         readonly processCommand: (
           command: Readonly<WireCommand>
         ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
-      }
-    ) => pipe(testCommand, service.processCommand, Effect.andThen(readEventsFromStore(eventStore)));
+      }) =>
+      (eventStore: EventStore<TestEvent>) =>
+        pipe(testCommand, service.processCommand, Effect.andThen(readEventsFromStore(eventStore)));
 
     const processCommandAndVerify = (service: {
       readonly processCommand: (
         command: Readonly<WireCommand>
       ) => Effect.Effect<CommandResult, CommandProcessingError, never>;
-    }) =>
-      pipe(
-        TestEventStore,
-        Effect.flatMap((eventStore) => processCommandAndReadEvents(eventStore, service))
-      );
+    }) => pipe(TestEventStore, Effect.flatMap(processCommandAndReadEvents(service)));
 
     return pipe(
       router,

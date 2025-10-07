@@ -34,6 +34,7 @@ describe('Event Sourcing Errors', () => {
 
     it.effect('should work with Effect error handling', () =>
       pipe(
+        undefined,
         eventStoreError.read('stream-1', 'Stream not found'),
         Effect.fail,
         Effect.catchTag('EventStoreError', (error) => Effect.succeed(`Caught: ${error.details}`)),
@@ -44,18 +45,18 @@ describe('Event Sourcing Errors', () => {
     );
 
     it('should support type guards', () => {
-      const error = eventStoreError.write('stream-1', 'Write failed');
+      const error = pipe(undefined, eventStoreError.write('stream-1', 'Write failed'));
       expect(error).toBeInstanceOf(EventStoreError);
 
-      const connError = connectionError.fatal('connect', new Error('failed'));
+      const connError = pipe(new Error('failed'), connectionError.fatal('connect'));
       expect(isEventSourcingError(connError)).toBe(true);
     });
   });
 
   describe('EventStoreConnectionError', () => {
     it('should distinguish retryable and fatal errors', () => {
-      const retryable = connectionError.retryable('connect', new Error('timeout'));
-      const fatal = connectionError.fatal('connect', new Error('invalid config'));
+      const retryable = pipe(new Error('timeout'), connectionError.retryable('connect'));
+      const fatal = pipe(new Error('invalid config'), connectionError.fatal('connect'));
 
       expect(retryable.retryable).toBe(true);
       expect(fatal.retryable).toBe(false);
@@ -91,9 +92,9 @@ describe('Event Sourcing Errors', () => {
   describe('Error helpers', () => {
     it('should provide convenient error creation', () => {
       const errors = [
-        eventStoreError.read('stream-1', 'Not found'),
-        eventStoreError.write('stream-2', 'Locked'),
-        eventStoreError.subscribe('stream-3', 'No permission'),
+        pipe(undefined, eventStoreError.read('stream-1', 'Not found')),
+        pipe(undefined, eventStoreError.write('stream-2', 'Locked')),
+        pipe(undefined, eventStoreError.subscribe('stream-3', 'No permission')),
       ];
 
       errors.forEach((error) => {

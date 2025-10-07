@@ -287,54 +287,49 @@ const broadcastEventMessage = (
     Effect.flatMap((timestamp) => broadcastEventWithContext(server, event, timestamp))
   );
 
-const matchSubscribedConnections = (
-  server: ReadonlyDeep<Server.Transport>,
-  event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>,
-  state: ServerState
-) =>
-  pipe(
-    HashMap.get(state.subscriptions, String(event.streamId)),
-    Option.match({
-      onNone: () => Effect.void,
-      onSome: (_connectionIds) => broadcastEventMessage(server, event),
-    })
-  );
+const matchSubscribedConnections =
+  (
+    server: ReadonlyDeep<Server.Transport>,
+    event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>
+  ) =>
+  (state: ServerState) =>
+    pipe(
+      HashMap.get(state.subscriptions, String(event.streamId)),
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: (_connectionIds) => broadcastEventMessage(server, event),
+      })
+    );
 
 const createEventPublisher =
   (server: ReadonlyDeep<Server.Transport>, stateRef: Ref.Ref<ServerState>) =>
   (event: ReadonlyDeep<Event & { readonly streamId: EventStreamId }>) =>
-    pipe(
-      stateRef,
-      Ref.get,
-      Effect.flatMap((state) => matchSubscribedConnections(server, event, state))
-    );
+    pipe(stateRef, Ref.get, Effect.flatMap(matchSubscribedConnections(server, event)));
 
-const processConnectionMessages = (
-  commandQueue: Queue.Queue<WireCommand>,
-  stateRef: Ref.Ref<ServerState>,
-  connection: Server.ClientConnection
-) =>
-  pipe(
-    connection.transport.subscribe(),
-    Effect.flatMap((messageStream) =>
-      Effect.forkScoped(
-        Stream.runForEach(
-          messageStream,
-          processIncomingMessage(commandQueue, stateRef, connection.clientId)
+const processConnectionMessages =
+  (commandQueue: Queue.Queue<WireCommand>, stateRef: Ref.Ref<ServerState>) =>
+  (connection: Server.ClientConnection) =>
+    pipe(
+      connection.transport.subscribe(),
+      Effect.flatMap((messageStream) =>
+        Effect.forkScoped(
+          Stream.runForEach(
+            messageStream,
+            processIncomingMessage(commandQueue, stateRef, connection.clientId)
+          )
+        )
+      ),
+      Effect.andThen(
+        Effect.addFinalizer(() =>
+          Ref.update(stateRef, (state) => ({
+            ...state,
+            subscriptions: HashMap.map(state.subscriptions, (connectionIds) =>
+              connectionIds.filter((id) => id !== connection.clientId)
+            ),
+          }))
         )
       )
-    ),
-    Effect.andThen(
-      Effect.addFinalizer(() =>
-        Ref.update(stateRef, (state) => ({
-          ...state,
-          subscriptions: HashMap.map(state.subscriptions, (connectionIds) =>
-            connectionIds.filter((id) => id !== connection.clientId)
-          ),
-        }))
-      )
-    )
-  );
+    );
 
 const startConnectionHandler = (
   server: ReadonlyDeep<Server.Transport>,
@@ -343,9 +338,7 @@ const startConnectionHandler = (
 ) =>
   pipe(
     server.connections,
-    Stream.runForEach((connection) =>
-      processConnectionMessages(commandQueue, stateRef, connection)
-    ),
+    Stream.runForEach(processConnectionMessages(commandQueue, stateRef)),
     Effect.forkScoped,
     Effect.as({
       onWireCommand: Stream.fromQueue(commandQueue),

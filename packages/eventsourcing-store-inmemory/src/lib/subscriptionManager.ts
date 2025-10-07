@@ -48,96 +48,85 @@ export class InMemorySubscriptionManager extends Effect.Tag('InMemorySubscriptio
   InMemorySubscriptionManagerService
 >() {}
 
-const addSubscriptionDataToMap = <T>(
-  subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
-  streamId: EventStreamId,
-  pubsub: PubSub.PubSub<T>
-) => HashMap.set(subs, streamId, { pubsub, subscribers: 0 });
+const addSubscriptionDataToMap =
+  <T>(streamId: EventStreamId, pubsub: PubSub.PubSub<T>) =>
+  (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
+    HashMap.set(subs, streamId, { pubsub, subscribers: 0 });
+
+const addSubscriptionToMap = <T>(streamId: EventStreamId, pubsub: PubSub.PubSub<T>) =>
+  addSubscriptionDataToMap(streamId, pubsub);
+
+const addPubsubToSubs =
+  <T>(subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>, streamId: EventStreamId) =>
+  (pubsub: PubSub.PubSub<T>) =>
+    pipe(subs, addSubscriptionToMap(streamId, pubsub));
 
 const createPubSubAndAddToMap = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
   streamId: EventStreamId
-) =>
-  pipe(
-    512,
-    PubSub.bounded<T>,
-    Effect.map((pubsub) => addSubscriptionDataToMap(subs, streamId, pubsub)),
-    Effect.runSync
-  );
+) => pipe(512, PubSub.bounded<T>, Effect.map(addPubsubToSubs(subs, streamId)), Effect.runSync);
 
-const addSubscriptionIfMissing = <T>(
-  subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
-  streamId: EventStreamId
-) => {
-  const streamIdOption = pipe(subs, HashMap.get(streamId));
+const addSubscriptionIfMissing =
+  <T>(streamId: EventStreamId) =>
+  (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) => {
+    const streamIdOption = pipe(subs, HashMap.get(streamId));
 
-  return pipe(
-    streamIdOption,
-    Option.match({
-      onNone: () => createPubSubAndAddToMap(subs, streamId),
-      onSome: () => subs,
-    })
-  );
-};
+    return pipe(
+      streamIdOption,
+      Option.match({
+        onNone: () => createPubSubAndAddToMap(subs, streamId),
+        onSome: () => subs,
+      })
+    );
+  };
 
-const extractSubscriptionData = <T>(
-  subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    subscriptions,
-    HashMap.get(streamId),
-    Option.match({
-      onNone: () =>
-        Effect.fail(
-          new EventStoreResourceError({
-            resource: `subscription for stream ${streamId}`,
-            operation: 'create',
-            cause: 'Failed to create subscription data',
-          })
-        ),
-      onSome: (data: Readonly<SubscriptionData<T>>) => Effect.succeed(data),
-    })
-  );
+const extractSubscriptionData =
+  <T>(streamId: EventStreamId) =>
+  (subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
+    pipe(
+      subscriptions,
+      HashMap.get(streamId),
+      Option.match({
+        onNone: () =>
+          Effect.fail(
+            new EventStoreResourceError({
+              resource: `subscription for stream ${streamId}`,
+              operation: 'create',
+              cause: 'Failed to create subscription data',
+            })
+          ),
+        onSome: (data: Readonly<SubscriptionData<T>>) => Effect.succeed(data),
+      })
+    );
 
 const getOrCreateSubscription = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
   streamId: EventStreamId
 ): Effect.Effect<SubscriptionData<T>, EventStoreResourceError, never> =>
   pipe(
-    SynchronizedRef.updateAndGet(ref, (subs) => addSubscriptionIfMissing(subs, streamId)),
-    Effect.flatMap((subscriptions) => extractSubscriptionData(subscriptions, streamId))
+    SynchronizedRef.updateAndGet(ref, addSubscriptionIfMissing(streamId)),
+    Effect.flatMap(extractSubscriptionData(streamId))
   );
 
-const updateSubscribersCount = <T>(
-  subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
-  streamId: EventStreamId,
-  delta: number
-) =>
-  HashMap.modify(subscriptions, streamId, (data) => ({
-    ...data,
-    subscribers: Math.max(0, data.subscribers + delta),
-  }));
+const updateSubscribersCount =
+  <T>(streamId: EventStreamId, delta: number) =>
+  (subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
+    HashMap.modify(subscriptions, streamId, (data) => ({
+      ...data,
+      subscribers: Math.max(0, data.subscribers + delta),
+    }));
 
 const incrementSubscribers = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
   streamId: EventStreamId
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    SynchronizedRef.update(ref, (subscriptions) =>
-      updateSubscribersCount(subscriptions, streamId, 1)
-    )
-  );
+  pipe(SynchronizedRef.update(ref, updateSubscribersCount(streamId, 1)));
 
 const decrementSubscribers = <T>(
   ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
   streamId: EventStreamId
 ): Effect.Effect<void, never, never> =>
-  pipe(
-    SynchronizedRef.update(ref, (subscriptions) =>
-      updateSubscribersCount(subscriptions, streamId, -1)
-    )
-  );
+  pipe(SynchronizedRef.update(ref, updateSubscribersCount(streamId, -1)));
 
 const filterActiveSubscriptions = <T>(
   subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
@@ -173,41 +162,34 @@ const decrementAndCleanup = <T>(
 const subscribeToQueue = <T>(subData: SubscriptionData<T>) =>
   pipe(subData.pubsub, PubSub.subscribe, Effect.map(createStreamFromQueue));
 
-const createStreamWithCleanup = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
-  streamId: EventStreamId,
-  subData: SubscriptionData<T>
-) => pipe(subData, subscribeToQueue, Effect.ensuring(decrementAndCleanup(ref, streamId)));
+const createStreamWithCleanup =
+  <T>(
+    ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
+    streamId: EventStreamId
+  ) =>
+  (subData: SubscriptionData<T>) =>
+    pipe(subData, subscribeToQueue, Effect.ensuring(decrementAndCleanup(ref, streamId)));
 
-const subscribeToStreamEffect = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    getOrCreateSubscription(ref, streamId),
-    Effect.tap(() => incrementSubscribers(ref, streamId)),
-    Effect.flatMap((subData: SubscriptionData<T>) =>
-      createStreamWithCleanup(ref, streamId, subData)
-    ),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(error)}`, error)
-    )
-  );
+const createSubscribeError = (streamId: EventStreamId) =>
+  eventStoreError.subscribe(streamId, `Failed to subscribe to stream: ${String(streamId)}`);
 
-const unsubscribeFromStreamEffect = <T>(
-  ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
-  streamId: EventStreamId
-) =>
-  pipe(
-    decrementAndCleanup(ref, streamId),
-    Effect.mapError((error) =>
-      eventStoreError.subscribe(
-        streamId,
-        `Failed to unsubscribe from stream: ${String(error)}`,
-        error
-      )
-    )
-  );
+const createUnsubscribeError = (streamId: EventStreamId) =>
+  eventStoreError.subscribe(streamId, `Failed to unsubscribe from stream: ${String(streamId)}`);
+
+const subscribeToStreamEffect =
+  <T>(streamId: EventStreamId) =>
+  (ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>) =>
+    pipe(
+      getOrCreateSubscription(ref, streamId),
+      Effect.tap(() => incrementSubscribers(ref, streamId)),
+      Effect.flatMap(createStreamWithCleanup(ref, streamId)),
+      Effect.mapError(createSubscribeError(streamId))
+    );
+
+const unsubscribeFromStreamEffect =
+  <T>(streamId: EventStreamId) =>
+  (ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>) =>
+    pipe(decrementAndCleanup(ref, streamId), Effect.mapError(createUnsubscribeError(streamId)));
 
 const calculateTotalSubscribers = <T>(
   subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
@@ -229,6 +211,16 @@ const getMetricsEffect = <T>(
     })
   );
 
+const subscribeForManager =
+  <T>(ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>) =>
+  (streamId: EventStreamId) =>
+    pipe(ref, subscribeToStreamEffect(streamId));
+
+const unsubscribeForManager =
+  <T>(ref: SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>) =>
+  (streamId: EventStreamId) =>
+    pipe(ref, unsubscribeFromStreamEffect(streamId));
+
 export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
   InMemorySubscriptionManagerService,
   never,
@@ -238,9 +230,8 @@ export const makeInMemorySubscriptionManager = <T>(): Effect.Effect<
     HashMap.empty(),
     SynchronizedRef.make<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>,
     Effect.map((ref) => ({
-      subscribeToStream: (streamId: EventStreamId) => subscribeToStreamEffect(ref, streamId),
-      unsubscribeFromStream: (streamId: EventStreamId) =>
-        unsubscribeFromStreamEffect(ref, streamId),
+      subscribeToStream: subscribeForManager(ref),
+      unsubscribeFromStream: unsubscribeForManager(ref),
       getSubscriptionMetrics: () => getMetricsEffect(ref),
     }))
   );

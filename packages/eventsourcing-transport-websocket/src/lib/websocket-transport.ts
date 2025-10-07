@@ -206,20 +206,18 @@ const offerMessageToQueue =
   (queue: Queue.Queue<TransportMessage>): Effect.Effect<void, never, never> =>
     Queue.offer(queue, message);
 
-const distributeMessageToSubscribers = (
-  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
-  message: TransportMessage
-) =>
-  pipe(
-    stateRef,
-    Ref.get,
-    Effect.flatMap((state) =>
-      Effect.forEach(state.subscribers, offerMessageToQueue(message), {
-        discard: true,
-      })
-    ),
-    Effect.asVoid
-  );
+const distributeMessageToSubscribers =
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) => (message: TransportMessage) =>
+    pipe(
+      stateRef,
+      Ref.get,
+      Effect.flatMap((state) =>
+        Effect.forEach(state.subscribers, offerMessageToQueue(message), {
+          discard: true,
+        })
+      ),
+      Effect.asVoid
+    );
 
 const decodeAndParseJson = (data: Readonly<Uint8Array>) =>
   Effect.try(() => {
@@ -230,16 +228,15 @@ const decodeAndParseJson = (data: Readonly<Uint8Array>) =>
 const parseIncomingData = (data: Readonly<Uint8Array>) =>
   pipe(data, decodeAndParseJson, Effect.flatMap(Schema.decodeUnknown(TransportMessageSchema)));
 
-const handleIncomingMessage = (
-  stateRef: Readonly<Ref.Ref<WebSocketInternalState>>,
-  data: Readonly<Uint8Array>
-): Effect.Effect<void, never, never> =>
-  pipe(
-    data,
-    parseIncomingData,
-    Effect.flatMap((message) => distributeMessageToSubscribers(stateRef, message)),
-    Effect.catchAll(() => Effect.void)
-  );
+const handleIncomingMessage =
+  (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
+  (data: Readonly<Uint8Array>): Effect.Effect<void, never, never> =>
+    pipe(
+      data,
+      parseIncomingData,
+      Effect.flatMap(distributeMessageToSubscribers(stateRef)),
+      Effect.catchAll(() => Effect.void)
+    );
 
 const createWebSocketConnection = (
   url: Readonly<string>,
@@ -360,7 +357,7 @@ const runSocketWithErrorHandling = (
   url: Readonly<string>
 ) =>
   pipe(
-    socket.run((data: Readonly<Uint8Array>) => handleIncomingMessage(stateRef, data), {
+    socket.run(handleIncomingMessage(stateRef), {
       onOpen: handleOnOpen(stateRef, connectedDeferred),
     }),
     Effect.catchAll(handleSocketError(connectedDeferred, stateRef, url)),

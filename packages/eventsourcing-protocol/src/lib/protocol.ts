@@ -228,57 +228,48 @@ const createCommandResult = (
     Match.exhaustive
   );
 
-const updateStateAndCompleteDeferred = (
-  stateRef: Ref.Ref<ProtocolState>,
-  commandId: string,
-  deferred: Deferred.Deferred<CommandResult>,
-  result: CommandResult
-) =>
-  pipe(
-    Ref.update(stateRef, (state) => ({
-      ...state,
-      pendingCommands: HashMap.remove(state.pendingCommands, commandId),
-    })),
-    Effect.andThen(Deferred.succeed(deferred, result))
-  );
+const updateStateAndCompleteDeferred =
+  (
+    stateRef: Ref.Ref<ProtocolState>,
+    commandId: string,
+    deferred: Deferred.Deferred<CommandResult>
+  ) =>
+  (result: CommandResult) =>
+    pipe(
+      Ref.update(stateRef, (state) => ({
+        ...state,
+        pendingCommands: HashMap.remove(state.pendingCommands, commandId),
+      })),
+      Effect.andThen(Deferred.succeed(deferred, result))
+    );
 
-const processDeferredCommandResult = (
-  stateRef: Ref.Ref<ProtocolState>,
-  message: ReadonlyDeep<ProtocolCommandResult>,
-  deferred: Deferred.Deferred<CommandResult>
-) =>
-  pipe(
-    message,
-    createCommandResult,
-    Effect.flatMap((result) =>
-      updateStateAndCompleteDeferred(stateRef, message.commandId, deferred, result)
-    ),
-    Effect.catchAll(() => Effect.void)
-  );
+const processDeferredCommandResult =
+  (stateRef: Ref.Ref<ProtocolState>, message: ReadonlyDeep<ProtocolCommandResult>) =>
+  (deferred: Deferred.Deferred<CommandResult>) =>
+    pipe(
+      message,
+      createCommandResult,
+      Effect.flatMap(updateStateAndCompleteDeferred(stateRef, message.commandId, deferred)),
+      Effect.catchAll(() => Effect.void)
+    );
 
-const matchPendingCommand = (
-  stateRef: Ref.Ref<ProtocolState>,
-  message: ReadonlyDeep<ProtocolCommandResult>,
-  state: ProtocolState
-) =>
-  pipe(
-    state.pendingCommands,
-    (commands) => HashMap.get(commands, message.commandId),
-    Option.match({
-      onNone: () => Effect.void,
-      onSome: (deferred) => processDeferredCommandResult(stateRef, message, deferred),
-    })
-  );
+const matchPendingCommand =
+  (stateRef: Ref.Ref<ProtocolState>, message: ReadonlyDeep<ProtocolCommandResult>) =>
+  (state: ProtocolState) =>
+    pipe(
+      state.pendingCommands,
+      (commands) => HashMap.get(commands, message.commandId),
+      Option.match({
+        onNone: () => Effect.void,
+        onSome: processDeferredCommandResult(stateRef, message),
+      })
+    );
 
 const handleCommandResult =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<ProtocolCommandResult>) =>
-    pipe(
-      stateRef,
-      Ref.get,
-      Effect.flatMap((state) => matchPendingCommand(stateRef, message, state))
-    );
+    pipe(stateRef, Ref.get, Effect.flatMap(matchPendingCommand(stateRef, message)));
 
-const offerEventToQueue = (message: ReadonlyDeep<ProtocolEvent>, state: ProtocolState) =>
+const offerEventToQueue = (message: ReadonlyDeep<ProtocolEvent>) => (state: ProtocolState) =>
   pipe(
     HashMap.get(state.subscriptions, message.streamId),
     Option.match({
@@ -294,11 +285,7 @@ const offerEventToQueue = (message: ReadonlyDeep<ProtocolEvent>, state: Protocol
   );
 
 const handleEvent = (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<ProtocolEvent>) =>
-  pipe(
-    stateRef,
-    Ref.get,
-    Effect.flatMap((state) => offerEventToQueue(message, state))
-  );
+  pipe(stateRef, Ref.get, Effect.flatMap(offerEventToQueue(message)));
 
 const handleMessage =
   (stateRef: Ref.Ref<ProtocolState>) => (message: ReadonlyDeep<TransportMessage>) =>
@@ -414,26 +401,27 @@ const awaitCommandResultWithTimeout = (
     )
   );
 
-const executeWireCommand = (
-  stateRef: Ref.Ref<ProtocolState>,
-  transport: ReadonlyDeep<Client.Transport>,
-  command: ReadonlyDeep<WireCommand>,
-  deferred: Deferred.Deferred<CommandResult>
-) =>
-  pipe(
-    Effect.acquireRelease(registerPendingCommand(stateRef, command.id, deferred), () =>
-      cleanupPendingCommand(stateRef, command.id)
-    ),
-    Effect.andThen(publishCommandToTransport(transport, command)),
-    Effect.andThen(awaitCommandResultWithTimeout(deferred, command.id))
-  );
+const executeWireCommand =
+  (
+    stateRef: Ref.Ref<ProtocolState>,
+    transport: ReadonlyDeep<Client.Transport>,
+    command: ReadonlyDeep<WireCommand>
+  ) =>
+  (deferred: Deferred.Deferred<CommandResult>) =>
+    pipe(
+      Effect.acquireRelease(registerPendingCommand(stateRef, command.id, deferred), () =>
+        cleanupPendingCommand(stateRef, command.id)
+      ),
+      Effect.andThen(publishCommandToTransport(transport, command)),
+      Effect.andThen(awaitCommandResultWithTimeout(deferred, command.id))
+    );
 
 const createWireCommandSender =
   (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
   (command: ReadonlyDeep<WireCommand>) =>
     pipe(
       Deferred.make<CommandResult>(),
-      Effect.flatMap((deferred) => executeWireCommand(stateRef, transport, command, deferred))
+      Effect.flatMap(executeWireCommand(stateRef, transport, command))
     );
 
 const encodeProtocolSubscribe = (
@@ -493,61 +481,47 @@ const createSubscriptionStream = (
     Stream.flatMap(Stream.fromQueue)
   );
 
-const registerSubscriptionAndPublish = (
-  stateRef: Ref.Ref<ProtocolState>,
-  transport: ReadonlyDeep<Client.Transport>,
-  streamId: string,
-  queue: Queue.Queue<Event>
-) =>
-  pipe(
-    Ref.update(stateRef, (state) => ({
-      ...state,
-      subscriptions: HashMap.set(state.subscriptions, streamId, queue),
-    })),
-    Effect.andThen(publishSubscribeMessage(transport, streamId)),
-    Effect.as(createSubscriptionStream(stateRef, streamId, queue))
-  );
+const registerSubscriptionAndPublish =
+  (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>, streamId: string) =>
+  (queue: Queue.Queue<Event>) =>
+    pipe(
+      Ref.update(stateRef, (state) => ({
+        ...state,
+        subscriptions: HashMap.set(state.subscriptions, streamId, queue),
+      })),
+      Effect.andThen(publishSubscribeMessage(transport, streamId)),
+      Effect.as(createSubscriptionStream(stateRef, streamId, queue))
+    );
 
 const createSubscriber =
   (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
   (streamId: string) =>
     pipe(
       Queue.unbounded<Event>(),
-      Effect.flatMap((queue) =>
-        registerSubscriptionAndPublish(stateRef, transport, streamId, queue)
-      )
+      Effect.flatMap(registerSubscriptionAndPublish(stateRef, transport, streamId))
     );
 
-const createScopedWireCommandSender = (
-  stateRef: Ref.Ref<ProtocolState>,
-  transport: ReadonlyDeep<Client.Transport>,
-  command: ReadonlyDeep<WireCommand>
-) => pipe(command, createWireCommandSender(stateRef, transport), Effect.scoped);
+const createScopedWireCommandSender =
+  (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
+  (command: ReadonlyDeep<WireCommand>) =>
+    pipe(command, createWireCommandSender(stateRef, transport), Effect.scoped);
 
-const startMessageHandler = (
-  stateRef: Ref.Ref<ProtocolState>,
-  transport: ReadonlyDeep<Client.Transport>,
-  stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>
-) =>
-  pipe(
-    stream,
-    (s) => Stream.runForEach(s, handleMessage(stateRef)),
-    Effect.forkScoped,
-    Effect.as({
-      sendWireCommand: (command: ReadonlyDeep<WireCommand>) =>
-        createScopedWireCommandSender(stateRef, transport, command),
-      subscribe: (streamId: string) => createSubscriber(stateRef, transport)(streamId),
-    })
-  );
+const startMessageHandler =
+  (stateRef: Ref.Ref<ProtocolState>, transport: ReadonlyDeep<Client.Transport>) =>
+  (stream: Stream.Stream<ReadonlyDeep<TransportMessage>, TransportError, never>) =>
+    pipe(
+      stream,
+      (s) => Stream.runForEach(s, handleMessage(stateRef)),
+      Effect.forkScoped,
+      Effect.as({
+        sendWireCommand: createScopedWireCommandSender(stateRef, transport),
+        subscribe: createSubscriber(stateRef, transport),
+      })
+    );
 
-const initializeProtocol = (
-  stateRef: Ref.Ref<ProtocolState>,
-  transport: ReadonlyDeep<Client.Transport>
-) =>
-  pipe(
-    transport.subscribe(),
-    Effect.flatMap((stream) => startMessageHandler(stateRef, transport, stream))
-  );
+const initializeProtocol =
+  (transport: ReadonlyDeep<Client.Transport>) => (stateRef: Ref.Ref<ProtocolState>) =>
+    pipe(transport.subscribe(), Effect.flatMap(startMessageHandler(stateRef, transport)));
 
 const createProtocolService = (
   transport: ReadonlyDeep<Client.Transport>
@@ -558,7 +532,7 @@ const createProtocolService = (
       subscriptions: HashMap.empty(),
     },
     Ref.make<ProtocolState>,
-    Effect.flatMap((stateRef) => initializeProtocol(stateRef, transport))
+    Effect.flatMap(initializeProtocol(transport))
   );
 
 export const ProtocolLive = (transport: ReadonlyDeep<Client.Transport>) =>

@@ -94,7 +94,7 @@ const runChangesetStatus = (root: string) =>
 
 const getChangesetStatus = pipe(rootDir, Effect.andThen(runChangesetStatus));
 
-const displayPackageList = (terminal: Terminal.Terminal, packageNames: readonly string[]) =>
+const displayPackageList = (packageNames: readonly string[]) => (terminal: Terminal.Terminal) =>
   pipe(
     `📦 Found ${packageNames.length} package(s) to validate:\n`,
     terminal.display,
@@ -108,10 +108,7 @@ const displayPackageList = (terminal: Terminal.Terminal, packageNames: readonly 
   );
 
 const displayPackages = (packageNames: readonly string[]) =>
-  pipe(
-    Terminal.Terminal,
-    Effect.andThen((terminal) => displayPackageList(terminal, packageNames))
-  );
+  pipe(Terminal.Terminal, Effect.andThen(displayPackageList(packageNames)));
 
 const extractPackageNames = (status: ChangesetStatus) =>
   Effect.succeed(status.releases.map((release) => release.name));
@@ -221,6 +218,8 @@ const runTurboValidation = (root: string, filterArgs: readonly string[]) =>
   pipe(
     Command.make('bunx', 'turbo', 'run', 'validate:pack', ...filterArgs),
     Command.workingDirectory(root),
+    Command.stdout('inherit'),
+    Command.stderr('inherit'),
     Command.exitCode,
     Effect.andThen((exitCode) =>
       exitCode === 0 ? displayValidationSuccess : displayValidationFailure
@@ -251,7 +250,7 @@ const validatePackages = (packagesToValidate: readonly string[]) =>
     ? displayNoPackagesValidation
     : pipe(
         rootDir,
-        Effect.andThen((root) => executePackageValidation(root, packagesToValidate))
+        Effect.flatMap((root) => executePackageValidation(root, packagesToValidate))
       );
 
 const program = pipe(
