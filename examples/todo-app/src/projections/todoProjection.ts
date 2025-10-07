@@ -83,23 +83,17 @@ const TodoProjectionEventStore = Context.GenericTag<ProjectionEventStore<TodoEve
   'TodoProjectionEventStore'
 );
 
-const applyProjectionLoader = (
-  todoId: TodoId,
-  projectionStore: ProjectionEventStore<TodoEvent>
-) => {
-  const appliedEvent = applyEvent(todoId);
-  const loader = loadProjection(TodoProjectionEventStore, appliedEvent);
-  const loadEffect = loader(todoId);
-  return pipe(loadEffect, Effect.provideService(TodoProjectionEventStore, projectionStore));
-};
-
-const loadProjectionWithStore =
-  (todoId: TodoId) => (projectionStore: ProjectionEventStore<TodoEvent>) =>
-    applyProjectionLoader(todoId, projectionStore);
+const applyProjectionLoader =
+  (todoId: TodoId) => (projectionStore: ProjectionEventStore<TodoEvent>) => {
+    const appliedEvent = applyEvent(todoId);
+    const loader = loadProjection(TodoProjectionEventStore, appliedEvent);
+    const loadEffect = loader(todoId);
+    return pipe(loadEffect, Effect.provideService(TodoProjectionEventStore, projectionStore));
+  };
 
 export const loadTodoProjection = (todoId: TodoId) =>
   pipe(
     TodoAggregate,
     Effect.map(makeProjectionEventStore),
-    Effect.flatMap(loadProjectionWithStore(todoId))
+    Effect.flatMap(applyProjectionLoader(todoId))
   );
