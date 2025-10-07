@@ -137,6 +137,45 @@ Effect.flatMap((x) => {
 Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
 ```
 
+### `no-switch-on-tag`
+
+Forbids switch statements in functional Effect code. Switch statements are imperative and don't provide exhaustiveness checking. Use `Match` for type-safe, exhaustive pattern matching.
+
+❌ Bad:
+
+```typescript
+switch (event.type) {
+  case 'Created':
+    return handleCreated(event);
+  case 'Updated':
+    return handleUpdated(event);
+  default:
+    return handleUnknown(event);
+}
+```
+
+✅ Good:
+
+```typescript
+pipe(
+  Match.value(event),
+  Match.when({ type: 'Created' }, handleCreated),
+  Match.when({ type: 'Updated' }, handleUpdated),
+  Match.orElse(handleUnknown)
+);
+```
+
+**For discriminated unions with `_tag`:**
+
+```typescript
+pipe(
+  Match.value(either),
+  Match.tag('Right', handleRight),
+  Match.tag('Left', handleLeft),
+  Match.exhaustive
+);
+```
+
 ### `prefer-schema-validation-over-assertions`
 
 Discourages type assertions in Effect callbacks in favor of runtime validation.
@@ -238,7 +277,7 @@ Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 - All `recommended` rules
 - Forbids `Effect.gen` (use `pipe` instead)
 - Forbids direct `_tag` access (use type guards or `Match`)
-- Forbids `switch` on `_tag` (use `Match` functions)
+- Forbids ALL `switch` statements (use `Match.value` for pattern matching)
 - Forbids nested `pipe()` calls
 - Forbids multiple `pipe()` calls in one function
 
@@ -252,7 +291,7 @@ Forbids `Effect.gen` in favor of `pipe` composition. **Controversial** - some te
 
 #### `preferMatch`
 
-Forbids direct `_tag` access and `switch` on `_tag`. Encourages declarative `Match` patterns.
+Forbids direct `_tag` access and ALL `switch` statements. Encourages declarative `Match` patterns.
 
 #### `pipeStrict`
 
@@ -394,6 +433,7 @@ export default [
 - `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
+- `effect/no-switch-on-tag` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
 

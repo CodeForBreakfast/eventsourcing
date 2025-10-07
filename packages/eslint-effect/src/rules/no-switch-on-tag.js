@@ -1,17 +1,17 @@
 /**
- * Forbid switch statements on _tag discriminator
- * Use Effect's match() functions instead
+ * Forbid switch statements in functional code
+ * Use Match.value or Match.type for pattern matching instead
  */
 export default {
   meta: {
     type: 'suggestion',
     docs: {
       description:
-        "Forbid switch on _tag. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
+        'Forbid switch statements in functional Effect code. Use Match.value for general pattern matching, Match.type for discriminated unions, or specific matchers like Either.match, Option.match, Exit.match.',
     },
     messages: {
-      noSwitchOnTag:
-        "switch on _tag is forbidden. Use Effect's match() functions instead: Either.match, Option.match, Exit.match, or Data.TaggedEnum.match.",
+      noSwitchStatement:
+        'switch statements are forbidden in functional code. Use Match.value for pattern matching on discriminated unions, or Match.type/Match.tag for type-safe exhaustive matching. For Effect types, use Either.match, Option.match, or Exit.match.',
     },
     schema: [],
   },
@@ -19,17 +19,10 @@ export default {
   create(context) {
     return {
       SwitchStatement(node) {
-        const discriminant = node.discriminant;
-        if (
-          discriminant.type === 'MemberExpression' &&
-          discriminant.property.type === 'Identifier' &&
-          discriminant.property.name === '_tag'
-        ) {
-          context.report({
-            node,
-            messageId: 'noSwitchOnTag',
-          });
-        }
+        context.report({
+          node,
+          messageId: 'noSwitchStatement',
+        });
       },
     };
   },
