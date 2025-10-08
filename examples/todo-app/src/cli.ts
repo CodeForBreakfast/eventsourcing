@@ -104,86 +104,53 @@ const createTodo = (title: string) => {
   );
 };
 
-const completeCommand = TodoAggregateRoot.commands.complete();
-
-const handleCompleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
-    handleConditional(
-      events,
-      commitAndPublish(todoId, eventNumber, events, `✓ Completed TODO: ${todoId}`),
-      Console.log(`⚠ TODO ${todoId} is already completed`)
-    );
-
-const processCompleteState =
-  (todoId: TodoId) =>
-  (
-    state: Readonly<{
-      readonly nextEventNumber: number;
-      readonly data: Readonly<Option.Option<unknown>>;
-    }>
-  ) =>
-    pipe(
-      state.data as Readonly<Option.Option<TodoState>>,
-      completeCommand,
-      Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
-    );
+const executeCommand = (
+  todoId: TodoId,
+  command: (state: Readonly<Option.Option<TodoState>>) => Effect.Effect<ReadonlyArray<TodoEvent>>,
+  successMessage: string,
+  noOpMessage: string
+) =>
+  pipe(
+    todoId,
+    TodoAggregateRoot.load,
+    Effect.flatMap((state) =>
+      pipe(
+        state.data as Readonly<Option.Option<TodoState>>,
+        command,
+        Effect.flatMap((events) =>
+          handleConditional(
+            events,
+            commitAndPublish(todoId, state.nextEventNumber, events, successMessage),
+            Console.log(noOpMessage)
+          )
+        )
+      )
+    )
+  );
 
 const completeTodo = (todoId: TodoId) =>
-  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processCompleteState(todoId)));
-
-const uncompleteCommand = TodoAggregateRoot.commands.uncomplete();
-
-const handleUncompleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
-    handleConditional(
-      events,
-      commitAndPublish(todoId, eventNumber, events, `✓ Uncompleted TODO: ${todoId}`),
-      Console.log(`⚠ TODO ${todoId} is already uncompleted`)
-    );
-
-const processUncompleteState =
-  (todoId: TodoId) =>
-  (
-    state: Readonly<{
-      readonly nextEventNumber: number;
-      readonly data: Readonly<Option.Option<unknown>>;
-    }>
-  ) =>
-    pipe(
-      state.data as Readonly<Option.Option<TodoState>>,
-      uncompleteCommand,
-      Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
-    );
+  executeCommand(
+    todoId,
+    TodoAggregateRoot.commands.complete(),
+    `✓ Completed TODO: ${todoId}`,
+    `⚠ TODO ${todoId} is already completed`
+  );
 
 const uncompleteTodo = (todoId: TodoId) =>
-  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processUncompleteState(todoId)));
-
-const deleteCommand = TodoAggregateRoot.commands.deleteTodo();
-
-const handleDeleteEvents =
-  (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
-    handleConditional(
-      events,
-      commitAndPublish(todoId, eventNumber, events, `✓ Deleted TODO: ${todoId}`),
-      Console.log(`⚠ TODO ${todoId} is already deleted`)
-    );
-
-const processDeleteState =
-  (todoId: TodoId) =>
-  (
-    state: Readonly<{
-      readonly nextEventNumber: number;
-      readonly data: Readonly<Option.Option<unknown>>;
-    }>
-  ) =>
-    pipe(
-      state.data as Readonly<Option.Option<TodoState>>,
-      deleteCommand,
-      Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
-    );
+  executeCommand(
+    todoId,
+    TodoAggregateRoot.commands.uncomplete(),
+    `✓ Uncompleted TODO: ${todoId}`,
+    `⚠ TODO ${todoId} is already uncompleted`
+  );
 
 const deleteTodo = (todoId: TodoId) =>
-  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processDeleteState(todoId)));
+  executeCommand(
+    todoId,
+    TodoAggregateRoot.commands.deleteTodo(),
+    `✓ Deleted TODO: ${todoId}`,
+    `⚠ TODO ${todoId} is already deleted`
+  );
 
 const logTodo = (todoId: TodoId, todo: Readonly<TodoState>) =>
   Console.log(

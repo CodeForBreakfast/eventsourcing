@@ -19,18 +19,12 @@ const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId
 const isTodoDeleted = (event: unknown): event is EventRecord<TodoDeleted, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoDeleted';
 
-const executeAddTodoCommand = (
-  state: Readonly<Option.Option<TodoListState>>,
-  streamId: string,
-  event: Readonly<EventRecord<TodoCreated, UserId>>
-) =>
-  pipe(
-    state,
-    TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title),
-    Effect.provide(provideCommandInitiator(event.metadata.origin as UserId))
-  );
+const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResult, TError>(
+  event: TEvent,
+  effect: Effect.Effect<TResult, TError>
+) => pipe(effect, Effect.provide(provideCommandInitiator(event.metadata.origin as UserId)));
 
-const commitAddTodoEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
+const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
   events.length > 0
     ? TodoListAggregateRoot.commit({
         id: TODO_LIST_ID_BRANDED,
@@ -39,15 +33,15 @@ const commitAddTodoEvents = (eventNumber: number) => (events: Readonly<ReadonlyA
       })
     : Effect.void;
 
-const addTodoAndCommit = (
+const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
   state: Readonly<AggregateState<TodoListState>>,
-  streamId: string,
-  event: Readonly<EventRecord<TodoCreated, UserId>>
+  event: TEvent,
+  command: Effect.Effect<ReadonlyArray<unknown>, TError>
 ) =>
   pipe(
-    state.data,
-    (data) => executeAddTodoCommand(data, streamId, event),
-    Effect.flatMap(commitAddTodoEvents(state.nextEventNumber))
+    command,
+    (effect) => withCommandInitiator(event, effect),
+    Effect.flatMap(commitEvents(state.nextEventNumber))
   );
 
 const castToAggregateState = (state: {
@@ -55,52 +49,27 @@ const castToAggregateState = (state: {
   readonly data: Readonly<Option.Option<unknown>>;
 }): Readonly<AggregateState<TodoListState>> => state as Readonly<AggregateState<TodoListState>>;
 
-const handleTodoCreated = (streamId: string, event: Readonly<EventRecord<TodoCreated, UserId>>) =>
+const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
+  event: TEvent,
+  buildCommand: (
+    state: Readonly<AggregateState<TodoListState>>
+  ) => Effect.Effect<ReadonlyArray<unknown>, TError>
+) =>
   pipe(
     TODO_LIST_ID_BRANDED,
     TodoListAggregateRoot.load,
     Effect.map(castToAggregateState),
-    Effect.flatMap((state) => addTodoAndCommit(state, streamId, event))
+    Effect.flatMap((state) => executeAndCommit(state, event, buildCommand(state)))
   );
 
-const executeRemoveTodoCommand = (
-  state: Readonly<Option.Option<TodoListState>>,
-  streamId: string,
-  event: Readonly<EventRecord<TodoDeleted, UserId>>
-) =>
-  pipe(
-    state,
-    TodoListAggregateRoot.commands.removeTodo(streamId as TodoId),
-    Effect.provide(provideCommandInitiator(event.metadata.origin as UserId))
-  );
-
-const commitRemoveTodoEvents =
-  (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
-    events.length > 0
-      ? TodoListAggregateRoot.commit({
-          id: TODO_LIST_ID_BRANDED,
-          eventNumber,
-          events: Chunk.fromIterable(events),
-        })
-      : Effect.void;
-
-const removeTodoAndCommit = (
-  state: Readonly<AggregateState<TodoListState>>,
-  streamId: string,
-  event: Readonly<EventRecord<TodoDeleted, UserId>>
-) =>
-  pipe(
-    state.data,
-    (data) => executeRemoveTodoCommand(data, streamId, event),
-    Effect.flatMap(commitRemoveTodoEvents(state.nextEventNumber))
+const handleTodoCreated = (streamId: string, event: Readonly<EventRecord<TodoCreated, UserId>>) =>
+  handleCommand(event, (state) =>
+    pipe(state.data, TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title))
   );
 
 const handleTodoDeleted = (streamId: string, event: Readonly<EventRecord<TodoDeleted, UserId>>) =>
-  pipe(
-    TODO_LIST_ID_BRANDED,
-    TodoListAggregateRoot.load,
-    Effect.map(castToAggregateState),
-    Effect.flatMap((state) => removeTodoAndCommit(state, streamId, event))
+  handleCommand(event, (state) =>
+    pipe(state.data, TodoListAggregateRoot.commands.removeTodo(streamId as TodoId))
   );
 
 const handleCreatedWithLogging = ({
