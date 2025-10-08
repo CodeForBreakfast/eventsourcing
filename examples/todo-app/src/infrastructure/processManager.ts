@@ -1,5 +1,8 @@
 import { Effect, Stream, pipe, Chunk, Brand, Option } from 'effect';
-import { AggregateState } from '@codeforbreakfast/eventsourcing-aggregates';
+import {
+  AggregateState,
+  provideCommandInitiator,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventBus, EventBusService } from './eventBus';
 import { TodoCreated, TodoDeleted } from '../domain/todoEvents';
 import { TodoListAggregateRoot, TodoListState } from '../domain/todoListAggregate';
@@ -22,11 +25,8 @@ const executeAddTodoCommand = (
 ) =>
   pipe(
     state,
-    TodoListAggregateRoot.commands.addTodo(
-      event.metadata.originator as UserId,
-      streamId as TodoId,
-      event.data.title
-    )
+    TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title),
+    Effect.provide(provideCommandInitiator(event.metadata.originator as UserId))
   );
 
 const commitAddTodoEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
@@ -69,10 +69,8 @@ const executeRemoveTodoCommand = (
 ) =>
   pipe(
     state,
-    TodoListAggregateRoot.commands.removeTodo(
-      event.metadata.originator as UserId,
-      streamId as TodoId
-    )
+    TodoListAggregateRoot.commands.removeTodo(streamId as TodoId),
+    Effect.provide(provideCommandInitiator(event.metadata.originator as UserId))
   );
 
 const commitRemoveTodoEvents =

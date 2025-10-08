@@ -6,6 +6,7 @@ import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
+import { provideCommandInitiator } from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoAggregate, TodoAggregateRoot, TodoState } from './domain/todoAggregate';
 import { TodoListAggregate } from './domain/todoListAggregate';
 import { EventBus, EventBusService, makeEventBus } from './infrastructure/eventBus';
@@ -79,21 +80,29 @@ const commitAndReturnId =
       Effect.as(todoId)
     );
 
-const executeCreateTodo = (userId: UserId, title: string) =>
-  TodoAggregateRoot.commands.createTodo(userId, title)();
+const executeCreateTodo = (title: string) =>
+  pipe(
+    TodoAggregateRoot.commands.createTodo(title)(),
+    Effect.provide(provideCommandInitiator(CURRENT_USER))
+  );
 
 const createTodo = (title: string) => {
   const todoId = `todo-${Date.now()}` as TodoId;
   const state = TodoAggregateRoot.new();
 
   return pipe(
-    executeCreateTodo(CURRENT_USER, title),
+    title,
+    executeCreateTodo,
     Effect.flatMap(commitAndReturnId(todoId, state.nextEventNumber, title))
   );
 };
 
-const completeCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  TodoAggregateRoot.commands.complete(userId)(state);
+const completeCommand = (state: Readonly<Option.Option<TodoState>>) =>
+  pipe(
+    state,
+    TodoAggregateRoot.commands.complete(),
+    Effect.provide(provideCommandInitiator(CURRENT_USER))
+  );
 
 const handleCompleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -104,7 +113,7 @@ const handleCompleteEvents =
     );
 
 const processCompleteState =
-  (todoId: TodoId, userId: UserId) =>
+  (todoId: TodoId) =>
   (
     state: Readonly<{
       readonly nextEventNumber: number;
@@ -112,15 +121,20 @@ const processCompleteState =
     }>
   ) =>
     pipe(
-      completeCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      state.data as Readonly<Option.Option<TodoState>>,
+      completeCommand,
       Effect.flatMap(handleCompleteEvents(todoId, state.nextEventNumber))
     );
 
 const completeTodo = (todoId: TodoId) =>
-  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processCompleteState(todoId, CURRENT_USER)));
+  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processCompleteState(todoId)));
 
-const uncompleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  TodoAggregateRoot.commands.uncomplete(userId)(state);
+const uncompleteCommand = (state: Readonly<Option.Option<TodoState>>) =>
+  pipe(
+    state,
+    TodoAggregateRoot.commands.uncomplete(),
+    Effect.provide(provideCommandInitiator(CURRENT_USER))
+  );
 
 const handleUncompleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -131,7 +145,7 @@ const handleUncompleteEvents =
     );
 
 const processUncompleteState =
-  (todoId: TodoId, userId: UserId) =>
+  (todoId: TodoId) =>
   (
     state: Readonly<{
       readonly nextEventNumber: number;
@@ -139,19 +153,20 @@ const processUncompleteState =
     }>
   ) =>
     pipe(
-      uncompleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      state.data as Readonly<Option.Option<TodoState>>,
+      uncompleteCommand,
       Effect.flatMap(handleUncompleteEvents(todoId, state.nextEventNumber))
     );
 
 const uncompleteTodo = (todoId: TodoId) =>
-  pipe(
-    todoId,
-    TodoAggregateRoot.load,
-    Effect.flatMap(processUncompleteState(todoId, CURRENT_USER))
-  );
+  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processUncompleteState(todoId)));
 
-const deleteCommand = (userId: UserId, state: Readonly<Option.Option<TodoState>>) =>
-  TodoAggregateRoot.commands.deleteTodo(userId)(state);
+const deleteCommand = (state: Readonly<Option.Option<TodoState>>) =>
+  pipe(
+    state,
+    TodoAggregateRoot.commands.deleteTodo(),
+    Effect.provide(provideCommandInitiator(CURRENT_USER))
+  );
 
 const handleDeleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -162,7 +177,7 @@ const handleDeleteEvents =
     );
 
 const processDeleteState =
-  (todoId: TodoId, userId: UserId) =>
+  (todoId: TodoId) =>
   (
     state: Readonly<{
       readonly nextEventNumber: number;
@@ -170,12 +185,13 @@ const processDeleteState =
     }>
   ) =>
     pipe(
-      deleteCommand(userId, state.data as Readonly<Option.Option<TodoState>>),
+      state.data as Readonly<Option.Option<TodoState>>,
+      deleteCommand,
       Effect.flatMap(handleDeleteEvents(todoId, state.nextEventNumber))
     );
 
 const deleteTodo = (todoId: TodoId) =>
-  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processDeleteState(todoId, CURRENT_USER)));
+  pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processDeleteState(todoId)));
 
 const logTodo = (todoId: TodoId, todo: Readonly<TodoState>) =>
   Console.log(

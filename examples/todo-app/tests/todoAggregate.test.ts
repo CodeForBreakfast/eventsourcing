@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Option, Exit, pipe } from 'effect';
+import { provideCommandInitiator } from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoAggregateRoot } from '../src/domain/todoAggregate';
 import { UserId } from '../src/domain/types';
 import { TodoState } from '../src/domain/todoAggregate';
@@ -24,7 +25,8 @@ describe('TodoAggregate', () => {
   describe('createTodo', () => {
     it.effect('should create a new TODO with the given title', () =>
       pipe(
-        TodoAggregateRoot.commands.createTodo(TEST_USER, 'Buy milk')(),
+        TodoAggregateRoot.commands.createTodo('Buy milk')(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -42,7 +44,8 @@ describe('TodoAggregate', () => {
     it.effect('should change the title of an existing TODO', () =>
       pipe(
         makeTestState(),
-        TodoAggregateRoot.commands.changeTitle(TEST_USER, 'Buy bread'),
+        TodoAggregateRoot.commands.changeTitle('Buy bread'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -58,7 +61,8 @@ describe('TodoAggregate', () => {
       const state = Option.none<TodoState>();
       return pipe(
         state,
-        TodoAggregateRoot.commands.changeTitle(TEST_USER, 'Buy bread'),
+        TodoAggregateRoot.commands.changeTitle('Buy bread'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.exit,
         Effect.map((exit) => {
           expect(Exit.isFailure(exit)).toBe(true);
@@ -70,7 +74,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ deleted: true });
       return pipe(
         state,
-        TodoAggregateRoot.commands.changeTitle(TEST_USER, 'Buy bread'),
+        TodoAggregateRoot.commands.changeTitle('Buy bread'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.exit,
         Effect.map((exit) => {
           expect(Exit.isFailure(exit)).toBe(true);
@@ -84,7 +89,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ completed: false });
       return pipe(
         state,
-        TodoAggregateRoot.commands.complete(TEST_USER),
+        TodoAggregateRoot.commands.complete(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -99,7 +105,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ completed: true });
       return pipe(
         state,
-        TodoAggregateRoot.commands.complete(TEST_USER),
+        TodoAggregateRoot.commands.complete(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);
@@ -113,7 +120,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ completed: true });
       return pipe(
         state,
-        TodoAggregateRoot.commands.uncomplete(TEST_USER),
+        TodoAggregateRoot.commands.uncomplete(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -128,7 +136,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ completed: false });
       return pipe(
         state,
-        TodoAggregateRoot.commands.uncomplete(TEST_USER),
+        TodoAggregateRoot.commands.uncomplete(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);
@@ -142,7 +151,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ deleted: false });
       return pipe(
         state,
-        TodoAggregateRoot.commands.deleteTodo(TEST_USER),
+        TodoAggregateRoot.commands.deleteTodo(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -157,7 +167,8 @@ describe('TodoAggregate', () => {
       const state = makeTestState({ deleted: true });
       return pipe(
         state,
-        TodoAggregateRoot.commands.deleteTodo(TEST_USER),
+        TodoAggregateRoot.commands.deleteTodo(),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);

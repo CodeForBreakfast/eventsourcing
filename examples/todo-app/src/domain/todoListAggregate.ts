@@ -1,5 +1,10 @@
 import { Effect, Option, Schema, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import {
+  makeAggregateRoot,
+  eventMetadata,
+  CommandContextError,
+  type CommandContextService,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId } from './types';
 import { TodoListEvent, TodoAddedToList, TodoRemovedFromList } from './todoListEvents';
@@ -37,10 +42,14 @@ const applyEvent =
   };
 
 const addTodo =
-  (userId: UserId, todoId: TodoId, title: string) =>
+  (todoId: TodoId, title: string) =>
   (
     state: Readonly<Option.Option<TodoListState>>
-  ): Effect.Effect<readonly TodoAddedToList[], never> => {
+  ): Effect.Effect<
+    readonly TodoAddedToList[],
+    CommandContextError,
+    CommandContextService<UserId>
+  > => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
@@ -50,20 +59,27 @@ const addTodo =
       return Effect.succeed([]);
     }
 
-    return Effect.succeed([
-      {
-        type: 'TodoAddedToList' as const,
-        metadata: { occurredAt: new Date(), originator: userId },
-        data: { todoId, title, addedAt: new Date() },
-      } satisfies TodoAddedToList,
-    ]);
+    return pipe(
+      eventMetadata<UserId>(),
+      Effect.map((metadata) => [
+        {
+          type: 'TodoAddedToList' as const,
+          metadata,
+          data: { todoId, title, addedAt: new Date() },
+        } satisfies TodoAddedToList,
+      ])
+    );
   };
 
 const removeTodo =
-  (userId: UserId, todoId: TodoId) =>
+  (todoId: TodoId) =>
   (
     state: Readonly<Option.Option<TodoListState>>
-  ): Effect.Effect<readonly TodoRemovedFromList[], never> => {
+  ): Effect.Effect<
+    readonly TodoRemovedFromList[],
+    CommandContextError,
+    CommandContextService<UserId>
+  > => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
@@ -73,13 +89,16 @@ const removeTodo =
       return Effect.succeed([]);
     }
 
-    return Effect.succeed([
-      {
-        type: 'TodoRemovedFromList' as const,
-        metadata: { occurredAt: new Date(), originator: userId },
-        data: { todoId, removedAt: new Date() },
-      } satisfies TodoRemovedFromList,
-    ]);
+    return pipe(
+      eventMetadata<UserId>(),
+      Effect.map((metadata) => [
+        {
+          type: 'TodoRemovedFromList' as const,
+          metadata,
+          data: { todoId, removedAt: new Date() },
+        } satisfies TodoRemovedFromList,
+      ])
+    );
   };
 
 export const TodoListAggregateRoot = makeAggregateRoot(

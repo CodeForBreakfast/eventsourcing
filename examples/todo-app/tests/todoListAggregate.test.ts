@@ -1,5 +1,6 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Option, pipe } from 'effect';
+import { provideCommandInitiator } from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoListAggregateRoot } from '../src/domain/todoListAggregate';
 import { TodoId, UserId } from '../src/domain/types';
 
@@ -12,7 +13,8 @@ describe('TodoListAggregate', () => {
       const state = Option.none();
       return pipe(
         state,
-        TodoListAggregateRoot.commands.addTodo(TEST_USER, TEST_TODO_ID, 'Buy milk'),
+        TodoListAggregateRoot.commands.addTodo(TEST_TODO_ID, 'Buy milk'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -31,7 +33,8 @@ describe('TodoListAggregate', () => {
       });
       return pipe(
         state,
-        TodoListAggregateRoot.commands.addTodo(TEST_USER, TEST_TODO_ID, 'Buy bread'),
+        TodoListAggregateRoot.commands.addTodo(TEST_TODO_ID, 'Buy bread'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -48,7 +51,8 @@ describe('TodoListAggregate', () => {
       });
       return pipe(
         state,
-        TodoListAggregateRoot.commands.addTodo(TEST_USER, TEST_TODO_ID, 'Buy milk'),
+        TodoListAggregateRoot.commands.addTodo(TEST_TODO_ID, 'Buy milk'),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);
@@ -64,7 +68,8 @@ describe('TodoListAggregate', () => {
       });
       return pipe(
         state,
-        TodoListAggregateRoot.commands.removeTodo(TEST_USER, TEST_TODO_ID),
+        TodoListAggregateRoot.commands.removeTodo(TEST_TODO_ID),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(1);
@@ -82,7 +87,8 @@ describe('TodoListAggregate', () => {
       });
       return pipe(
         state,
-        TodoListAggregateRoot.commands.removeTodo(TEST_USER, TEST_TODO_ID),
+        TodoListAggregateRoot.commands.removeTodo(TEST_TODO_ID),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);
@@ -94,7 +100,8 @@ describe('TodoListAggregate', () => {
       const state = Option.none();
       return pipe(
         state,
-        TodoListAggregateRoot.commands.removeTodo(TEST_USER, TEST_TODO_ID),
+        TodoListAggregateRoot.commands.removeTodo(TEST_TODO_ID),
+        Effect.provide(provideCommandInitiator(TEST_USER)),
         Effect.orDie,
         Effect.map((events) => {
           expect(events).toHaveLength(0);

@@ -1,5 +1,5 @@
 import { Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { eventMetadata, makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId } from './types';
 import {
@@ -100,79 +100,100 @@ const failIfDeletedTodo =
       ? Effect.fail(new Error(`Cannot ${operation} deleted TODO`))
       : Effect.succeed(state);
 
-const createTodo = (userId: UserId, title: string) => () =>
-  Effect.succeed([
-    {
-      type: 'TodoCreated' as const,
-      metadata: { occurredAt: new Date(), originator: userId },
-      data: { title, createdAt: new Date() },
-    } satisfies TodoCreated,
-  ]);
+const createTodo = (title: string) => () =>
+  pipe(
+    eventMetadata<UserId>(),
+    Effect.map((metadata) => [
+      {
+        type: 'TodoCreated' as const,
+        metadata,
+        data: { title, createdAt: new Date() },
+      } satisfies TodoCreated,
+    ])
+  );
 
-const changeTitle = (userId: UserId, title: string) =>
+const createTodoTitleChangedEvent = (title: string) =>
+  pipe(
+    eventMetadata<UserId>(),
+    Effect.map((metadata) => [
+      {
+        type: 'TodoTitleChanged' as const,
+        metadata,
+        data: { title, changedAt: new Date() },
+      } satisfies TodoTitleChanged,
+    ])
+  );
+
+const changeTitle = (title: string) =>
   requireExistingTodo('change title', (current) =>
     pipe(
       current,
       failIfDeletedTodo('change title'),
-      Effect.as([
-        {
-          type: 'TodoTitleChanged' as const,
-          metadata: { occurredAt: new Date(), originator: userId },
-          data: { title, changedAt: new Date() },
-        } satisfies TodoTitleChanged,
-      ])
+      Effect.andThen(createTodoTitleChangedEvent(title))
     )
   );
 
-const complete = (userId: UserId) =>
+const createCompletedEventWithMetadata = (metadata: {
+  readonly occurredAt: Date;
+  readonly originator: string;
+}) => [
+  {
+    type: 'TodoCompleted' as const,
+    metadata,
+    data: { completedAt: new Date() },
+  } satisfies TodoCompleted,
+];
+
+const createTodoCompletedEvent = () =>
+  pipe(eventMetadata<UserId>(), Effect.map(createCompletedEventWithMetadata));
+
+const createCompletedEventIfNeeded = (state: TodoState) =>
+  state.completed ? Effect.succeed([]) : createTodoCompletedEvent();
+
+const complete = () =>
   requireExistingTodo('complete', (current) =>
-    pipe(
-      current,
-      failIfDeletedTodo('complete'),
-      Effect.flatMap((state) =>
-        state.completed
-          ? Effect.succeed([])
-          : Effect.succeed([
-              {
-                type: 'TodoCompleted' as const,
-                metadata: { occurredAt: new Date(), originator: userId },
-                data: { completedAt: new Date() },
-              } satisfies TodoCompleted,
-            ])
-      )
-    )
+    pipe(current, failIfDeletedTodo('complete'), Effect.flatMap(createCompletedEventIfNeeded))
   );
 
-const uncomplete = (userId: UserId) =>
+const createUncompletedEventWithMetadata = (metadata: {
+  readonly occurredAt: Date;
+  readonly originator: string;
+}) => [
+  {
+    type: 'TodoUncompleted' as const,
+    metadata,
+    data: { uncompletedAt: new Date() },
+  } satisfies TodoUncompleted,
+];
+
+const createTodoUncompletedEvent = () =>
+  pipe(eventMetadata<UserId>(), Effect.map(createUncompletedEventWithMetadata));
+
+const createUncompletedEventIfNeeded = (state: TodoState) =>
+  state.completed ? createTodoUncompletedEvent() : Effect.succeed([]);
+
+const uncomplete = () =>
   requireExistingTodo('uncomplete', (current) =>
-    pipe(
-      current,
-      failIfDeletedTodo('uncomplete'),
-      Effect.flatMap((state) =>
-        state.completed
-          ? Effect.succeed([
-              {
-                type: 'TodoUncompleted' as const,
-                metadata: { occurredAt: new Date(), originator: userId },
-                data: { uncompletedAt: new Date() },
-              } satisfies TodoUncompleted,
-            ])
-          : Effect.succeed([])
-      )
-    )
+    pipe(current, failIfDeletedTodo('uncomplete'), Effect.flatMap(createUncompletedEventIfNeeded))
   );
 
-const deleteTodo = (userId: UserId) =>
+const createDeletedEventWithMetadata = (metadata: {
+  readonly occurredAt: Date;
+  readonly originator: string;
+}) => [
+  {
+    type: 'TodoDeleted' as const,
+    metadata,
+    data: { deletedAt: new Date() },
+  } satisfies TodoDeleted,
+];
+
+const createTodoDeletedEvent = () =>
+  pipe(eventMetadata<UserId>(), Effect.map(createDeletedEventWithMetadata));
+
+const deleteTodo = () =>
   requireExistingTodo('delete', (current) =>
-    current.deleted
-      ? Effect.succeed([])
-      : Effect.succeed([
-          {
-            type: 'TodoDeleted' as const,
-            metadata: { occurredAt: new Date(), originator: userId },
-            data: { deletedAt: new Date() },
-          } satisfies TodoDeleted,
-        ])
+    current.deleted ? Effect.succeed([]) : createTodoDeletedEvent()
   );
 
 export const TodoAggregateRoot = makeAggregateRoot(
