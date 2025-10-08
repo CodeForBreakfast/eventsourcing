@@ -6,7 +6,10 @@ import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { provideCommandInitiator } from '@codeforbreakfast/eventsourcing-aggregates';
+import {
+  type EventRecord,
+  provideCommandInitiator,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoAggregate, TodoAggregateRoot, TodoState } from './domain/todoAggregate';
 import { TodoListAggregate } from './domain/todoListAggregate';
 import { EventBus, EventBusService, makeEventBus } from './infrastructure/eventBus';
@@ -23,15 +26,23 @@ const EventBusLive = Layer.effect(EventBus, makeEventBus());
 
 const TodoEventStoreLive = Layer.effect(
   TodoAggregate,
-  pipe(InMemoryStore.make<TodoEvent>(), Effect.flatMap(makeInMemoryEventStore))
+  pipe(InMemoryStore.make<EventRecord<TodoEvent, UserId>>(), Effect.flatMap(makeInMemoryEventStore))
 );
 
 const TodoListEventStoreLive = Layer.effect(
   TodoListAggregate,
-  pipe(InMemoryStore.make<TodoListEvent>(), Effect.flatMap(makeInMemoryEventStore))
+  pipe(
+    InMemoryStore.make<EventRecord<TodoListEvent, UserId>>(),
+    Effect.flatMap(makeInMemoryEventStore)
+  )
 );
 
-const AppLive = Layer.mergeAll(EventBusLive, TodoEventStoreLive, TodoListEventStoreLive);
+const AppLive = Layer.mergeAll(
+  EventBusLive,
+  TodoEventStoreLive,
+  TodoListEventStoreLive,
+  provideCommandInitiator(CURRENT_USER)
+);
 
 const publishEventsWithBus =
   (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: Readonly<EventBusService>) =>
@@ -80,11 +91,7 @@ const commitAndReturnId =
       Effect.as(todoId)
     );
 
-const executeCreateTodo = (title: string) =>
-  pipe(
-    TodoAggregateRoot.commands.createTodo(title)(),
-    Effect.provide(provideCommandInitiator(CURRENT_USER))
-  );
+const executeCreateTodo = (title: string) => TodoAggregateRoot.commands.createTodo(title)();
 
 const createTodo = (title: string) => {
   const todoId = `todo-${Date.now()}` as TodoId;
@@ -97,12 +104,7 @@ const createTodo = (title: string) => {
   );
 };
 
-const completeCommand = (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    TodoAggregateRoot.commands.complete(),
-    Effect.provide(provideCommandInitiator(CURRENT_USER))
-  );
+const completeCommand = TodoAggregateRoot.commands.complete();
 
 const handleCompleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -129,12 +131,7 @@ const processCompleteState =
 const completeTodo = (todoId: TodoId) =>
   pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processCompleteState(todoId)));
 
-const uncompleteCommand = (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    TodoAggregateRoot.commands.uncomplete(),
-    Effect.provide(provideCommandInitiator(CURRENT_USER))
-  );
+const uncompleteCommand = TodoAggregateRoot.commands.uncomplete();
 
 const handleUncompleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -161,12 +158,7 @@ const processUncompleteState =
 const uncompleteTodo = (todoId: TodoId) =>
   pipe(todoId, TodoAggregateRoot.load, Effect.flatMap(processUncompleteState(todoId)));
 
-const deleteCommand = (state: Readonly<Option.Option<TodoState>>) =>
-  pipe(
-    state,
-    TodoAggregateRoot.commands.deleteTodo(),
-    Effect.provide(provideCommandInitiator(CURRENT_USER))
-  );
+const deleteCommand = TodoAggregateRoot.commands.deleteTodo();
 
 const handleDeleteEvents =
   (todoId: TodoId, eventNumber: number) => (events: Readonly<ReadonlyArray<TodoEvent>>) =>
@@ -273,9 +265,7 @@ const missingArgError = (message: string, usage: string) =>
     Effect.andThen(Effect.fail(new Error(message)))
   );
 
-const runCommand = (
-  args: ReadonlyArray<string>
-): Effect.Effect<unknown, unknown, TodoAggregate | TodoListAggregate | EventBus> => {
+const runCommand = (args: ReadonlyArray<string>) => {
   const command = args[0];
 
   return pipe(
@@ -324,10 +314,10 @@ const runWithProcessManager = (args: ReadonlyArray<string>) =>
     Effect.andThen(Effect.sleep('500 millis'))
   );
 
-const scopeAndProvide = (args: ReadonlyArray<string>) =>
+const scopeAndProvide = (args: ReadonlyArray<string>): Effect.Effect<void, never, never> =>
   pipe(args, runWithProcessManager, Effect.scoped, Effect.provide(AppLive)) as Effect.Effect<
     void,
-    unknown,
+    never,
     never
   >;
 

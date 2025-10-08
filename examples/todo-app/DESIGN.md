@@ -301,11 +301,14 @@ const applyEvent =
 
 ```typescript
 import { Effect, Schema, Option, ParseResult, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot, EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
+
+const UserId = Schema.String.pipe(Schema.brand('UserId'));
+type UserId = typeof UserId.Type;
 
 interface TodoState {
   readonly title: string;
@@ -332,22 +335,16 @@ const applyEvent =
 
 export class TodoAggregate extends Effect.Tag('TodoAggregate')<
   TodoAggregate,
-  EventStore<TodoEvent>
+  EventStore<EventRecord<TodoEvent, UserId>>
 >() {}
 
-export const TodoAggregateRoot = makeAggregateRoot(
-  TodoId,
-  Schema.String,
-  applyEvent,
-  TodoAggregate,
-  {
-    createTodo,
-    changeTitle,
-    complete,
-    uncomplete,
-    deleteTodo,
-  }
-);
+export const TodoAggregateRoot = makeAggregateRoot(TodoId, UserId, applyEvent, TodoAggregate, {
+  createTodo,
+  changeTitle,
+  complete,
+  uncomplete,
+  deleteTodo,
+});
 ```
 
 #### 2. TodoListAggregate
@@ -518,11 +515,14 @@ const applyEvent =
 
 ```typescript
 import { Effect, Schema, Option } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot, EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
+
+const UserId = Schema.String.pipe(Schema.brand('UserId'));
+type UserId = typeof UserId.Type;
 
 interface TodoListState {
   readonly todoIds: ReadonlySet<TodoId>;
@@ -541,12 +541,12 @@ const applyEvent =
 
 export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
   TodoListAggregate,
-  EventStore<TodoListEvent>
+  EventStore<EventRecord<TodoListEvent, UserId>>
 >() {}
 
 export const TodoListAggregateRoot = makeAggregateRoot(
   Schema.String.pipe(Schema.brand('TodoListId')),
-  Schema.String,
+  UserId,
   applyEvent,
   TodoListAggregate,
   {

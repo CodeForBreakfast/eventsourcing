@@ -1,9 +1,11 @@
 import { pipe, Schema } from 'effect';
 
-export const TodoId = pipe(Schema.String, Schema.brand('TodoId'));
-export type TodoId = typeof TodoId.Type;
+export const TodoIdSchema = pipe(Schema.String, Schema.brand('TodoId'));
+export type TodoId = typeof TodoIdSchema.Type;
+export const TodoId = TodoIdSchema;
 
-export const UserId = pipe(Schema.String, Schema.brand('UserId'));
-export type UserId = typeof UserId.Type;
+export const UserIdSchema = pipe(Schema.String, Schema.brand('UserId'));
+export type UserId = typeof UserIdSchema.Type;
+export const UserId = UserIdSchema;
 
 export const TODO_LIST_ID = 'singleton-todo-list' as const;

@@ -1,12 +1,7 @@
 import { Effect, Option, Schema, pipe } from 'effect';
-import {
-  makeAggregateRoot,
-  eventMetadata,
-  CommandContextError,
-  type CommandContextService,
-} from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot, type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
-import { TodoId, UserId } from './types';
+import { TodoId, UserId, UserIdSchema } from './types';
 import { TodoListEvent, TodoAddedToList, TodoRemovedFromList } from './todoListEvents';
 
 export interface TodoListState {
@@ -15,12 +10,12 @@ export interface TodoListState {
 
 export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
   TodoListAggregate,
-  EventStore<TodoListEvent>
+  EventStore<EventRecord<TodoListEvent, UserId>>
 >() {}
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoListState>>) =>
-  (event: Readonly<TodoListEvent>): Effect.Effect<TodoListState, never> => {
+  (event: Readonly<EventRecord<TodoListEvent, UserId>>): Effect.Effect<TodoListState, never> => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
@@ -45,11 +40,7 @@ const addTodo =
   (todoId: TodoId, title: string) =>
   (
     state: Readonly<Option.Option<TodoListState>>
-  ): Effect.Effect<
-    readonly TodoAddedToList[],
-    CommandContextError,
-    CommandContextService<UserId>
-  > => {
+  ): Effect.Effect<readonly TodoAddedToList[], never> => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
@@ -59,27 +50,19 @@ const addTodo =
       return Effect.succeed([]);
     }
 
-    return pipe(
-      eventMetadata<UserId>(),
-      Effect.map((metadata) => [
-        {
-          type: 'TodoAddedToList' as const,
-          metadata,
-          data: { todoId, title, addedAt: new Date() },
-        } satisfies TodoAddedToList,
-      ])
-    );
+    return Effect.succeed([
+      {
+        type: 'TodoAddedToList' as const,
+        data: { todoId, title, addedAt: new Date() },
+      } satisfies TodoAddedToList,
+    ]);
   };
 
 const removeTodo =
   (todoId: TodoId) =>
   (
     state: Readonly<Option.Option<TodoListState>>
-  ): Effect.Effect<
-    readonly TodoRemovedFromList[],
-    CommandContextError,
-    CommandContextService<UserId>
-  > => {
+  ): Effect.Effect<readonly TodoRemovedFromList[], never> => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
@@ -89,21 +72,17 @@ const removeTodo =
       return Effect.succeed([]);
     }
 
-    return pipe(
-      eventMetadata<UserId>(),
-      Effect.map((metadata) => [
-        {
-          type: 'TodoRemovedFromList' as const,
-          metadata,
-          data: { todoId, removedAt: new Date() },
-        } satisfies TodoRemovedFromList,
-      ])
-    );
+    return Effect.succeed([
+      {
+        type: 'TodoRemovedFromList' as const,
+        data: { todoId, removedAt: new Date() },
+      } satisfies TodoRemovedFromList,
+    ]);
   };
 
 export const TodoListAggregateRoot = makeAggregateRoot(
   pipe(Schema.String, Schema.brand('TodoListId')),
-  Schema.String,
+  UserIdSchema,
   applyEvent,
   TodoListAggregate,
   {
