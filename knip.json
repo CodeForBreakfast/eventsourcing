@@ -1,6 +1,6 @@
 {
   "$schema": "https://unpkg.com/knip@latest/schema.json",
-  "ignore": ["packages/*/build.{js,ts,mjs}", "**/*.example.ts"],
+  "ignore": ["packages/*/build.{js,ts,mjs}", "**/*.example.ts", "eslint.config.mjs"],
   "ignoreDependencies": [
     "@commitlint/cli",
     "@effect/language-service",
