@@ -63,6 +63,7 @@ import {
   CommandContextTest,
   eventSchema,
   eventMetadata,
+  type EventRecord,
 } from '@codeforbreakfast/eventsourcing-aggregates';
 import type { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { makeInMemoryEventStore } from '@codeforbreakfast/eventsourcing-store-inmemory';
@@ -76,12 +77,12 @@ const InitiatorId = Schema.String.pipe(Schema.brand('InitiatorId'));
 type InitiatorId = typeof InitiatorId.Type;
 
 // 3. Define your domain events using eventSchema
-const UserRegisteredEvent = eventSchema(Schema.String, Schema.Literal('UserRegistered'), {
+const UserRegisteredEvent = eventSchema(Schema.Literal('UserRegistered'), {
   email: Schema.String,
   name: Schema.String,
 });
 
-const UserEmailUpdatedEvent = eventSchema(Schema.String, Schema.Literal('UserEmailUpdated'), {
+const UserEmailUpdatedEvent = eventSchema(Schema.Literal('UserEmailUpdated'), {
   oldEmail: Schema.String,
   newEmail: Schema.String,
 });
@@ -127,27 +128,23 @@ const applyUserEvent: (
 // 6. Create event store tag
 class UserEventStore extends Context.Tag('UserEventStore')<
   UserEventStore,
-  EventStore<UserEvent>
+  EventStore<EventRecord<UserEvent, InitiatorId>>
 >() {}
 
 // 7. Define command handlers that return functions taking state
-// Note: Commands don't need userId for existing aggregates - it's implicit from the stream
+// Commands return bare events - framework adds metadata automatically during commit
 const registerUser = (email: string, name: string) => (currentState: AggregateState<UserState>) =>
   pipe(
     currentState.data,
     Option.match({
       onSome: () => Effect.fail(new Error('User already exists')),
       onNone: () =>
-        pipe(
-          eventMetadata<string>(),
-          Effect.map((metadata) =>
-            Chunk.of({
-              type: 'UserRegistered' as const,
-              metadata,
-              data: { email, name },
-            } satisfies UserEvent)
-          )
-        ),
+        Effect.succeed([
+          {
+            type: 'UserRegistered' as const,
+            data: { email, name },
+          } satisfies UserEvent,
+        ]),
     })
   );
 
@@ -157,26 +154,22 @@ const updateUserEmail = (newEmail: string) => (currentState: AggregateState<User
     Option.match({
       onNone: () => Effect.fail(new Error('User not found')),
       onSome: (state) =>
-        pipe(
-          eventMetadata<string>(),
-          Effect.map((metadata) =>
-            Chunk.of({
-              type: 'UserEmailUpdated' as const,
-              metadata,
-              data: {
-                oldEmail: state.email,
-                newEmail,
-              },
-            } satisfies UserEvent)
-          )
-        ),
+        Effect.succeed([
+          {
+            type: 'UserEmailUpdated' as const,
+            data: {
+              oldEmail: state.email,
+              newEmail,
+            },
+          } satisfies UserEvent,
+        ]),
     })
   );
 
 // 8. Create the aggregate root
 const UserAggregate = makeAggregateRoot(
   UserId,
-  Schema.String,
+  InitiatorId,
   applyUserEvent as any,
   UserEventStore,
   {
@@ -289,7 +282,7 @@ Use `eventSchema` to create properly structured domain events:
 import { Schema } from 'effect';
 import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 
-const MyEvent = eventSchema(Schema.String, Schema.Literal('MyEventType'), {
+const MyEvent = eventSchema(Schema.Literal('MyEventType'), {
   field1: Schema.String,
   field2: Schema.Number,
 });

@@ -1,44 +1,30 @@
 import { Schema } from 'effect';
+import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 
-export const TodoCreated = Schema.Struct({
-  type: Schema.Literal('TodoCreated'),
-  data: Schema.Struct({
-    title: Schema.String,
-    createdAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoCreated = eventSchema(Schema.Literal('TodoCreated'), {
+  title: Schema.String,
+  createdAt: Schema.ValidDateFromSelf,
 });
 export type TodoCreated = typeof TodoCreated.Type;
 
-export const TodoTitleChanged = Schema.Struct({
-  type: Schema.Literal('TodoTitleChanged'),
-  data: Schema.Struct({
-    title: Schema.String,
-    changedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoTitleChanged = eventSchema(Schema.Literal('TodoTitleChanged'), {
+  title: Schema.String,
+  changedAt: Schema.ValidDateFromSelf,
 });
 export type TodoTitleChanged = typeof TodoTitleChanged.Type;
 
-export const TodoCompleted = Schema.Struct({
-  type: Schema.Literal('TodoCompleted'),
-  data: Schema.Struct({
-    completedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoCompleted = eventSchema(Schema.Literal('TodoCompleted'), {
+  completedAt: Schema.ValidDateFromSelf,
 });
 export type TodoCompleted = typeof TodoCompleted.Type;
 
-export const TodoUncompleted = Schema.Struct({
-  type: Schema.Literal('TodoUncompleted'),
-  data: Schema.Struct({
-    uncompletedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoUncompleted = eventSchema(Schema.Literal('TodoUncompleted'), {
+  uncompletedAt: Schema.ValidDateFromSelf,
 });
 export type TodoUncompleted = typeof TodoUncompleted.Type;
 
-export const TodoDeleted = Schema.Struct({
-  type: Schema.Literal('TodoDeleted'),
-  data: Schema.Struct({
-    deletedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoDeleted = eventSchema(Schema.Literal('TodoDeleted'), {
+  deletedAt: Schema.ValidDateFromSelf,
 });
 export type TodoDeleted = typeof TodoDeleted.Type;
 

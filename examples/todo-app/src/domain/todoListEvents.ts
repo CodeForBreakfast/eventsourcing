@@ -1,22 +1,17 @@
 import { Schema } from 'effect';
+import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoId } from './types';
 
-export const TodoAddedToList = Schema.Struct({
-  type: Schema.Literal('TodoAddedToList'),
-  data: Schema.Struct({
-    todoId: TodoId,
-    title: Schema.String,
-    addedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoAddedToList = eventSchema(Schema.Literal('TodoAddedToList'), {
+  todoId: TodoId,
+  title: Schema.String,
+  addedAt: Schema.ValidDateFromSelf,
 });
 export type TodoAddedToList = typeof TodoAddedToList.Type;
 
-export const TodoRemovedFromList = Schema.Struct({
-  type: Schema.Literal('TodoRemovedFromList'),
-  data: Schema.Struct({
-    todoId: TodoId,
-    removedAt: Schema.ValidDateFromSelf,
-  }),
+export const TodoRemovedFromList = eventSchema(Schema.Literal('TodoRemovedFromList'), {
+  todoId: TodoId,
+  removedAt: Schema.ValidDateFromSelf,
 });
 export type TodoRemovedFromList = typeof TodoRemovedFromList.Type;
 

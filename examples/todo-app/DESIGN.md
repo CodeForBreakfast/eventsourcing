@@ -36,33 +36,33 @@ import { Schema } from 'effect';
 import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 
 // Event 1: Todo Created
-const TodoCreated = eventSchema(Schema.String, Schema.Literal('TodoCreated'), {
+const TodoCreated = eventSchema(Schema.Literal('TodoCreated'), {
   title: Schema.String,
   createdAt: Schema.ValidDateFromSelf,
 });
 type TodoCreated = typeof TodoCreated.Type;
 
 // Event 2: Todo Title Changed
-const TodoTitleChanged = eventSchema(Schema.String, Schema.Literal('TodoTitleChanged'), {
+const TodoTitleChanged = eventSchema(Schema.Literal('TodoTitleChanged'), {
   title: Schema.String,
   changedAt: Schema.ValidDateFromSelf,
 });
 type TodoTitleChanged = typeof TodoTitleChanged.Type;
 
 // Event 3: Todo Completed
-const TodoCompleted = eventSchema(Schema.String, Schema.Literal('TodoCompleted'), {
+const TodoCompleted = eventSchema(Schema.Literal('TodoCompleted'), {
   completedAt: Schema.ValidDateFromSelf,
 });
 type TodoCompleted = typeof TodoCompleted.Type;
 
 // Event 4: Todo Uncompleted
-const TodoUncompleted = eventSchema(Schema.String, Schema.Literal('TodoUncompleted'), {
+const TodoUncompleted = eventSchema(Schema.Literal('TodoUncompleted'), {
   uncompletedAt: Schema.ValidDateFromSelf,
 });
 type TodoUncompleted = typeof TodoUncompleted.Type;
 
 // Event 5: Todo Deleted
-const TodoDeleted = eventSchema(Schema.String, Schema.Literal('TodoDeleted'), {
+const TodoDeleted = eventSchema(Schema.Literal('TodoDeleted'), {
   deletedAt: Schema.ValidDateFromSelf,
 });
 type TodoDeleted = typeof TodoDeleted.Type;
@@ -368,14 +368,14 @@ import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
 
-const TodoAddedToList = eventSchema(Schema.String, Schema.Literal('TodoAddedToList'), {
+const TodoAddedToList = eventSchema(Schema.Literal('TodoAddedToList'), {
   todoId: TodoId,
   title: Schema.String,
   addedAt: Schema.ValidDateFromSelf,
 });
 type TodoAddedToList = typeof TodoAddedToList.Type;
 
-const TodoRemovedFromList = eventSchema(Schema.String, Schema.Literal('TodoRemovedFromList'), {
+const TodoRemovedFromList = eventSchema(Schema.Literal('TodoRemovedFromList'), {
   todoId: TodoId,
   removedAt: Schema.ValidDateFromSelf,
 });

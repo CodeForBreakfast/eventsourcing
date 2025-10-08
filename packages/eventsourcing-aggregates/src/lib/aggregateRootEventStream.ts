@@ -358,14 +358,15 @@ export const eventMetadata = <TInitiator>() =>
   pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext<TInitiator>));
 
 /**
- * Creates a schema for domain events with type, metadata, and data fields
+ * Creates a schema for bare domain events with type and data fields
+ *
+ * Events created with this helper are bare business events without metadata.
+ * The framework automatically enriches them with metadata during commit.
  *
  * @since 0.4.0
  * @example
  * ```typescript
- * // Required origin
  * const UserCreatedEvent = eventSchema(
- *   PersonId,
  *   Schema.Literal('UserCreated'),
  *   {
  *     userId: Schema.String,
@@ -374,26 +375,21 @@ export const eventMetadata = <TInitiator>() =>
  *   }
  * );
  *
- * // Optional origin
  * const SystemEvent = eventSchema(
- *   Schema.OptionFromSelf(PersonId),
  *   Schema.Literal('SystemSync'),
  *   { timestamp: Schema.Number }
  * );
  * ```
  *
- * @param originSchema - Schema for the event origin (can be required or optional)
  * @param type - Schema for the event type discriminator
  * @param data - Schema fields for the event data
- * @returns A Schema.Struct with type, metadata, and data fields
+ * @returns A Schema.Struct with type and data fields (bare event, no metadata)
  */
-export const eventSchema = <TOrigin, TType, F extends Schema.Struct.Fields, R>(
-  originSchema: Schema.Schema<TOrigin>,
+export const eventSchema = <TType, F extends Schema.Struct.Fields, R>(
   type: Schema.Schema<TType, R>,
   data: F
 ) =>
   Schema.Struct({
     type,
-    metadata: EventMetadata(originSchema),
     data: Schema.Struct(data),
   });
