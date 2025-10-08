@@ -12,6 +12,7 @@ Automatic metadata enrichment for event sourcing. Commands now emit bare busines
 - Metadata field renamed: `originator` → `origin`
 - `applyEvent` receives bare `TEvent` (metadata stripped during load)
 - EventStore type now explicit: `EventStore<EventRecord<TEvent, TOrigin>>`
+- `eventSchema` signature changed: removed `originSchema` parameter (creates bare events without metadata)
 
 **New Exports:**
 
