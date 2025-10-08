@@ -226,6 +226,12 @@ const decodeEventNumber = (
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(id, toStreamId, Effect.flatMap(beginning), Effect.flatMap(eventStore.read));
 
+const stripMetadata = <TEvent, TOrigin>(record: EventRecord<TEvent, TOrigin>): TEvent => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- _ is intentionally unused in destructuring to extract metadata
+  const { metadata: _, ...event } = record;
+  return event as TEvent;
+};
+
 const loadAggregateState =
   <TId extends string, TState, TEvent, TOrigin>(
     id: TId,
@@ -236,15 +242,8 @@ const loadAggregateState =
   (eventStore: EventStore<EventRecord<TEvent, TOrigin>>) =>
     pipe(
       loadStreamEvents(eventStore, id),
-      Effect.flatMap(
-        processEventStream(
-          apply as (
-            state: Readonly<Option.Option<TState>>
-          ) => (
-            event: Readonly<EventRecord<TEvent, TOrigin>>
-          ) => Effect.Effect<TState, ParseResult.ParseError>
-        )
-      ),
+      Effect.map(Stream.map(stripMetadata)),
+      Effect.flatMap(processEventStream(apply)),
       Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
     );
 

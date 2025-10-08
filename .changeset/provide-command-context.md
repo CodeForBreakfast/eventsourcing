@@ -3,34 +3,20 @@
 '@codeforbreakfast/eventsourcing-transport-websocket': minor
 ---
 
-Automatic metadata enrichment: Commands now emit bare business events. The framework automatically enriches events with metadata (occurredAt, origin) before persisting them. This separates business logic from infrastructure concerns.
+Automatic metadata enrichment for event sourcing. Commands now emit bare business events, and the framework automatically enriches them with metadata (occurredAt, origin) before persisting. This keeps domain logic pure and separates business concerns from infrastructure.
 
 **Breaking Changes:**
 
-1. **Event definitions no longer include metadata field**
-   - Events are now pure business data
-   - Metadata is added automatically by the framework at commit time
-
-2. **Commands return bare events, not enriched events**
-   - Remove all `eventMetadata<TInitiator>()` calls from command functions
-   - Commands return `Event[]`, framework stores `EventRecord<Event, TOrigin>[]`
-
-3. **Metadata field renamed: `originator` → `origin`**
-   - More flexible naming to support various origin types (userId, system, API context, etc.)
-
-4. **EventStore type parameter changes**
-   - Before: `EventStore<TodoEvent>` (metadata baked into event type)
-   - After: `EventStore<EventRecord<TodoEvent, UserId>>` (framework adds metadata wrapper)
-
-5. **applyEvent receives bare events without metadata**
-   - Functions that rebuild state from events now receive bare `TEvent` (no metadata)
-   - Focus on business data only - metadata is infrastructure concern
-   - applyEvent signature: `(event: TEvent) => Effect<State, Error>`
+- Commands return bare events (`TEvent[]`) without metadata
+- Framework enriches events to `EventRecord<TEvent, TOrigin>` during commit
+- Metadata field renamed: `originator` → `origin`
+- `applyEvent` receives bare `TEvent` (metadata stripped during load)
+- EventStore type now explicit: `EventStore<EventRecord<TEvent, TOrigin>>`
 
 **New Exports:**
 
-- `EventRecord<TEvent, TOrigin>` - Type for framework-enriched events with metadata
-- `EventMetadata<TOrigin>` - Type for event metadata structure
+- `EventRecord<TEvent, TOrigin>` - Enriched events with metadata wrapper
+- `EventMetadata<TOrigin>` - Event metadata structure (occurredAt, origin)
 
 **WebSocket Transport:**
 
