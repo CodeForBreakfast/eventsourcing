@@ -8,4 +8,8 @@ export const UserIdSchema = pipe(Schema.String, Schema.brand('UserId'));
 export type UserId = typeof UserIdSchema.Type;
 export const UserId = UserIdSchema;
 
-export const TODO_LIST_ID = 'singleton-todo-list' as const;
+export const TodoListIdSchema = pipe(Schema.String, Schema.brand('TodoListId'));
+export type TodoListId = typeof TodoListIdSchema.Type;
+export const TodoListId = TodoListIdSchema;
+
+export const TODO_LIST_ID = 'singleton-todo-list' as TodoListId;

@@ -1,4 +1,4 @@
-import { Effect, Stream, pipe, Chunk, Brand, Option } from 'effect';
+import { Effect, Stream, pipe, Chunk, Option } from 'effect';
 import {
   AggregateState,
   provideCommandInitiator,
@@ -8,10 +8,6 @@ import { EventBus, EventBusService } from './eventBus';
 import { TodoCreated, TodoDeleted } from '../domain/todoEvents';
 import { TodoListAggregateRoot, TodoListState } from '../domain/todoListAggregate';
 import { TODO_LIST_ID, UserId, TodoId } from '../domain/types';
-
-type TodoListId = string & Brand.Brand<'TodoListId'>;
-
-const TODO_LIST_ID_BRANDED = TODO_LIST_ID as TodoListId;
 
 const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoCreated';
@@ -27,7 +23,7 @@ const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResu
 const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
   events.length > 0
     ? TodoListAggregateRoot.commit({
-        id: TODO_LIST_ID_BRANDED,
+        id: TODO_LIST_ID,
         eventNumber,
         events: Chunk.fromIterable(events),
       })
@@ -56,7 +52,7 @@ const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
   ) => Effect.Effect<ReadonlyArray<unknown>, TError>
 ) =>
   pipe(
-    TODO_LIST_ID_BRANDED,
+    TODO_LIST_ID,
     TodoListAggregateRoot.load,
     Effect.map(castToAggregateState),
     Effect.flatMap((state) => executeAndCommit(state, event, buildCommand(state)))
