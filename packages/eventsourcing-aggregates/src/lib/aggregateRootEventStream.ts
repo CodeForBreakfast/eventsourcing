@@ -227,16 +227,24 @@ const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEv
   pipe(id, toStreamId, Effect.flatMap(beginning), Effect.flatMap(eventStore.read));
 
 const loadAggregateState =
-  <TId extends string, TState, TEvent>(
+  <TId extends string, TState, TEvent, TOrigin>(
     id: TId,
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
   ) =>
-  (eventStore: EventStore<TEvent>) =>
+  (eventStore: EventStore<EventRecord<TEvent, TOrigin>>) =>
     pipe(
       loadStreamEvents(eventStore, id),
-      Effect.flatMap(processEventStream(apply)),
+      Effect.flatMap(
+        processEventStream(
+          apply as (
+            state: Readonly<Option.Option<TState>>
+          ) => (
+            event: Readonly<EventRecord<TEvent, TOrigin>>
+          ) => Effect.Effect<TState, ParseResult.ParseError>
+        )
+      ),
       Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
     );
 
@@ -287,9 +295,7 @@ export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState
   _initiatorSchema: Schema.Schema<TInitiator, any>,
   apply: (
     state: Readonly<Option.Option<TState>>
-  ) => (
-    event: Readonly<EventRecord<TEvent, TInitiator>>
-  ) => Effect.Effect<TState, ParseResult.ParseError>,
+  ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
   tag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TInitiator>>>>,
   commands: TCommands
 ) => ({

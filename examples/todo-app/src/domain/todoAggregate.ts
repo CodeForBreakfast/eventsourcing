@@ -24,7 +24,7 @@ export class TodoAggregate extends Effect.Tag('TodoAggregate')<
 
 const applyEventToExistingState = (
   currentState: TodoState,
-  event: Readonly<EventRecord<TodoEvent, UserId>>
+  event: Readonly<TodoEvent>
 ): Effect.Effect<TodoState, ParseResult.ParseError> =>
   pipe(
     event,
@@ -58,9 +58,7 @@ const applyEventToExistingState = (
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoState>>) =>
-  (
-    event: Readonly<EventRecord<TodoEvent, UserId>>
-  ): Effect.Effect<TodoState, ParseResult.ParseError> => {
+  (event: Readonly<TodoEvent>): Effect.Effect<TodoState, ParseResult.ParseError> => {
     if (event.type === 'TodoCreated') {
       return Effect.succeed({
         title: event.data.title,

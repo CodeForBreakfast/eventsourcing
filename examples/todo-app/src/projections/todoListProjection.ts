@@ -22,9 +22,7 @@ export interface TodoListProjection {
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoListProjection>>) =>
-  (
-    event: Readonly<EventRecord<TodoListEvent, UserId>>
-  ): Effect.Effect<TodoListProjection, never> => {
+  (event: Readonly<TodoListEvent>): Effect.Effect<TodoListProjection, never> => {
     const currentState = Option.getOrElse(state, () => ({ todos: [] }));
 
     if (event.type === 'TodoAddedToList') {

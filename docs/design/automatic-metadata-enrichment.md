@@ -136,16 +136,14 @@ class TodoAggregate extends Effect.Tag('TodoAggregate')<
 
 ### 3. Apply Function
 
-The `applyEvent` function receives `EventRecord` (enriched events) when loading from store:
+The `applyEvent` function receives bare events (business data only):
 
 ```typescript
 const applyEvent =
   (state: Readonly<Option.Option<TodoState>>) =>
-  (
-    event: Readonly<EventRecord<TodoEvent, UserId>>
-  ): Effect.Effect<TodoState, ParseResult.ParseError> => {
-    // Can access event.type, event.data (business logic)
-    // Can also access event.metadata.origin if needed
+  (event: Readonly<TodoEvent>): Effect.Effect<TodoState, ParseResult.ParseError> => {
+    // Receives bare business events - no metadata
+    // Focus on business logic only
 
     if (event.type === 'TodoCreated') {
       return Effect.succeed({
@@ -275,7 +273,31 @@ EventStore<TodoEvent>; // TodoEvent already has metadata
 EventStore<EventRecord<TodoEvent, UserId>>; // Framework adds metadata
 ```
 
-### 5. Process Managers
+### 5. applyEvent receives bare events
+
+The `applyEvent` function signature changes to receive bare events without metadata:
+
+**Before:**
+
+```typescript
+const applyEvent =
+  (state: Option.Option<TodoState>) =>
+  (event: EventRecord<TodoEvent, UserId>): Effect.Effect<TodoState, ParseResult.ParseError> => {
+    // Had access to event.metadata.originator
+  };
+```
+
+**After:**
+
+```typescript
+const applyEvent =
+  (state: Option.Option<TodoState>) =>
+  (event: TodoEvent): Effect.Effect<TodoState, ParseResult.ParseError> => {
+    // Only has access to business data - no metadata
+  };
+```
+
+### 6. Process Managers
 
 Process managers receive `EventRecord` from the event bus:
 

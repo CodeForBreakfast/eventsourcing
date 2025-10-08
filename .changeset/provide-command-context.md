@@ -22,10 +22,10 @@ Automatic metadata enrichment: Commands now emit bare business events. The frame
    - Before: `EventStore<TodoEvent>` (metadata baked into event type)
    - After: `EventStore<EventRecord<TodoEvent, UserId>>` (framework adds metadata wrapper)
 
-5. **applyEvent receives EventRecord instead of bare events**
-   - Functions that rebuild state from events now receive `EventRecord<TEvent, TOrigin>`
-   - Access business data via event properties (type, data)
-   - Access metadata via `event.metadata.origin` and `event.metadata.occurredAt`
+5. **applyEvent receives bare events without metadata**
+   - Functions that rebuild state from events now receive bare `TEvent` (no metadata)
+   - Focus on business data only - metadata is infrastructure concern
+   - applyEvent signature: `(event: TEvent) => Effect<State, Error>`
 
 **New Exports:**
 

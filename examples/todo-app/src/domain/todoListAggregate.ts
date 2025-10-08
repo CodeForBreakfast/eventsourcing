@@ -15,7 +15,7 @@ export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoListState>>) =>
-  (event: Readonly<EventRecord<TodoListEvent, UserId>>): Effect.Effect<TodoListState, never> => {
+  (event: Readonly<TodoListEvent>): Effect.Effect<TodoListState, never> => {
     const currentState = Option.getOrElse(
       state,
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
