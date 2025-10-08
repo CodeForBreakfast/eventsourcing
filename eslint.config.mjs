@@ -4,7 +4,7 @@ import unusedImports from 'eslint-plugin-unused-imports';
 import importPlugin from 'eslint-plugin-import';
 import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
-import eslintComments from 'eslint-plugin-eslint-comments';
+import eslintComments from '@eslint-community/eslint-plugin-eslint-comments';
 import effectPlugin from '@codeforbreakfast/eslint-effect';
 import buntestPlugin from '@codeforbreakfast/buntest/eslint';
 
