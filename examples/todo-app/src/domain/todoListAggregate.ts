@@ -1,4 +1,4 @@
-import { Effect, Option, Schema, pipe } from 'effect';
+import { Effect, Option } from 'effect';
 import { makeAggregateRoot, type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId, UserIdSchema, TodoListIdSchema } from './types';
