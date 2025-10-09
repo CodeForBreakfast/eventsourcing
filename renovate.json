@@ -6,7 +6,7 @@
     ":automergeLinters",
     ":automergeMinor",
     ":automergeStableNonMajor",
-    "npm:unpublishSafe",
+    "security:minimumReleaseAgeNpm",
     ":semanticCommits"
   ],
   "ignorePaths": ["**/node_modules/**", "**/test/**", "**/tests/**"],
