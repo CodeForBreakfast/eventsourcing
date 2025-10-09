@@ -16,14 +16,22 @@
         "**/*.test.ts",
         "**/*.spec.ts",
         "tsconfig*.json",
-        "package.json"
+        "package.json",
+        "$TURBO_ROOT$/bun.lock"
       ],
       "cache": true
     },
     "build": {
       "outputs": ["dist/**", "*.tsbuildinfo"],
       "dependsOn": ["^build"],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "tsconfig*.json", "package.json", "build.ts"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "tsconfig*.json",
+        "package.json",
+        "build.ts",
+        "$TURBO_ROOT$/bun.lock"
+      ],
       "cache": true
     },
     "//#deps:check": {
@@ -89,7 +97,14 @@
     "test": {
       "dependsOn": ["^test", "lint", "//#deps:check", "//#arch:check"],
       "outputs": [],
-      "inputs": ["src/**/*.ts", "src/**/*.tsx", "**/*.test.ts", "**/*.spec.ts", "package.json"],
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.spec.ts",
+        "package.json",
+        "$TURBO_ROOT$/bun.lock"
+      ],
       "cache": true,
       "env": [
         "TEST_PG_USERNAME",
