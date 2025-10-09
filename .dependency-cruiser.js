@@ -36,6 +36,7 @@ export default {
           'build[.](?:ts|js|mjs|cjs)$', // Build scripts
           'packages/eslint-effect/test/.*', // ESLint rule test files - intentionally not imported
           '[.]turbo/.*', // Turbo cache and temp files
+          'packages/[^/]+/src/(?!index[.]ts$).*[.]ts$', // Implementation files in src/ (but not src/index.ts) - accessed through barrel exports
         ],
       },
       to: {},
