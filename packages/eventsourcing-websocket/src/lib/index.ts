@@ -6,35 +6,30 @@
  */
 
 import { Context, Effect, Layer, pipe } from 'effect';
+import type { Scope } from 'effect/Scope';
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
 import { Protocol, ProtocolLive } from '@codeforbreakfast/eventsourcing-protocol';
 import type { TransportError, ConnectionError } from '@codeforbreakfast/eventsourcing-transport';
-import type { Scope } from 'effect/Scope';
+
+const buildProtocolLayer = (
+  layer: Layer.Layer<Protocol, TransportError | ConnectionError, Scope>
+): Effect.Effect<Context.Tag.Service<typeof Protocol>, TransportError | ConnectionError, Scope> =>
+  pipe(
+    layer,
+    Layer.build,
+    Effect.map((context) => Context.get(context, Protocol))
+  );
 
 /**
  * Connect to a WebSocket event sourcing server
  */
 export const connect = (
   url: string
-): Effect.Effect<
-  Context.Tag.Service<typeof Protocol>,
-  TransportError | ConnectionError,
-  Protocol | Scope
-> => {
-  // Create the layer stack
-  const protocolLayer = pipe(
+): Effect.Effect<Context.Tag.Service<typeof Protocol>, TransportError | ConnectionError, Scope> => {
+  return pipe(
     url,
     WebSocketConnector.connect,
-    Effect.map(ProtocolLive),
-    Layer.unwrapScoped
-  );
-
-  // Return protocol service that depends on the layer
-  return pipe(
-    Effect.Do,
-    Effect.bind('_', () => Layer.build(protocolLayer)),
-    Effect.bind('protocol', () => Protocol),
-    Effect.map(({ protocol }) => protocol)
+    Effect.andThen(buildProtocolLayer(makeWebSocketProtocolLayer(url)))
   );
 };
 
@@ -44,5 +39,5 @@ export const connect = (
 export const makeWebSocketProtocolLayer = (
   url: string
 ): Layer.Layer<Protocol, TransportError | ConnectionError, Scope> => {
-  return pipe(url, WebSocketConnector.connect, Effect.map(ProtocolLive), Layer.unwrapScoped);
+  return Layer.unwrapScoped(pipe(url, WebSocketConnector.connect, Effect.map(ProtocolLive)));
 };
