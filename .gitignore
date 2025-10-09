@@ -8,6 +8,17 @@ build/
 /lib/
 *.tsbuildinfo
 
+# Generated TypeScript artifacts in source directories
+# (type declarations and JS files generated alongside source)
+**/*.d.ts
+**/*.d.ts.map
+**/*.js
+**/*.js.map
+# But don't ignore these specific files that are actual source
+!*.config.js
+!*.config.mjs
+!**/build.js
+
 # Turbo
 .turbo
 
