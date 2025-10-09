@@ -34,10 +34,10 @@ export interface AggregateState<TData> {
  * Options for committing events to an aggregate
  * @since 0.4.0
  */
-export interface CommitOptions<TId extends string> {
+export interface CommitOptions<TId extends string, TEvent> {
   readonly id: TId;
   readonly eventNumber: EventNumber;
-  readonly events: Chunk.Chunk<unknown>;
+  readonly events: Chunk.Chunk<TEvent>;
 }
 
 /**
@@ -133,9 +133,9 @@ const commit =
   <TId extends string, TEvent, TOrigin, TTag>(
     eventstoreTag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TOrigin>>>>
   ) =>
-  (options: CommitOptions<TId>) =>
+  (options: CommitOptions<TId, TEvent>) =>
     pipe(
-      options.events as Chunk.Chunk<TEvent>,
+      options.events,
       enrichEventsWithMetadata<TEvent, TOrigin>,
       Effect.flatMap((enrichedEvents) =>
         getEventStoreAndCommit(eventstoreTag, options.id, options.eventNumber, enrichedEvents)

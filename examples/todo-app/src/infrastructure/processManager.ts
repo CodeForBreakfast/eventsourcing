@@ -7,6 +7,7 @@ import {
 import { EventBus, EventBusService } from './eventBus';
 import { TodoCreated, TodoDeleted } from '../domain/todoEvents';
 import { TodoListAggregateRoot, TodoListState } from '../domain/todoListAggregate';
+import { TodoListEvent } from '../domain/todoListEvents';
 import { TODO_LIST_ID, UserId, TodoId } from '../domain/types';
 
 const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId> =>
@@ -20,7 +21,7 @@ const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResu
   effect: Effect.Effect<TResult, TError>
 ) => pipe(effect, Effect.provide(provideCommandInitiator(event.metadata.origin as UserId)));
 
-const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
+const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<TodoListEvent>>) =>
   events.length > 0
     ? TodoListAggregateRoot.commit({
         id: TODO_LIST_ID,
@@ -32,7 +33,7 @@ const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<un
 const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
   state: Readonly<AggregateState<TodoListState>>,
   event: TEvent,
-  command: Effect.Effect<ReadonlyArray<unknown>, TError>
+  command: Effect.Effect<ReadonlyArray<TodoListEvent>, TError>
 ) =>
   pipe(
     command,
@@ -49,7 +50,7 @@ const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
   event: TEvent,
   buildCommand: (
     state: Readonly<AggregateState<TodoListState>>
-  ) => Effect.Effect<ReadonlyArray<unknown>, TError>
+  ) => Effect.Effect<ReadonlyArray<TodoListEvent>, TError>
 ) =>
   pipe(
     TODO_LIST_ID,
