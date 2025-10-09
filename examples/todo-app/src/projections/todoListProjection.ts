@@ -4,7 +4,8 @@ import {
   makeProjectionEventStore,
   ProjectionEventStore,
 } from '@codeforbreakfast/eventsourcing-projections';
-import { TodoId, TODO_LIST_ID } from '../domain/types';
+import { type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
+import { TodoId, TODO_LIST_ID, UserId } from '../domain/types';
 import { TodoListEvent } from '../domain/todoListEvents';
 import { TodoListAggregate } from '../domain/todoListAggregate';
 
@@ -51,13 +52,13 @@ const applyEvent =
     return Effect.succeed(currentState);
   };
 
-const TodoListProjectionEventStore = Context.GenericTag<ProjectionEventStore<TodoListEvent>>(
-  'TodoListProjectionEventStore'
-);
+const TodoListProjectionEventStore = Context.GenericTag<
+  ProjectionEventStore<EventRecord<TodoListEvent, UserId>>
+>('TodoListProjectionEventStore');
 
 const applyProjectionLoader = (
   listId: string,
-  projectionStore: ProjectionEventStore<TodoListEvent>
+  projectionStore: ProjectionEventStore<EventRecord<TodoListEvent, UserId>>
 ) => {
   const loader = loadProjection(TodoListProjectionEventStore, applyEvent);
   const loadEffect = loader(listId);
@@ -65,7 +66,7 @@ const applyProjectionLoader = (
 };
 
 const loadProjectionForList = (
-  projectionStore: ProjectionEventStore<TodoListEvent>,
+  projectionStore: ProjectionEventStore<EventRecord<TodoListEvent, UserId>>,
   listId: string
 ) => applyProjectionLoader(listId, projectionStore);
 

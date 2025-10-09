@@ -1,7 +1,7 @@
-import { Effect, Option, Schema, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Effect, Option } from 'effect';
+import { makeAggregateRoot, type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
-import { TodoId, UserId } from './types';
+import { TodoId, UserId, UserIdSchema, TodoListIdSchema } from './types';
 import { TodoListEvent, TodoAddedToList, TodoRemovedFromList } from './todoListEvents';
 
 export interface TodoListState {
@@ -10,7 +10,7 @@ export interface TodoListState {
 
 export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
   TodoListAggregate,
-  EventStore<TodoListEvent>
+  EventStore<EventRecord<TodoListEvent, UserId>>
 >() {}
 
 const applyEvent =
@@ -37,7 +37,7 @@ const applyEvent =
   };
 
 const addTodo =
-  (userId: UserId, todoId: TodoId, title: string) =>
+  (todoId: TodoId, title: string) =>
   (
     state: Readonly<Option.Option<TodoListState>>
   ): Effect.Effect<readonly TodoAddedToList[], never> => {
@@ -53,14 +53,13 @@ const addTodo =
     return Effect.succeed([
       {
         type: 'TodoAddedToList' as const,
-        metadata: { occurredAt: new Date(), originator: userId },
         data: { todoId, title, addedAt: new Date() },
       } satisfies TodoAddedToList,
     ]);
   };
 
 const removeTodo =
-  (userId: UserId, todoId: TodoId) =>
+  (todoId: TodoId) =>
   (
     state: Readonly<Option.Option<TodoListState>>
   ): Effect.Effect<readonly TodoRemovedFromList[], never> => {
@@ -76,15 +75,14 @@ const removeTodo =
     return Effect.succeed([
       {
         type: 'TodoRemovedFromList' as const,
-        metadata: { occurredAt: new Date(), originator: userId },
         data: { todoId, removedAt: new Date() },
       } satisfies TodoRemovedFromList,
     ]);
   };
 
 export const TodoListAggregateRoot = makeAggregateRoot(
-  pipe(Schema.String, Schema.brand('TodoListId')),
-  Schema.String,
+  TodoListIdSchema,
+  UserIdSchema,
   applyEvent,
   TodoListAggregate,
   {

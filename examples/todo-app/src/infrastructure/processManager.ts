@@ -1,52 +1,44 @@
-import { Effect, Stream, pipe, Chunk, Brand, Option } from 'effect';
-import { AggregateState } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Effect, Stream, pipe, Chunk, Option } from 'effect';
+import {
+  AggregateState,
+  provideCommandInitiator,
+  EventRecord,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventBus, EventBusService } from './eventBus';
 import { TodoCreated, TodoDeleted } from '../domain/todoEvents';
 import { TodoListAggregateRoot, TodoListState } from '../domain/todoListAggregate';
+import { TodoListEvent } from '../domain/todoListEvents';
 import { TODO_LIST_ID, UserId, TodoId } from '../domain/types';
 
-type TodoListId = string & Brand.Brand<'TodoListId'>;
-
-const TODO_LIST_ID_BRANDED = TODO_LIST_ID as TodoListId;
-
-const isTodoCreated = (event: unknown): event is TodoCreated =>
+const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoCreated';
 
-const isTodoDeleted = (event: unknown): event is TodoDeleted =>
+const isTodoDeleted = (event: unknown): event is EventRecord<TodoDeleted, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoDeleted';
 
-const executeAddTodoCommand = (
-  state: Readonly<Option.Option<TodoListState>>,
-  streamId: string,
-  event: Readonly<TodoCreated>
-) =>
-  pipe(
-    state,
-    TodoListAggregateRoot.commands.addTodo(
-      event.metadata.originator as UserId,
-      streamId as TodoId,
-      event.data.title
-    )
-  );
+const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResult, TError>(
+  event: TEvent,
+  effect: Effect.Effect<TResult, TError>
+) => pipe(effect, Effect.provide(provideCommandInitiator(event.metadata.origin as UserId)));
 
-const commitAddTodoEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
+const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<TodoListEvent>>) =>
   events.length > 0
     ? TodoListAggregateRoot.commit({
-        id: TODO_LIST_ID_BRANDED,
+        id: TODO_LIST_ID,
         eventNumber,
         events: Chunk.fromIterable(events),
       })
     : Effect.void;
 
-const addTodoAndCommit = (
+const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
   state: Readonly<AggregateState<TodoListState>>,
-  streamId: string,
-  event: Readonly<TodoCreated>
+  event: TEvent,
+  command: Effect.Effect<ReadonlyArray<TodoListEvent>, TError>
 ) =>
   pipe(
-    state.data,
-    (data) => executeAddTodoCommand(data, streamId, event),
-    Effect.flatMap(commitAddTodoEvents(state.nextEventNumber))
+    command,
+    (effect) => withCommandInitiator(event, effect),
+    Effect.flatMap(commitEvents(state.nextEventNumber))
   );
 
 const castToAggregateState = (state: {
@@ -54,54 +46,27 @@ const castToAggregateState = (state: {
   readonly data: Readonly<Option.Option<unknown>>;
 }): Readonly<AggregateState<TodoListState>> => state as Readonly<AggregateState<TodoListState>>;
 
-const handleTodoCreated = (streamId: string, event: Readonly<TodoCreated>) =>
-  pipe(
-    TODO_LIST_ID_BRANDED,
-    TodoListAggregateRoot.load,
-    Effect.map(castToAggregateState),
-    Effect.flatMap((state) => addTodoAndCommit(state, streamId, event))
-  );
-
-const executeRemoveTodoCommand = (
-  state: Readonly<Option.Option<TodoListState>>,
-  streamId: string,
-  event: Readonly<TodoDeleted>
+const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
+  event: TEvent,
+  buildCommand: (
+    state: Readonly<AggregateState<TodoListState>>
+  ) => Effect.Effect<ReadonlyArray<TodoListEvent>, TError>
 ) =>
   pipe(
-    state,
-    TodoListAggregateRoot.commands.removeTodo(
-      event.metadata.originator as UserId,
-      streamId as TodoId
-    )
-  );
-
-const commitRemoveTodoEvents =
-  (eventNumber: number) => (events: Readonly<ReadonlyArray<unknown>>) =>
-    events.length > 0
-      ? TodoListAggregateRoot.commit({
-          id: TODO_LIST_ID_BRANDED,
-          eventNumber,
-          events: Chunk.fromIterable(events),
-        })
-      : Effect.void;
-
-const removeTodoAndCommit = (
-  state: Readonly<AggregateState<TodoListState>>,
-  streamId: string,
-  event: Readonly<TodoDeleted>
-) =>
-  pipe(
-    state.data,
-    (data) => executeRemoveTodoCommand(data, streamId, event),
-    Effect.flatMap(commitRemoveTodoEvents(state.nextEventNumber))
-  );
-
-const handleTodoDeleted = (streamId: string, event: Readonly<TodoDeleted>) =>
-  pipe(
-    TODO_LIST_ID_BRANDED,
+    TODO_LIST_ID,
     TodoListAggregateRoot.load,
     Effect.map(castToAggregateState),
-    Effect.flatMap((state) => removeTodoAndCommit(state, streamId, event))
+    Effect.flatMap((state) => executeAndCommit(state, event, buildCommand(state)))
+  );
+
+const handleTodoCreated = (streamId: string, event: Readonly<EventRecord<TodoCreated, UserId>>) =>
+  handleCommand(event, (state) =>
+    pipe(state.data, TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title))
+  );
+
+const handleTodoDeleted = (streamId: string, event: Readonly<EventRecord<TodoDeleted, UserId>>) =>
+  handleCommand(event, (state) =>
+    pipe(state.data, TodoListAggregateRoot.commands.removeTodo(streamId as TodoId))
   );
 
 const handleCreatedWithLogging = ({
@@ -109,7 +74,7 @@ const handleCreatedWithLogging = ({
   event,
 }: {
   readonly streamId: string;
-  readonly event: TodoCreated;
+  readonly event: EventRecord<TodoCreated, UserId>;
 }) =>
   pipe(
     handleTodoCreated(streamId, event),
@@ -121,7 +86,7 @@ const handleDeletedWithLogging = ({
   event,
 }: {
   readonly streamId: string;
-  readonly event: TodoDeleted;
+  readonly event: EventRecord<TodoDeleted, UserId>;
 }) =>
   pipe(
     handleTodoDeleted(streamId, event),
@@ -130,7 +95,7 @@ const handleDeletedWithLogging = ({
 
 const runCreatedStream = (
   stream: Stream.Stream<
-    { readonly streamId: string; readonly event: TodoCreated },
+    { readonly streamId: string; readonly event: EventRecord<TodoCreated, UserId> },
     unknown,
     unknown
   >
@@ -138,7 +103,7 @@ const runCreatedStream = (
 
 const runDeletedStream = (
   stream: Stream.Stream<
-    { readonly streamId: string; readonly event: TodoDeleted },
+    { readonly streamId: string; readonly event: EventRecord<TodoDeleted, UserId> },
     unknown,
     unknown
   >
@@ -148,8 +113,16 @@ const subscribeToStreams = (eventBus: EventBusService) =>
   Effect.all([eventBus.subscribe(isTodoCreated), eventBus.subscribe(isTodoDeleted)]);
 
 const runBothStreams = ([createdStream, deletedStream]: readonly [
-  Stream.Stream<{ readonly streamId: string; readonly event: TodoCreated }, unknown, unknown>,
-  Stream.Stream<{ readonly streamId: string; readonly event: TodoDeleted }, unknown, unknown>,
+  Stream.Stream<
+    { readonly streamId: string; readonly event: EventRecord<TodoCreated, UserId> },
+    unknown,
+    unknown
+  >,
+  Stream.Stream<
+    { readonly streamId: string; readonly event: EventRecord<TodoDeleted, UserId> },
+    unknown,
+    unknown
+  >,
 ]) =>
   Effect.all([runCreatedStream(createdStream), runDeletedStream(deletedStream)], {
     concurrency: 'unbounded',

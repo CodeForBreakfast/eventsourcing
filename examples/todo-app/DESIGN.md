@@ -36,33 +36,33 @@ import { Schema } from 'effect';
 import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 
 // Event 1: Todo Created
-const TodoCreated = eventSchema(Schema.String, Schema.Literal('TodoCreated'), {
+const TodoCreated = eventSchema(Schema.Literal('TodoCreated'), {
   title: Schema.String,
   createdAt: Schema.ValidDateFromSelf,
 });
 type TodoCreated = typeof TodoCreated.Type;
 
 // Event 2: Todo Title Changed
-const TodoTitleChanged = eventSchema(Schema.String, Schema.Literal('TodoTitleChanged'), {
+const TodoTitleChanged = eventSchema(Schema.Literal('TodoTitleChanged'), {
   title: Schema.String,
   changedAt: Schema.ValidDateFromSelf,
 });
 type TodoTitleChanged = typeof TodoTitleChanged.Type;
 
 // Event 3: Todo Completed
-const TodoCompleted = eventSchema(Schema.String, Schema.Literal('TodoCompleted'), {
+const TodoCompleted = eventSchema(Schema.Literal('TodoCompleted'), {
   completedAt: Schema.ValidDateFromSelf,
 });
 type TodoCompleted = typeof TodoCompleted.Type;
 
 // Event 4: Todo Uncompleted
-const TodoUncompleted = eventSchema(Schema.String, Schema.Literal('TodoUncompleted'), {
+const TodoUncompleted = eventSchema(Schema.Literal('TodoUncompleted'), {
   uncompletedAt: Schema.ValidDateFromSelf,
 });
 type TodoUncompleted = typeof TodoUncompleted.Type;
 
 // Event 5: Todo Deleted
-const TodoDeleted = eventSchema(Schema.String, Schema.Literal('TodoDeleted'), {
+const TodoDeleted = eventSchema(Schema.Literal('TodoDeleted'), {
   deletedAt: Schema.ValidDateFromSelf,
 });
 type TodoDeleted = typeof TodoDeleted.Type;
@@ -301,11 +301,14 @@ const applyEvent =
 
 ```typescript
 import { Effect, Schema, Option, ParseResult, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot, EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
+
+const UserId = Schema.String.pipe(Schema.brand('UserId'));
+type UserId = typeof UserId.Type;
 
 interface TodoState {
   readonly title: string;
@@ -332,22 +335,16 @@ const applyEvent =
 
 export class TodoAggregate extends Effect.Tag('TodoAggregate')<
   TodoAggregate,
-  EventStore<TodoEvent>
+  EventStore<EventRecord<TodoEvent, UserId>>
 >() {}
 
-export const TodoAggregateRoot = makeAggregateRoot(
-  TodoId,
-  Schema.String,
-  applyEvent,
-  TodoAggregate,
-  {
-    createTodo,
-    changeTitle,
-    complete,
-    uncomplete,
-    deleteTodo,
-  }
-);
+export const TodoAggregateRoot = makeAggregateRoot(TodoId, UserId, applyEvent, TodoAggregate, {
+  createTodo,
+  changeTitle,
+  complete,
+  uncomplete,
+  deleteTodo,
+});
 ```
 
 #### 2. TodoListAggregate
@@ -371,14 +368,14 @@ import { eventSchema } from '@codeforbreakfast/eventsourcing-aggregates';
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
 
-const TodoAddedToList = eventSchema(Schema.String, Schema.Literal('TodoAddedToList'), {
+const TodoAddedToList = eventSchema(Schema.Literal('TodoAddedToList'), {
   todoId: TodoId,
   title: Schema.String,
   addedAt: Schema.ValidDateFromSelf,
 });
 type TodoAddedToList = typeof TodoAddedToList.Type;
 
-const TodoRemovedFromList = eventSchema(Schema.String, Schema.Literal('TodoRemovedFromList'), {
+const TodoRemovedFromList = eventSchema(Schema.Literal('TodoRemovedFromList'), {
   todoId: TodoId,
   removedAt: Schema.ValidDateFromSelf,
 });
@@ -518,11 +515,14 @@ const applyEvent =
 
 ```typescript
 import { Effect, Schema, Option } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { makeAggregateRoot, EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 
 const TodoId = Schema.String.pipe(Schema.brand('TodoId'));
 type TodoId = typeof TodoId.Type;
+
+const UserId = Schema.String.pipe(Schema.brand('UserId'));
+type UserId = typeof UserId.Type;
 
 interface TodoListState {
   readonly todoIds: ReadonlySet<TodoId>;
@@ -541,12 +541,12 @@ const applyEvent =
 
 export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
   TodoListAggregate,
-  EventStore<TodoListEvent>
+  EventStore<EventRecord<TodoListEvent, UserId>>
 >() {}
 
 export const TodoListAggregateRoot = makeAggregateRoot(
   Schema.String.pipe(Schema.brand('TodoListId')),
-  Schema.String,
+  UserId,
   applyEvent,
   TodoListAggregate,
   {

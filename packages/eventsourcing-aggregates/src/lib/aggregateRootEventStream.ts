@@ -34,10 +34,10 @@ export interface AggregateState<TData> {
  * Options for committing events to an aggregate
  * @since 0.4.0
  */
-export interface CommitOptions<TId extends string> {
+export interface CommitOptions<TId extends string, TEvent> {
   readonly id: TId;
   readonly eventNumber: EventNumber;
-  readonly events: Chunk.Chunk<unknown>;
+  readonly events: Chunk.Chunk<TEvent>;
 }
 
 /**
@@ -108,15 +108,37 @@ const commitToEventStore =
       Effect.flatMap((position) => appendEventsAtPosition(events, position, eventstore))
     );
 
+const enrichEventWithMetadata = <TEvent, TOrigin>(
+  event: TEvent,
+  metadata: EventMetadata<TOrigin>
+): EventRecord<TEvent, TOrigin> => ({
+  ...event,
+  metadata,
+});
+
+const enrichEventsWithMetadata = <TEvent, TOrigin>(events: Chunk.Chunk<TEvent>) =>
+  pipe(
+    eventMetadata<TOrigin>(),
+    Effect.map((metadata) => Chunk.map(events, (event) => enrichEventWithMetadata(event, metadata)))
+  );
+
+const getEventStoreAndCommit = <TId extends string, TEvent, TOrigin, TTag>(
+  eventstoreTag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TOrigin>>>>,
+  id: TId,
+  eventNumber: EventNumber,
+  enrichedEvents: Chunk.Chunk<EventRecord<TEvent, TOrigin>>
+) => pipe(eventstoreTag, Effect.flatMap(commitToEventStore(id, eventNumber, enrichedEvents)));
+
 const commit =
-  <TId extends string, TEvent, TTag>(
-    eventstoreTag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>
+  <TId extends string, TEvent, TOrigin, TTag>(
+    eventstoreTag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TOrigin>>>>
   ) =>
-  (options: CommitOptions<TId>) =>
+  (options: CommitOptions<TId, TEvent>) =>
     pipe(
-      eventstoreTag,
-      Effect.flatMap(
-        commitToEventStore(options.id, options.eventNumber, options.events as Chunk.Chunk<TEvent>)
+      options.events,
+      enrichEventsWithMetadata<TEvent, TOrigin>,
+      Effect.flatMap((enrichedEvents) =>
+        getEventStoreAndCommit(eventstoreTag, options.id, options.eventNumber, enrichedEvents)
       )
     );
 
@@ -186,14 +208,14 @@ const processEventStream =
       Effect.flatMap(foldEventsIntoState(apply, stream))
     );
 
-const createDecodedResult = (
+const createDecodedResult = <TState>(
   decodedEventNumber: EventNumber,
-  data: Readonly<Option.Option<unknown>>
+  data: Readonly<Option.Option<TState>>
 ) => ({ nextEventNumber: decodedEventNumber, data }) as const;
 
-const decodeEventNumber = (
+const decodeEventNumber = <TState>(
   nextEventNumber: Readonly<number>,
-  data: Readonly<Option.Option<unknown>>
+  data: Readonly<Option.Option<TState>>
 ) =>
   pipe(
     nextEventNumber,
@@ -204,16 +226,23 @@ const decodeEventNumber = (
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(id, toStreamId, Effect.flatMap(beginning), Effect.flatMap(eventStore.read));
 
+const stripMetadata = <TEvent, TOrigin>(record: EventRecord<TEvent, TOrigin>): TEvent => {
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- _ is intentionally unused in destructuring to extract metadata
+  const { metadata: _, ...event } = record;
+  return event as TEvent;
+};
+
 const loadAggregateState =
-  <TId extends string, TState, TEvent>(
+  <TId extends string, TState, TEvent, TOrigin>(
     id: TId,
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
   ) =>
-  (eventStore: EventStore<TEvent>) =>
+  (eventStore: EventStore<EventRecord<TEvent, TOrigin>>) =>
     pipe(
       loadStreamEvents(eventStore, id),
+      Effect.map(Stream.map(stripMetadata)),
       Effect.flatMap(processEventStream(apply)),
       Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
     );
@@ -261,11 +290,12 @@ const loadAggregateState =
  */
 export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState, TCommands, TTag>(
   _idSchema: Schema.Schema<TId, string>,
-  _initiatorSchema: Schema.Schema<TInitiator>,
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Schema.Schema requires any for input type
+  _initiatorSchema: Schema.Schema<TInitiator, any>,
   apply: (
     state: Readonly<Option.Option<TState>>
   ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
-  tag: Readonly<Context.Tag<TTag, EventStore<TEvent>>>,
+  tag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TInitiator>>>>,
   commands: TCommands
 ) => ({
   new: (): AggregateState<TState> => ({
@@ -273,21 +303,30 @@ export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState
     data: Option.none(),
   }),
   load: (id: TId) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
-  commit: commit<TId, TEvent, TTag>(tag),
+  commit: commit<TId, TEvent, TInitiator, TTag>(tag),
   commands,
 });
 
-export const EventMetadata = <TOriginator>(originatorSchema: Schema.Schema<TOriginator>) =>
+export interface EventMetadata<TOrigin> {
+  readonly occurredAt: Date;
+  readonly origin: TOrigin;
+}
+
+export type EventRecord<TEvent, TOrigin> = TEvent & {
+  readonly metadata: EventMetadata<TOrigin>;
+};
+
+export const EventMetadata = <TOrigin>(originSchema: Schema.Schema<TOrigin>) =>
   Schema.Struct({
     occurredAt: Schema.ValidDateFromSelf,
-    originator: originatorSchema,
+    origin: originSchema,
   });
 
 const createMetadataFromInitiator =
   <TInitiator>(currentTime: number) =>
   (initiator: TInitiator) => ({
     occurredAt: new Date(currentTime),
-    originator: initiator,
+    origin: initiator,
   });
 
 const getInitiator =
@@ -302,14 +341,14 @@ const getMetadataFromContext = <TInitiator>(currentTime: number) =>
   pipe(CommandContext<TInitiator>(), Effect.flatMap(getInitiator<TInitiator>(currentTime)));
 
 /**
- * Creates event metadata with timestamp and originator information
+ * Creates event metadata with timestamp and origin information
  *
  * @since 0.4.0
  * @example
  * ```typescript
  * const metadata = await Effect.runPromise(eventMetadata());
  * console.log(metadata.occurredAt); // Current timestamp
- * console.log(metadata.originator); // Originator from context
+ * console.log(metadata.origin); // Origin from context
  * ```
  *
  * @returns Effect that resolves to event metadata
@@ -319,14 +358,15 @@ export const eventMetadata = <TInitiator>() =>
   pipe(Clock.currentTimeMillis, Effect.flatMap(getMetadataFromContext<TInitiator>));
 
 /**
- * Creates a schema for domain events with type, metadata, and data fields
+ * Creates a schema for bare domain events with type and data fields
+ *
+ * Events created with this helper are bare business events without metadata.
+ * The framework automatically enriches them with metadata during commit.
  *
  * @since 0.4.0
  * @example
  * ```typescript
- * // Required originator
  * const UserCreatedEvent = eventSchema(
- *   PersonId,
  *   Schema.Literal('UserCreated'),
  *   {
  *     userId: Schema.String,
@@ -335,26 +375,21 @@ export const eventMetadata = <TInitiator>() =>
  *   }
  * );
  *
- * // Optional originator
  * const SystemEvent = eventSchema(
- *   Schema.OptionFromSelf(PersonId),
  *   Schema.Literal('SystemSync'),
  *   { timestamp: Schema.Number }
  * );
  * ```
  *
- * @param originatorSchema - Schema for the event originator (can be required or optional)
  * @param type - Schema for the event type discriminator
  * @param data - Schema fields for the event data
- * @returns A Schema.Struct with type, metadata, and data fields
+ * @returns A Schema.Struct with type and data fields (bare event, no metadata)
  */
-export const eventSchema = <TOriginator, TType, F extends Schema.Struct.Fields, R>(
-  originatorSchema: Schema.Schema<TOriginator>,
+export const eventSchema = <TType, F extends Schema.Struct.Fields, R>(
   type: Schema.Schema<TType, R>,
   data: F
 ) =>
   Schema.Struct({
     type,
-    metadata: EventMetadata(originatorSchema),
     data: Schema.Struct(data),
   });

@@ -1,7 +1,7 @@
 import { Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
-import { makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { EventRecord, makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
-import { TodoId, UserId } from './types';
+import { TodoIdSchema, UserId, UserIdSchema } from './types';
 import {
   TodoEvent,
   TodoCreated,
@@ -19,7 +19,7 @@ export interface TodoState {
 
 export class TodoAggregate extends Effect.Tag('TodoAggregate')<
   TodoAggregate,
-  EventStore<TodoEvent>
+  EventStore<EventRecord<TodoEvent, UserId>>
 >() {}
 
 const applyEventToExistingState = (
@@ -100,16 +100,15 @@ const failIfDeletedTodo =
       ? Effect.fail(new Error(`Cannot ${operation} deleted TODO`))
       : Effect.succeed(state);
 
-const createTodo = (userId: UserId, title: string) => () =>
+const createTodo = (title: string) => () =>
   Effect.succeed([
     {
       type: 'TodoCreated' as const,
-      metadata: { occurredAt: new Date(), originator: userId },
       data: { title, createdAt: new Date() },
     } satisfies TodoCreated,
   ]);
 
-const changeTitle = (userId: UserId, title: string) =>
+const changeTitle = (title: string) =>
   requireExistingTodo('change title', (current) =>
     pipe(
       current,
@@ -117,67 +116,69 @@ const changeTitle = (userId: UserId, title: string) =>
       Effect.as([
         {
           type: 'TodoTitleChanged' as const,
-          metadata: { occurredAt: new Date(), originator: userId },
           data: { title, changedAt: new Date() },
         } satisfies TodoTitleChanged,
       ])
     )
   );
 
-const complete = (userId: UserId) =>
+const complete = () =>
   requireExistingTodo('complete', (current) =>
     pipe(
       current,
       failIfDeletedTodo('complete'),
       Effect.flatMap((state) =>
-        state.completed
-          ? Effect.succeed([])
-          : Effect.succeed([
-              {
-                type: 'TodoCompleted' as const,
-                metadata: { occurredAt: new Date(), originator: userId },
-                data: { completedAt: new Date() },
-              } satisfies TodoCompleted,
-            ])
+        Effect.succeed(
+          state.completed
+            ? []
+            : [
+                {
+                  type: 'TodoCompleted' as const,
+                  data: { completedAt: new Date() },
+                } satisfies TodoCompleted,
+              ]
+        )
       )
     )
   );
 
-const uncomplete = (userId: UserId) =>
+const uncomplete = () =>
   requireExistingTodo('uncomplete', (current) =>
     pipe(
       current,
       failIfDeletedTodo('uncomplete'),
       Effect.flatMap((state) =>
-        state.completed
-          ? Effect.succeed([
-              {
-                type: 'TodoUncompleted' as const,
-                metadata: { occurredAt: new Date(), originator: userId },
-                data: { uncompletedAt: new Date() },
-              } satisfies TodoUncompleted,
-            ])
-          : Effect.succeed([])
+        Effect.succeed(
+          state.completed
+            ? [
+                {
+                  type: 'TodoUncompleted' as const,
+                  data: { uncompletedAt: new Date() },
+                } satisfies TodoUncompleted,
+              ]
+            : []
+        )
       )
     )
   );
 
-const deleteTodo = (userId: UserId) =>
+const deleteTodo = () =>
   requireExistingTodo('delete', (current) =>
-    current.deleted
-      ? Effect.succeed([])
-      : Effect.succeed([
-          {
-            type: 'TodoDeleted' as const,
-            metadata: { occurredAt: new Date(), originator: userId },
-            data: { deletedAt: new Date() },
-          } satisfies TodoDeleted,
-        ])
+    Effect.succeed(
+      current.deleted
+        ? []
+        : [
+            {
+              type: 'TodoDeleted' as const,
+              data: { deletedAt: new Date() },
+            } satisfies TodoDeleted,
+          ]
+    )
   );
 
 export const TodoAggregateRoot = makeAggregateRoot(
-  TodoId,
-  Schema.String,
+  TodoIdSchema,
+  UserIdSchema,
   applyEvent,
   TodoAggregate,
   {

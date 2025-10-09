@@ -5,7 +5,19 @@
  * Uses Effect.acquireRelease for proper lifecycle management and resource cleanup.
  */
 
-import { Context, Effect, Stream, Scope, Ref, Queue, HashSet, HashMap, pipe, Schema } from 'effect';
+import {
+  Context,
+  Effect,
+  Stream,
+  Scope,
+  Ref,
+  Queue,
+  HashSet,
+  HashMap,
+  pipe,
+  Schema,
+  Either,
+} from 'effect';
 import {
   type TransportMessage,
   ConnectionState,
@@ -25,15 +37,24 @@ type ServerWebSocket<T = undefined> = Bun.ServerWebSocket<T>;
 interface WebSocketServerConfig {
   readonly port: number;
   readonly host: string;
+  readonly authenticateConnection?: (
+    req: ReadonlyDeep<Request>
+  ) => Effect.Effect<Record<string, unknown>, TransportError>;
+}
+
+interface WebSocketData {
+  readonly clientId: Server.ClientId;
+  readonly auth?: Record<string, unknown>;
 }
 
 interface ClientState {
   readonly id: Server.ClientId;
-  readonly socket: ServerWebSocket<{ readonly clientId: Server.ClientId }>; // Bun WebSocket
+  readonly socket: ServerWebSocket<WebSocketData>;
   readonly connectionStateRef: Ref.Ref<ConnectionState>;
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
   readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
   readonly connectedAt: ReadonlyDeep<Date>;
+  readonly authMetadata: Record<string, unknown>;
 }
 
 interface ServerState {
@@ -217,7 +238,8 @@ const buildClientState =
   (
     clientId: Server.ClientId,
     connectedAt: ReadonlyDeep<Date>,
-    ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
+    ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
+    authMetadata: Record<string, unknown>
   ) =>
   (resources: {
     readonly connectionStateQueue: Queue.Queue<ConnectionState>;
@@ -230,14 +252,19 @@ const buildClientState =
     connectionStateQueue: resources.connectionStateQueue,
     subscribersRef: resources.subscribersRef,
     connectedAt,
+    authMetadata,
   });
 
 const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
-  ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
+  ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
+  authMetadata: Record<string, unknown>
 ): Effect.Effect<ClientState, never, never> =>
-  pipe(createClientResources(), Effect.map(buildClientState(clientId, connectedAt, ws)));
+  pipe(
+    createClientResources(),
+    Effect.map(buildClientState(clientId, connectedAt, ws, authMetadata))
+  );
 
 const createAddClientToServerStateUpdater = (clientState: ClientState) => (state: ServerState) => ({
   ...state,
@@ -261,14 +288,14 @@ const offerNewConnection =
         clientId: clientState.id,
         transport: createClientTransport(clientState),
         connectedAt: clientState.connectedAt,
-        metadata: {},
+        metadata: clientState.authMetadata,
       })
     );
 
 const registerClientAndTransition =
   (
     serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
-    ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>
+    ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>
   ) =>
   (clientState: ClientState): Effect.Effect<void, never, never> =>
     pipe(
@@ -277,8 +304,9 @@ const registerClientAndTransition =
       Effect.andThen(
         Effect.sync(() => {
           // eslint-disable-next-line functional/immutable-data -- Bun WebSocket API requires mutating the data property to attach client metadata
-          (ws as ServerWebSocket<{ readonly clientId: Server.ClientId }>).data = {
+          (ws as ServerWebSocket<WebSocketData>).data = {
             clientId: clientState.id,
+            auth: clientState.authMetadata,
           };
         })
       ),
@@ -347,7 +375,7 @@ const createWebSocketServer = (
         port: config.port,
         hostname: config.host,
         websocket: {
-          open: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
+          open: (ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>) => {
             const createClientIdAndTimestamp = (): Effect.Effect<
               { readonly clientId: Server.ClientId; readonly connectedAt: Date },
               never,
@@ -362,16 +390,17 @@ const createWebSocketServer = (
             Effect.runSync(
               pipe(
                 createClientIdAndTimestamp(),
-                Effect.flatMap(({ clientId, connectedAt }) =>
-                  createClientStateResources(clientId, connectedAt, ws)
-                ),
+                Effect.flatMap(({ clientId, connectedAt }) => {
+                  const authMetadata = ws.data?.auth ?? {};
+                  return createClientStateResources(clientId, connectedAt, ws, authMetadata);
+                }),
                 Effect.flatMap(registerClientAndTransition(serverStateRef, ws))
               )
             );
           },
 
           message: (
-            ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>,
+            ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
             message: ReadonlyDeep<string>
           ) => {
             // eslint-disable-next-line effect/no-runSync -- WebSocket message handler is a synchronous callback at application boundary, requires Effect.runSync
@@ -387,7 +416,7 @@ const createWebSocketServer = (
             );
           },
 
-          close: (ws: ReadonlyDeep<ServerWebSocket<{ readonly clientId: Server.ClientId }>>) => {
+          close: (ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>) => {
             // eslint-disable-next-line effect/no-runSync -- WebSocket close handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
@@ -403,6 +432,30 @@ const createWebSocketServer = (
         },
 
         fetch: (req, server) => {
+          if (config.authenticateConnection) {
+            const authEffect = pipe(
+              req,
+              Effect.succeed,
+              Effect.flatMap(config.authenticateConnection),
+              Effect.catchAll(Effect.fail)
+            );
+
+            // eslint-disable-next-line effect/no-runSync -- fetch handler is a synchronous callback at application boundary, requires Effect.runSync
+            const authResult = Effect.runSync(pipe(authEffect, Effect.either));
+
+            if (Either.isLeft(authResult)) {
+              return new Response('Authentication failed', { status: 401 });
+            }
+
+            const success = server.upgrade(req, {
+              data: { auth: authResult.right },
+            });
+            if (success) {
+              return undefined;
+            }
+            return new Response('WebSocket upgrade failed', { status: 400 });
+          }
+
           const success = server.upgrade(req);
           if (success) {
             return undefined;

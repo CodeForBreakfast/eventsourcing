@@ -12,3 +12,8 @@ export const CommandContextTest = <TInitiator>(initiator: TInitiator) =>
   Layer.succeed(CommandContext<TInitiator>(), {
     getInitiator: Effect.succeed(initiator),
   });
+
+export const provideCommandInitiator = <TInitiator>(initiator: TInitiator) =>
+  Layer.succeed(CommandContext<TInitiator>(), {
+    getInitiator: Effect.succeed(initiator),
+  });
