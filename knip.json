@@ -8,7 +8,15 @@
     "eslint-plugin-*",
     "fast-check",
     "npm",
-    "@codeforbreakfast/eslint-effect"
+    "@codeforbreakfast/eslint-effect",
+    "type-fest",
+    "@codeforbreakfast/eventsourcing-store",
+    "@effect/experimental",
+    "@effect/sql-pg",
+    "@codeforbreakfast/eventsourcing-transport",
+    "@codeforbreakfast/eventsourcing-transport-websocket",
+    "@codeforbreakfast/eventsourcing-protocol",
+    "effect"
   ],
   "ignoreBinaries": ["publish"],
   "workspaces": {
