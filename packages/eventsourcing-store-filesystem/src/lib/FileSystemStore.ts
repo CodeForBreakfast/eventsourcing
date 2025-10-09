@@ -1,4 +1,15 @@
-import { Chunk, Effect, Stream, pipe, Option, Schema } from 'effect';
+import {
+  Chunk,
+  Effect,
+  Stream,
+  pipe,
+  Option,
+  Schema,
+  PubSub,
+  HashMap,
+  SynchronizedRef,
+  Queue,
+} from 'effect';
 import { FileSystem, Path } from '@effect/platform';
 import {
   EventStreamId,
@@ -31,6 +42,10 @@ export interface FileSystemStore<V = never> {
     never,
     FileSystem.FileSystem | Path.Path
   >;
+}
+
+interface FileSystemStoreState<V> {
+  readonly pubSubsByStreamId: HashMap.HashMap<EventStreamId, PubSub.PubSub<V>>;
 }
 
 const getStreamDirectoryPath = (
@@ -153,29 +168,89 @@ const validateStreamVersion = (
     )
   );
 
-const writeAndAppendEvents = <V>(
-  streamDir: string,
+const createPubSubForStream = <V>(): Effect.Effect<PubSub.PubSub<V>, never, never> =>
+  PubSub.bounded<V>(256);
+
+const createPubSubWithState = <V>(
+  currentState: FileSystemStoreState<V>,
+  streamId: EventStreamId
+): Effect.Effect<readonly [PubSub.PubSub<V>, FileSystemStoreState<V>], never, never> =>
+  pipe(
+    createPubSubForStream<V>(),
+    Effect.map(
+      (pubsub) =>
+        [
+          pubsub,
+          {
+            pubSubsByStreamId: HashMap.set(currentState.pubSubsByStreamId, streamId, pubsub),
+          },
+        ] as const
+    )
+  );
+
+const getOrCreatePubSub =
+  <V>(streamId: EventStreamId) =>
+  (
+    currentState: FileSystemStoreState<V>
+  ): Effect.Effect<readonly [PubSub.PubSub<V>, FileSystemStoreState<V>], never, never> =>
+    pipe(
+      currentState.pubSubsByStreamId,
+      HashMap.get(streamId),
+      Option.match({
+        onSome: (pubsub) => Effect.succeed([pubsub, currentState] as const),
+        onNone: () => createPubSubWithState(currentState, streamId),
+      })
+    );
+
+const ensurePubSubExists = <V>(
+  streamId: EventStreamId,
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
+): Effect.Effect<PubSub.PubSub<V>, never, never> =>
+  pipe(state, SynchronizedRef.modifyEffect(getOrCreatePubSub(streamId)));
+
+const publishEventsToStream = <V>(
+  pubsub: PubSub.PubSub<V>,
+  events: Chunk.Chunk<V>
+): Effect.Effect<void, never, never> => pipe(pubsub, PubSub.publishAll(events), Effect.asVoid);
+
+const publishAndReturnPosition = <V>(
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>,
-  fs: FileSystem.FileSystem
-): Effect.Effect<
-  EventStreamPosition,
-  ConcurrencyConflictError,
-  FileSystem.FileSystem | Path.Path
-> => {
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
+): Effect.Effect<EventStreamPosition, never, never> => {
   const newPosition = {
     ...streamEnd,
     eventNumber: streamEnd.eventNumber + newEvents.length,
   };
   return pipe(
-    validateStreamVersion(streamDir, streamEnd, fs),
-    Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
+    ensurePubSubExists(streamEnd.streamId, state),
+    Effect.flatMap((pubsub) => publishEventsToStream(pubsub, newEvents)),
     Effect.as(newPosition)
   );
 };
 
+const writeAndAppendEvents = <V>(
+  streamDir: string,
+  streamEnd: EventStreamPosition,
+  newEvents: Chunk.Chunk<V>,
+  fs: FileSystem.FileSystem,
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
+): Effect.Effect<
+  EventStreamPosition,
+  ConcurrencyConflictError,
+  FileSystem.FileSystem | Path.Path
+> =>
+  pipe(
+    validateStreamVersion(streamDir, streamEnd, fs),
+    Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
+    Effect.andThen(publishAndReturnPosition(streamEnd, newEvents, state))
+  );
+
 const appendEventsToStream =
-  <V>(config: FileSystemStoreConfig) =>
+  <V>(
+    config: FileSystemStoreConfig,
+    state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
+  ) =>
   (streamEnd: EventStreamPosition) =>
   (
     newEvents: Chunk.Chunk<V>
@@ -189,7 +264,7 @@ const appendEventsToStream =
       services,
       Effect.flatMap(([fs, path]) => {
         const streamDir = getStreamDirectoryPath(config.baseDir, streamEnd.streamId, path);
-        return writeAndAppendEvents(streamDir, streamEnd, newEvents, fs);
+        return writeAndAppendEvents(streamDir, streamEnd, newEvents, fs, state);
       })
     );
   };
@@ -307,15 +382,48 @@ const readEventsFromDirectory = <V>(
   );
 };
 
+const concatHistoricalWithQueue =
+  <V>(historical: Stream.Stream<V, never, never>) =>
+  (dequeue: Queue.Dequeue<V>): Stream.Stream<V, never, never> =>
+    pipe(historical, Stream.concat(Stream.fromQueue(dequeue)));
+
+const createLiveStreamFromHistoricalAndPubSub =
+  <V>(historical: Stream.Stream<V, never, never>) =>
+  (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
+    const subscription = PubSub.subscribe(pubsub);
+    const subscriptionEffect = pipe(
+      subscription,
+      Effect.map(concatHistoricalWithQueue(historical))
+    );
+    return Stream.unwrapScoped(subscriptionEffect);
+  };
+
+const combineHistoricalWithPubSub = <V>(
+  streamId: EventStreamId,
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
+  historical: Stream.Stream<V, never, never>
+): Effect.Effect<Stream.Stream<V, never, never>, never, never> => {
+  const pubsubEffect = ensurePubSubExists(streamId, state);
+  return pipe(
+    pubsubEffect,
+    Effect.map(createLiveStreamFromHistoricalAndPubSub(historical)),
+    Effect.flatMap(Effect.succeed)
+  );
+};
+
 const getEventsForStream =
-  <V>(config: FileSystemStoreConfig) =>
+  <V>(
+    config: FileSystemStoreConfig,
+    state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
+  ) =>
   (
     streamId: EventStreamId
   ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> =>
     pipe(
       Path.Path,
       Effect.map((path) => getStreamDirectoryPath(config.baseDir, streamId, path)),
-      Effect.flatMap(readEventsFromDirectory<V>)
+      Effect.flatMap(readEventsFromDirectory<V>),
+      Effect.flatMap((historical) => combineHistoricalWithPubSub(streamId, state, historical))
     );
 
 const EventStreamIdSchema = pipe(Schema.String, Schema.brand('EventStreamId'));
@@ -415,12 +523,35 @@ const getAllEventsFromAllStreams = <V>(
   );
 };
 
+const getHistoricalEventsForStream =
+  <V>(config: FileSystemStoreConfig) =>
+  (
+    streamId: EventStreamId
+  ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> =>
+    pipe(
+      Path.Path,
+      Effect.map((path) => getStreamDirectoryPath(config.baseDir, streamId, path)),
+      Effect.flatMap(readEventsFromDirectory<V>)
+    );
+
+const createInitialState = <V>(): FileSystemStoreState<V> => ({
+  pubSubsByStreamId: HashMap.empty(),
+});
+
+const createStoreFromState =
+  <V>(config: FileSystemStoreConfig) =>
+  (state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>): FileSystemStore<V> => ({
+    append: appendEventsToStream(config, state),
+    get: getEventsForStream(config, state),
+    getHistorical: getHistoricalEventsForStream(config),
+    getAll: () => getAllEventsFromAllStreams(config),
+  });
+
 export const make = <V>(
   config: FileSystemStoreConfig
 ): Effect.Effect<FileSystemStore<V>, never, never> =>
-  Effect.succeed({
-    append: appendEventsToStream(config),
-    get: getEventsForStream(config),
-    getHistorical: getEventsForStream(config),
-    getAll: () => getAllEventsFromAllStreams(config),
-  });
+  pipe(
+    createInitialState<V>(),
+    SynchronizedRef.make<FileSystemStoreState<V>>,
+    Effect.map(createStoreFromState(config))
+  );

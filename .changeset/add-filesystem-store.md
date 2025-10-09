@@ -17,7 +17,7 @@ This new package provides a simple filesystem-based event store that stores even
 **Limitations:**
 
 - Not recommended for production use
-- No live subscription support (historical reads only)
+- Live subscriptions work only within a single process (uses in-memory PubSub)
 - Performance not optimized for large event volumes
 
 This implementation is ideal for:

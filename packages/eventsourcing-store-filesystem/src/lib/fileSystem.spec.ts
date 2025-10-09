@@ -21,25 +21,30 @@ export const FooEventStoreTest = (store: FileSystemStore<FooEvent>) =>
   );
 
 const makeFooEventStoreLayer = () => {
-  const testDirEffect = pipe(
+  const testDir = pipe(
     Path.Path,
     Effect.map((path) =>
       path.join(
         tmpdir(),
         `eventsourcing-test-${Date.now()}-${Math.random().toString(36).substring(7)}`
       )
-    )
+    ),
+    Effect.provide(BunPath.layer),
+    Effect.runSync
   );
-  const storeEffect = pipe(
-    testDirEffect,
-    Effect.flatMap((testDir) => make<FooEvent>({ baseDir: testDir }))
-  );
-  const eventStoreLayer = pipe(storeEffect, Effect.map(FooEventStoreTest), Layer.unwrapEffect);
-  return pipe(eventStoreLayer, Layer.provide(BunFileSystem.layer), Layer.provide(BunPath.layer));
+  // eslint-disable-next-line buntest/no-runSync-in-tests -- setup function needs to create store instance synchronously
+  const store = Effect.runSync(make<FooEvent>({ baseDir: testDir }));
+  return FooEventStoreTest(store);
 };
 
 runEventStoreTestSuite(
   'Filesystem',
-  () => pipe(makeFooEventStoreLayer(), Layer.provide(silentLogger)),
+  () =>
+    pipe(
+      makeFooEventStoreLayer(),
+      Layer.provide(BunFileSystem.layer),
+      Layer.provide(BunPath.layer),
+      Layer.provide(silentLogger)
+    ),
   { supportsHorizontalScaling: false }
 );

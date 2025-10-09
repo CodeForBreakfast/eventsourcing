@@ -68,7 +68,7 @@ This implementation is designed for **learning and debugging**, not production u
 - Each event is a separate file (can be slow with many events)
 - No caching or optimization
 - Simple concurrency control via file count checks
-- No live subscriptions (subscribe returns historical events only)
+- Live subscriptions work within a single process (uses in-memory PubSub)
 
 For production use, consider:
 
