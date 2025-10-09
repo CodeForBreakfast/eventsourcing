@@ -8,7 +8,7 @@
     "tsBuildInfoFile": "./dist/.tsbuildinfo"
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules"],
+  "exclude": ["dist", "node_modules", "**/*.test.ts", "src/tests/**"],
   "references": [
     {
       "path": "../eventsourcing-transport"
