@@ -18,10 +18,12 @@ npm install @codeforbreakfast/eventsourcing-store-filesystem
 
 ## Usage
 
+### With Bun
+
 ```typescript
 import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
 import { BunFileSystem, BunPath } from '@effect/platform-bun';
-import { Layer, Effect, pipe } from 'effect';
+import { Effect, pipe } from 'effect';
 
 const program = pipe(
   make({ baseDir: './event-data' }),
@@ -31,6 +33,44 @@ const program = pipe(
 );
 
 const eventStore = await Effect.runPromise(program);
+```
+
+### With Node.js
+
+```typescript
+import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
+import { NodeFileSystem, NodePath } from '@effect/platform-node';
+import { Effect, pipe } from 'effect';
+
+const program = pipe(
+  make({ baseDir: './event-data' }),
+  Effect.flatMap(makeFileSystemEventStore),
+  Effect.provide(NodeFileSystem.layer),
+  Effect.provide(NodePath.layer)
+);
+
+const eventStore = await Effect.runPromise(program);
+```
+
+The `baseDir` directory will be created automatically if it doesn't exist.
+
+Once created, use the `eventStore` with the standard EventStore API documented in [@codeforbreakfast/eventsourcing-store](../eventsourcing-store).
+
+## Configuration
+
+The store accepts a single configuration option:
+
+| Option    | Type     | Description                                                                        |
+| --------- | -------- | ---------------------------------------------------------------------------------- |
+| `baseDir` | `string` | Root directory for storing event files. Created automatically if it doesn't exist. |
+
+**Example:**
+
+```typescript
+import { make } from '@codeforbreakfast/eventsourcing-store-filesystem';
+
+// Configure the base directory
+const store = make({ baseDir: './my-events' });
 ```
 
 ## Directory Structure

@@ -15,17 +15,31 @@
  *
  * ## Example Usage
  *
+ * ### With Bun:
  * ```typescript
  * import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
  * import { BunFileSystem, BunPath } from '@effect/platform-bun';
- * import { Layer, Effect, pipe } from 'effect';
+ * import { Effect, pipe } from 'effect';
  *
- * // Create the store with a base directory
  * const program = pipe(
  *   make({ baseDir: './event-data' }),
  *   Effect.flatMap(makeFileSystemEventStore),
  *   Effect.provide(BunFileSystem.layer),
  *   Effect.provide(BunPath.layer)
+ * );
+ * ```
+ *
+ * ### With Node.js:
+ * ```typescript
+ * import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
+ * import { NodeFileSystem, NodePath } from '@effect/platform-node';
+ * import { Effect, pipe } from 'effect';
+ *
+ * const program = pipe(
+ *   make({ baseDir: './event-data' }),
+ *   Effect.flatMap(makeFileSystemEventStore),
+ *   Effect.provide(NodeFileSystem.layer),
+ *   Effect.provide(NodePath.layer)
  * );
  * ```
  *
