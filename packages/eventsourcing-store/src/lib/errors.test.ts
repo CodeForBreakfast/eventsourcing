@@ -45,11 +45,13 @@ describe('Event Sourcing Errors', () => {
     );
 
     it('should support type guards', () => {
-      const error = pipe(undefined, eventStoreError.write('stream-1', 'Write failed'));
-      expect(error).toBeInstanceOf(EventStoreError);
+      expect(pipe(undefined, eventStoreError.write('stream-1', 'Write failed'))).toBeInstanceOf(
+        EventStoreError
+      );
 
-      const connError = pipe(new Error('failed'), connectionError.fatal('connect'));
-      expect(isEventSourcingError(connError)).toBe(true);
+      expect(
+        isEventSourcingError(pipe(new Error('failed'), connectionError.fatal('connect')))
+      ).toBe(true);
     });
   });
 
@@ -91,13 +93,11 @@ describe('Event Sourcing Errors', () => {
 
   describe('Error helpers', () => {
     it('should provide convenient error creation', () => {
-      const errors = [
+      [
         pipe(undefined, eventStoreError.read('stream-1', 'Not found')),
         pipe(undefined, eventStoreError.write('stream-2', 'Locked')),
         pipe(undefined, eventStoreError.subscribe('stream-3', 'No permission')),
-      ];
-
-      errors.forEach((error) => {
+      ].forEach((error) => {
         expect(error).toBeInstanceOf(EventStoreError);
         expect(error.recoveryHint).toBeDefined();
       });
@@ -106,7 +106,7 @@ describe('Event Sourcing Errors', () => {
 
   describe('Type guards', () => {
     it('should identify all event sourcing errors', () => {
-      const errors = [
+      [
         new EventStoreError({ operation: 'read', details: 'test' }),
         new ProjectionError({
           projectionName: 'test',
@@ -123,9 +123,7 @@ describe('Event Sourcing Errors', () => {
           details: 'test',
           retryable: false,
         }),
-      ];
-
-      errors.forEach((error) => {
+      ].forEach((error) => {
         expect(isEventSourcingError(error)).toBe(true);
       });
 
@@ -137,16 +135,17 @@ describe('Event Sourcing Errors', () => {
 
   describe('Error serialization', () => {
     it('should serialize and deserialize correctly', () => {
-      const error = new EventStoreError({
-        operation: 'write',
-        streamId: 'test-stream',
-        details: 'Write failed',
-        cause: { message: 'DB error' },
-        recoveryHint: 'Retry later',
-      });
-
-      const serialized = JSON.stringify(error);
-      const deserialized = JSON.parse(serialized) as {
+      const deserialized = JSON.parse(
+        JSON.stringify(
+          new EventStoreError({
+            operation: 'write',
+            streamId: 'test-stream',
+            details: 'Write failed',
+            cause: { message: 'DB error' },
+            recoveryHint: 'Retry later',
+          })
+        )
+      ) as {
         readonly _tag: string;
         readonly operation: string;
         readonly streamId: string;
@@ -160,42 +159,51 @@ describe('Event Sourcing Errors', () => {
 
   describe('Constructor field assignment', () => {
     it('should create error with read operation', () => {
-      const error = new EventStoreError({
-        operation: 'read',
-        streamId: 'test-stream',
-        details: 'test details',
-      });
-
-      expect(error).toBeInstanceOf(EventStoreError);
-      expect(error.operation).toBe('read');
-      expect(error.streamId).toBe('test-stream');
-      expect(error.details).toBe('test details');
+      pipe(
+        new EventStoreError({
+          operation: 'read',
+          streamId: 'test-stream',
+          details: 'test details',
+        }),
+        (error) => {
+          expect(error).toBeInstanceOf(EventStoreError);
+          expect(error.operation).toBe('read');
+          expect(error.streamId).toBe('test-stream');
+          expect(error.details).toBe('test details');
+        }
+      );
     });
 
     it('should create error with write operation', () => {
-      const error = new EventStoreError({
-        operation: 'write',
-        streamId: 'test-stream',
-        details: 'test details',
-      });
-
-      expect(error).toBeInstanceOf(EventStoreError);
-      expect(error.operation).toBe('write');
-      expect(error.streamId).toBe('test-stream');
-      expect(error.details).toBe('test details');
+      pipe(
+        new EventStoreError({
+          operation: 'write',
+          streamId: 'test-stream',
+          details: 'test details',
+        }),
+        (error) => {
+          expect(error).toBeInstanceOf(EventStoreError);
+          expect(error.operation).toBe('write');
+          expect(error.streamId).toBe('test-stream');
+          expect(error.details).toBe('test details');
+        }
+      );
     });
 
     it('should create error with subscribe operation', () => {
-      const error = new EventStoreError({
-        operation: 'subscribe',
-        streamId: 'test-stream',
-        details: 'test details',
-      });
-
-      expect(error).toBeInstanceOf(EventStoreError);
-      expect(error.operation).toBe('subscribe');
-      expect(error.streamId).toBe('test-stream');
-      expect(error.details).toBe('test details');
+      pipe(
+        new EventStoreError({
+          operation: 'subscribe',
+          streamId: 'test-stream',
+          details: 'test details',
+        }),
+        (error) => {
+          expect(error).toBeInstanceOf(EventStoreError);
+          expect(error.operation).toBe('subscribe');
+          expect(error.streamId).toBe('test-stream');
+          expect(error.details).toBe('test details');
+        }
+      );
     });
   });
 });
