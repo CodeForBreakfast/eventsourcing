@@ -20,6 +20,7 @@ import preferEffectPlatform from './prefer-effect-platform.js';
 import suggestCurryingOpportunity from './suggest-currying-opportunity.js';
 import noEtaExpansion from './no-eta-expansion.js';
 import noUnnecessaryFunctionAlias from './no-unnecessary-function-alias.js';
+import noIntermediateEffectVariables from './no-intermediate-effect-variables.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -44,4 +45,5 @@ export default {
   'suggest-currying-opportunity': suggestCurryingOpportunity,
   'no-eta-expansion': noEtaExpansion,
   'no-unnecessary-function-alias': noUnnecessaryFunctionAlias,
+  'no-intermediate-effect-variables': noIntermediateEffectVariables,
 };

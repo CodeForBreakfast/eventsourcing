@@ -15,7 +15,7 @@ const logError = (message: string, error: unknown): Effect.Effect<void> =>
 const myEffect = Effect.succeed('test');
 
 // This SHOULD trigger a warning because params are already at end (good currying opportunity)
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Intentionally triggering to verify rule works
+// eslint-disable-next-line effect/suggest-currying-opportunity, effect/no-intermediate-effect-variables -- Intentionally triggering to verify rule works
 const example1 = Effect.catchAll(myEffect, (error) => logError('Failed', error));
 
 // =============================================================================
@@ -29,6 +29,7 @@ const logErrorWrongOrder = (error: unknown, message: string): Effect.Effect<void
 // Rule won't suggest because param (error) comes first, not last
 // Would require changing signature from (error, message) to (message, error)
 // This breaks semantic ordering
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const example2 = Effect.catchAll(myEffect, (error) => logErrorWrongOrder(error, 'Failed'));
 
 // =============================================================================
@@ -62,7 +63,7 @@ const example4 = Effect.map(Effect.succeed(50), (value) =>
 // =============================================================================
 
 // Rule doesn't trigger on Effect library functions
-// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
+// eslint-disable-next-line effect/no-eta-expansion, effect/no-intermediate-effect-variables -- Testing currying rule, not eta-expansion
 const validExample1 = Effect.flatMap(myEffect, (x) => Effect.succeed(x));
 
 // =============================================================================
@@ -70,6 +71,7 @@ const validExample1 = Effect.flatMap(myEffect, (x) => Effect.succeed(x));
 // =============================================================================
 
 // Param 'x' is in the middle, not at the end - would require reordering
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const validExample2 = Effect.map(myEffect, (x) => processData('static', x, 'suffix'));
 
 // =============================================================================

@@ -246,6 +246,56 @@ Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 
 **Note:** This rule only triggers on user-defined functions, not Effect library functions.
 
+### `no-intermediate-effect-variables`
+
+Forbids storing Effect/Stream/PubSub/etc results in intermediate variables before using them in pipes or other functions. Enforces composition into a single pipe chain for better readability and proper functional composition.
+
+❌ Bad:
+
+```typescript
+// Breaking up the pipe chain unnecessarily
+const userEffect = fetchUser(userId);
+const result = pipe(userEffect, Effect.flatMap(validateUser), Effect.map(formatUserData));
+
+// Storing intermediate pipe results
+const validated = pipe(data, Schema.decodeUnknown(UserSchema));
+const processed = Effect.map(validated, processUser);
+return Effect.flatMap(processed, saveToDatabase);
+
+// Multiple intermediate variables in sequence
+const stream = Stream.fromIterable(items);
+const filtered = pipe(stream, Stream.filter(isValid));
+const mapped = pipe(filtered, Stream.map(transform));
+return Stream.runCollect(mapped);
+```
+
+✅ Good:
+
+```typescript
+// Single cohesive pipe chain
+const result = pipe(fetchUser(userId), Effect.flatMap(validateUser), Effect.map(formatUserData));
+
+// All transformations in one composition
+return pipe(
+  data,
+  Schema.decodeUnknown(UserSchema),
+  Effect.map(processUser),
+  Effect.flatMap(saveToDatabase)
+);
+
+// Stream operations composed together
+return pipe(
+  Stream.fromIterable(items),
+  Stream.filter(isValid),
+  Stream.map(transform),
+  Stream.runCollect
+);
+```
+
+**Rationale**: Intermediate variables break the flow of pipe composition and make code harder to follow. They encourage imperative thinking instead of functional composition. By composing everything into a single pipe chain, the data flow becomes clear and transformation steps are explicitly ordered. This rule is particularly important for catching developers who try to work around proper pipe usage.
+
+**Note:** This is an aggressive rule included in the `pipeStrict` config. It enforces proper functional composition patterns and prevents common anti-patterns where developers break up pipe chains unnecessarily.
+
 ## Rule Presets
 
 ### Recommended Presets
@@ -299,6 +349,7 @@ Enforces strict pipe composition rules:
 
 - Forbids nested `pipe()` calls
 - Forbids multiple `pipe()` calls per function
+- Forbids storing Effect-like values in intermediate variables
 
 #### `plugin`
 
@@ -436,6 +487,7 @@ export default [
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
+- `effect/no-intermediate-effect-variables` - Forbid storing Effect-like values in intermediate variables (opt-in via `pipeStrict` config)
 
 ## Available Exports
 

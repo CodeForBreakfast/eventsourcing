@@ -6,6 +6,7 @@ import { pipe, Effect } from 'effect';
 
 const multiplePipes = () => {
   const result1 = pipe(42, (x) => x + 1);
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Testing multiple pipes, not intermediate variables
   const result2 = pipe(result1, (x) => x * 2);
   return result2;
 };

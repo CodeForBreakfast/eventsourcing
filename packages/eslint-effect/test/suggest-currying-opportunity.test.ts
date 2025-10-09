@@ -27,18 +27,19 @@ type ErrorWithMessage = { readonly error: string };
 const myEffect = Effect.succeed('test');
 
 // Params already at end - no reordering needed
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Testing currying opportunity with single curried arg
+// eslint-disable-next-line effect/suggest-currying-opportunity, effect/no-intermediate-effect-variables -- Testing currying opportunity with single curried arg
 const handleError1 = Effect.catchAll(myEffect, (error) =>
   logHandlerError('Failed to process', error)
 );
 
 // Params already at end - no reordering needed
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Testing currying opportunity with message arg
+// eslint-disable-next-line effect/suggest-currying-opportunity, effect/no-intermediate-effect-variables -- Testing currying opportunity with message arg
 const handleError2 = Effect.catchAll(myEffect, (error: unknown) =>
   logHandlerError('Failed with context', error)
 );
 
 // Would create 2-level currying - filtered out by maxCurriedParams default
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const processWithPrefix = Effect.map(myEffect, (data: string) =>
   processData('prefix-', '-suffix', data)
 );
@@ -49,11 +50,13 @@ const validateValue = Effect.map(Effect.succeed(50), (value: number) =>
 );
 
 // Needs reordering (param comes first) - filtered out by default (allowReordering: false)
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const handleError3 = Effect.catchAll(myEffect, (error: unknown) =>
   logHandlerErrorWrongOrder(error, 'Failed to process')
 );
 
 // Needs reordering (param comes first) - filtered out by default (allowReordering: false)
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const processWithPrefixReorder = Effect.map(myEffect, (data: string) =>
   processDataWrongOrder(data, 'prefix-', '-suffix')
 );
@@ -61,13 +64,15 @@ const processWithPrefixReorder = Effect.map(myEffect, (data: string) =>
 // Valid patterns that should NOT trigger the rule:
 
 // Already properly curried or doesn't fit the pattern
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const validPattern1 = Effect.map(myEffect, (x: string) => x.length * 2);
 
 // Using Effect library function - should not suggest currying
-// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
+// eslint-disable-next-line effect/no-eta-expansion, effect/no-intermediate-effect-variables -- Testing currying rule, not eta-expansion
 const validPattern2 = Effect.flatMap(myEffect, (x: string) => Effect.succeed(x));
 
 // Param in the middle - would require reordering (filtered out by default)
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Focus on testing currying
 const validPattern3 = Effect.map(myEffect, (x: string) => processData('static', x, 'suffix'));
 
 // Param not passed through directly - uses property access
