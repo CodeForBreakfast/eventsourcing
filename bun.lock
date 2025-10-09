@@ -165,6 +165,25 @@
         "effect": "^3.17.0",
       },
     },
+    "packages/eventsourcing-store-filesystem": {
+      "name": "@codeforbreakfast/eventsourcing-store-filesystem",
+      "version": "0.1.0",
+      "dependencies": {
+        "@codeforbreakfast/eventsourcing-store": "workspace:*",
+      },
+      "devDependencies": {
+        "@codeforbreakfast/buntest": "workspace:*",
+        "@effect/platform-bun": "^0.80.0 || ^0.81.0",
+        "@types/node": "24.6.2",
+        "effect": "3.18.1",
+        "eslint": "9.36.0",
+        "typescript": "5.9.3",
+      },
+      "peerDependencies": {
+        "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0",
+        "effect": "^3.17.0",
+      },
+    },
     "packages/eventsourcing-store-inmemory": {
       "name": "@codeforbreakfast/eventsourcing-store-inmemory",
       "version": "0.2.7",
@@ -360,6 +379,8 @@
     "@codeforbreakfast/eventsourcing-protocol": ["@codeforbreakfast/eventsourcing-protocol@workspace:packages/eventsourcing-protocol"],
 
     "@codeforbreakfast/eventsourcing-store": ["@codeforbreakfast/eventsourcing-store@workspace:packages/eventsourcing-store"],
+
+    "@codeforbreakfast/eventsourcing-store-filesystem": ["@codeforbreakfast/eventsourcing-store-filesystem@workspace:packages/eventsourcing-store-filesystem"],
 
     "@codeforbreakfast/eventsourcing-store-inmemory": ["@codeforbreakfast/eventsourcing-store-inmemory@workspace:packages/eventsourcing-store-inmemory"],
 
