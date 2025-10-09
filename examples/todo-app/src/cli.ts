@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, Layer, Console, Option, Chunk, pipe, Match, Schema } from 'effect';
+import { Effect, Layer, Console, Option, Chunk, pipe, Match } from 'effect';
 import { Projection } from '@codeforbreakfast/eventsourcing-projections';
 import {
   makeInMemoryEventStore,
@@ -104,39 +104,8 @@ const createTodo = (title: string) => {
   );
 };
 
-const TodoStateSchema = Schema.Struct({
-  title: Schema.String,
-  completed: Schema.Boolean,
-  deleted: Schema.Boolean,
-});
-
-const TodoStateOptionSchema = Schema.OptionFromSelf(TodoStateSchema);
-
-const processCommandEvents =
-  (
-    command: (
-      state: Readonly<Option.Option<TodoState>>
-    ) => Effect.Effect<ReadonlyArray<TodoEvent>, Error>,
-    todoId: TodoId,
-    eventNumber: number,
-    successMessage: string,
-    noOpMessage: string
-  ) =>
-  (todoState: Readonly<Option.Option<TodoState>>) =>
-    pipe(
-      todoState,
-      command,
-      Effect.flatMap((events) =>
-        handleConditional(
-          events,
-          commitAndPublish(todoId, eventNumber, events, successMessage),
-          Console.log(noOpMessage)
-        )
-      )
-    );
-
-const decodeAndProcessCommand = (
-  data: unknown,
+const processCommand = (
+  todoState: Readonly<Option.Option<TodoState>>,
   command: (
     state: Readonly<Option.Option<TodoState>>
   ) => Effect.Effect<ReadonlyArray<TodoEvent>, Error>,
@@ -146,9 +115,15 @@ const decodeAndProcessCommand = (
   noOpMessage: string
 ) =>
   pipe(
-    data,
-    Schema.decodeUnknown(TodoStateOptionSchema),
-    Effect.flatMap(processCommandEvents(command, todoId, eventNumber, successMessage, noOpMessage))
+    todoState,
+    command,
+    Effect.flatMap((events) =>
+      handleConditional(
+        events,
+        commitAndPublish(todoId, eventNumber, events, successMessage),
+        Console.log(noOpMessage)
+      )
+    )
   );
 
 const executeCommand = (
@@ -163,7 +138,7 @@ const executeCommand = (
     todoId,
     TodoAggregateRoot.load,
     Effect.flatMap((state) =>
-      decodeAndProcessCommand(
+      processCommand(
         state.data,
         command,
         todoId,
