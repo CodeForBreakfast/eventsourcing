@@ -9,6 +9,6 @@
     "downlevelIteration": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "build.ts"],
+  "exclude": ["dist", "build.ts", "**/*.spec.ts"],
   "references": [{ "path": "../eventsourcing-store" }]
 }

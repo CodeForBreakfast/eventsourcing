@@ -19,7 +19,7 @@
     "src"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --build",
+    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc --project tsconfig.build.json",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit",
     "clean": "rm -rf dist",
