@@ -120,7 +120,7 @@ const application = pipe(
 The server-side protocol handles incoming commands and publishes events:
 
 ```typescript
-import { Effect, Stream, pipe, Context } from 'effect';
+import { Effect, Stream, pipe } from 'effect';
 import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
 import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import { toStreamId } from '@codeforbreakfast/eventsourcing-store';
@@ -137,10 +137,7 @@ const createSuccessResult = (target: string) =>
     })
   );
 
-const handleCommand = (
-  protocol: Context.Tag.Service<typeof ServerProtocol>,
-  command: WireCommand
-) =>
+const handleCommand = (protocol: typeof ServerProtocol.Service, command: WireCommand) =>
   pipe(
     Effect.sync(() => console.log('Received command:', command.name)),
     Effect.flatMap(() => createSuccessResult(command.target)),
@@ -248,7 +245,7 @@ Subscribes to events from a specific stream.
 import type { Effect, Stream } from 'effect';
 import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import type { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
-import type { Event, ServerProtocolError } from '@codeforbreakfast/eventsourcing-protocol';
+import type { Event } from '@codeforbreakfast/eventsourcing-protocol';
 import type { TransportError } from '@codeforbreakfast/eventsourcing-transport';
 
 interface ServerProtocolService {
@@ -256,10 +253,10 @@ interface ServerProtocolService {
   readonly sendResult: (
     commandId: string,
     result: CommandResult
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+  ) => Effect.Effect<void, TransportError, never>;
   readonly publishEvent: (
     event: Event & { readonly streamId: EventStreamId }
-  ) => Effect.Effect<void, TransportError | ServerProtocolError, never>;
+  ) => Effect.Effect<void, TransportError, never>;
 }
 ```
 
