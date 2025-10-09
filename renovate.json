@@ -9,6 +9,7 @@
     "npm:unpublishSafe",
     ":semanticCommits"
   ],
+  "ignorePaths": ["**/node_modules/**", "**/test/**", "**/tests/**"],
   "lockFileMaintenance": {
     "enabled": true,
     "automerge": true,
