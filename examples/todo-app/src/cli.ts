@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, Layer, Console, Option, Chunk, pipe, Match } from 'effect';
+import { Effect, Layer, Console, Option, Chunk, pipe, Match, Schema } from 'effect';
 import { Projection } from '@codeforbreakfast/eventsourcing-projections';
 import {
   makeInMemoryEventStore,
@@ -16,7 +16,7 @@ import { EventBus, EventBusService, makeEventBus } from './infrastructure/eventB
 import { startProcessManager } from './infrastructure/processManager';
 import { loadTodoProjection } from './projections/todoProjection';
 import { loadTodoListProjection, TodoListProjection } from './projections/todoListProjection';
-import { TodoId, UserId } from './domain/types';
+import { TodoId, TodoIdSchema, UserId } from './domain/types';
 import type { TodoEvent } from './domain/todoEvents';
 import type { TodoListEvent } from './domain/todoListEvents';
 
@@ -253,6 +253,20 @@ const missingArgError = (message: string, usage: string) =>
     Effect.andThen(Effect.fail(new Error(message)))
   );
 
+const parseTodoId = (id: string): Effect.Effect<TodoId, Error> =>
+  pipe(
+    id,
+    Schema.decode(TodoIdSchema),
+    Effect.mapError(() => new Error(`Invalid TODO ID: ${id}`))
+  );
+
+const parseAndCompleteTodo = (id: string) => pipe(id, parseTodoId, Effect.flatMap(completeTodo));
+
+const parseAndUncompleteTodo = (id: string) =>
+  pipe(id, parseTodoId, Effect.flatMap(uncompleteTodo));
+
+const parseAndDeleteTodo = (id: string) => pipe(id, parseTodoId, Effect.flatMap(deleteTodo));
+
 const runCommand = (args: ReadonlyArray<string>) => {
   const command = args[0];
 
@@ -268,13 +282,13 @@ const runCommand = (args: ReadonlyArray<string>) => {
     Match.when('complete', () => {
       const id = args[1];
       return id
-        ? completeTodo(id as TodoId)
+        ? parseAndCompleteTodo(id)
         : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts complete <id>');
     }),
     Match.when('uncomplete', () => {
       const id = args[1];
       return id
-        ? uncompleteTodo(id as TodoId)
+        ? parseAndUncompleteTodo(id)
         : missingArgError(
             'Error: TODO ID is required',
             'Usage: bun run src/cli.ts uncomplete <id>'
@@ -283,7 +297,7 @@ const runCommand = (args: ReadonlyArray<string>) => {
     Match.when('delete', () => {
       const id = args[1];
       return id
-        ? deleteTodo(id as TodoId)
+        ? parseAndDeleteTodo(id)
         : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts delete <id>');
     }),
     Match.when('list', listTodos),

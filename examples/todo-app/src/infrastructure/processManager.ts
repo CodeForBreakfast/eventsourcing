@@ -1,4 +1,4 @@
-import { Effect, Stream, pipe, Chunk, Option } from 'effect';
+import { Effect, Stream, pipe, Chunk, Schema } from 'effect';
 import {
   AggregateState,
   provideCommandInitiator,
@@ -8,7 +8,7 @@ import { EventBus, EventBusService } from './eventBus';
 import { TodoCreated, TodoDeleted } from '../domain/todoEvents';
 import { TodoListAggregateRoot, TodoListState } from '../domain/todoListAggregate';
 import { TodoListEvent } from '../domain/todoListEvents';
-import { TODO_LIST_ID, UserId, TodoId } from '../domain/types';
+import { TODO_LIST_ID, UserId, UserIdSchema, TodoId, TodoIdSchema } from '../domain/types';
 
 const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoCreated';
@@ -16,10 +16,22 @@ const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId
 const isTodoDeleted = (event: unknown): event is EventRecord<TodoDeleted, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoDeleted';
 
+const parseUserId = (userId: unknown): Effect.Effect<UserId, Error> =>
+  pipe(
+    userId,
+    Schema.decodeUnknown(UserIdSchema),
+    Effect.mapError(() => new Error(`Invalid UserId: ${String(userId)}`))
+  );
+
+const provideInitiatorFromUserId =
+  <TResult, TError>(effect: Effect.Effect<TResult, TError>) =>
+  (userId: UserId) =>
+    pipe(effect, Effect.provide(provideCommandInitiator(userId)));
+
 const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResult, TError>(
   event: TEvent,
   effect: Effect.Effect<TResult, TError>
-) => pipe(effect, Effect.provide(provideCommandInitiator(event.metadata.origin as UserId)));
+) => pipe(event.metadata.origin, parseUserId, Effect.flatMap(provideInitiatorFromUserId(effect)));
 
 const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<TodoListEvent>>) =>
   events.length > 0
@@ -41,10 +53,12 @@ const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
     Effect.flatMap(commitEvents(state.nextEventNumber))
   );
 
-const castToAggregateState = (state: {
-  readonly nextEventNumber: number;
-  readonly data: Readonly<Option.Option<unknown>>;
-}): Readonly<AggregateState<TodoListState>> => state as Readonly<AggregateState<TodoListState>>;
+const parseTodoId = (todoId: string): Effect.Effect<TodoId, Error> =>
+  pipe(
+    todoId,
+    Schema.decode(TodoIdSchema),
+    Effect.mapError(() => new Error(`Invalid TodoId: ${todoId}`))
+  );
 
 const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
   event: TEvent,
@@ -55,19 +69,24 @@ const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
   pipe(
     TODO_LIST_ID,
     TodoListAggregateRoot.load,
-    Effect.map(castToAggregateState),
     Effect.flatMap((state) => executeAndCommit(state, event, buildCommand(state)))
   );
 
-const handleTodoCreated = (streamId: string, event: Readonly<EventRecord<TodoCreated, UserId>>) =>
+const executeAddTodo = (event: Readonly<EventRecord<TodoCreated, UserId>>) => (todoId: TodoId) =>
   handleCommand(event, (state) =>
-    pipe(state.data, TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title))
+    pipe(state.data, TodoListAggregateRoot.commands.addTodo(todoId, event.data.title))
+  );
+
+const handleTodoCreated = (streamId: string, event: Readonly<EventRecord<TodoCreated, UserId>>) =>
+  pipe(streamId, parseTodoId, Effect.flatMap(executeAddTodo(event)));
+
+const executeRemoveTodo = (event: Readonly<EventRecord<TodoDeleted, UserId>>) => (todoId: TodoId) =>
+  handleCommand(event, (state) =>
+    pipe(state.data, TodoListAggregateRoot.commands.removeTodo(todoId))
   );
 
 const handleTodoDeleted = (streamId: string, event: Readonly<EventRecord<TodoDeleted, UserId>>) =>
-  handleCommand(event, (state) =>
-    pipe(state.data, TodoListAggregateRoot.commands.removeTodo(streamId as TodoId))
-  );
+  pipe(streamId, parseTodoId, Effect.flatMap(executeRemoveTodo(event)));
 
 const handleCreatedWithLogging = ({
   streamId,

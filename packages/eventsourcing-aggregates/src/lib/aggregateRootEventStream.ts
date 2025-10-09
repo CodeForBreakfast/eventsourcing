@@ -208,11 +208,6 @@ const processEventStream =
       Effect.flatMap(foldEventsIntoState(apply, stream))
     );
 
-const createDecodedResult = <TState>(
-  decodedEventNumber: EventNumber,
-  data: Readonly<Option.Option<TState>>
-) => ({ nextEventNumber: decodedEventNumber, data }) as const;
-
 const decodeEventNumber = <TState>(
   nextEventNumber: Readonly<number>,
   data: Readonly<Option.Option<TState>>
@@ -220,32 +215,62 @@ const decodeEventNumber = <TState>(
   pipe(
     nextEventNumber,
     Schema.decode(EventNumber),
-    Effect.map((decodedEventNumber) => createDecodedResult(decodedEventNumber, data))
+    Effect.map((decodedEventNumber) =>
+      (<TState>(
+        decodedEventNumber: EventNumber,
+        data: Readonly<Option.Option<TState>>
+      ): AggregateState<TState> => ({ nextEventNumber: decodedEventNumber, data }))(
+        decodedEventNumber,
+        data
+      )
+    )
   );
 
 const loadStreamEvents = <TId extends string, TEvent>(eventStore: EventStore<TEvent>, id: TId) =>
   pipe(id, toStreamId, Effect.flatMap(beginning), Effect.flatMap(eventStore.read));
 
-const stripMetadata = <TEvent, TOrigin>(record: EventRecord<TEvent, TOrigin>): TEvent => {
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- _ is intentionally unused in destructuring to extract metadata
-  const { metadata: _, ...event } = record;
-  return event as TEvent;
-};
-
 const loadAggregateState =
-  <TId extends string, TState, TEvent, TOrigin>(
+  <TId extends string, TState, TEvent extends Record<string, unknown>, TOrigin>(
     id: TId,
     apply: (
       state: Readonly<Option.Option<TState>>
     ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>
   ) =>
-  (eventStore: EventStore<EventRecord<TEvent, TOrigin>>) =>
+  (
+    eventStore: EventStore<EventRecord<TEvent, TOrigin>>
+  ): Effect.Effect<AggregateState<TState>, ParseResult.ParseError> =>
     pipe(
       loadStreamEvents(eventStore, id),
-      Effect.map(Stream.map(stripMetadata)),
       Effect.flatMap(processEventStream(apply)),
-      Effect.flatMap(({ nextEventNumber, data }) => decodeEventNumber(nextEventNumber, data))
-    );
+      Effect.flatMap(
+        ({
+          nextEventNumber,
+          data,
+        }): Effect.Effect<AggregateState<TState>, ParseResult.ParseError> =>
+          decodeEventNumber(nextEventNumber, data)
+      )
+    ) as Effect.Effect<AggregateState<TState>, ParseResult.ParseError>;
+
+/**
+ * Represents an aggregate root with event sourcing capabilities
+ * @since 0.4.0
+ */
+export interface AggregateRoot<
+  TId extends string,
+  TState,
+  TEvent extends Record<string, unknown>,
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- TInitiator is used in the makeAggregateRoot implementation
+  _TInitiator,
+  TCommands,
+  TTag,
+> {
+  readonly new: () => AggregateState<TState>;
+  readonly load: (id: TId) => Effect.Effect<AggregateState<TState>, ParseResult.ParseError, TTag>;
+  readonly commit: (
+    options: CommitOptions<TId, TEvent>
+  ) => Effect.Effect<void, ParseResult.ParseError, TTag>;
+  readonly commands: TCommands;
+}
 
 /**
  * Creates an aggregate root with event sourcing capabilities
@@ -288,7 +313,14 @@ const loadAggregateState =
  * @throws {ParseResult.ParseError} If events cannot be parsed
  * @throws {EventStoreError} If the event store operations fail
  */
-export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState, TCommands, TTag>(
+export const makeAggregateRoot = <
+  TId extends string,
+  TInitiator,
+  TEvent extends Record<string, unknown>,
+  TState,
+  TCommands,
+  TTag,
+>(
   _idSchema: Schema.Schema<TId, string>,
   // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Schema.Schema requires any for input type
   _initiatorSchema: Schema.Schema<TInitiator, any>,
@@ -297,13 +329,16 @@ export const makeAggregateRoot = <TId extends string, TInitiator, TEvent, TState
   ) => (event: Readonly<TEvent>) => Effect.Effect<TState, ParseResult.ParseError>,
   tag: Readonly<Context.Tag<TTag, EventStore<EventRecord<TEvent, TInitiator>>>>,
   commands: TCommands
-) => ({
+): AggregateRoot<TId, TState, TEvent, TInitiator, TCommands, TTag> => ({
   new: (): AggregateState<TState> => ({
     nextEventNumber: 0,
     data: Option.none(),
   }),
-  load: (id: TId) => pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
-  commit: commit<TId, TEvent, TInitiator, TTag>(tag),
+  load: (id: TId): Effect.Effect<AggregateState<TState>, ParseResult.ParseError, TTag> =>
+    pipe(tag, Effect.flatMap(loadAggregateState(id, apply))),
+  commit: commit<TId, TEvent, TInitiator, TTag>(tag) as (
+    options: CommitOptions<TId, TEvent>
+  ) => Effect.Effect<void, ParseResult.ParseError, TTag>,
   commands,
 });
 
