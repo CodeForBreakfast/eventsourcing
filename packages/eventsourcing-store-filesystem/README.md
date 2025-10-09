@@ -18,35 +18,17 @@ npm install @codeforbreakfast/eventsourcing-store-filesystem
 
 ## Usage
 
-### With Bun
-
 ```typescript
 import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
 import { BunFileSystem, BunPath } from '@effect/platform-bun';
 import { Effect, pipe } from 'effect';
 
+// Also works with Node.js using NodeFileSystem and NodePath from '@effect/platform-node'
 const program = pipe(
   make({ baseDir: './event-data' }),
   Effect.flatMap(makeFileSystemEventStore),
   Effect.provide(BunFileSystem.layer),
   Effect.provide(BunPath.layer)
-);
-
-const eventStore = await Effect.runPromise(program);
-```
-
-### With Node.js
-
-```typescript
-import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
-import { NodeFileSystem, NodePath } from '@effect/platform-node';
-import { Effect, pipe } from 'effect';
-
-const program = pipe(
-  make({ baseDir: './event-data' }),
-  Effect.flatMap(makeFileSystemEventStore),
-  Effect.provide(NodeFileSystem.layer),
-  Effect.provide(NodePath.layer)
 );
 
 const eventStore = await Effect.runPromise(program);
