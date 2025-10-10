@@ -343,20 +343,17 @@ const startConnectionHandler = (
 
 const createServerProtocolService = (
   server: ReadonlyDeep<Server.Transport>
-): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> => {
-  const queueAndState = Effect.all([
-    Queue.unbounded<WireCommand>(),
-    Ref.make<ServerState>({
-      subscriptions: HashMap.empty(),
-    }),
-  ]);
-  return pipe(
-    queueAndState,
+): Effect.Effect<Context.Tag.Service<typeof ServerProtocol>, TransportError, Scope.Scope> =>
+  pipe(
+    [
+      Queue.unbounded<WireCommand>(),
+      Ref.make<ServerState>({ subscriptions: HashMap.empty() }),
+    ] as const,
+    Effect.all,
     Effect.flatMap(([commandQueue, stateRef]) =>
       startConnectionHandler(server, commandQueue, stateRef)
     )
   );
-};
 
 // ============================================================================
 // Live Implementation

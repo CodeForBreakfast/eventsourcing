@@ -461,6 +461,7 @@ const runTest = <A, E, R>(
     readonly server: ReadonlyDeep<InMemoryServer>;
     readonly clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>;
   }) => Effect.Effect<A, E, R>
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
 ) => pipe(setupTestEnvironment, Effect.flatMap(testLogic), Effect.scoped);
 
 const runTestWithProtocol = <A, E, R>(
@@ -1100,6 +1101,7 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test resubscription behavior across scope boundaries
         collectFirstBatch,
         Effect.scoped,
         Effect.flatMap(verifyFirstBatchAndResubscribe),
@@ -1335,8 +1337,10 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify cleanup behavior between connection cycles
         subscribeAndVerifyFirstConnection,
         Effect.scoped,
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify subscription works after reconnection
         Effect.andThen(subscribeAndVerifyAfterReconnection),
         Effect.provide(ProtocolLive(clientTransport))
       );
@@ -1491,6 +1495,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should emit commands through server protocol onWireCommand stream', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           runServerProtocolTest(server, clientTransport)
@@ -1599,6 +1604,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should deliver command results via server protocol sendResult', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           runServerSendResultTest(server, clientTransport)
@@ -1671,6 +1677,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should publish events via server protocol publishEvent', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           runPublishEventTest(server, clientTransport)
@@ -1891,6 +1898,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should handle very large payloads in commands and events', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           setupLargePayloadServer(server, clientTransport)
@@ -1911,17 +1919,14 @@ describe('Protocol Behavior Tests', () => {
         }))
       );
 
-    const subscribeAndCollectCycleEvent = (cycleNumber: number) =>
-      pipe(`cycle-stream-${cycleNumber}`, subscribe, Effect.flatMap(collectCycleEvent));
-
-    const performSubscriptionCycle = (cycleNumber: number) => {
-      const subscription = subscribeAndCollectCycleEvent(cycleNumber);
-      const scopedSubscription = pipe(subscription, Effect.scoped);
-      return pipe(
-        scopedSubscription,
+    const performSubscriptionCycle = (cycleNumber: number) =>
+      pipe(
+        `cycle-stream-${cycleNumber}`,
+        subscribe,
+        Effect.flatMap(collectCycleEvent),
+        Effect.scoped,
         Effect.map((result) => ({ ...result, cycleNumber }))
       );
-    };
 
     const verifyCycleResults = (
       results: readonly {
@@ -2003,6 +2008,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should handle rapid subscription/unsubscription cycles', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           setupRapidCycleTest(server, clientTransport)
@@ -2030,14 +2036,17 @@ describe('Protocol Behavior Tests', () => {
 
     const runCleanupTest = (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test subscription cleanup across scope boundaries
         subscribeAndDrainUser123,
         Effect.scoped,
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify new subscription works after previous cleanup
         Effect.andThen(subscribeAndDrainUser456),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
     it.effect('should clean up subscriptions when stream scope ends', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ clientTransport }) => runCleanupTest(clientTransport)),
         Effect.scoped
@@ -2092,6 +2101,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('should handle multiple sequential commands after cleanup', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           runSequentialCommandsTest(server, clientTransport)
@@ -2179,6 +2189,7 @@ describe('Protocol Behavior Tests', () => {
         Effect.withSpan('client-test-span')
       );
 
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to fork server-side command processing
       return pipe(processFirstCommand, Effect.andThen(clientWork));
     };
 
@@ -2209,6 +2220,7 @@ describe('Protocol Behavior Tests', () => {
 
     it.effect('client span context should propagate through protocol layer', () =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test helper: setupTestEnvironment is reused across multiple test cases for consistency
         setupTestEnvironment,
         Effect.flatMap(({ server, clientTransport }) =>
           runTestWithServerProtocol(server, clientTransport)
