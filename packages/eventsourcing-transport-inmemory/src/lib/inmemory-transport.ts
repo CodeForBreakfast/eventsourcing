@@ -15,7 +15,19 @@
  * - Pure functional design with no global state
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, HashMap, HashSet, Option, pipe } from 'effect';
+import {
+  Effect,
+  Stream,
+  Scope,
+  Ref,
+  Queue,
+  PubSub,
+  HashMap,
+  HashSet,
+  Option,
+  pipe,
+  Match,
+} from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -142,7 +154,12 @@ const forwardMessagesToSubscriber =
 const applyFilterToStream =
   (filter?: (message: ReadonlyDeep<TransportMessage>) => boolean) =>
   (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>): Stream.Stream<TransportMessage> =>
-    filter !== undefined ? Stream.filter(Stream.fromQueue(queue), filter) : Stream.fromQueue(queue);
+    pipe(
+      filter,
+      Match.value,
+      Match.when(Match.undefined, () => Stream.fromQueue(queue)),
+      Match.orElse((filterFn) => Stream.filter(Stream.fromQueue(queue), filterFn))
+    );
 
 const createSimpleSubscription =
   (sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
