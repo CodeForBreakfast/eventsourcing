@@ -96,9 +96,10 @@ const requireExistingTodo = <A, E, R>(
 const failIfDeletedTodo =
   (operation: string) =>
   (state: TodoState): Effect.Effect<TodoState, Error> =>
-    state.deleted
-      ? Effect.fail(new Error(`Cannot ${operation} deleted TODO`))
-      : Effect.succeed(state);
+    Effect.if(state.deleted, {
+      onTrue: () => Effect.fail(new Error(`Cannot ${operation} deleted TODO`)),
+      onFalse: () => Effect.succeed(state),
+    });
 
 const createTodo = (title: string) => () =>
   Effect.succeed([
@@ -128,16 +129,16 @@ const complete = () =>
       current,
       failIfDeletedTodo('complete'),
       Effect.flatMap((state) =>
-        Effect.succeed(
-          state.completed
-            ? []
-            : [
-                {
-                  type: 'TodoCompleted' as const,
-                  data: { completedAt: new Date() },
-                } satisfies TodoCompleted,
-              ]
-        )
+        Effect.if(state.completed, {
+          onTrue: () => Effect.succeed([]),
+          onFalse: () =>
+            Effect.succeed([
+              {
+                type: 'TodoCompleted' as const,
+                data: { completedAt: new Date() },
+              } satisfies TodoCompleted,
+            ]),
+        })
       )
     )
   );
@@ -148,32 +149,32 @@ const uncomplete = () =>
       current,
       failIfDeletedTodo('uncomplete'),
       Effect.flatMap((state) =>
-        Effect.succeed(
-          state.completed
-            ? [
-                {
-                  type: 'TodoUncompleted' as const,
-                  data: { uncompletedAt: new Date() },
-                } satisfies TodoUncompleted,
-              ]
-            : []
-        )
+        Effect.if(state.completed, {
+          onTrue: () =>
+            Effect.succeed([
+              {
+                type: 'TodoUncompleted' as const,
+                data: { uncompletedAt: new Date() },
+              } satisfies TodoUncompleted,
+            ]),
+          onFalse: () => Effect.succeed([]),
+        })
       )
     )
   );
 
 const deleteTodo = () =>
   requireExistingTodo('delete', (current) =>
-    Effect.succeed(
-      current.deleted
-        ? []
-        : [
-            {
-              type: 'TodoDeleted' as const,
-              data: { deletedAt: new Date() },
-            } satisfies TodoDeleted,
-          ]
-    )
+    Effect.if(current.deleted, {
+      onTrue: () => Effect.succeed([]),
+      onFalse: () =>
+        Effect.succeed([
+          {
+            type: 'TodoDeleted' as const,
+            data: { deletedAt: new Date() },
+          } satisfies TodoDeleted,
+        ]),
+    })
   );
 
 export const TodoAggregateRoot = makeAggregateRoot(

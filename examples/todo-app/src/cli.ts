@@ -265,30 +265,38 @@ const runCommand = (args: ReadonlyArray<string>) => {
     Match.value,
     Match.when('create', () => {
       const title = args[1];
-      return title
-        ? createTodo(title)
-        : missingArgError('Error: Title is required', 'Usage: bun run src/cli.ts create <title>');
+      return Effect.if(Boolean(title), {
+        onTrue: () => createTodo(title!),
+        onFalse: () =>
+          missingArgError('Error: Title is required', 'Usage: bun run src/cli.ts create <title>'),
+      });
     }),
     Match.when('complete', () => {
       const id = args[1];
-      return id
-        ? parseAndCompleteTodo(id)
-        : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts complete <id>');
+      return Effect.if(Boolean(id), {
+        onTrue: () => parseAndCompleteTodo(id!),
+        onFalse: () =>
+          missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts complete <id>'),
+      });
     }),
     Match.when('uncomplete', () => {
       const id = args[1];
-      return id
-        ? parseAndUncompleteTodo(id)
-        : missingArgError(
+      return Effect.if(Boolean(id), {
+        onTrue: () => parseAndUncompleteTodo(id!),
+        onFalse: () =>
+          missingArgError(
             'Error: TODO ID is required',
             'Usage: bun run src/cli.ts uncomplete <id>'
-          );
+          ),
+      });
     }),
     Match.when('delete', () => {
       const id = args[1];
-      return id
-        ? parseAndDeleteTodo(id)
-        : missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts delete <id>');
+      return Effect.if(Boolean(id), {
+        onTrue: () => parseAndDeleteTodo(id!),
+        onFalse: () =>
+          missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts delete <id>'),
+      });
     }),
     Match.when('list', listTodos),
     Match.orElse(showHelp)
