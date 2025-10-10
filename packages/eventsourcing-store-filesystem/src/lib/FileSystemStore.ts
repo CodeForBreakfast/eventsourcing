@@ -106,7 +106,7 @@ const writeEventToFile = <V>(
   event: V,
   fs: FileSystem.FileSystem
 ): Effect.Effect<void, never, never> => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to separate serialization concern from file writing
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.sync requires a thunk argument, cannot be piped differently
   const serialized = Effect.sync(() => JSON.stringify(event, null, 2));
   const writeFile = writeFileStringForPath(eventPath, fs);
   return pipe(serialized, Effect.flatMap(writeFile));
@@ -147,6 +147,7 @@ const writeEventsToFiles = <V>(
   startIndex: number,
   events: Chunk.Chunk<V>
 ): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> => {
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
   return pipe(
     services,
@@ -260,6 +261,7 @@ const appendEventsToStream =
     ConcurrencyConflictError,
     FileSystem.FileSystem | Path.Path
   > => {
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
     return pipe(
       services,
@@ -376,7 +378,7 @@ const readEventsFromDirectoryWithServices = <V>(
 const readEventsFromDirectory = <V>(
   streamDir: string
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to gather required services before processing
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
   return pipe(
     services,
@@ -392,9 +394,9 @@ const concatHistoricalWithQueue =
 const createLiveStreamFromHistoricalAndPubSub =
   <V>(historical: Stream.Stream<V, never, never>) =>
   (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable needed to create subscription before mapping
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- PubSub.subscribe requires pubsub argument, cannot be piped differently
     const subscription = PubSub.subscribe(pubsub);
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to transform subscription into stream with historical data
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Stream.unwrapScoped requires Effect argument, cannot be piped differently
     const subscriptionEffect = pipe(
       subscription,
       Effect.map(concatHistoricalWithQueue(historical))
@@ -514,7 +516,7 @@ const getAllEventsFromAllStreams = <V>(
   never,
   FileSystem.FileSystem | Path.Path
 > => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to gather all required services and stream IDs before processing
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const allServices = Effect.all([
     getAllStreams(config),
     FileSystem.FileSystem,
