@@ -253,19 +253,18 @@ const createNotificationsStream = (
     Stream.mapError(eventStoreError.read(undefined, 'Failed to read notification queue'))
   );
 
-const logListenerStarted = Effect.logInfo(
-  'PostgreSQL notification listener started with LISTEN/NOTIFY support'
+const startListenerService = pipe(
+  'PostgreSQL notification listener started with LISTEN/NOTIFY support',
+  Effect.logInfo,
+  Effect.asVoid
 );
-
-const startListenerService = pipe(logListenerStarted, Effect.asVoid);
 
 const clearActiveChannels = Ref.set(HashSet.empty<string>());
 
-const logListenerStopped = Effect.logInfo('PostgreSQL notification listener stopped');
-
 const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
   pipe(
-    logListenerStopped,
+    'PostgreSQL notification listener stopped',
+    Effect.logInfo,
     Effect.andThen(Ref.get(activeChannels)),
     Effect.flatMap((channels) =>
       Effect.forEach(Array.from(channels), (channelName) =>
@@ -276,29 +275,41 @@ const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =
     Effect.asVoid
   );
 
-const createNotificationListenerDependencies = Effect.all({
+const buildNotificationListener = ({
+  client,
+  activeChannels,
+  notificationQueue,
+}: {
+  readonly client: PgClient.PgClient;
+  readonly activeChannels: Ref.Ref<HashSet.HashSet<string>>;
+  readonly notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+  }>;
+}) => ({
+  listen: startListenForStream(activeChannels, client, notificationQueue),
+
+  unlisten: stopListenForStream(activeChannels),
+
+  notifications: createNotificationsStream(notificationQueue),
+
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Module-level Effect used once as service property
+  start: startListenerService,
+
+  stop: stopListenerService(activeChannels),
+});
+
+const createNotificationListenerDependencies = {
   client: PgClient.PgClient,
   activeChannels: Ref.make(HashSet.empty<string>()),
   notificationQueue: Queue.unbounded<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
   }>(),
-});
+};
 
 export const NotificationListenerLive = Layer.effect(
   NotificationListener,
-  pipe(
-    createNotificationListenerDependencies,
-    Effect.map(({ client, activeChannels, notificationQueue }) => ({
-      listen: startListenForStream(activeChannels, client, notificationQueue),
-
-      unlisten: stopListenForStream(activeChannels),
-
-      notifications: createNotificationsStream(notificationQueue),
-
-      start: startListenerService,
-
-      stop: stopListenerService(activeChannels),
-    }))
-  )
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Effect.all needs an object argument, cannot be piped differently
+  pipe(Effect.all(createNotificationListenerDependencies), Effect.map(buildNotificationListener))
 );

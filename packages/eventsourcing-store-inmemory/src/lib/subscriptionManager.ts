@@ -67,17 +67,15 @@ const createPubSubAndAddToMap = <T>(
 
 const addSubscriptionIfMissing =
   <T>(streamId: EventStreamId) =>
-  (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) => {
-    const streamIdOption = pipe(subs, HashMap.get(streamId));
-
-    return pipe(
-      streamIdOption,
+  (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
+    pipe(
+      subs,
+      HashMap.get(streamId),
       Option.match({
         onNone: () => createPubSubAndAddToMap(subs, streamId),
         onSome: () => subs,
       })
     );
-  };
 
 const extractSubscriptionData =
   <T>(streamId: EventStreamId) =>

@@ -131,6 +131,11 @@ const forwardMessagesToSubscriber =
       Effect.forkDaemon
     );
 
+const applyFilterToStream =
+  (filter?: (message: ReadonlyDeep<TransportMessage>) => boolean) =>
+  (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>): Stream.Stream<TransportMessage> =>
+    filter ? Stream.filter(Stream.fromQueue(queue), filter) : Stream.fromQueue(queue);
+
 const createSimpleSubscription =
   (sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
   (
@@ -139,10 +144,7 @@ const createSimpleSubscription =
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap(forwardMessagesToSubscriber(sourceQueue)),
-      Effect.map((queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
-        const baseStream = Stream.fromQueue(queue);
-        return filter ? Stream.filter(baseStream, filter) : baseStream;
-      })
+      Effect.map(applyFilterToStream(filter))
     );
 
 const addSubscriber = (
@@ -227,11 +229,7 @@ const createClientTransport = (
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap(setupSubscriberForwarding(clientState)),
-      Effect.map((queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
-        const baseStream = Stream.fromQueue(queue);
-        const filteredStream = filter ? Stream.filter(baseStream, filter) : baseStream;
-        return filteredStream;
-      })
+      Effect.map(applyFilterToStream(filter))
     ),
 });
 

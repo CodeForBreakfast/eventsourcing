@@ -22,27 +22,17 @@ import type { TodoListEvent } from './domain/todoListEvents';
 
 const CURRENT_USER = 'user-1' as UserId;
 
-const EventBusLive = Layer.effect(EventBus, makeEventBus());
+const makeTodoEventStore = () =>
+  pipe(
+    InMemoryStore.make<EventRecord<TodoEvent, UserId>>(),
+    Effect.flatMap(makeInMemoryEventStore)
+  );
 
-const TodoEventStoreLive = Layer.effect(
-  TodoAggregate,
-  pipe(InMemoryStore.make<EventRecord<TodoEvent, UserId>>(), Effect.flatMap(makeInMemoryEventStore))
-);
-
-const TodoListEventStoreLive = Layer.effect(
-  TodoListAggregate,
+const makeTodoListEventStore = () =>
   pipe(
     InMemoryStore.make<EventRecord<TodoListEvent, UserId>>(),
     Effect.flatMap(makeInMemoryEventStore)
-  )
-);
-
-const AppLive = Layer.mergeAll(
-  EventBusLive,
-  TodoEventStoreLive,
-  TodoListEventStoreLive,
-  provideCommandInitiator(CURRENT_USER)
-);
+  );
 
 const publishEventsWithBus =
   (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: Readonly<EventBusService>) =>
@@ -317,11 +307,19 @@ const runWithProcessManager = (args: ReadonlyArray<string>) =>
   );
 
 const scopeAndProvide = (args: ReadonlyArray<string>): Effect.Effect<void, never, never> =>
-  pipe(args, runWithProcessManager, Effect.scoped, Effect.provide(AppLive)) as Effect.Effect<
-    void,
-    never,
-    never
-  >;
+  pipe(
+    args,
+    runWithProcessManager,
+    Effect.scoped,
+    Effect.provide(
+      Layer.mergeAll(
+        Layer.effect(EventBus, makeEventBus()),
+        Layer.effect(TodoAggregate, makeTodoEventStore()),
+        Layer.effect(TodoListAggregate, makeTodoListEventStore()),
+        provideCommandInitiator(CURRENT_USER)
+      )
+    )
+  ) as Effect.Effect<void, never, never>;
 
 // eslint-disable-next-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
 const args = process.argv.slice(2);

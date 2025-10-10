@@ -614,7 +614,11 @@ const validateDependencies =
     );
 
 const validatePackageDependencies = (changedPackages: ReadonlySet<string>) =>
-  pipe(getPackageDependencyMap, Effect.flatMap(validateDependencies(changedPackages)));
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+    getPackageDependencyMap,
+    Effect.flatMap(validateDependencies(changedPackages))
+  );
 
 const validateChangesetsFlow = (changesets: readonly ChangesetInfoInternal[]) =>
   pipe(
@@ -631,7 +635,11 @@ const checkUnpublishableWhenNoChangesets =
       : Effect.void;
 
 const validateAfterCheckingPublishable = (changesets: readonly ChangesetInfoInternal[]) =>
-  pipe(checkForUnpublishedPackages, Effect.flatMap(checkUnpublishableWhenNoChangesets(changesets)));
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+    checkForUnpublishedPackages,
+    Effect.flatMap(checkUnpublishableWhenNoChangesets(changesets))
+  );
 
 const showChangedFilesList = (changedFiles: readonly string[]) => (terminal: Terminal.Terminal) => {
   const filesToShow = changedFiles
@@ -745,6 +753,11 @@ const validateChangesets = pipe(
   Effect.flatMap(runValidationLogic)
 );
 
-const program = pipe(validateChangesets, Effect.provide(BunContext.layer));
+const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  validateChangesets,
+  Effect.provide(BunContext.layer)
+);
 
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
 BunRuntime.runMain(program);

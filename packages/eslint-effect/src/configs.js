@@ -31,6 +31,7 @@ const pipeRecommendedRules = {
 const pipeStrictRules = {
   'effect/no-nested-pipe': 'error',
   'effect/no-nested-pipes': 'error',
+  'effect/no-intermediate-effect-variables': 'error',
 };
 
 export const functionalImmutabilityRules = {

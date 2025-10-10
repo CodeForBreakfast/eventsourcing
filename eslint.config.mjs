@@ -143,7 +143,7 @@ export default [
   {
     name: 'effect-strict',
     files: ['**/*.ts', '**/*.tsx'],
-    ignores: ['**/eventsourcing-testing-contracts/**', '**/buntest/**'],
+    ignores: ['**/eventsourcing-testing-contracts/**', '**/buntest/**', '**/testing/**'],
     languageOptions: commonLanguageOptions,
     plugins: commonPlugins,
     rules: effectPlugin.configs.strict.rules,

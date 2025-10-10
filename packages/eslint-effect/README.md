@@ -246,6 +246,74 @@ Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 
 **Note:** This rule only triggers on user-defined functions, not Effect library functions.
 
+### `no-intermediate-effect-variables`
+
+Forbids storing Effect/Stream/pipe results in intermediate variables **when they are only used once**. Variables that are genuinely reused multiple times are allowed as legitimate building blocks.
+
+❌ Bad (single use - should inline):
+
+```typescript
+// Breaking up the pipe chain for a single use
+const userEffect = fetchUser(userId);
+const result = pipe(userEffect, Effect.flatMap(validateUser), Effect.map(formatUserData));
+
+// Storing intermediate pipe results used once
+const validated = pipe(data, Schema.decodeUnknown(UserSchema));
+const processed = Effect.map(validated, processUser);
+return Effect.flatMap(processed, saveToDatabase);
+
+// Schema defined but only used once
+const UserIdSchema = pipe(Schema.String, Schema.nonEmptyString());
+export const decodeUserId = Schema.decode(UserIdSchema); // Only usage
+```
+
+✅ Good (inline single-use values):
+
+```typescript
+// Single cohesive pipe chain
+const result = pipe(fetchUser(userId), Effect.flatMap(validateUser), Effect.map(formatUserData));
+
+// All transformations in one composition
+return pipe(
+  data,
+  Schema.decodeUnknown(UserSchema),
+  Effect.map(processUser),
+  Effect.flatMap(saveToDatabase)
+);
+
+// Schema inlined directly
+export const decodeUserId = Schema.decode(pipe(Schema.String, Schema.nonEmptyString()));
+```
+
+✅ Good (multiple uses - legitimate reuse):
+
+```typescript
+// Layer reused in multiple compositions
+const PgLive = Layer.effect(PgClient, createPgClient);
+const Layer1 = pipe(Migration.layer, Layer.provide(PgLive)); // Use 1
+const Layer2 = pipe(EventStore.layer, Layer.provide(PgLive)); // Use 2
+
+// Effect reused across test cases
+const setupTest = Effect.gen(/* ... */);
+it('test 1', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 1
+it('test 2', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 2
+```
+
+✅ Good (execution results are plain values):
+
+```typescript
+// runSync returns a plain value, not an Effect
+const authResult = Effect.runSync(pipe(authenticate(req), Effect.either));
+if (Either.isLeft(authResult)) {
+  return Response.json({ error: authResult.left });
+}
+return Response.json({ token: authResult.right });
+```
+
+**Rationale**: Single-use intermediate variables break the flow of pipe composition and make code harder to follow. However, variables that are reused multiple times serve as legitimate building blocks for composition and should be kept. The rule also excludes execution methods (`runSync`, `runPromise`, `runFork`) which return plain values, and factory methods (`Schema.decode`) which return functions.
+
+**Note:** This is an aggressive rule included in the `pipeStrict` config. It enforces proper functional composition patterns while allowing genuine code reuse.
+
 ## Rule Presets
 
 ### Recommended Presets
@@ -299,6 +367,7 @@ Enforces strict pipe composition rules:
 
 - Forbids nested `pipe()` calls
 - Forbids multiple `pipe()` calls per function
+- Forbids storing pipe/Effect results in single-use intermediate variables
 
 #### `plugin`
 
@@ -436,6 +505,7 @@ export default [
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
+- `effect/no-intermediate-effect-variables` - Forbid storing pipe/Effect results in single-use intermediate variables (opt-in via `pipeStrict` config)
 
 ## Available Exports
 

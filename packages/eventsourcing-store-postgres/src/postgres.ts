@@ -58,13 +58,12 @@ export const makePgConfigurationLive = (prefix: string) =>
 
 export const PgConfigurationLive = makePgConfigurationLive('PG');
 
-const MigratorLive = pipe(
+export const PostgresLive = pipe(
   {
     loader,
     table: 'eventstore_migrations',
   },
   PgMigrator.layer,
-  Layer.provide(PgLive)
+  Layer.provide(PgLive),
+  Layer.provideMerge(PgLive)
 );
-
-export const PostgresLive = pipe(MigratorLive, Layer.provideMerge(PgLive));

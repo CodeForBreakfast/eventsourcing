@@ -99,6 +99,16 @@ const validatePackages = (packages: readonly string[]) =>
     })
   );
 
-const program = pipe(discoverPackages, Effect.andThen(validatePackages));
+const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  discoverPackages,
+  Effect.andThen(validatePackages)
+);
 
-BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));
+BunRuntime.runMain(
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
+    program,
+    Effect.provide(BunContext.layer)
+  )
+);

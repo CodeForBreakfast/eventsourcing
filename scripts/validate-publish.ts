@@ -112,7 +112,11 @@ const filterPackagesByDirectory =
 
 const getPackagesForChangedDirs = (changedDirectories: ReadonlySet<string>) =>
   changedDirectories.size > 0
-    ? pipe(getAllPackages, Effect.map(filterPackagesByDirectory(changedDirectories)))
+    ? pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+        getAllPackages,
+        Effect.map(filterPackagesByDirectory(changedDirectories))
+      )
     : Effect.succeed([]);
 
 const displayWarningAndGetAllPackages = pipe(
@@ -132,7 +136,11 @@ const processGitDiffResult = (root: string) => (baseBranch: string) =>
   );
 
 const combineRootWithBaseBranch = (root: string) =>
-  pipe(getBaseBranch, Effect.andThen(processGitDiffResult(root)));
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+    getBaseBranch,
+    Effect.andThen(processGitDiffResult(root))
+  );
 
 const getChangedPackageNames = pipe(rootDir, Effect.andThen(combineRootWithBaseBranch));
 
@@ -156,6 +164,16 @@ const displayPackages = (changedPackageNames: readonly string[]) =>
     ? displayNoPackagesMessage
     : displayPackageList(changedPackageNames);
 
-const program = pipe(getChangedPackageNames, Effect.andThen(displayPackages));
+const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  getChangedPackageNames,
+  Effect.andThen(displayPackages)
+);
 
-BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));
+BunRuntime.runMain(
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
+    program,
+    Effect.provide(BunContext.layer)
+  )
+);

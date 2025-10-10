@@ -32,6 +32,7 @@ const resolveRootDir = (scriptsDir: string) =>
 const getCurrentPath = Effect.sync(() => new URL(import.meta.url).pathname);
 
 const getRootDir = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: root directory resolver reused in main program logic
   getCurrentPath,
   Effect.flatMap(getScriptsDir),
   Effect.flatMap(resolveRootDir)
@@ -86,6 +87,7 @@ const readPackagesDir = (fs: FileSystem.FileSystem, path: Path.Path, packagesDir
 const getServicesAndRootDir = Effect.all([FileSystem.FileSystem, Path.Path, getRootDir]);
 
 const getAllPackages = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   getServicesAndRootDir,
   Effect.flatMap(([fs, path, rootDir]) => {
     const packagesDir = path.join(rootDir, 'packages');
@@ -126,10 +128,12 @@ const outputDependencyMap = (dependencyMap: PackageDependencyMap) =>
   );
 
 const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   getAllPackages,
   Effect.map(buildDependencyMap),
   Effect.flatMap(outputDependencyMap),
   Effect.provide(BunContext.layer)
 );
 
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
 BunRuntime.runMain(program);

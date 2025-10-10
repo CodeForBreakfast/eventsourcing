@@ -324,11 +324,9 @@ describe('Command Processing Service', () => {
   it.effect('should work as Effect service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
-
-    const ServiceLayer = Layer.effect(
-      CommandProcessingService,
-      pipe(router, createCommandProcessingService(TestEventStore))
-    );
+    /* eslint-disable effect/no-intermediate-effect-variables -- Effect and Layer variables needed to avoid nested pipes */
+    const serviceEffect = pipe(router, createCommandProcessingService(TestEventStore));
+    const ServiceLayer = Layer.effect(CommandProcessingService, serviceEffect);
 
     return pipe(
       CommandProcessingService,
@@ -339,5 +337,6 @@ describe('Command Processing Service', () => {
       Effect.provide(ServiceLayer),
       Effect.provide(testLayer)
     );
+    /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable after test completes */
   });
 });

@@ -32,7 +32,7 @@ const makeFooEventStoreLayer = () => {
     Effect.provide(BunPath.layer),
     Effect.runSync
   );
-  // eslint-disable-next-line buntest/no-runSync-in-tests -- test setup needs synchronous store creation to share PubSub state across tests
+  // eslint-disable-next-line buntest/no-runSync-in-tests, effect/no-intermediate-effect-variables -- test setup needs synchronous store creation to share PubSub state across tests, testDir extracted from Effect for use as plain value
   const store = Effect.runSync(make<FooEvent>({ baseDir: testDir }));
   return FooEventStoreTest(store);
 };

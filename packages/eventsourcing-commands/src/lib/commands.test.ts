@@ -12,8 +12,9 @@ describe('Wire Commands', () => {
         payload: { email: 'test@example.com' },
       };
 
-      const result = pipe(validCommand, Schema.decodeUnknownEither(WireCommand));
-      expect(Either.isRight(result)).toBe(true);
+      expect(Either.isRight(pipe(validCommand, Schema.decodeUnknownEither(WireCommand)))).toBe(
+        true
+      );
     });
 
     test('should reject invalid wire command', () => {
@@ -24,8 +25,9 @@ describe('Wire Commands', () => {
         payload: { email: 'test@example.com' },
       };
 
-      const result = pipe(invalidCommand, Schema.decodeUnknownEither(WireCommand));
-      expect(Either.isLeft(result)).toBe(true);
+      expect(Either.isLeft(pipe(invalidCommand, Schema.decodeUnknownEither(WireCommand)))).toBe(
+        true
+      );
     });
 
     test('should accept unknown payload types', () => {
@@ -40,8 +42,9 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = pipe(commandWithComplexPayload, Schema.decodeUnknownEither(WireCommand));
-      expect(Either.isRight(result)).toBe(true);
+      expect(
+        Either.isRight(pipe(commandWithComplexPayload, Schema.decodeUnknownEither(WireCommand)))
+      ).toBe(true);
     });
   });
 
@@ -55,8 +58,9 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = pipe(successResult, Schema.decodeUnknownEither(CommandResult));
-      expect(Either.isRight(result)).toBe(true);
+      expect(Either.isRight(pipe(successResult, Schema.decodeUnknownEither(CommandResult)))).toBe(
+        true
+      );
     });
 
     test('should validate validation error', () => {
@@ -70,8 +74,9 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
-      expect(Either.isRight(result)).toBe(true);
+      expect(Either.isRight(pipe(failureResult, Schema.decodeUnknownEither(CommandResult)))).toBe(
+        true
+      );
     });
 
     test('should validate handler not found error', () => {
@@ -85,8 +90,9 @@ describe('Wire Commands', () => {
         },
       };
 
-      const result = pipe(failureResult, Schema.decodeUnknownEither(CommandResult));
-      expect(Either.isRight(result)).toBe(true);
+      expect(Either.isRight(pipe(failureResult, Schema.decodeUnknownEither(CommandResult)))).toBe(
+        true
+      );
     });
   });
 

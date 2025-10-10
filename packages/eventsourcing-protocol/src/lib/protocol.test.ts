@@ -1100,6 +1100,7 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test resubscription behavior across scope boundaries
         collectFirstBatch,
         Effect.scoped,
         Effect.flatMap(verifyFirstBatchAndResubscribe),
@@ -1335,8 +1336,10 @@ describe('Protocol Behavior Tests', () => {
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify cleanup behavior between connection cycles
         subscribeAndVerifyFirstConnection,
         Effect.scoped,
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify subscription works after reconnection
         Effect.andThen(subscribeAndVerifyAfterReconnection),
         Effect.provide(ProtocolLive(clientTransport))
       );
@@ -1911,17 +1914,14 @@ describe('Protocol Behavior Tests', () => {
         }))
       );
 
-    const subscribeAndCollectCycleEvent = (cycleNumber: number) =>
-      pipe(`cycle-stream-${cycleNumber}`, subscribe, Effect.flatMap(collectCycleEvent));
-
-    const performSubscriptionCycle = (cycleNumber: number) => {
-      const subscription = subscribeAndCollectCycleEvent(cycleNumber);
-      const scopedSubscription = pipe(subscription, Effect.scoped);
-      return pipe(
-        scopedSubscription,
+    const performSubscriptionCycle = (cycleNumber: number) =>
+      pipe(
+        `cycle-stream-${cycleNumber}`,
+        subscribe,
+        Effect.flatMap(collectCycleEvent),
+        Effect.scoped,
         Effect.map((result) => ({ ...result, cycleNumber }))
       );
-    };
 
     const verifyCycleResults = (
       results: readonly {
@@ -2030,8 +2030,10 @@ describe('Protocol Behavior Tests', () => {
 
     const runCleanupTest = (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
       pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test subscription cleanup across scope boundaries
         subscribeAndDrainUser123,
         Effect.scoped,
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify new subscription works after previous cleanup
         Effect.andThen(subscribeAndDrainUser456),
         Effect.provide(ProtocolLive(clientTransport))
       );
@@ -2179,6 +2181,7 @@ describe('Protocol Behavior Tests', () => {
         Effect.withSpan('client-test-span')
       );
 
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to fork server-side command processing
       return pipe(processFirstCommand, Effect.andThen(clientWork));
     };
 

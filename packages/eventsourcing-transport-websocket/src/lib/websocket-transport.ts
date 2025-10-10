@@ -159,11 +159,8 @@ const subscribeToMessages =
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap(addSubscriberToState(stateRef)),
-      Effect.map((queue) => {
-        const baseStream = Stream.fromQueue(queue);
-
-        return filter ? Stream.filter(baseStream, applyFilterSafely(filter)) : baseStream;
-      })
+      Effect.map(Stream.fromQueue),
+      Effect.map((stream) => (filter ? Stream.filter(stream, applyFilterSafely(filter)) : stream))
     );
 
 const createConnectedTransport = (
