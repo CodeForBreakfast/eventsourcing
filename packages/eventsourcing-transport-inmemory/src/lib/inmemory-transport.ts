@@ -15,19 +15,7 @@
  * - Pure functional design with no global state
  */
 
-import {
-  Effect,
-  Stream,
-  Scope,
-  Ref,
-  Queue,
-  PubSub,
-  HashMap,
-  HashSet,
-  Option,
-  pipe,
-  Match,
-} from 'effect';
+import { Effect, Stream, Scope, Ref, Queue, PubSub, HashMap, HashSet, Option, pipe } from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -121,13 +109,10 @@ const publishOrFail =
     message: ReadonlyDeep<TransportMessage>
   ) =>
   (state: ReadonlyDeep<ConnectionState>): Effect.Effect<void, TransportError> =>
-    pipe(
-      state !== 'connected',
-      Match.value,
-      Match.when(true, () => Effect.fail(new TransportError({ message: errorMessage }))),
-      Match.when(false, () => Queue.offer(targetQueue, message)),
-      Match.exhaustive
-    );
+    Effect.if(state !== 'connected', {
+      onTrue: () => Effect.fail(new TransportError({ message: errorMessage })),
+      onFalse: () => Queue.offer(targetQueue, message),
+    });
 
 const publishWithConnectionCheck =
   (
@@ -157,13 +142,7 @@ const forwardMessagesToSubscriber =
 const applyFilterToStream =
   (filter?: (message: ReadonlyDeep<TransportMessage>) => boolean) =>
   (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>): Stream.Stream<TransportMessage> =>
-    pipe(
-      filter !== undefined,
-      Match.value,
-      Match.when(true, () => Stream.filter(Stream.fromQueue(queue), filter!)),
-      Match.when(false, () => Stream.fromQueue(queue)),
-      Match.exhaustive
-    );
+    filter !== undefined ? Stream.filter(Stream.fromQueue(queue), filter) : Stream.fromQueue(queue);
 
 const createSimpleSubscription =
   (sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
