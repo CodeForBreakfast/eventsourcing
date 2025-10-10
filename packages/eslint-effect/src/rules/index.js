@@ -2,6 +2,7 @@ import noUnnecessaryPipeWrapper from './no-unnecessary-pipe-wrapper.js';
 import preferMatchTag from './prefer-match-tag.js';
 import preferMatchOverConditionals from './prefer-match-over-conditionals.js';
 import preferMatchOverTernary from './prefer-match-over-ternary.js';
+import preferEffectIfOverMatchBoolean from './prefer-effect-if-over-match-boolean.js';
 import preferSchemaValidationOverAssertions from './prefer-schema-validation-over-assertions.js';
 import noClasses from './no-classes.js';
 import noRunSync from './no-runSync.js';
@@ -28,6 +29,7 @@ export default {
   'prefer-match-tag': preferMatchTag,
   'prefer-match-over-conditionals': preferMatchOverConditionals,
   'prefer-match-over-ternary': preferMatchOverTernary,
+  'prefer-effect-if-over-match-boolean': preferEffectIfOverMatchBoolean,
   'prefer-schema-validation-over-assertions': preferSchemaValidationOverAssertions,
   'no-classes': noClasses,
   'no-runSync': noRunSync,
