@@ -20,14 +20,18 @@ const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
 const JsonFooEvent = Schema.parseJson(FooEvent);
 
-export const FooEventStoreLive = Layer.effect(
+const encodeFooEvents = Effect.map(encodedEventStore(JsonFooEvent));
+
+const FooEventStoreEffect = Layer.effect(
   FooEventStore,
-  pipe(sqlEventStore, Effect.map(encodedEventStore(JsonFooEvent)))
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- encodeFooEvents is a reusable transformation function
+  pipe(sqlEventStore, encodeFooEvents)
 );
 
 // Complete test layer with all dependencies
 const TestLayer = pipe(
-  FooEventStoreLive,
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- FooEventStoreEffect is reused as base for test layer composition
+  FooEventStoreEffect,
   Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, Logger.pretty)),
   Layer.provide(PostgresLive),
   Layer.provide(makePgConfigurationLive('TEST_PG')),

@@ -102,33 +102,12 @@ const mapResolversToService = (sql: SqlClient.SqlClient) =>
     Effect.mapError(eventStoreError.write(undefined, 'Failed to initialize event row service'))
   );
 
-export const makeEventRowService: Effect.Effect<
-  EventRowServiceInterface,
-  EventStoreError,
-  SqlClient.SqlClient
-> = pipe(SqlClient.SqlClient, Effect.flatMap(mapResolversToService));
-
 /**
  * Layer that provides EventRowService
  */
-export const EventRowServiceLive = Layer.effect(EventRowService, makeEventRowService);
-
-/**
- * Event tracking layer - provides event ordering and deduplication services
- * Depends on database infrastructure for connection management
- */
-export const EventTrackingLive = pipe(
-  EventStreamTrackerLive(),
-  Layer.provide(ConnectionManagerLive)
-);
-
-/**
- * Notification infrastructure layer - provides PostgreSQL LISTEN/NOTIFY handling
- * Depends on database infrastructure for connection management
- */
-export const NotificationInfrastructureLive = pipe(
-  NotificationListenerLive,
-  Layer.provide(ConnectionManagerLive)
+export const EventRowServiceLive = Layer.effect(
+  EventRowService,
+  pipe(SqlClient.SqlClient, Effect.flatMap(mapResolversToService))
 );
 
 /**
@@ -137,8 +116,8 @@ export const NotificationInfrastructureLive = pipe(
  */
 export const EventSubscriptionServicesLive = Layer.mergeAll(
   SubscriptionManagerLive,
-  EventTrackingLive,
-  NotificationInfrastructureLive
+  pipe(EventStreamTrackerLive(), Layer.provide(ConnectionManagerLive)),
+  pipe(NotificationListenerLive, Layer.provide(ConnectionManagerLive))
 );
 
 const publishEventToSubscribers = (
@@ -239,10 +218,6 @@ const startNotificationListener = (
     Effect.andThen(consumeNotifications(notificationListener, subscriptionManager))
   );
 
-const logBridgeStart = Effect.logInfo(
-  'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
-);
-
 const startBridge = (
   notificationListener: Readonly<{
     readonly start: Effect.Effect<void, EventStoreError, never>;
@@ -255,7 +230,9 @@ const startBridge = (
   subscriptionManager: SubscriptionManagerService
 ) =>
   Effect.andThen(
-    logBridgeStart,
+    Effect.logInfo(
+      'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
+    ),
     startNotificationListener(notificationListener, subscriptionManager)
   );
 
@@ -423,49 +400,52 @@ export class SqlEventStore extends Effect.Tag('SqlEventStore')<
   EventStore<string>
 >() {}
 
-const getSqlEventStoreManagerDependencies = Effect.all({
+const buildSqlEventStore = ({
+  subscriptionManager,
+  notificationListener,
+}: {
+  readonly subscriptionManager: SubscriptionManagerService;
+  readonly notificationListener: Readonly<{
+    readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly notifications: Stream.Stream<
+      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      EventStoreError,
+      never
+    >;
+    readonly start: Effect.Effect<void, EventStoreError, never>;
+    readonly stop: Effect.Effect<void, EventStoreError, never>;
+  }>;
+}) => makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener);
+
+const getSqlEventStoreDependencies = {
   subscriptionManager: SubscriptionManager,
   notificationListener: NotificationListener,
-});
+};
 
-const makeSqlEventStoreEffect = pipe(
-  getSqlEventStoreManagerDependencies,
-  Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-    makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
-  )
-);
-
-const mergeEventStoreLayers = () =>
-  Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive);
-
-const createSqlEventStoreEffect = Layer.effect(SqlEventStore, makeSqlEventStoreEffect);
-
-const createSqlEventStoreLayer = pipe(
-  createSqlEventStoreEffect,
-  Layer.provide(mergeEventStoreLayers())
+const SqlEventStoreEffect = Layer.effect(
+  SqlEventStore,
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Effect.all needs an object argument, cannot be piped differently
+  pipe(Effect.all(getSqlEventStoreDependencies), Effect.flatMap(buildSqlEventStore))
 );
 
 /**
  * Main SQL EventStore layer with simplified dependency management
  * Uses the logical layer groups defined above for clearer composition
  */
-export const SqlEventStoreLive = createSqlEventStoreLayer;
+export const SqlEventStoreLive = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- SqlEventStoreEffect is the base layer being composed with dependencies
+  SqlEventStoreEffect,
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- EventSubscriptionServicesLive and EventRowServiceLive are module-level layers that provide required context
+  Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive))
+);
 
 /**
  * Backward-compatible function - requires SubscriptionManager and NotificationListener in context
  */
-const getSqlEventStoreDependencies = Effect.all({
-  subscriptionManager: SubscriptionManager,
-  notificationListener: NotificationListener,
-});
-
 export const sqlEventStore: Effect.Effect<
   EventStore<string>,
   EventStoreError,
   EventRowService | SubscriptionManager | NotificationListener
-> = pipe(
-  getSqlEventStoreDependencies,
-  Effect.flatMap(({ subscriptionManager, notificationListener }) =>
-    makeSqlEventStoreWithSubscriptionManager(subscriptionManager, notificationListener)
-  )
-);
+  // eslint-disable-next-line effect/no-pipe-first-arg-call -- Effect.all needs an object argument, cannot be piped differently
+> = pipe(Effect.all(getSqlEventStoreDependencies), Effect.flatMap(buildSqlEventStore));

@@ -29,22 +29,6 @@ export class ConnectionManager extends Context.Tag('ConnectionManager')<
   }
 >() {}
 
-/**
- * Create a robust persistent connection specifically for LISTEN/NOTIFY operations
- * This uses the main PgClient from the layer, so it inherits the same configuration
- */
-const createListenConnection = pipe(
-  PgClient.PgClient,
-  // Add debug logging
-  Effect.tap(() => Effect.logDebug('PostgreSQL notification listener connection established')),
-  Effect.tapError((error) =>
-    Effect.logError('Failed to establish notification listener connection', {
-      error,
-    })
-  ),
-  Effect.mapError(connectionError.retryable('establish notification listener connection'))
-);
-
 const healthCheckQuery = 'SELECT 1 AS health_check';
 
 const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
@@ -66,11 +50,20 @@ const executeShutdown = (_listenConnection: PgClient.PgClient) =>
 
 /**
  * Implementation of ConnectionManager service
+ * Creates a robust persistent connection specifically for LISTEN/NOTIFY operations
+ * This uses the main PgClient from the layer, so it inherits the same configuration
  */
 export const ConnectionManagerLive = Layer.effect(
   ConnectionManager,
   pipe(
-    createListenConnection,
+    PgClient.PgClient,
+    Effect.tap(() => Effect.logDebug('PostgreSQL notification listener connection established')),
+    Effect.tapError((error) =>
+      Effect.logError('Failed to establish notification listener connection', {
+        error,
+      })
+    ),
+    Effect.mapError(connectionError.retryable('establish notification listener connection')),
     Effect.map((listenConnection) => ({
       getListenConnection: Effect.succeed(listenConnection),
       healthCheck: executeHealthCheck(listenConnection),

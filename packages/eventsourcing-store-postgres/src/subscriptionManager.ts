@@ -56,35 +56,32 @@ export class SubscriptionManager extends Effect.Tag('SubscriptionManager')<
   SubscriptionManagerService
 >() {}
 
+const updateHashMapWithPubSub =
+  <T>(streamId: EventStreamId, subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
+  (pubsub: PubSub.PubSub<T>) => {
+    const data = { pubsub };
+    return HashMap.set(subs, streamId, data);
+  };
+
 const createPubSubAndUpdateHashMap = <T>(
   streamId: EventStreamId,
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => {
-  const createPubSub = PubSub.bounded<T>(256);
-  return pipe(
-    createPubSub,
-    Effect.map((pubsub) => {
-      const data = { pubsub };
-      return HashMap.set(subs, streamId, data);
-    }),
-    Effect.runSync
-  );
-};
+): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
+  pipe(256, PubSub.bounded<T>, Effect.map(updateHashMapWithPubSub(streamId, subs)), Effect.runSync);
 
 const getOrCreateSubscription =
   <T>(streamId: EventStreamId) =>
   (
     subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-  ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> => {
-    const streamIdOption = pipe(subs, HashMap.get(streamId));
-    return pipe(
-      streamIdOption,
+  ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
+    pipe(
+      subs,
+      HashMap.get(streamId),
       Option.match({
         onNone: () => createPubSubAndUpdateHashMap(streamId, subs),
         onSome: () => subs,
       })
     );
-  };
 
 const extractSubscriptionData =
   <T>(streamId: EventStreamId) =>

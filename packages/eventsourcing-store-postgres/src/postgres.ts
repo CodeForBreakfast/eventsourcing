@@ -64,7 +64,9 @@ const MigratorLive = pipe(
     table: 'eventstore_migrations',
   },
   PgMigrator.layer,
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- PgLive is reused in both Layer.provide here and Layer.provideMerge below
   Layer.provide(PgLive)
 );
 
+// eslint-disable-next-line effect/no-intermediate-effect-variables -- MigratorLive and PgLive are both reused to compose PostgresLive layer
 export const PostgresLive = pipe(MigratorLive, Layer.provideMerge(PgLive));
