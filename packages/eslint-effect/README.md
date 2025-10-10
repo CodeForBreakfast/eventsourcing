@@ -139,40 +139,55 @@ Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(ha
 
 ### `prefer-match-over-ternary`
 
-Encourages declarative `Match.value` patterns over ternary operators when selecting between Effect types or function calls.
+Encourages declarative `Match.value` patterns over ternary operators when pattern matching on non-boolean values or selecting between function calls.
+
+**Note**: For boolean conditions returning Effects, use `Effect.if` instead (see `prefer-effect-if-over-match-boolean` rule).
 
 ❌ Bad:
 
 ```typescript
-const result = condition ? Effect.succeed(42) : Effect.fail('error');
+const result = filter !== undefined ? Stream.filter(stream, filter) : stream;
 
-const handler = (hasData: boolean) => (hasData ? createDataEffect() : handleNoData());
+const handler = (option: Option.Option<number>) =>
+  Option.isSome(option) ? processValue(option.value) : getDefault();
 
-const processConditional = (events: readonly unknown[]) =>
-  events.length > 0 ? formatList(events) : Effect.succeed('empty');
+const processStatus = (status: 'pending' | 'active' | 'complete') =>
+  status === 'complete' ? finalizeTask() : continueTask();
 ```
 
 ✅ Good:
 
 ```typescript
 const result = pipe(
-  Match.value(condition),
-  Match.when(true, () => Effect.succeed(42)),
-  Match.when(false, () => Effect.fail('error'))
+  filter,
+  Match.value,
+  Match.when(Match.undefined, () => stream),
+  Match.orElse((f) => Stream.filter(stream, f))
 );
 
-const handler = (hasData: boolean) =>
-  pipe(Match.value(hasData), Match.when(true, createDataEffect), Match.when(false, handleNoData));
-
-const processConditional = (events: readonly unknown[]) =>
+const handler = (option: Option.Option<number>) =>
   pipe(
-    Match.value(events.length > 0),
-    Match.when(true, () => formatList(events)),
-    Match.when(false, () => Effect.succeed('empty'))
+    option,
+    Match.value,
+    Match.when(Match.some, (opt) => processValue(opt.value)),
+    Match.orElse(getDefault)
   );
+
+const processStatus = (status: 'pending' | 'active' | 'complete') =>
+  pipe(status, Match.value, Match.when('complete', finalizeTask), Match.orElse(continueTask));
 ```
 
-**Rationale**: Ternary operators are imperative and less composable than `Match` patterns. Using `Match.value` provides better composability, clearer intent, and consistency with other Effect patterns. Plain value ternaries (not function calls) are allowed as they're appropriate for simple value selection.
+**For boolean conditions with Effects, use `Effect.if`:**
+
+```typescript
+// Boolean condition returning Effects - use Effect.if, NOT Match.value
+const result = Effect.if(condition, {
+  onTrue: () => Effect.succeed(42),
+  onFalse: () => Effect.fail('error'),
+});
+```
+
+**Rationale**: Ternary operators are imperative and less composable than `Match` patterns. Using `Match.value` provides better composability for pattern matching on values like optional types, union types, or non-boolean conditions. However, for simple boolean conditionals returning Effects, `Effect.if` is the preferred pattern as it's more explicit and type-safe. Plain value ternaries (not function calls) are allowed as they're appropriate for simple value selection.
 
 ### `no-switch-statement`
 
