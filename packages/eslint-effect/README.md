@@ -137,6 +137,43 @@ Effect.flatMap((x) => {
 Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
 ```
 
+### `prefer-match-over-ternary`
+
+Encourages declarative `Match.value` patterns over ternary operators when selecting between Effect types or function calls.
+
+❌ Bad:
+
+```typescript
+const result = condition ? Effect.succeed(42) : Effect.fail('error');
+
+const handler = (hasData: boolean) => (hasData ? createDataEffect() : handleNoData());
+
+const processConditional = (events: readonly unknown[]) =>
+  events.length > 0 ? formatList(events) : Effect.succeed('empty');
+```
+
+✅ Good:
+
+```typescript
+const result = pipe(
+  Match.value(condition),
+  Match.when(true, () => Effect.succeed(42)),
+  Match.when(false, () => Effect.fail('error'))
+);
+
+const handler = (hasData: boolean) =>
+  pipe(Match.value(hasData), Match.when(true, createDataEffect), Match.when(false, handleNoData));
+
+const processConditional = (events: readonly unknown[]) =>
+  pipe(
+    Match.value(events.length > 0),
+    Match.when(true, () => formatList(events)),
+    Match.when(false, () => Effect.succeed('empty'))
+  );
+```
+
+**Rationale**: Ternary operators are imperative and less composable than `Match` patterns. Using `Match.value` provides better composability, clearer intent, and consistency with other Effect patterns. Plain value ternaries (not function calls) are allowed as they're appropriate for simple value selection.
+
 ### `no-switch-statement`
 
 Forbids switch statements in functional Effect code. Switch statements are imperative and don't provide exhaustiveness checking. Use `Match` for type-safe, exhaustive pattern matching.
@@ -502,6 +539,7 @@ export default [
 - `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
+- `effect/prefer-match-over-ternary` - Use Match.value over ternary operators for conditional branching
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers

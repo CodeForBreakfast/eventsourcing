@@ -106,6 +106,7 @@ const pluginRulesOnly = {
   'effect/no-unnecessary-function-alias': 'warn',
   'effect/prefer-match-tag': 'error',
   'effect/prefer-match-over-conditionals': 'error',
+  'effect/prefer-match-over-ternary': 'error',
   'effect/prefer-schema-validation-over-assertions': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
