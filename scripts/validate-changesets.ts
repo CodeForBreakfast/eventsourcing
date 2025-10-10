@@ -7,7 +7,7 @@
  * 2. Merging changesets that miss dependent packages
  */
 
-import { Effect, pipe, Array as EffectArray, Option } from 'effect';
+import { Effect, pipe, Array as EffectArray, Option, Match } from 'effect';
 import { FileSystem, Path, Terminal, Command } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
 
@@ -50,9 +50,14 @@ const parsePackageJsonContent = (packagePath: string) => (content: string) => {
 const readPackageJson = (fs: FileSystem.FileSystem, packagePath: string) =>
   pipe(packagePath, fs.readFileString, Effect.map(parsePackageJsonContent(packagePath)));
 
-const checkAndReadPackage =
-  (fs: FileSystem.FileSystem, packagePath: string) => (exists: boolean) =>
-    exists ? readPackageJson(fs, packagePath) : Effect.succeed(Option.none<PackageInternal>());
+const checkAndReadPackage = (fs: FileSystem.FileSystem, packagePath: string) => (exists: boolean) =>
+  pipe(
+    exists,
+    Match.value,
+    Match.when(true, () => readPackageJson(fs, packagePath)),
+    Match.when(false, () => Effect.succeed(Option.none<PackageInternal>())),
+    Match.exhaustive
+  );
 
 const readPackageIfExists = (
   fs: FileSystem.FileSystem,
@@ -170,13 +175,19 @@ const parsePackagesFromFrontmatter = (
 const parseChangesetContent = (file: string) => (content: string) => {
   const frontmatterContent = parseFrontmatter(content);
   const { packages, changeType } = parsePackagesFromFrontmatter(frontmatterContent);
-  return packages.length === 0
-    ? Option.none<ChangesetInfoInternal>()
-    : Option.some<ChangesetInfoInternal>({
+  return pipe(
+    packages.length === 0,
+    Match.value,
+    Match.when(true, () => Option.none<ChangesetInfoInternal>()),
+    Match.when(false, () =>
+      Option.some<ChangesetInfoInternal>({
         filename: file,
         packages,
         type: changeType,
-      });
+      })
+    ),
+    Match.exhaustive
+  );
 };
 
 const parseChangesetFile =
@@ -214,7 +225,13 @@ const readChangesetDirectory = (
 
 const checkAndReadChangesets =
   (fs: FileSystem.FileSystem, path: Path.Path, changesetsDir: string) => (exists: boolean) =>
-    exists ? readChangesetDirectory(fs, path, changesetsDir) : Effect.succeed([]);
+    pipe(
+      exists,
+      Match.value,
+      Match.when(true, () => readChangesetDirectory(fs, path, changesetsDir)),
+      Match.when(false, () => Effect.succeed([])),
+      Match.exhaustive
+    );
 
 const readChangesetsFromDirectory = ([fs, path, rootDir]: readonly [
   FileSystem.FileSystem,
