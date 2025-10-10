@@ -79,9 +79,13 @@ export const makeCommandRegistry = <
       matcher,
       Effect.exit,
       Effect.flatMap((matcherResult) =>
-        Exit.isFailure(matcherResult)
-          ? Effect.succeed(createUnknownErrorFailure(wireCommand.id, String(matcherResult.cause)))
-          : Effect.succeed(matcherResult.value)
+        pipe(
+          Match.value(matcherResult),
+          Match.when(Exit.isFailure, (failure) =>
+            Effect.succeed(createUnknownErrorFailure(wireCommand.id, String(failure.cause)))
+          ),
+          Match.orElse((success) => Effect.succeed(success.value))
+        )
       )
     );
 
