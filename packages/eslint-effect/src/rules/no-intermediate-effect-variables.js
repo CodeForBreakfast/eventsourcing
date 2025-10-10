@@ -144,6 +144,14 @@ export default {
         }
       },
 
+      Property(node) {
+        if (node.value.type === 'Identifier' && trackedVariables.has(node.value.name)) {
+          const tracked = trackedVariables.get(node.value.name);
+          tracked.usageCount++;
+          tracked.usageNodes.push(node.value);
+        }
+      },
+
       'Program:exit': () => {
         for (const [varName, tracked] of trackedVariables.entries()) {
           if (tracked.usageCount === 1) {

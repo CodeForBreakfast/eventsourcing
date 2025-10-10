@@ -128,7 +128,6 @@ describe('Command Processing Service', () => {
       Effect.map((service) => {
         expect(typeof service.processCommand).toBe('function');
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -148,7 +147,6 @@ describe('Command Processing Service', () => {
           expect(true).toBe(false);
         }
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -199,7 +197,6 @@ describe('Command Processing Service', () => {
       router,
       createCommandProcessingService(TestEventStore),
       Effect.flatMap(processCommandAndVerify),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -222,7 +219,6 @@ describe('Command Processing Service', () => {
           expect(true).toBe(false);
         }
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -246,7 +242,6 @@ describe('Command Processing Service', () => {
           expect(true).toBe(false);
         }
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -270,7 +265,6 @@ describe('Command Processing Service', () => {
       Effect.tap(() => {
         expect(handlerCalled).toBe(true);
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -323,7 +317,6 @@ describe('Command Processing Service', () => {
         expect(isCommandSuccess(orderResult!)).toBe(true);
         expect(isCommandFailure(updateResult!)).toBe(true);
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
@@ -331,11 +324,10 @@ describe('Command Processing Service', () => {
   it.effect('should work as Effect service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
-
-    const ServiceLayer = Layer.effect(
-      CommandProcessingService,
-      pipe(router, createCommandProcessingService(TestEventStore))
-    );
+    /* eslint-disable effect/no-intermediate-effect-variables -- Effect and Layer variables needed to avoid nested pipes */
+    const serviceEffect = pipe(router, createCommandProcessingService(TestEventStore));
+    const ServiceLayer = Layer.effect(CommandProcessingService, serviceEffect);
+    /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable rule after Layer creation */
 
     return pipe(
       CommandProcessingService,
@@ -343,9 +335,7 @@ describe('Command Processing Service', () => {
       Effect.map((result) => {
         expect(isCommandSuccess(result)).toBe(true);
       }),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Layer used in chained Effect.provide calls
       Effect.provide(ServiceLayer),
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test layer reused across multiple test cases
       Effect.provide(testLayer)
     );
   });
