@@ -15,6 +15,8 @@ export default {
         'Use Match.value instead of ternary for conditional branching. Pattern: pipe(Match.value(condition), Match.when(...), Match.exhaustive). Alternative: move simple literal equality (x === "value") inside Effect constructor to avoid duplication.',
       useMatchInEffectConstructor:
         'Use Match.value to select the value, then wrap result in Effect constructor. Pattern: pipe(Match.value(condition), Match.when(true, () => a), Match.when(false, () => b), Match.exhaustive, Effect.succeed). Avoid duplicating Effect.succeed/fail in each branch. Note: Simple literal equality (x === "value" ? a : b) is allowed.',
+      useEffectIf:
+        'Use Effect.if instead of ternary for boolean conditional branching. Pattern: Effect.if(condition, { onTrue: () => effectIfTrue, onFalse: () => effectIfFalse }). Effect.if is more semantic for boolean conditions and avoids nested pipe issues.',
     },
     schema: [],
   },
@@ -75,6 +77,30 @@ export default {
           typeof left.value === 'string');
 
       return hasIdentifier || hasMemberAccess;
+    };
+
+    const isBooleanCondition = (condition) => {
+      // Direct boolean checks: if (x), if (!x), if (Boolean(x))
+      if (
+        condition.type === 'Identifier' ||
+        condition.type === 'UnaryExpression' ||
+        condition.type === 'CallExpression'
+      ) {
+        return true;
+      }
+
+      // Comparison operators that return boolean
+      if (condition.type === 'BinaryExpression') {
+        const booleanOperators = ['===', '!==', '==', '!=', '<', '>', '<=', '>='];
+        return booleanOperators.includes(condition.operator);
+      }
+
+      // Logical operators: &&, ||
+      if (condition.type === 'LogicalExpression') {
+        return true;
+      }
+
+      return false;
     };
 
     const isRelevantTernary = (node) => {
@@ -186,6 +212,17 @@ export default {
 
         // Allow simple literal equality checks even with function calls in branches
         if (isSimpleLiteralEquality(node.test)) {
+          return;
+        }
+
+        // For boolean conditions with Effect calls, suggest Effect.if
+        const consequentIsEffect = isEffectCall(node.consequent);
+        const alternateIsEffect = isEffectCall(node.alternate);
+        if ((consequentIsEffect || alternateIsEffect) && isBooleanCondition(node.test)) {
+          context.report({
+            node,
+            messageId: 'useEffectIf',
+          });
           return;
         }
 
