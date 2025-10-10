@@ -137,11 +137,51 @@ Effect.flatMap((x) => {
 Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
 ```
 
+### `prefer-effect-if-over-match-boolean`
+
+Enforces `Effect.if` over `Match.value` for boolean conditionals. `Match.value` should be reserved for pattern matching on multiple values, not simple true/false branches.
+
+❌ Bad:
+
+```typescript
+pipe(
+  isValid,
+  Match.value,
+  Match.when(true, () => Effect.succeed('valid')),
+  Match.when(false, () => Effect.fail('invalid')),
+  Match.exhaustive
+);
+
+pipe(
+  user.isAdmin,
+  Match.value,
+  Match.when(true, () => grantAccess()),
+  Match.when(false, () => denyAccess()),
+  Match.exhaustive
+);
+```
+
+✅ Good:
+
+```typescript
+Effect.if(isValid, {
+  onTrue: () => Effect.succeed('valid'),
+  onFalse: () => Effect.fail('invalid'),
+});
+
+Effect.if(user.isAdmin, {
+  onTrue: () => grantAccess(),
+  onFalse: () => denyAccess(),
+});
+```
+
+**Rationale**: `Match.value` is designed for pattern matching on discriminated unions and multiple values. Using it for simple boolean conditions is verbose and obscures intent. `Effect.if` is explicit, concise, and clearly communicates boolean branching logic.
+
 ### `prefer-match-over-ternary`
 
 Encourages declarative `Match.value` patterns over ternary operators when pattern matching on non-boolean values or selecting between function calls.
 
-**Note**: For boolean conditions returning Effects, use `Effect.if` instead (see `prefer-effect-if-over-match-boolean` rule).
+**Note**: For boolean conditions returning Effects, use `Effect.if` instead (see `prefer-effect-if-over-match-boolean` rule above).
 
 ❌ Bad:
 
@@ -554,7 +594,8 @@ export default [
 - `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
-- `effect/prefer-match-over-ternary` - Use Match.value over ternary operators for conditional branching
+- `effect/prefer-effect-if-over-match-boolean` - Use Effect.if over Match.value for boolean conditionals
+- `effect/prefer-match-over-ternary` - Use Match.value over ternary operators for non-boolean pattern matching
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
