@@ -9,7 +9,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@commitlint/cli": "20.1.0",
         "@commitlint/config-conventional": "20.0.0",
-        "@effect/language-service": "0.41.1",
+        "@effect/language-service": "0.43.0",
         "@effect/platform": "0.92.1",
         "@effect/platform-bun": "0.81.1",
         "@eslint-community/eslint-plugin-eslint-comments": "4.5.0",
@@ -17,7 +17,7 @@
         "@typescript-eslint/eslint-plugin": "8.45.0",
         "@typescript-eslint/parser": "8.45.0",
         "dependency-cruiser": "17.0.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "eslint-config-prettier": "10.1.8",
         "eslint-plugin-compat": "6.0.2",
@@ -45,7 +45,7 @@
         "@codeforbreakfast/eventsourcing-projections": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-        "effect": "^3.18.1",
+        "effect": "3.18.4",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -55,7 +55,7 @@
       "name": "@codeforbreakfast/buntest",
       "version": "0.2.4",
       "dependencies": {
-        "effect": "3.18.1",
+        "effect": "3.18.4",
       },
     },
     "packages/eslint-effect": {
@@ -63,7 +63,7 @@
       "version": "0.6.0",
       "devDependencies": {
         "@typescript-eslint/eslint-plugin": "8.45.0",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -83,7 +83,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -101,7 +101,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -118,7 +118,7 @@
       },
       "devDependencies": {
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -139,7 +139,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -156,7 +156,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -173,9 +173,9 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@effect/platform-bun": "^0.80.0 || ^0.81.0",
+        "@effect/platform-bun": "0.81.1",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -193,7 +193,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -216,7 +216,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@effect/platform-bun": "0.81.1",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -234,7 +234,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -250,7 +250,7 @@
       },
       "devDependencies": {
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -269,7 +269,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -290,7 +290,7 @@
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.6.2",
         "bun-types": "1.2.23",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -308,7 +308,7 @@
       },
       "devDependencies": {
         "@types/node": "24.6.2",
-        "effect": "3.18.1",
+        "effect": "3.18.4",
         "eslint": "9.36.0",
         "typescript": "5.9.3",
       },
@@ -434,7 +434,7 @@
 
     "@effect/experimental": ["@effect/experimental@0.56.0", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.92.0", "effect": "^3.18.0", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-ZT9wTUVyDptzdkW4Tfvz5fNzygW9vt5jWcFmKI9SlhZMu9unVJgsBhxWCNYCyfPnxw3n/Z6SEKsqgt8iKQc4MA=="],
 
-    "@effect/language-service": ["@effect/language-service@0.41.1", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-BZaFkF1JdoTIJuzT7mNfUnfQG2MLxkQtn5b9y1z0BZUIcNfs5p7yR0ekYfTkPkt+TVD+9HE12VC1SsG5DReKww=="],
+    "@effect/language-service": ["@effect/language-service@0.43.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-xS/IkmljYvADffm2YLEXExUO4p52V9iZu+GBUtmvK5PtyzgUK5NJTwUizeJ8F+0fFxVcpb3J37p4iiHCpJQkeA=="],
 
     "@effect/platform": ["@effect/platform@0.92.1", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.18.1" } }, "sha512-XXWCBVwyhaKZISN7aM1fv/3fWDGyxr84ObywnUrL8aHvJLoIeskWFAP/fqw3c5MFCrJ3ZV97RWLbv6JiBQugdg=="],
 
@@ -766,7 +766,7 @@
 
     "dunder-proto": ["dunder-proto@1.0.1", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.1", "es-errors": "^1.3.0", "gopd": "^1.2.0" } }, "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A=="],
 
-    "effect": ["effect@3.18.1", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-5aJ7yRlvvkBplMSnhPyol7WYvPenvau12asO3HJhG/126SySWV9D8bscGTbV52XxtC5bwO/VUd5ffjE6uep/1A=="],
+    "effect": ["effect@3.18.4", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-b1LXQJLe9D11wfnOKAk3PKxuqYshQ0Heez+y5pnkd3jLj1yx9QhM72zZ9uUrOQyNvrs2GZZd/3maL0ZV18YuDA=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.223", "", {}, "sha512-qKm55ic6nbEmagFlTFczML33rF90aU+WtrJ9MdTCThrcvDNdUHN4p6QfVN78U06ZmguqXIyMPyYhw2TrbDUwPQ=="],
 
