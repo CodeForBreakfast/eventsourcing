@@ -12,8 +12,6 @@ export default {
     messages: {
       useEffectIf:
         'Use Effect.if instead of piping boolean to Match.value. Pattern: Effect.if(condition, { onTrue: () => effect, onFalse: () => effect }). Match.value should be used for pattern matching on multiple values, not booleans.',
-      useEffectIfForMatchWhen:
-        'Use Effect.if instead of Match.when(true/false) for boolean branching. Pattern: Effect.if(condition, { onTrue: () => effect, onFalse: () => effect }). Match.when should be used for pattern matching on multiple values, not boolean true/false.',
     },
     schema: [],
   },
@@ -27,26 +25,6 @@ export default {
         node.object.name === 'Match' &&
         node.property.type === 'Identifier' &&
         node.property.name === 'value'
-      );
-    };
-
-    const isMatchWhenCall = (node) => {
-      return (
-        node &&
-        node.type === 'CallExpression' &&
-        node.callee.type === 'MemberExpression' &&
-        node.callee.object.type === 'Identifier' &&
-        node.callee.object.name === 'Match' &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === 'when'
-      );
-    };
-
-    const isBooleanLiteral = (node) => {
-      return (
-        node &&
-        node.type === 'Literal' &&
-        (node.value === true || node.value === false)
       );
     };
 
@@ -92,18 +70,6 @@ export default {
             context.report({
               node: secondArg,
               messageId: 'useEffectIf',
-            });
-          }
-        }
-
-        // Also check for Match.when(true/false, ...) as a fallback
-        if (isMatchWhenCall(node) && node.arguments.length >= 1) {
-          const firstArg = node.arguments[0];
-
-          if (isBooleanLiteral(firstArg)) {
-            context.report({
-              node,
-              messageId: 'useEffectIfForMatchWhen',
             });
           }
         }
