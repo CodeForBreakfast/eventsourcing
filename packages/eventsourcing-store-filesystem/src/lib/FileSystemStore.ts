@@ -148,7 +148,6 @@ const writeEventsToFiles = <V>(
   events: Chunk.Chunk<V>
 ): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> => {
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
     services,
     Effect.flatMap(([fs, path]) =>
@@ -262,7 +261,6 @@ const appendEventsToStream =
     FileSystem.FileSystem | Path.Path
   > => {
     const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     return pipe(
       services,
       Effect.flatMap(([fs, path]) => {
@@ -379,8 +377,8 @@ const readEventsFromDirectory = <V>(
   streamDir: string
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     services,
     Effect.flatMap(([fs, path]) => readEventsFromDirectoryWithServices<V>(streamDir, fs, path))
   );
@@ -521,8 +519,8 @@ const getAllEventsFromAllStreams = <V>(
     FileSystem.FileSystem,
     Path.Path,
   ] as const);
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     allServices,
     Effect.flatMap(([streamIds, fs, path]) =>
       getAllEventsFromAllStreamsWithServices<V>(config, streamIds, fs, path)
