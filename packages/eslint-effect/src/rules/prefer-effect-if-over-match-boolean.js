@@ -17,6 +17,8 @@ export default {
   },
 
   create(context) {
+    const sourceCode = context.sourceCode;
+
     const isMatchValueIdentifier = (node) => {
       return (
         node &&
@@ -28,12 +30,49 @@ export default {
       );
     };
 
-    const isBooleanExpression = (node) => {
+    const hasExplicitBooleanType = (identifier, sourceCode) => {
+      // Find the variable/parameter declaration for this identifier
+      const scope = sourceCode.getScope(identifier);
+      let currentScope = scope;
+
+      while (currentScope) {
+        const variable = currentScope.variables.find((v) => v.name === identifier.name);
+
+        if (variable && variable.defs.length > 0) {
+          const def = variable.defs[0];
+
+          // Check parameter with type annotation
+          if (def.type === 'Parameter' && def.node.typeAnnotation) {
+            const typeAnnotation = def.node.typeAnnotation.typeAnnotation;
+            if (typeAnnotation && typeAnnotation.type === 'TSBooleanKeyword') {
+              return true;
+            }
+          }
+
+          // Check variable declaration with type annotation
+          if (def.type === 'Variable' && def.node.typeAnnotation) {
+            const typeAnnotation = def.node.typeAnnotation.typeAnnotation;
+            if (typeAnnotation && typeAnnotation.type === 'TSBooleanKeyword') {
+              return true;
+            }
+          }
+
+          return false;
+        }
+
+        currentScope = currentScope.upper;
+      }
+
+      return false;
+    };
+
+    const isBooleanExpression = (node, sourceCode) => {
       if (!node) return false;
 
-      // Identifiers could be boolean but we can't tell without types
-      // So we don't flag them - Match.value(someBooleanVar) might be legitimate
-      // if someBooleanVar is a discriminant in a larger union
+      // Check if identifier has explicit boolean type annotation
+      if (node.type === 'Identifier' && hasExplicitBooleanType(node, sourceCode)) {
+        return true;
+      }
 
       // Binary comparisons that return boolean
       if (node.type === 'BinaryExpression') {
@@ -70,7 +109,7 @@ export default {
           const firstArg = node.arguments[0];
           const secondArg = node.arguments[1];
 
-          if (isBooleanExpression(firstArg) && isMatchValueIdentifier(secondArg)) {
+          if (isBooleanExpression(firstArg, sourceCode) && isMatchValueIdentifier(secondArg)) {
             context.report({
               node: secondArg,
               messageId: 'useEffectIf',
