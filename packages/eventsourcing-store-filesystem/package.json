@@ -1,7 +1,7 @@
 {
-  "name": "@codeforbreakfast/eventsourcing-store-postgres",
-  "version": "0.6.7",
-  "description": "Production-ready PostgreSQL event store with Effect integration - Scalable, ACID-compliant event persistence with type-safe database operations and streaming",
+  "name": "@codeforbreakfast/eventsourcing-store-filesystem",
+  "version": "0.1.0",
+  "description": "Filesystem-based event store implementation for learning and debugging - Human-readable JSON files organized by stream for easy inspection",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -33,29 +33,26 @@
   "keywords": [
     "event-sourcing",
     "event-store",
-    "postgresql",
-    "postgres",
-    "database",
-    "persistence",
+    "filesystem",
+    "debugging",
+    "learning",
+    "storage",
+    "cqrs",
     "effect",
     "effect-ts",
     "functional-programming",
     "fp",
     "typescript",
     "type-safe",
-    "streaming",
-    "acid",
-    "scalable",
-    "production",
-    "sql",
-    "cqrs"
+    "human-readable",
+    "json"
   ],
   "author": "Code for Breakfast",
   "license": "MIT",
   "repository": {
     "type": "git",
     "url": "https://github.com/CodeForBreakfast/eventsourcing",
-    "directory": "packages/eventsourcing-store-postgres"
+    "directory": "packages/eventsourcing-store-filesystem"
   },
   "bugs": {
     "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
@@ -66,11 +63,7 @@
     "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0"
   },
   "dependencies": {
-    "@codeforbreakfast/eventsourcing-store": "workspace:*",
-    "@effect/experimental": "0.56.0",
-    "@effect/sql": "0.46.0",
-    "@effect/sql-pg": "0.47.0",
-    "type-fest": "5.0.1"
+    "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",

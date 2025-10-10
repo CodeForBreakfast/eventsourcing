@@ -70,7 +70,7 @@
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@codeforbreakfast/buntest": "workspace:*",
     "@types/node": "24.6.2",
-    "effect": "3.18.1",
+    "effect": "3.18.4",
     "eslint": "9.36.0",
     "typescript": "5.9.3"
   },
