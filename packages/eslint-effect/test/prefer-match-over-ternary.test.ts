@@ -70,12 +70,16 @@ const plainValueTernary = (condition: boolean) => {
 // Should NOT fail - ternary with string literals
 const stringTernary = (condition: boolean) => (condition ? 'yes' : 'no');
 
-// Should NOT fail - using Match.value instead (correct pattern)
+// Should fail with prefer-effect-if-over-match-boolean - Match.when(true/false) should use Effect.if
+// But used here as example of what prefer-match-over-ternary suggests (now superseded by Effect.if)
 const correctMatchPattern = (condition: boolean) =>
   pipe(
     // eslint-disable-next-line effect/no-pipe-first-arg-call -- Match.value(condition) is the correct usage pattern here
+    // eslint-disable-next-line effect/prefer-effect-if-over-match-boolean -- Example code showing Match.value pattern (prefer Effect.if for booleans)
     Match.value(condition),
+    // eslint-disable-next-line effect/prefer-effect-if-over-match-boolean -- Example code showing Match.when pattern (prefer Effect.if for booleans)
     Match.when(true, () => Effect.succeed(42)),
+    // eslint-disable-next-line effect/prefer-effect-if-over-match-boolean -- Example code showing Match.when pattern (prefer Effect.if for booleans)
     Match.when(false, () => Effect.fail('error'))
   );
 
