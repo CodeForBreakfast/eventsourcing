@@ -102,6 +102,18 @@ export default {
       );
     };
 
+    const isMatchValueCall = (node) => {
+      return (
+        node &&
+        node.type === 'CallExpression' &&
+        node.callee.type === 'MemberExpression' &&
+        node.callee.object.type === 'Identifier' &&
+        node.callee.object.name === 'Match' &&
+        node.callee.property.type === 'Identifier' &&
+        node.callee.property.name === 'value'
+      );
+    };
+
     return {
       CallExpression(node) {
         // Check for pipe(booleanExpression, Match.value, ...)
@@ -112,6 +124,18 @@ export default {
           if (isBooleanExpression(firstArg, sourceCode) && isMatchValueIdentifier(secondArg)) {
             context.report({
               node: secondArg,
+              messageId: 'useEffectIf',
+            });
+          }
+        }
+
+        // Check for Match.value(booleanExpression)
+        if (isMatchValueCall(node) && node.arguments.length >= 1) {
+          const firstArg = node.arguments[0];
+
+          if (isBooleanExpression(firstArg, sourceCode)) {
+            context.report({
+              node,
               messageId: 'useEffectIf',
             });
           }
