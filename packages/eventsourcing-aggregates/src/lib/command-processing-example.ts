@@ -78,6 +78,7 @@ export const processUserCommand = (command: ReadonlyDeep<WireCommand>) =>
   pipe(
     CommandProcessingService,
     Effect.flatMap((service) => service.processCommand(command)),
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Exported layer reused in examples
     Effect.provide(CommandProcessingServiceLive)
     // Note: You also need to provide EventStoreService layer
   );

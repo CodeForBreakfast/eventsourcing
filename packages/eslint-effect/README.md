@@ -248,28 +248,26 @@ Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 
 ### `no-intermediate-effect-variables`
 
-Forbids storing Effect/Stream/PubSub/etc results in intermediate variables before using them in pipes or other functions. Enforces composition into a single pipe chain for better readability and proper functional composition.
+Forbids storing Effect/Stream/pipe results in intermediate variables **when they are only used once**. Variables that are genuinely reused multiple times are allowed as legitimate building blocks.
 
-❌ Bad:
+❌ Bad (single use - should inline):
 
 ```typescript
-// Breaking up the pipe chain unnecessarily
+// Breaking up the pipe chain for a single use
 const userEffect = fetchUser(userId);
 const result = pipe(userEffect, Effect.flatMap(validateUser), Effect.map(formatUserData));
 
-// Storing intermediate pipe results
+// Storing intermediate pipe results used once
 const validated = pipe(data, Schema.decodeUnknown(UserSchema));
 const processed = Effect.map(validated, processUser);
 return Effect.flatMap(processed, saveToDatabase);
 
-// Multiple intermediate variables in sequence
-const stream = Stream.fromIterable(items);
-const filtered = pipe(stream, Stream.filter(isValid));
-const mapped = pipe(filtered, Stream.map(transform));
-return Stream.runCollect(mapped);
+// Schema defined but only used once
+const UserIdSchema = pipe(Schema.String, Schema.nonEmptyString());
+export const decodeUserId = Schema.decode(UserIdSchema); // Only usage
 ```
 
-✅ Good:
+✅ Good (inline single-use values):
 
 ```typescript
 // Single cohesive pipe chain
@@ -283,18 +281,38 @@ return pipe(
   Effect.flatMap(saveToDatabase)
 );
 
-// Stream operations composed together
-return pipe(
-  Stream.fromIterable(items),
-  Stream.filter(isValid),
-  Stream.map(transform),
-  Stream.runCollect
-);
+// Schema inlined directly
+export const decodeUserId = Schema.decode(pipe(Schema.String, Schema.nonEmptyString()));
 ```
 
-**Rationale**: Intermediate variables break the flow of pipe composition and make code harder to follow. They encourage imperative thinking instead of functional composition. By composing everything into a single pipe chain, the data flow becomes clear and transformation steps are explicitly ordered. This rule is particularly important for catching developers who try to work around proper pipe usage.
+✅ Good (multiple uses - legitimate reuse):
 
-**Note:** This is an aggressive rule included in the `pipeStrict` config. It enforces proper functional composition patterns and prevents common anti-patterns where developers break up pipe chains unnecessarily.
+```typescript
+// Layer reused in multiple compositions
+const PgLive = Layer.effect(PgClient, createPgClient);
+const Layer1 = pipe(Migration.layer, Layer.provide(PgLive)); // Use 1
+const Layer2 = pipe(EventStore.layer, Layer.provide(PgLive)); // Use 2
+
+// Effect reused across test cases
+const setupTest = Effect.gen(/* ... */);
+it('test 1', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 1
+it('test 2', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 2
+```
+
+✅ Good (execution results are plain values):
+
+```typescript
+// runSync returns a plain value, not an Effect
+const authResult = Effect.runSync(pipe(authenticate(req), Effect.either));
+if (Either.isLeft(authResult)) {
+  return Response.json({ error: authResult.left });
+}
+return Response.json({ token: authResult.right });
+```
+
+**Rationale**: Single-use intermediate variables break the flow of pipe composition and make code harder to follow. However, variables that are reused multiple times serve as legitimate building blocks for composition and should be kept. The rule also excludes execution methods (`runSync`, `runPromise`, `runFork`) which return plain values, and factory methods (`Schema.decode`) which return functions.
+
+**Note:** This is an aggressive rule included in the `pipeStrict` config. It enforces proper functional composition patterns while allowing genuine code reuse.
 
 ## Rule Presets
 
@@ -349,7 +367,7 @@ Enforces strict pipe composition rules:
 
 - Forbids nested `pipe()` calls
 - Forbids multiple `pipe()` calls per function
-- Forbids storing Effect-like values in intermediate variables
+- Forbids storing pipe/Effect results in single-use intermediate variables
 
 #### `plugin`
 
@@ -487,7 +505,7 @@ export default [
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
-- `effect/no-intermediate-effect-variables` - Forbid storing Effect-like values in intermediate variables (opt-in via `pipeStrict` config)
+- `effect/no-intermediate-effect-variables` - Forbid storing pipe/Effect results in single-use intermediate variables (opt-in via `pipeStrict` config)
 
 ## Available Exports
 

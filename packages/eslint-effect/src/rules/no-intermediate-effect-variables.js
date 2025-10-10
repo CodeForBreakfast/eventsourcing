@@ -1,17 +1,18 @@
 /**
- * Forbid storing Effect/Stream/etc results in intermediate variables
- * Encourages composing everything into a single pipe chain
+ * Forbid storing Effect/Stream/pipe results in intermediate variables when they are only used once
+ * Encourages composing everything into a single pipe chain for better readability
+ * Allows variables that are genuinely reused multiple times
  */
 export default {
   meta: {
     type: 'suggestion',
     docs: {
       description:
-        'Forbid storing Effect/Stream/PubSub/etc results in intermediate variables. Compose everything into a single pipe chain instead.',
+        'Forbid storing Effect/Stream/pipe results in intermediate variables when used only once. Variables used multiple times are allowed as legitimate reuse.',
     },
     messages: {
       noIntermediateVariable:
-        'Variable "{{varName}}" stores an Effect-like value but is then used as an argument to another function. Compose everything into a single pipe() chain instead.',
+        'Variable "{{varName}}" stores a pipe/Effect result but is only used once. Inline it directly into the pipe() chain for better readability.',
     },
     schema: [],
   },
@@ -57,10 +58,50 @@ export default {
       'SubscriptionRef',
     ]);
 
+    const EXECUTION_METHODS = new Set([
+      'runSync',
+      'runPromise',
+      'runFork',
+      'runCallback',
+      'unsafeRunSync',
+      'unsafeRunPromise',
+      'unsafeRunCallback',
+    ]);
+
+    const FACTORY_METHODS = new Set(['decode', 'encode', 'decodeUnknown', 'encodeUnknown']);
+
     const trackedVariables = new Map();
+
+    const isExecutionCall = (node) => {
+      return (
+        node.type === 'CallExpression' &&
+        node.callee.type === 'MemberExpression' &&
+        node.callee.property.type === 'Identifier' &&
+        EXECUTION_METHODS.has(node.callee.property.name)
+      );
+    };
+
+    const isFactoryCall = (node) => {
+      return (
+        node.type === 'CallExpression' &&
+        node.callee.type === 'MemberExpression' &&
+        node.callee.object.type === 'Identifier' &&
+        node.callee.object.name === 'Schema' &&
+        node.callee.property.type === 'Identifier' &&
+        FACTORY_METHODS.has(node.callee.property.name)
+      );
+    };
 
     const isEffectModuleCall = (node) => {
       if (node.type !== 'CallExpression') {
+        return false;
+      }
+
+      if (isExecutionCall(node)) {
+        return false;
+      }
+
+      if (isFactoryCall(node)) {
         return false;
       }
 
@@ -86,6 +127,8 @@ export default {
             trackedVariables.set(node.id.name, {
               node: node.id,
               declarator: node,
+              usageCount: 0,
+              usageNodes: [],
             });
           }
         }
@@ -95,18 +138,24 @@ export default {
         for (const arg of node.arguments) {
           if (arg.type === 'Identifier' && trackedVariables.has(arg.name)) {
             const tracked = trackedVariables.get(arg.name);
-            context.report({
-              node: arg,
-              messageId: 'noIntermediateVariable',
-              data: {
-                varName: arg.name,
-              },
-            });
+            tracked.usageCount++;
+            tracked.usageNodes.push(arg);
           }
         }
       },
 
       'Program:exit': () => {
+        for (const [varName, tracked] of trackedVariables.entries()) {
+          if (tracked.usageCount === 1) {
+            context.report({
+              node: tracked.usageNodes[0],
+              messageId: 'noIntermediateVariable',
+              data: {
+                varName,
+              },
+            });
+          }
+        }
         trackedVariables.clear();
       },
     };

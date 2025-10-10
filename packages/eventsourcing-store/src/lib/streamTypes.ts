@@ -8,7 +8,6 @@ export const EventStreamId = pipe(
 );
 export type EventStreamId = typeof EventStreamId.Type;
 
-// eslint-disable-next-line effect/no-intermediate-effect-variables -- Legitimate pattern: creating decoder from schema
 export const toStreamId = Schema.decode(EventStreamId);
 
 export const EventNumber = pipe(Schema.Number, Schema.nonNegative());

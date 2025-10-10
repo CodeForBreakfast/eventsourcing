@@ -444,7 +444,6 @@ const createWebSocketServer = (
               )
             );
 
-            // eslint-disable-next-line effect/no-intermediate-effect-variables -- authResult is used twice (for isLeft check and accessing .right), cannot inline
             if (Either.isLeft(authResult)) {
               return new Response('Authentication failed', { status: 401 });
             }
