@@ -1,5 +1,11 @@
 # @codeforbreakfast/buntest
 
+## 0.2.5
+
+### Patch Changes
+
+- [#246](https://github.com/CodeForBreakfast/eventsourcing/pull/246) [`212e229`](https://github.com/CodeForBreakfast/eventsourcing/commit/212e229e36ffefe76bf77ef12fb84fa01275d7cc) Thanks [@GraemeF](https://github.com/GraemeF)! - Fixed ESLint configuration to properly handle TypeScript declaration files. This resolves parsing errors that occurred when ESLint attempted to parse generated `.d.ts` files that were not included in TypeScript project configurations.
+
 ## 0.2.4
 
 ### Patch Changes

@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store-filesystem",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Filesystem-based event store implementation for learning and debugging - Human-readable JSON files organized by stream for easy inspection",
   "type": "module",
   "main": "./dist/index.js",
