@@ -18,6 +18,6 @@
     "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
   },
   "dependencies": {
-    "effect": "3.18.1"
+    "effect": "3.18.4"
   }
 }
