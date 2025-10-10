@@ -139,10 +139,12 @@ const subscribeToClientMessages =
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap(addQueueToClientSubscribers(clientState)),
-      Effect.map((queue) =>
-        filter
-          ? Stream.filter(Stream.fromQueue(queue), applyFilterToMessage(filter))
-          : Stream.fromQueue(queue)
+      Effect.flatMap((queue) =>
+        Effect.if(filter !== undefined, {
+          onTrue: () =>
+            Effect.succeed(Stream.filter(Stream.fromQueue(queue), applyFilterToMessage(filter!))),
+          onFalse: () => Effect.succeed(Stream.fromQueue(queue)),
+        })
       )
     );
 
