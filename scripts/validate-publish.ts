@@ -125,13 +125,10 @@ const getFilteredPackages = (changedDirectories: ReadonlySet<string>) =>
   );
 
 const getPackagesForChangedDirs = (changedDirectories: ReadonlySet<string>) =>
-  pipe(
-    changedDirectories.size > 0,
-    Match.value,
-    Match.when(true, () => getFilteredPackages(changedDirectories)),
-    Match.when(false, () => Effect.succeed([])),
-    Match.exhaustive
-  );
+  Effect.if(changedDirectories.size > 0, {
+    onTrue: () => getFilteredPackages(changedDirectories),
+    onFalse: () => Effect.succeed([]),
+  });
 
 const displayWarningAndGetAllPackages = pipe(
   Terminal.Terminal,
