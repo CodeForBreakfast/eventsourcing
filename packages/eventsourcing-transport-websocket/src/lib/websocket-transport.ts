@@ -151,11 +151,6 @@ const addSubscriberToState =
       subscribers: HashSet.add(state.subscribers, queue),
     }));
 
-const applyFilterToStream =
-  (filter: (message: Readonly<TransportMessage>) => boolean) =>
-  (stream: Stream.Stream<TransportMessage, never, never>) =>
-    Stream.filter(stream, applyFilterSafely(filter));
-
 const subscribeToMessages =
   (stateRef: Readonly<Ref.Ref<WebSocketInternalState>>) =>
   (
@@ -165,7 +160,7 @@ const subscribeToMessages =
       Queue.unbounded<TransportMessage>(),
       Effect.tap(addSubscriberToState(stateRef)),
       Effect.map(Stream.fromQueue),
-      Effect.map((stream) => (filter ? applyFilterToStream(filter)(stream) : stream))
+      Effect.map((stream) => (filter ? Stream.filter(stream, applyFilterSafely(filter)) : stream))
     );
 
 const createConnectedTransport = (

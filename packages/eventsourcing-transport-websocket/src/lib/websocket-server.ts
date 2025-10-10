@@ -139,11 +139,11 @@ const subscribeToClientMessages =
     pipe(
       Queue.unbounded<TransportMessage>(),
       Effect.tap(addQueueToClientSubscribers(clientState)),
-      Effect.map((queue) => {
-        const baseStream = Stream.fromQueue(queue);
-
-        return filter ? Stream.filter(baseStream, applyFilterToMessage(filter)) : baseStream;
-      })
+      Effect.map((queue) =>
+        filter
+          ? Stream.filter(Stream.fromQueue(queue), applyFilterToMessage(filter))
+          : Stream.fromQueue(queue)
+      )
     );
 
 const createClientTransport = (clientState: ReadonlyDeep<ClientState>): Client.Transport => ({
@@ -433,16 +433,18 @@ const createWebSocketServer = (
 
         fetch: (req, server) => {
           if (config.authenticateConnection) {
-            const authEffect = pipe(
-              req,
-              Effect.succeed,
-              Effect.flatMap(config.authenticateConnection),
-              Effect.catchAll(Effect.fail)
+            // eslint-disable-next-line effect/no-runSync -- fetch handler is a synchronous callback at application boundary, requires Effect.runSync
+            const authResult = Effect.runSync(
+              pipe(
+                req,
+                Effect.succeed,
+                Effect.flatMap(config.authenticateConnection),
+                Effect.catchAll(Effect.fail),
+                Effect.either
+              )
             );
 
-            // eslint-disable-next-line effect/no-runSync -- fetch handler is a synchronous callback at application boundary, requires Effect.runSync
-            const authResult = Effect.runSync(pipe(authEffect, Effect.either));
-
+            // eslint-disable-next-line effect/no-intermediate-effect-variables -- authResult is used twice (for isLeft check and accessing .right), cannot inline
             if (Either.isLeft(authResult)) {
               return new Response('Authentication failed', { status: 401 });
             }
