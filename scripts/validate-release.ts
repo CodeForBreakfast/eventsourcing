@@ -45,6 +45,7 @@ const fetchGitOrigin = (root: string, baseBranch: string) =>
 const getRootAndBaseBranch = Effect.all([rootDir, getEnvVar('GITHUB_BASE_REF')]);
 
 const fetchBaseBranch = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   getRootAndBaseBranch,
   Effect.andThen(([root, baseBranch]) =>
     baseBranch ? fetchGitOrigin(root, baseBranch) : Effect.void
@@ -92,7 +93,11 @@ const runChangesetStatus = (root: string) =>
     Effect.andThen(() => resolveAndReadStatus(root))
   );
 
-const getChangesetStatus = pipe(rootDir, Effect.andThen(runChangesetStatus));
+const getChangesetStatus = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  rootDir,
+  Effect.andThen(runChangesetStatus)
+);
 
 const displayPackageList = (packageNames: readonly string[]) => (terminal: Terminal.Terminal) =>
   pipe(
@@ -139,6 +144,7 @@ const displayValidationError = pipe(
 );
 
 const determinePackagesToValidate = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   fetchBaseBranch,
   Effect.andThen(() => getChangesetStatus),
   Effect.andThen((status) =>
@@ -249,14 +255,22 @@ const validatePackages = (packagesToValidate: readonly string[]) =>
   packagesToValidate.length === 0
     ? displayNoPackagesValidation
     : pipe(
+        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
         rootDir,
         Effect.flatMap((root) => executePackageValidation(root, packagesToValidate))
       );
 
 const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   validateChangesets,
   Effect.andThen(() => getPackagesToValidate),
   Effect.andThen(validatePackages)
 );
 
-BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));
+BunRuntime.runMain(
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
+    program,
+    Effect.provide(BunContext.layer)
+  )
+);

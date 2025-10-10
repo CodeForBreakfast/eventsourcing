@@ -250,22 +250,23 @@ const reduceDirectoryEntries =
       }
     );
 
-const processDirectory = (
-  currentDir: string,
-  files: readonly string[] = []
-): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> => {
-  const readdirEffect = pipe(
+const readDirectoryForProcessing = (currentDir: string) =>
+  pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.readDirectory(currentDir)),
     Effect.mapError((error) => new Error(`Failed to read directory ${currentDir}: ${error}`))
   );
 
-  return pipe(
-    readdirEffect,
+const processDirectory = (
+  currentDir: string,
+  files: readonly string[] = []
+): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> =>
+  pipe(
+    currentDir,
+    readDirectoryForProcessing,
     Effect.flatMap(mapNamesToEntries(currentDir)),
     Effect.flatMap(reduceDirectoryEntries(files, currentDir))
   );
-};
 
 const findMarkdownFiles = (dir: string) => processDirectory(dir, []);
 
@@ -592,9 +593,14 @@ const createValidationDirPaths = (cwd: string) =>
     }))
   );
 
-const getValidationDirs = pipe(resolveCwd, Effect.flatMap(createValidationDirPaths));
+const getValidationDirs = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  resolveCwd,
+  Effect.flatMap(createValidationDirPaths)
+);
 
 const validateMarkdownExamples = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
   getValidationDirs,
   Effect.flatMap(({ packageDir, tempDir }) => runValidation(packageDir, tempDir))
 );
@@ -604,6 +610,16 @@ const logErrorAndFail = (error: Readonly<Error>) => {
   return pipe(errorMessage, Console.error, Effect.andThen(Effect.fail(error)));
 };
 
-const program = pipe(validateMarkdownExamples, Effect.catchAll(logErrorAndFail));
+const program = pipe(
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+  validateMarkdownExamples,
+  Effect.catchAll(logErrorAndFail)
+);
 
-BunRuntime.runMain(pipe(program, Effect.provide(BunContext.layer)));
+BunRuntime.runMain(
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script entry point pattern
+    program,
+    Effect.provide(BunContext.layer)
+  )
+);
