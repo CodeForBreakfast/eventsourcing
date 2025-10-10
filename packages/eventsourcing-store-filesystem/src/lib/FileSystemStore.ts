@@ -106,9 +106,9 @@ const writeEventToFile = <V>(
   event: V,
   fs: FileSystem.FileSystem
 ): Effect.Effect<void, never, never> => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.sync requires a thunk argument, cannot be piped differently
   const serialized = Effect.sync(() => JSON.stringify(event, null, 2));
   const writeFile = writeFileStringForPath(eventPath, fs);
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.sync requires a thunk argument, cannot be piped differently
   return pipe(serialized, Effect.flatMap(writeFile));
 };
 
@@ -147,8 +147,8 @@ const writeEventsToFiles = <V>(
   startIndex: number,
   events: Chunk.Chunk<V>
 ): Effect.Effect<void, never, FileSystem.FileSystem | Path.Path> => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
     services,
     Effect.flatMap(([fs, path]) =>
@@ -261,8 +261,8 @@ const appendEventsToStream =
     ConcurrencyConflictError,
     FileSystem.FileSystem | Path.Path
   > => {
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     return pipe(
       services,
       Effect.flatMap(([fs, path]) => {
@@ -378,8 +378,8 @@ const readEventsFromDirectoryWithServices = <V>(
 const readEventsFromDirectory = <V>(
   streamDir: string
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
     services,
     Effect.flatMap(([fs, path]) => readEventsFromDirectoryWithServices<V>(streamDir, fs, path))
@@ -394,13 +394,13 @@ const concatHistoricalWithQueue =
 const createLiveStreamFromHistoricalAndPubSub =
   <V>(historical: Stream.Stream<V, never, never>) =>
   (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- PubSub.subscribe requires pubsub argument, cannot be piped differently
     const subscription = PubSub.subscribe(pubsub);
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Stream.unwrapScoped requires Effect argument, cannot be piped differently
     const subscriptionEffect = pipe(
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- PubSub.subscribe requires pubsub argument, cannot be piped differently
       subscription,
       Effect.map(concatHistoricalWithQueue(historical))
     );
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Stream.unwrapScoped requires Effect argument, cannot be piped differently
     return Stream.unwrapScoped(subscriptionEffect);
   };
 
@@ -516,12 +516,12 @@ const getAllEventsFromAllStreams = <V>(
   never,
   FileSystem.FileSystem | Path.Path
 > => {
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   const allServices = Effect.all([
     getAllStreams(config),
     FileSystem.FileSystem,
     Path.Path,
   ] as const);
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
   return pipe(
     allServices,
     Effect.flatMap(([streamIds, fs, path]) =>
