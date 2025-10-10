@@ -357,13 +357,10 @@ const createSeparateTempFiles = (
 };
 
 const checkTypeCheckOutput = (output: string) =>
-  pipe(
-    output.trim().length > 0,
-    Match.value,
-    Match.when(true, () => Effect.fail(output)),
-    Match.when(false, () => Effect.void),
-    Match.exhaustive
-  );
+  Effect.if(output.trim().length > 0, {
+    onTrue: () => Effect.fail(output),
+    onFalse: () => Effect.void,
+  });
 
 const typeCheckDirectory = (tempDir: string) =>
   pipe(
@@ -538,13 +535,10 @@ const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
 
 const handleValidationErrors =
   (allBlocks: readonly CodeBlock[]) => (errors: readonly ValidationError[]) =>
-    pipe(
-      errors.length > 0,
-      Match.value,
-      Match.when(true, () => displayErrorsAndFail(errors)),
-      Match.when(false, () => Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`)),
-      Match.exhaustive
-    );
+    Effect.if(errors.length > 0, {
+      onTrue: () => displayErrorsAndFail(errors),
+      onFalse: () => Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`),
+    });
 
 const typeCheckAndReportErrors = (allBlocks: readonly CodeBlock[], tempDir: string) => {
   const blockCountMessage = `📝 Found ${allBlocks.length} TypeScript code blocks\n`;
@@ -565,13 +559,10 @@ const skipValidationIfNoBlocks = (tempDir: string) => {
 
 const processAllBlocks =
   (tempDir: string, _packageDir: string) => (allBlocks: readonly CodeBlock[]) =>
-    pipe(
-      allBlocks.length === 0,
-      Match.value,
-      Match.when(true, () => skipValidationIfNoBlocks(tempDir)),
-      Match.when(false, () => typeCheckAndReportErrors(allBlocks, tempDir)),
-      Match.exhaustive
-    );
+    Effect.if(allBlocks.length === 0, {
+      onTrue: () => skipValidationIfNoBlocks(tempDir),
+      onFalse: () => typeCheckAndReportErrors(allBlocks, tempDir),
+    });
 
 const collectAllCodeBlocks =
   (packageDir: string) =>
