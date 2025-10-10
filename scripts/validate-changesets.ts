@@ -175,19 +175,14 @@ const parsePackagesFromFrontmatter = (
 const parseChangesetContent = (file: string) => (content: string) => {
   const frontmatterContent = parseFrontmatter(content);
   const { packages, changeType } = parsePackagesFromFrontmatter(frontmatterContent);
-  return pipe(
-    packages.length === 0,
-    Match.value,
-    Match.when(true, () => Option.none<ChangesetInfoInternal>()),
-    Match.when(false, () =>
-      Option.some<ChangesetInfoInternal>({
-        filename: file,
-        packages,
-        type: changeType,
-      })
-    ),
-    Match.exhaustive
-  );
+  if (packages.length === 0) {
+    return Option.none<ChangesetInfoInternal>();
+  }
+  return Option.some<ChangesetInfoInternal>({
+    filename: file,
+    packages,
+    type: changeType,
+  });
 };
 
 const parseChangesetFile =
