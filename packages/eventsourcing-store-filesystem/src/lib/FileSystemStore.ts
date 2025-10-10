@@ -9,7 +9,6 @@ import {
   HashMap,
   SynchronizedRef,
   Queue,
-  Match,
 } from 'effect';
 import { FileSystem, Path } from '@effect/platform';
 import {
@@ -84,21 +83,17 @@ const validateStreamPosition = (
   actualVersion: number,
   streamId: EventStreamId
 ): Effect.Effect<void, ConcurrencyConflictError, never> =>
-  pipe(
-    expectedVersion === actualVersion,
-    Match.value,
-    Match.when(true, () => Effect.void),
-    Match.when(false, () =>
+  Effect.if(expectedVersion === actualVersion, {
+    onTrue: () => Effect.void,
+    onFalse: () =>
       Effect.fail(
         new ConcurrencyConflictError({
           expectedVersion,
           actualVersion,
           streamId,
         })
-      )
-    ),
-    Match.exhaustive
-  );
+      ),
+  });
 
 const writeFileStringForPath =
   (eventPath: string, fs: FileSystem.FileSystem) =>
