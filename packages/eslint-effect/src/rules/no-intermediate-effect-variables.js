@@ -92,6 +92,21 @@ export default {
       );
     };
 
+    const isSchemaComposition = (node) => {
+      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'pipe') {
+        return false;
+      }
+
+      const firstArg = node.arguments[0];
+      if (!firstArg) return false;
+
+      return (
+        firstArg.type === 'MemberExpression' &&
+        firstArg.object.type === 'Identifier' &&
+        firstArg.object.name === 'Schema'
+      );
+    };
+
     const isEffectModuleCall = (node) => {
       if (node.type !== 'CallExpression') {
         return false;
@@ -102,6 +117,10 @@ export default {
       }
 
       if (isFactoryCall(node)) {
+        return false;
+      }
+
+      if (isSchemaComposition(node)) {
         return false;
       }
 
@@ -141,6 +160,14 @@ export default {
             tracked.usageCount++;
             tracked.usageNodes.push(arg);
           }
+        }
+      },
+
+      MemberExpression(node) {
+        if (node.object.type === 'Identifier' && trackedVariables.has(node.object.name)) {
+          const tracked = trackedVariables.get(node.object.name);
+          tracked.usageCount++;
+          tracked.usageNodes.push(node.object);
         }
       },
 

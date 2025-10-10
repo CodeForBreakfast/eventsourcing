@@ -293,6 +293,7 @@ const buildNotificationListener = ({
 
   notifications: createNotificationsStream(notificationQueue),
 
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Module-level Effect used once as service property
   start: startListenerService,
 
   stop: stopListenerService(activeChannels),

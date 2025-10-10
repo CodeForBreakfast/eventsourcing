@@ -60,7 +60,9 @@ describe('Event Sourcing Errors', () => {
       const retryable = pipe(new Error('timeout'), connectionError.retryable('connect'));
       const fatal = pipe(new Error('invalid config'), connectionError.fatal('connect'));
 
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Testing error object properties, not Effect chains
       expect(retryable.retryable).toBe(true);
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Testing error object properties, not Effect chains
       expect(fatal.retryable).toBe(false);
     });
   });

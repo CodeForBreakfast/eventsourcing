@@ -327,7 +327,6 @@ describe('Command Processing Service', () => {
     /* eslint-disable effect/no-intermediate-effect-variables -- Effect and Layer variables needed to avoid nested pipes */
     const serviceEffect = pipe(router, createCommandProcessingService(TestEventStore));
     const ServiceLayer = Layer.effect(CommandProcessingService, serviceEffect);
-    /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable rule after Layer creation */
 
     return pipe(
       CommandProcessingService,
@@ -338,5 +337,6 @@ describe('Command Processing Service', () => {
       Effect.provide(ServiceLayer),
       Effect.provide(testLayer)
     );
+    /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable after test completes */
   });
 });
