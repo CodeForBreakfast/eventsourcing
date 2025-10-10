@@ -21,6 +21,7 @@ export const FooEventStoreTest = (store: FileSystemStore<FooEvent>) =>
   );
 
 const makeFooEventStoreLayer = () => {
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to create unique test directory path, then executed synchronously for test setup
   const testDir = pipe(
     Path.Path,
     Effect.map((path) =>

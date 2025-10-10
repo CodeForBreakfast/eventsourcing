@@ -106,6 +106,7 @@ const writeEventToFile = <V>(
   event: V,
   fs: FileSystem.FileSystem
 ): Effect.Effect<void, never, never> => {
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to separate serialization concern from file writing
   const serialized = Effect.sync(() => JSON.stringify(event, null, 2));
   const writeFile = writeFileStringForPath(eventPath, fs);
   return pipe(serialized, Effect.flatMap(writeFile));
@@ -375,6 +376,7 @@ const readEventsFromDirectoryWithServices = <V>(
 const readEventsFromDirectory = <V>(
   streamDir: string
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to gather required services before processing
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
   return pipe(
     services,
@@ -390,7 +392,9 @@ const concatHistoricalWithQueue =
 const createLiveStreamFromHistoricalAndPubSub =
   <V>(historical: Stream.Stream<V, never, never>) =>
   (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable needed to create subscription before mapping
     const subscription = PubSub.subscribe(pubsub);
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to transform subscription into stream with historical data
     const subscriptionEffect = pipe(
       subscription,
       Effect.map(concatHistoricalWithQueue(historical))
@@ -510,6 +514,7 @@ const getAllEventsFromAllStreams = <V>(
   never,
   FileSystem.FileSystem | Path.Path
 > => {
+  // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect variable used to gather all required services and stream IDs before processing
   const allServices = Effect.all([
     getAllStreams(config),
     FileSystem.FileSystem,
