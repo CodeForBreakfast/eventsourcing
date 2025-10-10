@@ -1,14 +1,4 @@
-import {
-  Chunk,
-  Effect,
-  HashMap,
-  Match,
-  Option,
-  PubSub,
-  Stream,
-  SynchronizedRef,
-  pipe,
-} from 'effect';
+import { Chunk, Effect, HashMap, Option, PubSub, Stream, SynchronizedRef, pipe } from 'effect';
 import {
   EventStreamId,
   EventStreamPosition,
@@ -41,21 +31,17 @@ const createUpdatedEventStream = <V>(
 const appendToExistingEventStream =
   <V = never>(position: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
   (eventStream: EventStream<V>) =>
-    pipe(
-      eventStream.events.length === position.eventNumber,
-      Match.value,
-      Match.when(true, () => Effect.succeed(createUpdatedEventStream(eventStream, newEvents))),
-      Match.when(false, () =>
+    Effect.if(eventStream.events.length === position.eventNumber, {
+      onTrue: () => Effect.succeed(createUpdatedEventStream(eventStream, newEvents)),
+      onFalse: () =>
         Effect.fail(
           new ConcurrencyConflictError({
             expectedVersion: position.eventNumber,
             actualVersion: eventStream.events.length,
             streamId: position.streamId,
           })
-        )
-      ),
-      Match.exhaustive
-    );
+        ),
+    });
 
 const createOrAppendToStream = <V>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
   pipe(emptyStream<V>(), Effect.flatMap(appendToExistingEventStream(streamEnd, newEvents)));
