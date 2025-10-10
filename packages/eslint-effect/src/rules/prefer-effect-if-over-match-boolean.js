@@ -31,6 +31,10 @@ export default {
     const isBooleanExpression = (node) => {
       if (!node) return false;
 
+      // Identifiers could be boolean but we can't tell without types
+      // So we don't flag them - Match.value(someBooleanVar) might be legitimate
+      // if someBooleanVar is a discriminant in a larger union
+
       // Binary comparisons that return boolean
       if (node.type === 'BinaryExpression') {
         const booleanOps = ['===', '!==', '==', '!=', '<', '>', '<=', '>='];
