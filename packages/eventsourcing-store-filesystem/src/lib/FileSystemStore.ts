@@ -83,15 +83,17 @@ const validateStreamPosition = (
   actualVersion: number,
   streamId: EventStreamId
 ): Effect.Effect<void, ConcurrencyConflictError, never> =>
-  expectedVersion === actualVersion
-    ? Effect.void
-    : Effect.fail(
+  Effect.if(expectedVersion === actualVersion, {
+    onTrue: () => Effect.void,
+    onFalse: () =>
+      Effect.fail(
         new ConcurrencyConflictError({
           expectedVersion,
           actualVersion,
           streamId,
         })
-      );
+      ),
+  });
 
 const writeFileStringForPath =
   (eventPath: string, fs: FileSystem.FileSystem) =>

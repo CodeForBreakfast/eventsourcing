@@ -137,6 +137,98 @@ Effect.flatMap((x) => {
 Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
 ```
 
+### `prefer-effect-if-over-match-boolean`
+
+Enforces `Effect.if` over `Match.value` for boolean conditionals. `Match.value` should be reserved for pattern matching on multiple values, not simple true/false branches.
+
+❌ Bad:
+
+```typescript
+pipe(
+  isValid,
+  Match.value,
+  Match.when(true, () => Effect.succeed('valid')),
+  Match.when(false, () => Effect.fail('invalid')),
+  Match.exhaustive
+);
+
+pipe(
+  user.isAdmin,
+  Match.value,
+  Match.when(true, () => grantAccess()),
+  Match.when(false, () => denyAccess()),
+  Match.exhaustive
+);
+```
+
+✅ Good:
+
+```typescript
+Effect.if(isValid, {
+  onTrue: () => Effect.succeed('valid'),
+  onFalse: () => Effect.fail('invalid'),
+});
+
+Effect.if(user.isAdmin, {
+  onTrue: () => grantAccess(),
+  onFalse: () => denyAccess(),
+});
+```
+
+**Rationale**: `Match.value` is designed for pattern matching on discriminated unions and multiple values. Using it for simple boolean conditions is verbose and obscures intent. `Effect.if` is explicit, concise, and clearly communicates boolean branching logic.
+
+### `prefer-match-over-ternary`
+
+Encourages declarative `Match.value` patterns over ternary operators when pattern matching on non-boolean values or selecting between function calls.
+
+**Note**: For boolean conditions returning Effects, use `Effect.if` instead (see `prefer-effect-if-over-match-boolean` rule above).
+
+❌ Bad:
+
+```typescript
+const result = filter !== undefined ? Stream.filter(stream, filter) : stream;
+
+const handler = (option: Option.Option<number>) =>
+  Option.isSome(option) ? processValue(option.value) : getDefault();
+
+const processStatus = (status: 'pending' | 'active' | 'complete') =>
+  status === 'complete' ? finalizeTask() : continueTask();
+```
+
+✅ Good:
+
+```typescript
+const result = pipe(
+  filter,
+  Match.value,
+  Match.when(Match.undefined, () => stream),
+  Match.orElse((f) => Stream.filter(stream, f))
+);
+
+const handler = (option: Option.Option<number>) =>
+  pipe(
+    option,
+    Match.value,
+    Match.when(Match.some, (opt) => processValue(opt.value)),
+    Match.orElse(getDefault)
+  );
+
+const processStatus = (status: 'pending' | 'active' | 'complete') =>
+  pipe(status, Match.value, Match.when('complete', finalizeTask), Match.orElse(continueTask));
+```
+
+**For boolean conditions with Effects, use `Effect.if`:**
+
+```typescript
+// Boolean condition returning Effects - use Effect.if, NOT Match.value
+const result = Effect.if(condition, {
+  onTrue: () => Effect.succeed(42),
+  onFalse: () => Effect.fail('error'),
+});
+```
+
+**Rationale**: Ternary operators are imperative and less composable than `Match` patterns. Using `Match.value` provides better composability for pattern matching on values like optional types, union types, or non-boolean conditions. However, for simple boolean conditionals returning Effects, `Effect.if` is the preferred pattern as it's more explicit and type-safe. Plain value ternaries (not function calls) are allowed as they're appropriate for simple value selection.
+
 ### `no-switch-statement`
 
 Forbids switch statements in functional Effect code. Switch statements are imperative and don't provide exhaustiveness checking. Use `Match` for type-safe, exhaustive pattern matching.
@@ -502,6 +594,8 @@ export default [
 - `effect/no-unnecessary-function-alias` - Detect unnecessary function aliases
 - `effect/prefer-match-tag` - Use Match.tag over Match.when for \_tag
 - `effect/prefer-match-over-conditionals` - Use Match over if statements
+- `effect/prefer-effect-if-over-match-boolean` - Use Effect.if over Match.value for boolean conditionals
+- `effect/prefer-match-over-ternary` - Use Match.value over ternary operators for non-boolean pattern matching
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers

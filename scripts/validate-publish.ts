@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe } from 'effect';
+import { Effect, Match, pipe } from 'effect';
 import { Command, FileSystem, Path, Terminal } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
 
@@ -46,10 +46,17 @@ const buildPackageMetadata = (dir: string) => (content: string) => {
   return [{ name: pkgData.name, directory: dir }];
 };
 
+const readAndBuildMetadata = (packageJsonPath: string, dir: string) =>
+  pipe(packageJsonPath, readFileAsString, Effect.map(buildPackageMetadata(dir)));
+
 const readPackageMetadataIfExists = (packageJsonPath: string, dir: string) => (exists: boolean) =>
-  exists
-    ? pipe(packageJsonPath, readFileAsString, Effect.map(buildPackageMetadata(dir)))
-    : Effect.succeed([]);
+  pipe(
+    exists,
+    Match.value,
+    Match.when(true, () => readAndBuildMetadata(packageJsonPath, dir)),
+    Match.when(false, () => Effect.succeed([])),
+    Match.exhaustive
+  );
 
 const checkExistsAndRead = (dir: string) => (packageJsonPath: string) =>
   pipe(
@@ -110,14 +117,18 @@ const filterPackagesByDirectory =
   (allPackages: ReadonlyArray<{ readonly name: string; readonly directory: string }>) =>
     allPackages.filter((pkg) => changedDirectories.has(pkg.directory)).map((pkg) => pkg.name);
 
+const getFilteredPackages = (changedDirectories: ReadonlySet<string>) =>
+  pipe(
+    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
+    getAllPackages,
+    Effect.map(filterPackagesByDirectory(changedDirectories))
+  );
+
 const getPackagesForChangedDirs = (changedDirectories: ReadonlySet<string>) =>
-  changedDirectories.size > 0
-    ? pipe(
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Script pattern: effect reused in main program logic
-        getAllPackages,
-        Effect.map(filterPackagesByDirectory(changedDirectories))
-      )
-    : Effect.succeed([]);
+  Effect.if(changedDirectories.size > 0, {
+    onTrue: () => getFilteredPackages(changedDirectories),
+    onFalse: () => Effect.succeed([]),
+  });
 
 const displayWarningAndGetAllPackages = pipe(
   Terminal.Terminal,

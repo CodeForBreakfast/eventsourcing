@@ -65,6 +65,7 @@ const constAssertionInFlatMap = pipe(
   // eslint-disable-next-line effect/no-pipe-first-arg-call -- Testing first arg in pipe
   Effect.succeed(true),
   Effect.flatMap((completed) =>
+    // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing as const, not ternary patterns
     completed
       ? Effect.succeed([
           {

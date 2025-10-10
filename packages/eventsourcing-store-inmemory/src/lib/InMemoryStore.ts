@@ -31,15 +31,17 @@ const createUpdatedEventStream = <V>(
 const appendToExistingEventStream =
   <V = never>(position: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
   (eventStream: EventStream<V>) =>
-    eventStream.events.length === position.eventNumber
-      ? Effect.succeed(createUpdatedEventStream(eventStream, newEvents))
-      : Effect.fail(
+    Effect.if(eventStream.events.length === position.eventNumber, {
+      onTrue: () => Effect.succeed(createUpdatedEventStream(eventStream, newEvents)),
+      onFalse: () =>
+        Effect.fail(
           new ConcurrencyConflictError({
             expectedVersion: position.eventNumber,
             actualVersion: eventStream.events.length,
             streamId: position.streamId,
           })
-        );
+        ),
+    });
 
 const createOrAppendToStream = <V>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
   pipe(emptyStream<V>(), Effect.flatMap(appendToExistingEventStream(streamEnd, newEvents)));

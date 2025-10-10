@@ -300,18 +300,23 @@ const appendEventToStream =
         }
         return events[events.length - 1]?.event_number;
       }),
-      Effect.flatMap((last) => {
-        return (end.eventNumber === 0 && last === -1) ||
-          (last !== undefined && last === end.eventNumber - 1)
-          ? Effect.succeed(end)
-          : Effect.fail(
-              new ConcurrencyConflictError({
-                expectedVersion: end.eventNumber,
-                actualVersion: (last ?? -1) + 1,
-                streamId: end.streamId,
-              })
-            );
-      }),
+      Effect.flatMap((last) =>
+        Effect.if(
+          (end.eventNumber === 0 && last === -1) ||
+            (last !== undefined && last === end.eventNumber - 1),
+          {
+            onTrue: () => Effect.succeed(end),
+            onFalse: () =>
+              Effect.fail(
+                new ConcurrencyConflictError({
+                  expectedVersion: end.eventNumber,
+                  actualVersion: (last ?? -1) + 1,
+                  streamId: end.streamId,
+                })
+              ),
+          }
+        )
+      ),
       Effect.flatMap((end: EventStreamPosition) =>
         eventRows.insert({
           event_number: end.eventNumber,

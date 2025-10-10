@@ -69,6 +69,19 @@ export const makeCommandRegistry = <
 
   const toReadonlyDeep = <A>(value: A): ReadonlyDeep<A> => value as ReadonlyDeep<A>;
 
+  const handleMatcherExit = (
+    matcherResult: Readonly<Exit.Exit<CommandResult, unknown>>,
+    wireCommand: ReadonlyDeep<WireCommand>
+  ): Effect.Effect<CommandResult, never, never> =>
+    pipe(
+      matcherResult,
+      Match.value,
+      Match.when(Exit.isFailure, (failure) =>
+        Effect.succeed(createUnknownErrorFailure(wireCommand.id, String(failure.cause)))
+      ),
+      Match.orElse((success) => Effect.succeed(success.value))
+    );
+
   const executeMatcherWithErrorHandling = (
     command: CommandFromDefinitions<T>,
     wireCommand: ReadonlyDeep<WireCommand>
@@ -78,11 +91,7 @@ export const makeCommandRegistry = <
       toReadonlyDeep,
       matcher,
       Effect.exit,
-      Effect.flatMap((matcherResult) =>
-        Exit.isFailure(matcherResult)
-          ? Effect.succeed(createUnknownErrorFailure(wireCommand.id, String(matcherResult.cause)))
-          : Effect.succeed(matcherResult.value)
-      )
+      Effect.flatMap((matcherResult) => handleMatcherExit(matcherResult, wireCommand))
     );
 
   const createValidationErrorFailure = (

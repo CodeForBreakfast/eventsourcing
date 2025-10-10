@@ -1,6 +1,6 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe, Array as EffectArray, Console, Option } from 'effect';
+import { Effect, pipe, Array as EffectArray, Console, Option, Match } from 'effect';
 import { Path, Command, Terminal, FileSystem } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
 
@@ -47,14 +47,20 @@ const processMarkdownLine =
     const trimmed = line?.trim() ?? '';
 
     if (trimmed.match(/^```(?:typescript|ts)$/)) {
-      return state.inBlock
-        ? logMalformedCodeBlock(filePath, lineIndex, state)
-        : Effect.succeed({
+      return pipe(
+        state.inBlock,
+        Match.value,
+        Match.when(true, () => logMalformedCodeBlock(filePath, lineIndex, state)),
+        Match.when(false, () =>
+          Effect.succeed({
             ...state,
             inBlock: true,
             currentBlock: [],
             blockStartLine: lineIndex + 1,
-          });
+          })
+        ),
+        Match.exhaustive
+      );
     }
 
     if (trimmed === '```' && state.inBlock) {
@@ -350,11 +356,17 @@ const createSeparateTempFiles = (
   return pipe(tsConfigEffect, Effect.andThen(writeAllBlockFiles(blocks, tempDir)));
 };
 
+const checkTypeCheckOutput = (output: string) =>
+  Effect.if(output.trim().length > 0, {
+    onTrue: () => Effect.fail(output),
+    onFalse: () => Effect.void,
+  });
+
 const typeCheckDirectory = (tempDir: string) =>
   pipe(
     Command.make('bun', 'tsc', '--project', tempDir, '--noEmit'),
     Command.string,
-    Effect.flatMap((output) => (output.trim().length > 0 ? Effect.fail(output) : Effect.void))
+    Effect.flatMap(checkTypeCheckOutput)
   );
 
 const findBlockFileByFilename = (filename: string, blockFiles: readonly BlockFile[]) =>
@@ -523,9 +535,10 @@ const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
 
 const handleValidationErrors =
   (allBlocks: readonly CodeBlock[]) => (errors: readonly ValidationError[]) =>
-    errors.length > 0
-      ? displayErrorsAndFail(errors)
-      : Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`);
+    Effect.if(errors.length > 0, {
+      onTrue: () => displayErrorsAndFail(errors),
+      onFalse: () => Console.log(`\n✅ All ${allBlocks.length} code examples are valid!`),
+    });
 
 const typeCheckAndReportErrors = (allBlocks: readonly CodeBlock[], tempDir: string) => {
   const blockCountMessage = `📝 Found ${allBlocks.length} TypeScript code blocks\n`;
@@ -546,9 +559,10 @@ const skipValidationIfNoBlocks = (tempDir: string) => {
 
 const processAllBlocks =
   (tempDir: string, _packageDir: string) => (allBlocks: readonly CodeBlock[]) =>
-    allBlocks.length === 0
-      ? skipValidationIfNoBlocks(tempDir)
-      : typeCheckAndReportErrors(allBlocks, tempDir);
+    Effect.if(allBlocks.length === 0, {
+      onTrue: () => skipValidationIfNoBlocks(tempDir),
+      onFalse: () => typeCheckAndReportErrors(allBlocks, tempDir),
+    });
 
 const collectAllCodeBlocks =
   (packageDir: string) =>

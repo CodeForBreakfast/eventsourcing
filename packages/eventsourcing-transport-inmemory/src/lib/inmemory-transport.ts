@@ -15,7 +15,19 @@
  * - Pure functional design with no global state
  */
 
-import { Effect, Stream, Scope, Ref, Queue, PubSub, HashMap, HashSet, Option, pipe } from 'effect';
+import {
+  Effect,
+  Stream,
+  Scope,
+  Ref,
+  Queue,
+  PubSub,
+  HashMap,
+  HashSet,
+  Option,
+  pipe,
+  Match,
+} from 'effect';
 import {
   TransportError,
   ConnectionError,
@@ -102,6 +114,18 @@ const createConnectionStateStream = (
     )
   );
 
+const publishOrFail =
+  (
+    targetQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>,
+    errorMessage: ReadonlyDeep<string>,
+    message: ReadonlyDeep<TransportMessage>
+  ) =>
+  (state: ReadonlyDeep<ConnectionState>): Effect.Effect<void, TransportError> =>
+    Effect.if(state !== 'connected', {
+      onTrue: () => Effect.fail(new TransportError({ message: errorMessage })),
+      onFalse: () => Queue.offer(targetQueue, message),
+    });
+
 const publishWithConnectionCheck =
   (
     clientState: ReadonlyDeep<InMemoryClientState>,
@@ -112,11 +136,7 @@ const publishWithConnectionCheck =
     pipe(
       clientState.connectionState,
       Ref.get,
-      Effect.flatMap((state: ReadonlyDeep<ConnectionState>) =>
-        state !== 'connected'
-          ? Effect.fail(new TransportError({ message: errorMessage }))
-          : Queue.offer(targetQueue, message)
-      )
+      Effect.flatMap(publishOrFail(targetQueue, errorMessage, message))
     );
 
 const forwardMessagesToSubscriber =
@@ -134,7 +154,12 @@ const forwardMessagesToSubscriber =
 const applyFilterToStream =
   (filter?: (message: ReadonlyDeep<TransportMessage>) => boolean) =>
   (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>): Stream.Stream<TransportMessage> =>
-    filter ? Stream.filter(Stream.fromQueue(queue), filter) : Stream.fromQueue(queue);
+    pipe(
+      filter,
+      Match.value,
+      Match.when(Match.undefined, () => Stream.fromQueue(queue)),
+      Match.orElse((filterFn) => Stream.filter(Stream.fromQueue(queue), filterFn))
+    );
 
 const createSimpleSubscription =
   (sourceQueue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
