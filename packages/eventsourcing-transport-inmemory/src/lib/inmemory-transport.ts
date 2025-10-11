@@ -188,12 +188,8 @@ const forwardToSubscribers = (
     Effect.flatMap((subscribers: ReadonlyDeep<HashSet.HashSet<Queue.Queue<TransportMessage>>>) =>
       Effect.forEach(
         HashSet.values(subscribers),
-        (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) => {
-          if (excludeQueue && queue === excludeQueue) {
-            return Effect.void;
-          }
-          return Queue.offer(queue, message);
-        },
+        (queue: ReadonlyDeep<Queue.Queue<TransportMessage>>) =>
+          excludeQueue && queue === excludeQueue ? Effect.void : Queue.offer(queue, message),
         { discard: true }
       )
     )
