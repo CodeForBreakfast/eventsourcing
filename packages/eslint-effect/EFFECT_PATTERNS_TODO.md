@@ -19,7 +19,7 @@
 - [ ] `prefer-get-somes` - `filter(Option.isSome).map(x => x.value)` → `getSomes` (Array)
 - [ ] `prefer-get-rights` - `filter(Either.isRight).map(x => x.right)` → `getRights` (Array)
 - [ ] `prefer-get-lefts` - `filter(Either.isLeft).map(x => x.left)` → `getLefts` (Array)
-- [ ] `prefer-succeed-none` - `succeed(Option.none())` → `succeedNone` (Effect)
+- [x] `prefer-succeed-none` - `succeed(Option.none())` → `succeedNone` (Effect)
 - [ ] `prefer-succeed-some` - `succeed(Option.some(x))` → `succeedSome(x)` (Effect)
 - [ ] `prefer-when` - `condition ? effect : void` → `when(effect, () => condition)` (Effect)
 - [ ] `prefer-unless` - `!condition ? effect : void` → `unless(effect, () => condition)` (Effect)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (12 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null)
+- Already Analyzed: 27 (13 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null, prefer-succeed-none)
 - Not Yet Analyzed: 250

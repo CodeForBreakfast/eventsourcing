@@ -82,6 +82,7 @@ export default [
       'effect/prefer-from-nullable': 'off',
       'effect/prefer-get-or-else': 'off',
       'effect/prefer-get-or-null': 'off',
+      'effect/prefer-succeed-none': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -259,6 +260,11 @@ export default [
     name: 'prefer-schema-validation-over-assertions-test',
     files: ['test/prefer-schema-validation-over-assertions.test.ts'],
     rules: { 'effect/prefer-schema-validation-over-assertions': 'error' },
+  },
+  {
+    name: 'prefer-succeed-none-test',
+    files: ['test/prefer-succeed-none.test.ts'],
+    rules: { 'effect/prefer-succeed-none': 'error' },
   },
   {
     name: 'suggest-currying-opportunity-test',
