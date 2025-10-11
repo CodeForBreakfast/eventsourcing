@@ -1,5 +1,16 @@
 # @codeforbreakfast/eventsourcing-protocol-default
 
+## 0.4.3
+
+### Patch Changes
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated internal implementation to comply with `no-if-statement` rule.
+
+  Test code now uses if statements where appropriate (for assertions and side effects), while production code follows functional patterns. This is an internal refactoring with no API changes.
+
+- Updated dependencies [[`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.3
+
 ## 0.4.2
 
 ### Patch Changes
