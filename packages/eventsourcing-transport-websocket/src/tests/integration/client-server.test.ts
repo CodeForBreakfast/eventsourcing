@@ -8,8 +8,8 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Stream, pipe, Option, Either } from 'effect';
+import { describe, it, expectSome, assertEqual, expectLeft } from '@codeforbreakfast/buntest';
+import { Effect, Stream, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -137,17 +137,6 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 // WebSocket-Specific Tests
 // =============================================================================
 
-const assertConnectionState = Option.match({
-  onNone: () =>
-    Effect.sync(() => {
-      expect(false).toBe(true);
-    }),
-  onSome: (connectionState: ConnectionState) =>
-    Effect.sync(() => {
-      expect(connectionState).toBe('connected');
-    }),
-});
-
 const checkConnectionState = (client: {
   readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 }) =>
@@ -155,7 +144,8 @@ const checkConnectionState = (client: {
     client.connectionState,
     Stream.take(1),
     Stream.runHead,
-    Effect.flatMap(assertConnectionState)
+    Effect.flatMap(expectSome),
+    Effect.flatMap(assertEqual('connected'))
   );
 
 const connectAndVerify = (host: string, port: number) =>
@@ -184,10 +174,8 @@ describe('WebSocket Client-Server Specific Tests', () => {
       `ws://localhost:${nonExistentPort}`,
       WebSocketConnector.connect,
       Effect.either,
-      Effect.tap((result) => {
-        expect(Either.isLeft(result)).toBe(true);
-        return Effect.void;
-      })
+      Effect.flatMap(expectLeft),
+      Effect.asVoid
     );
   });
 });
