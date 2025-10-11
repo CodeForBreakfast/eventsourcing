@@ -11,7 +11,7 @@
 - [x] `prefer-zip-right` - `flatMap(() => b)` → `zipRight(a, b)` (Effect, Option)
 - [x] `prefer-ignore` - Complex ignore pattern → `ignore` (Effect)
 - [x] `prefer-ignore-logged` - Ignore with logging → `ignoreLogged` (Effect)
-- [ ] `prefer-from-nullable` - `value != null ? some(value) : none()` → `fromNullable(value)` (Option)
+- [x] `prefer-from-nullable` - `value != null ? some(value) : none()` → `fromNullable(value)` (Option)
 - [ ] `prefer-get-or-else` - `isSome(opt) ? opt.value : default` → `getOrElse(() => default)` (Option)
 - [ ] `prefer-get-or-null` - `getOrElse(() => null)` → `getOrNull` (Option)
 - [ ] `prefer-get-or-undefined` - `getOrElse(() => undefined)` → `getOrUndefined` (Option)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (9 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged)
+- Already Analyzed: 27 (10 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable)
 - Not Yet Analyzed: 250

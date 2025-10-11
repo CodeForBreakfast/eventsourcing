@@ -32,6 +32,7 @@ import preferZipLeft from './prefer-zip-left.js';
 import preferZipRight from './prefer-zip-right.js';
 import preferIgnore from './prefer-ignore.js';
 import preferIgnoreLogged from './prefer-ignore-logged.js';
+import preferFromNullable from './prefer-from-nullable.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -68,4 +69,5 @@ export default {
   'prefer-zip-right': preferZipRight,
   'prefer-ignore': preferIgnore,
   'prefer-ignore-logged': preferIgnoreLogged,
+  'prefer-from-nullable': preferFromNullable,
 };

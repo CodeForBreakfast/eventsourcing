@@ -118,6 +118,7 @@ const pluginRulesOnly = {
   'effect/prefer-zip-right': 'error',
   'effect/prefer-ignore': 'error',
   'effect/prefer-ignore-logged': 'error',
+  'effect/prefer-from-nullable': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 
