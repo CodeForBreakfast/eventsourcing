@@ -3,8 +3,8 @@
 '@codeforbreakfast/eventsourcing-protocol': patch
 '@codeforbreakfast/eventsourcing-commands': patch
 '@codeforbreakfast/eventsourcing-store-postgres': patch
-'@codeforbreakfast/eventsourcing-example-todo': patch
 '@codeforbreakfast/eventsourcing-transport-websocket': patch
+'@codeforbreakfast/eventsourcing-websocket': patch
 ---
 
 Updated internal implementation to comply with `no-if-statement` rule.
