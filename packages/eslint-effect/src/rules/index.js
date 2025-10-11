@@ -31,6 +31,7 @@ import preferFlatten from './prefer-flatten.js';
 import preferZipLeft from './prefer-zip-left.js';
 import preferZipRight from './prefer-zip-right.js';
 import preferIgnore from './prefer-ignore.js';
+import preferIgnoreLogged from './prefer-ignore-logged.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -66,4 +67,5 @@ export default {
   'prefer-zip-left': preferZipLeft,
   'prefer-zip-right': preferZipRight,
   'prefer-ignore': preferIgnore,
+  'prefer-ignore-logged': preferIgnoreLogged,
 };

@@ -78,6 +78,7 @@ export default [
       'effect/prefer-zip-left': 'off',
       'effect/prefer-zip-right': 'off',
       'effect/prefer-ignore': 'off',
+      'effect/prefer-ignore-logged': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -210,6 +211,11 @@ export default [
     name: 'prefer-ignore-test',
     files: ['test/prefer-ignore.test.ts'],
     rules: { 'effect/prefer-ignore': 'error' },
+  },
+  {
+    name: 'prefer-ignore-logged-test',
+    files: ['test/prefer-ignore-logged.test.ts'],
+    rules: { 'effect/prefer-ignore-logged': 'error' },
   },
   {
     name: 'prefer-effect-platform-test',
