@@ -228,12 +228,10 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.sync(() => {
         expect(Option.isSome(state1)).toBe(true);
         expect(Option.isSome(state2)).toBe(true);
-        void (Option.isSome(state1) && Option.isSome(state2)
-          ? (() => {
-              expect(state1.value).toBe('connected');
-              expect(state2.value).toBe('connected');
-            })()
-          : undefined);
+        if (Option.isSome(state1) && Option.isSome(state2)) {
+          expect(state1.value).toBe('connected');
+          expect(state2.value).toBe('connected');
+        }
         expect(connections).toHaveLength(2);
         expect(connections[0]!.clientId).toBeDefined();
         expect(connections[1]!.clientId).toBeDefined();

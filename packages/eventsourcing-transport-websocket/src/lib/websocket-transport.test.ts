@@ -43,64 +43,52 @@ const createMockWebSocket =
 
     const dispatchEvent = (event: unknown): boolean => {
       const listeners = eventListeners.get((event as { readonly type: string }).type);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-      const _unused = listeners
-        ? listeners.forEach((listener) => {
-            try {
-              listener(event);
-            } catch (error) {
-              // eslint-disable-next-line effect/prefer-effect-platform -- Test helper mock uses console
-              console.error('Error in event listener:', error);
-            }
-          })
-        : void 0;
+      if (listeners) {
+        listeners.forEach((listener) => {
+          try {
+            listener(event);
+          } catch (error) {
+            // eslint-disable-next-line effect/prefer-effect-platform -- Test helper mock uses console
+            console.error('Error in event listener:', error);
+          }
+        });
+      }
       return true;
     };
 
     const simulateConnection = () => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-      const _unused =
-        config.shouldFailConnection || config.shouldFailBeforeOpen
-          ? (() => {
-              dispatchEvent({ type: 'error', error: new Error('Connection failed') });
-              readyState = WebSocketState.CLOSED;
-            })()
-          : config.shouldCloseBeforeOpen
-            ? (() => {
-                dispatchEvent({ type: 'close', code: 1006, reason: 'Connection refused' });
-                readyState = WebSocketState.CLOSED;
-              })()
-            : (() => {
-                const openDelay = config.openDelay ?? 0;
-                pipe(openDelay, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-                  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-                  const _unused2 = closedEarly
-                    ? void 0
-                    : (() => {
-                        readyState = WebSocketState.OPEN;
-                        dispatchEvent({ type: 'open' });
+      if (config.shouldFailConnection || config.shouldFailBeforeOpen) {
+        dispatchEvent({ type: 'error', error: new Error('Connection failed') });
+        readyState = WebSocketState.CLOSED;
+      } else if (config.shouldCloseBeforeOpen) {
+        dispatchEvent({ type: 'close', code: 1006, reason: 'Connection refused' });
+        readyState = WebSocketState.CLOSED;
+      } else {
+        const openDelay = config.openDelay ?? 0;
+        pipe(openDelay, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+          if (!closedEarly) {
+            readyState = WebSocketState.OPEN;
+            dispatchEvent({ type: 'open' });
 
-                        // Send preloaded messages if configured
-                        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-                        const _unused3 = config.preloadedMessages
-                          ? pipe(100, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-                              // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-                              const _unused4 = closedEarly
-                                ? void 0
-                                : config.preloadedMessages!.forEach((message) => {
-                                    dispatchEvent({ type: 'message', data: message });
-                                  });
-                            })
-                          : void 0;
-                      })();
-                });
-              })();
+            if (config.preloadedMessages) {
+              pipe(100, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+                if (!closedEarly) {
+                  config.preloadedMessages!.forEach((message) => {
+                    dispatchEvent({ type: 'message', data: message });
+                  });
+                }
+              });
+            }
+          }
+        });
+      }
     };
 
     // Start connection simulation with delay to allow 'connecting' state to be observed
     pipe(50, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-      const _unused = closedEarly ? void 0 : simulateConnection();
+      if (!closedEarly) {
+        simulateConnection();
+      }
     });
 
     // Return WebSocket-compatible object
@@ -127,29 +115,21 @@ const createMockWebSocket =
 
       removeEventListener(type: string, listener: (event: unknown) => void) {
         const listeners = eventListeners.get(type);
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-        const _unused = listeners
-          ? (() => {
-              const filteredListeners = listeners.filter((l) => l !== listener);
-              eventListeners.set(type, filteredListeners);
-            })()
-          : void 0;
+        if (listeners) {
+          const filteredListeners = listeners.filter((l) => l !== listener);
+          eventListeners.set(type, filteredListeners);
+        }
       },
 
       dispatchEvent,
 
       send(_data: string | ArrayBuffer | Blob | ArrayBufferView) {
-        // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-        const _unused =
-          readyState !== WebSocketState.OPEN
-            ? (() => {
-                throw new Error('WebSocket is not open');
-              })()
-            : config.shouldFailOnWrite
-              ? (() => {
-                  throw new Error('Send failed');
-                })()
-              : void 0;
+        if (readyState !== WebSocketState.OPEN) {
+          throw new Error('WebSocket is not open');
+        }
+        if (config.shouldFailOnWrite) {
+          throw new Error('Send failed');
+        }
         // In a real implementation, this would send data to the server
       },
 
@@ -282,10 +262,9 @@ const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
     Stream.runHead,
     Effect.map((message) => {
       expect(Option.isSome(message)).toBe(true);
-      // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Ternary needs assignment to avoid unused expression error
-      const _unused = Option.isSome(message)
-        ? expect(extractMessageId(message.value)).toBe('valid-id')
-        : void 0;
+      if (Option.isSome(message)) {
+        expect(extractMessageId(message.value)).toBe('valid-id');
+      }
     })
   );
 
