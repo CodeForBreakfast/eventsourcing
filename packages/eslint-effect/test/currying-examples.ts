@@ -9,13 +9,11 @@ import { Effect } from 'effect';
 // =============================================================================
 
 const logError = (message: string, error: unknown): Effect.Effect<void> =>
-  // eslint-disable-next-line effect/prefer-effect-platform -- Example function
   Effect.sync(() => console.error(message, error));
 
 const myEffect = Effect.succeed('test');
 
 // This SHOULD trigger a warning because params are already at end (good currying opportunity)
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Intentionally triggering to verify rule works
 const example1 = Effect.catchAll(myEffect, (error) => logError('Failed', error));
 
 // =============================================================================
@@ -23,7 +21,6 @@ const example1 = Effect.catchAll(myEffect, (error) => logError('Failed', error))
 // =============================================================================
 
 const logErrorWrongOrder = (error: unknown, message: string): Effect.Effect<void> =>
-  // eslint-disable-next-line effect/prefer-effect-platform -- Example function
   Effect.sync(() => console.error(message, error));
 
 // Rule won't suggest because param (error) comes first, not last
@@ -62,7 +59,6 @@ const example4 = Effect.map(Effect.succeed(50), (value) =>
 // =============================================================================
 
 // Rule doesn't trigger on Effect library functions
-// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
 const validExample1 = Effect.flatMap(myEffect, (x) => Effect.succeed(x));
 
 // =============================================================================

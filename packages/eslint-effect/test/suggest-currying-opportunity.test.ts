@@ -1,12 +1,10 @@
 import { Effect } from 'effect';
 
 const logHandlerError = (message: string, error: unknown): Effect.Effect<void> => {
-  // eslint-disable-next-line effect/prefer-effect-platform -- Test utility function
   return Effect.sync(() => console.log(message, error));
 };
 
 const logHandlerErrorWrongOrder = (error: unknown, message: string): Effect.Effect<void> => {
-  // eslint-disable-next-line effect/prefer-effect-platform -- Test utility function
   return Effect.sync(() => console.log(message, error));
 };
 
@@ -27,13 +25,13 @@ type ErrorWithMessage = { readonly error: string };
 const myEffect = Effect.succeed('test');
 
 // Params already at end - no reordering needed
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Testing currying opportunity with single curried arg
+
 const handleError1 = Effect.catchAll(myEffect, (error) =>
   logHandlerError('Failed to process', error)
 );
 
 // Params already at end - no reordering needed
-// eslint-disable-next-line effect/suggest-currying-opportunity -- Testing currying opportunity with message arg
+
 const handleError2 = Effect.catchAll(myEffect, (error: unknown) =>
   logHandlerError('Failed with context', error)
 );
@@ -64,7 +62,7 @@ const processWithPrefixReorder = Effect.map(myEffect, (data: string) =>
 const validPattern1 = Effect.map(myEffect, (x: string) => x.length * 2);
 
 // Using Effect library function - should not suggest currying
-// eslint-disable-next-line effect/no-eta-expansion -- Testing currying rule, not eta-expansion
+
 const validPattern2 = Effect.flatMap(myEffect, (x: string) => Effect.succeed(x));
 
 // Param in the middle - would require reordering (filtered out by default)

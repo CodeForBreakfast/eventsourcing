@@ -1,6 +1,5 @@
 import { Effect } from 'effect';
 
-// eslint-disable-next-line effect/no-gen -- Testing Effect.gen call
 const genTest = Effect.gen(function* () {
   yield* Effect.succeed(42);
   return 'done';
