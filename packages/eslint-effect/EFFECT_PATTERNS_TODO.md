@@ -25,7 +25,7 @@
 - [ ] `prefer-unless` - `!condition ? effect : void` → `unless(effect, () => condition)` (Effect)
 - [ ] `prefer-match-value` - Nested ternaries → `Match.value` (Match)
 - [ ] `prefer-match-tags` - `switch(value._tag)` → `Match.tags` (Match)
-- [ ] `prefer-and-then` - Simple `flatMap(() => x)` → `andThen(x)` (Effect)
+- [x] `prefer-and-then` - Simple `flatMap(() => x)` → `andThen(x)` (Effect, Option, Stream, STM)
 - [ ] `prefer-tap` - `flatMap(v => map(fx, () => v))` → `tap(fx)` (Effect)
 - [ ] `prefer-tap-error` - `catchAll(e => flatMap(fx, () => fail(e)))` → `tapError(fx)` (Effect)
 - [ ] `prefer-tap-both` - `tap` + `tapError` → `tapBoth` (Effect)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (13 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null, prefer-succeed-none)
+- Already Analyzed: 27 (14 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null, prefer-succeed-none, prefer-and-then)
 - Not Yet Analyzed: 250

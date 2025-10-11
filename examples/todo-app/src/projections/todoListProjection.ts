@@ -58,23 +58,17 @@ const TodoListProjectionEventStore = Context.GenericTag<
   ProjectionEventStore<EventRecord<TodoListEvent, UserId>>
 >('TodoListProjectionEventStore');
 
-const applyProjectionLoader = (
-  listId: string,
-  projectionStore: ProjectionEventStore<EventRecord<TodoListEvent, UserId>>
-) => {
-  const loader = loadProjection(TodoListProjectionEventStore, applyEvent);
-  const loadEffect = loader(listId);
-  return pipe(loadEffect, Effect.provideService(TodoListProjectionEventStore, projectionStore));
-};
-
-const loadProjectionForList = (
-  projectionStore: ProjectionEventStore<EventRecord<TodoListEvent, UserId>>,
-  listId: string
-) => applyProjectionLoader(listId, projectionStore);
+const applyProjectionLoader =
+  (listId: string) => (projectionStore: ProjectionEventStore<EventRecord<TodoListEvent, UserId>>) =>
+    pipe(
+      listId,
+      loadProjection(TodoListProjectionEventStore, applyEvent),
+      Effect.provideService(TodoListProjectionEventStore, projectionStore)
+    );
 
 export const loadTodoListProjection = () =>
   pipe(
     TodoListAggregate,
     Effect.map(makeProjectionEventStore),
-    Effect.flatMap((projectionStore) => loadProjectionForList(projectionStore, TODO_LIST_ID))
+    Effect.flatMap(applyProjectionLoader(TODO_LIST_ID))
   );
