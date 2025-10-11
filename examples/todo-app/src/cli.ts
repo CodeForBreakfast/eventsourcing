@@ -178,7 +178,7 @@ const processProjectionData = (todoId: TodoId) => (data: Readonly<Option.Option<
     data,
     Option.filter(filterDeleted),
     Option.match({
-      onNone: () => Effect.succeed(Option.none()),
+      onNone: () => Effect.succeedNone,
       onSome: formatAndLogTodo(todoId),
     })
   );
