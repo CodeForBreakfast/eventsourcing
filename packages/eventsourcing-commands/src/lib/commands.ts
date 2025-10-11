@@ -192,9 +192,9 @@ const buildSchemaFromCommandList = <
       : (() => {
           const [first, second, ...rest] = schemas;
           const hasRequiredSchemas = !!first && !!second;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
           return hasRequiredSchemas
-            ? (Schema.Union(first, second, ...rest) as any)
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
+              (Schema.Union(first, second, ...rest) as any)
             : (() => {
                 throw new Error('Unexpected state: should have at least 2 schemas');
               })();
