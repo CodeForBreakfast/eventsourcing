@@ -294,12 +294,9 @@ const appendEventToStream =
     pipe(
       end.streamId,
       eventRows.selectAllEventsInStream,
-      Effect.map((events: readonly EventRow[]) => {
-        if (events.length === 0) {
-          return -1;
-        }
-        return events[events.length - 1]?.event_number;
-      }),
+      Effect.map((events: readonly EventRow[]) =>
+        events.length === 0 ? -1 : events[events.length - 1]?.event_number
+      ),
       Effect.flatMap((last) =>
         Effect.if(
           (end.eventNumber === 0 && last === -1) ||
@@ -331,12 +328,9 @@ const appendEventToStream =
       })),
       Effect.tap(() => notifySubscribers(subscriptionManager, end.streamId, payload)),
       Effect.tapError((error) => Effect.logError('Error writing to event store', { error })),
-      Effect.mapError((error) => {
-        if (error instanceof ConcurrencyConflictError) {
-          return error;
-        }
-        return createWriteError(end.streamId, error);
-      }),
+      Effect.mapError((error) =>
+        error instanceof ConcurrencyConflictError ? error : createWriteError(end.streamId, error)
+      ),
       Effect.flatMap(Schema.decode(EventStreamPosition))
     );
 
