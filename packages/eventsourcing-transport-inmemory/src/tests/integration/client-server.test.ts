@@ -8,7 +8,7 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expectSome, assertEqual, expectTrue } from '@codeforbreakfast/buntest';
 import { Effect, Stream, pipe, Option } from 'effect';
 import {
   TransportMessage,
@@ -168,10 +168,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
   const expectStateConnected = (state: Readonly<Option.Option<ConnectionState>>) =>
-    Option.match(state, {
-      onNone: () => Effect.void,
-      onSome: (value) => Effect.sync(() => expect(value).toBe('connected')),
-    });
+    pipe(state, expectSome, Effect.flatMap(assertEqual('connected')));
 
   const verifyClientConnectionState = (client: {
     readonly connectionState: Stream.Stream<ConnectionState>;
@@ -180,10 +177,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       client.connectionState,
       Stream.take(1),
       Stream.runHead,
-      Effect.tap((state) => {
-        expect(Option.isSome(state)).toBe(true);
-        return expectStateConnected(state);
-      })
+      Effect.flatMap(expectStateConnected)
     );
 
   it.effect('in-memory server should accept connections', () =>
@@ -219,30 +213,55 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.map((chunk) => Array.from(chunk))
     );
 
-  const verifyWithBothStates =
-    (
-      state1: Readonly<Option.Option<ConnectionState>>,
-      state2: Readonly<Option.Option<ConnectionState>>
-    ) =>
-    (connections: ReadonlyArray<{ readonly clientId: string }>) =>
-      Effect.sync(() => {
-        expect(Option.isSome(state1)).toBe(true);
-        expect(Option.isSome(state2)).toBe(true);
-        if (Option.isSome(state1) && Option.isSome(state2)) {
-          expect(state1.value).toBe('connected');
-          expect(state2.value).toBe('connected');
-        }
-        expect(connections).toHaveLength(2);
-        expect(connections[0]!.clientId).toBeDefined();
-        expect(connections[1]!.clientId).toBeDefined();
-        expect(connections[0]!.clientId).not.toBe(connections[1]!.clientId);
-      });
+  const assertStateIsConnected = assertEqual('connected');
 
-  const verifyConnectionsAfterStates = (
-    server: InMemoryServer,
-    state1: Readonly<Option.Option<ConnectionState>>,
-    state2: Readonly<Option.Option<ConnectionState>>
-  ) => pipe(server, collectServerConnections, Effect.flatMap(verifyWithBothStates(state1, state2)));
+  const assertHasTwoConnections = expectTrue('Expected 2 connections');
+
+  const assertFirstClientIdDefined = expectTrue('Expected first clientId to be defined');
+
+  const assertSecondClientIdDefined = expectTrue('Expected second clientId to be defined');
+
+  const assertDifferentClientIds = expectTrue('Expected different clientIds');
+
+  const verifyBothStatesConnected = (states: readonly [ConnectionState, ConnectionState]) =>
+    pipe(
+      states[0],
+      assertStateIsConnected,
+      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+      Effect.andThen(pipe(states[1], assertStateIsConnected))
+    );
+
+  const verifyConnectionsArray = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+    pipe(
+      connections.length === 2,
+      assertHasTwoConnections,
+      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+      Effect.andThen(pipe(connections[0]!.clientId !== undefined, assertFirstClientIdDefined)),
+      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+      Effect.andThen(pipe(connections[1]!.clientId !== undefined, assertSecondClientIdDefined)),
+      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+      Effect.andThen(
+        pipe(connections[0]!.clientId !== connections[1]!.clientId, assertDifferentClientIds)
+      )
+    );
+
+  const verifyConnectionsAfterStates =
+    (states: readonly [ConnectionState, ConnectionState]) =>
+    (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+      pipe(states, verifyBothStatesConnected, Effect.andThen(verifyConnectionsArray(connections)));
+
+  const verifyServerWithStates =
+    (server: InMemoryServer) => (states: readonly [ConnectionState, ConnectionState]) =>
+      pipe(server, collectServerConnections, Effect.flatMap(verifyConnectionsAfterStates(states)));
+
+  const unwrapAndVerifyStates =
+    (server: InMemoryServer) =>
+    (optionStates: readonly [Option.Option<ConnectionState>, Option.Option<ConnectionState>]) =>
+      pipe(
+        [expectSome(optionStates[0]), expectSome(optionStates[1])] as const,
+        Effect.all,
+        Effect.flatMap(verifyServerWithStates(server))
+      );
 
   const verifyTwoClientsConnected = (
     server: InMemoryServer,
@@ -252,7 +271,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
     pipe(
       [getClientConnectionState(client1), getClientConnectionState(client2)] as const,
       Effect.all,
-      Effect.flatMap(([state1, state2]) => verifyConnectionsAfterStates(server, state1, state2))
+      Effect.flatMap(unwrapAndVerifyStates(server))
     );
 
   const connectTwoClients = (server: InMemoryServer) =>
@@ -289,13 +308,18 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.timeout(100)
     );
 
+  const assertHasOneMessage = expectTrue('Expected 1 message');
+
   const verifyTestMessage =
     (testMessage: TransportMessage) => (messages: ReadonlyArray<TransportMessage>) =>
-      Effect.sync(() => {
-        expect(messages).toHaveLength(1);
-        expect(messages[0]!.id).toEqual(testMessage.id);
-        expect(messages[0]!.type).toBe(testMessage.type);
-      });
+      pipe(
+        messages.length === 1,
+        assertHasOneMessage,
+        // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+        Effect.andThen(pipe(messages[0]!.id, assertEqual(testMessage.id))),
+        // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
+        Effect.andThen(pipe(messages[0]!.type, assertEqual(testMessage.type)))
+      );
 
   const collectWithServerAndMessage =
     (server: InMemoryServer, testMessage: TransportMessage) =>
