@@ -8,8 +8,6 @@ import {
 import { makeInMemoryEventStore } from './index';
 import { type InMemoryStore, make } from './InMemoryStore';
 
-const LoggerLive = silentLogger;
-
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;
 
@@ -26,6 +24,6 @@ const makeFooEventStoreLayer = () =>
 // Note: In-memory store doesn't support horizontal scaling since each instance has its own memory
 runEventStoreTestSuite(
   'In-memory',
-  () => pipe(makeFooEventStoreLayer(), Layer.provide(LoggerLive)),
+  () => pipe(makeFooEventStoreLayer(), Layer.provide(silentLogger)),
   { supportsHorizontalScaling: false }
 );

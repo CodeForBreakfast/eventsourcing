@@ -90,8 +90,6 @@ const createUpdatedValue =
     },
   });
 
-const updateEventStreamsByIdForEventStream = updateEventStreamsById;
-
 const applyUpdatedEventStreamToValue =
   <V>(
     allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
@@ -102,7 +100,7 @@ const applyUpdatedEventStreamToValue =
   (updatedEventStream: EventStream<V>) =>
     pipe(
       eventStreamsById,
-      updateEventStreamsByIdForEventStream(updatedEventStream, streamEnd, newEvents),
+      updateEventStreamsById(updatedEventStream, streamEnd, newEvents),
       Effect.map(createUpdatedValue(allEventsStream, newEvents, streamEnd))
     );
 
@@ -136,14 +134,16 @@ const modifyEventStreamsWithEmptyIfMissing =
       })
     );
 
-const modifyEventStreamsForEnsure = modifyEventStreamsWithEmptyIfMissing;
-
 const modifyEventStreamsByIdWithEmptyStream = <V>(
   streamId: EventStreamId,
   emptyStream: EventStream<V>,
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>
 ): Effect.Effect<HashMap.HashMap<EventStreamId, EventStream<V>>, never, never> =>
-  pipe(eventStreamsById, modifyEventStreamsForEnsure(streamId, emptyStream), Effect.succeed);
+  pipe(
+    eventStreamsById,
+    modifyEventStreamsWithEmptyIfMissing(streamId, emptyStream),
+    Effect.succeed
+  );
 
 const buildValueFromEventStreamsById =
   <V>(allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>) =>

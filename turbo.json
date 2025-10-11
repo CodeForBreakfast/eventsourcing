@@ -101,6 +101,7 @@
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/bun.lock",
         "$TURBO_ROOT$/packages/eslint-effect/src/**/*.js",
+        "$TURBO_ROOT$/packages/buntest/src/eslint/**/*.js",
         "package.json"
       ]
     },

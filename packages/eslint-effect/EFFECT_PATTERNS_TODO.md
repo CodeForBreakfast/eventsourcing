@@ -14,7 +14,8 @@
 - [x] `prefer-from-nullable` - `value != null ? some(value) : none()` → `fromNullable(value)` (Option)
 - [x] `prefer-get-or-else` - `isSome(opt) ? opt.value : default` → `getOrElse(() => default)` (Option)
 - [x] `prefer-get-or-null` - `getOrElse(() => null)` → `getOrNull` (Option)
-- [ ] `prefer-get-or-undefined` - `getOrElse(() => undefined)` → `getOrUndefined` (Option)
+- [x] `prefer-get-or-undefined` - `getOrElse(() => undefined)` → `getOrUndefined` (Option)
+- [x] `no-effect-if-option-check` - `Effect.if(Option.isSome/isNone(...))` → Use `Option.match` with Effect branches (Custom pattern)
 - [ ] `prefer-head` - `get(0)` → `head` (Array)
 - [ ] `prefer-get-somes` - `filter(Option.isSome).map(x => x.value)` → `getSomes` (Array)
 - [ ] `prefer-get-rights` - `filter(Either.isRight).map(x => x.right)` → `getRights` (Array)
@@ -322,10 +323,3 @@
 - [ ] `fiberId` - Get fiber ID
 - [ ] `fiberIdWith` - Use fiber ID
 - [ ] `eventually` - Retry until success
-
-## Summary
-
-**Total patterns: 277**
-
-- Already Analyzed: 27 (14 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null, prefer-succeed-none, prefer-and-then)
-- Not Yet Analyzed: 250

@@ -28,6 +28,13 @@ export * from './types.js';
 export * from './utils.js';
 
 /**
+ * Effect-native assertion utilities for testing
+ *
+ * @since 1.0.0
+ */
+export * from './effect-assertions.js';
+
+/**
  * @since 1.0.0
  */
 export const addEqualityTesters: () => void = internal.addEqualityTesters;

@@ -171,12 +171,7 @@ const waitForConnectedState = (transport: {
     transport.connectionState,
     Stream.filter((state) => state === 'connected'),
     Stream.take(1),
-    Stream.runDrain,
-    Effect.andThen(
-      Effect.sync(() => {
-        expect(true).toBe(true);
-      })
-    )
+    Stream.runDrain
   );
 
 describe('WebSocket Transport - Mock Factory', () => {

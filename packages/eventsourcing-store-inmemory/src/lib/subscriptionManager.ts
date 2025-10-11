@@ -53,12 +53,10 @@ const addSubscriptionDataToMap =
   (subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>) =>
     HashMap.set(subs, streamId, { pubsub, subscribers: 0 });
 
-const addSubscriptionToMap = addSubscriptionDataToMap;
-
 const addPubsubToSubs =
   <T>(subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>, streamId: EventStreamId) =>
   (pubsub: PubSub.PubSub<T>) =>
-    pipe(subs, addSubscriptionToMap(streamId, pubsub));
+    pipe(subs, addSubscriptionDataToMap(streamId, pubsub));
 
 const createPubSubAndAddToMap = <T>(
   subs: HashMap.HashMap<EventStreamId, SubscriptionData<T>>,
