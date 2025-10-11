@@ -13,7 +13,7 @@
 - [x] `prefer-ignore-logged` - Ignore with logging → `ignoreLogged` (Effect)
 - [x] `prefer-from-nullable` - `value != null ? some(value) : none()` → `fromNullable(value)` (Option)
 - [x] `prefer-get-or-else` - `isSome(opt) ? opt.value : default` → `getOrElse(() => default)` (Option)
-- [ ] `prefer-get-or-null` - `getOrElse(() => null)` → `getOrNull` (Option)
+- [x] `prefer-get-or-null` - `getOrElse(() => null)` → `getOrNull` (Option)
 - [ ] `prefer-get-or-undefined` - `getOrElse(() => undefined)` → `getOrUndefined` (Option)
 - [ ] `prefer-head` - `get(0)` → `head` (Array)
 - [ ] `prefer-get-somes` - `filter(Option.isSome).map(x => x.value)` → `getSomes` (Array)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (11 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else)
+- Already Analyzed: 27 (12 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore, prefer-ignore-logged, prefer-from-nullable, prefer-get-or-else, prefer-get-or-null)
 - Not Yet Analyzed: 250

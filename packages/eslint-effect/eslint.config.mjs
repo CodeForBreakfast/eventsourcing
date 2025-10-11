@@ -81,6 +81,7 @@ export default [
       'effect/prefer-ignore-logged': 'off',
       'effect/prefer-from-nullable': 'off',
       'effect/prefer-get-or-else': 'off',
+      'effect/prefer-get-or-null': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -228,6 +229,11 @@ export default [
     name: 'prefer-get-or-else-test',
     files: ['test/prefer-get-or-else.test.ts'],
     rules: { 'effect/prefer-get-or-else': 'error' },
+  },
+  {
+    name: 'prefer-get-or-null-test',
+    files: ['test/prefer-get-or-null.test.ts'],
+    rules: { 'effect/prefer-get-or-null': 'error' },
   },
   {
     name: 'prefer-effect-platform-test',

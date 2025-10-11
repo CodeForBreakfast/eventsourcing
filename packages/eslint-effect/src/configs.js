@@ -120,6 +120,7 @@ const pluginRulesOnly = {
   'effect/prefer-ignore-logged': 'error',
   'effect/prefer-from-nullable': 'error',
   'effect/prefer-get-or-else': 'error',
+  'effect/prefer-get-or-null': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 
