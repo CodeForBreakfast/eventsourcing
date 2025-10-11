@@ -155,6 +155,13 @@ export default [
     rules: effectPlugin.configs.strict.rules,
   },
   {
+    name: 'eslint-effect-plugin-tests',
+    files: ['packages/eslint-effect/test/**/*.ts'],
+    languageOptions: commonLanguageOptions,
+    plugins: commonPlugins,
+    rules: effectPlugin.configs.strict.rules,
+  },
+  {
     name: 'buntest-integration',
     files: [
       '**/*.test.ts',

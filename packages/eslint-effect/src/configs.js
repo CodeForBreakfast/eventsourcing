@@ -113,6 +113,7 @@ const pluginRulesOnly = {
   'effect/prefer-as-void': 'error',
   'effect/prefer-as-some': 'error',
   'effect/prefer-as-some-error': 'error',
+  'effect/prefer-flatten': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 

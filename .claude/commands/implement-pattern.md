@@ -47,9 +47,36 @@ Create the files:
 - `packages/eslint-effect/src/rules/[rule-name].js` - The ESLint rule implementation
 - `packages/eslint-effect/test/[rule-name].test.ts` - Comprehensive tests
 
-Add the new rule to `packages/eslint-effect/src/rules/index.js` exports.
-Add the rule to appropriate configs in `packages/eslint-effect/src/configs.js`.
-Enable ONLY your rule for your test file.
+**Add the rule to exports and configs:**
+
+1. Add the new rule to `packages/eslint-effect/src/rules/index.js` exports
+2. Add the rule to `pluginRulesOnly` in `packages/eslint-effect/src/configs.js`
+
+**Enable ONLY your rule for your test file:**
+
+The eslint-effect package has its own `packages/eslint-effect/eslint.config.mjs` that:
+
+- Disables ALL effect rules by default for test files (for test isolation)
+- Enables rules per-file so each test only has its own rule enabled
+
+To enable your rule:
+
+1. Add your rule to the disabled list in the `eslint-effect-test-isolation` section:
+
+   ```js
+   'effect/your-rule-name': 'off',
+   ```
+
+2. Add a per-file config section for your test (in alphabetical order):
+   ```js
+   {
+     name: 'your-rule-name-test',
+     files: ['test/your-rule-name.test.ts'],
+     rules: { 'effect/your-rule-name': 'error' },
+   },
+   ```
+
+This ensures your test runs in isolation and only your rule is enabled.
 
 ### 4. Write Tests
 
