@@ -286,7 +286,7 @@ const readEventFromFile = <V>(
   return pipe(
     readFile,
     Effect.flatMap(parseJsonContent<V>),
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.catchAll(() => Effect.succeed(Option.none()))
   );
 };

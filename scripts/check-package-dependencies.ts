@@ -52,7 +52,7 @@ const parsePackageJson = (content: string): PackageInfo => {
 };
 
 const readPackageJson = (fs: FileSystem.FileSystem, packagePath: string) =>
-  pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.map(Option.some));
+  pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.asSome);
 
 const checkAndReadPackage = (fs: FileSystem.FileSystem, packagePath: string) => (exists: boolean) =>
   pipe(
