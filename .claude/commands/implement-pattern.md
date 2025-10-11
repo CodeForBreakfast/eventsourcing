@@ -19,15 +19,26 @@ Read `packages/eslint-effect/EFFECT_PATTERNS_TODO.md` and select the next unchec
 - Within a section, work top-to-bottom
 - Skip patterns marked with `[x]` (already completed)
 
-### 2. Analyze Existing Rules
+### 2. Understand the Pattern
 
-Before implementing, study existing similar rules in `packages/eslint-effect/src/rules/` to understand:
+**CRITICAL:** Before implementing, verify your understanding of the pattern:
 
-- Code structure and patterns
-- How to handle both data-first and data-last (piped) styles
-- AST matching patterns
-- Auto-fix implementation
-- Test structure in `packages/eslint-effect/test/`
+1. **Check Effect source code** at `~/Development/effect/` to understand:
+   - How the simplified function works
+   - Its type signature and behavior
+   - Edge cases and constraints
+   - Examples from Effect's own tests
+
+2. **Study existing similar rules** in `packages/eslint-effect/src/rules/` to understand:
+   - Code structure and patterns
+   - How to handle piped call style (data-last)
+   - AST matching patterns
+   - Auto-fix implementation
+   - Test structure in `packages/eslint-effect/test/`
+
+**Note:** This codebase uses pipe exclusively. Do NOT implement detection for data-first call styles.
+
+**Do NOT implement a rule based on assumptions. Always verify against the Effect source code first.**
 
 ### 3. Implement the Rule
 
@@ -38,7 +49,7 @@ Create three files:
 
 The rule must:
 
-- Detect the verbose pattern in both data-first and piped styles
+- Detect the verbose pattern in piped style only
 - Provide clear, helpful error messages
 - Include auto-fix where safe and unambiguous
 - Handle edge cases appropriately
@@ -50,7 +61,6 @@ Tests must cover:
 - Invalid code (should trigger the rule)
 - Auto-fix correctness (before/after comparison)
 - Edge cases (nested pipes, complex expressions, etc.)
-- Both data-first and data-last styles
 - Multiple applicable types if relevant
 
 ### 4. Update Rule Index
@@ -84,7 +94,7 @@ Create a commit following conventional commits format:
 feat(eslint-effect): add [rule-name] rule
 
 Implements [brief description of the pattern being simplified]
-- Supports both data-first and piped call styles
+- Supports piped call style
 - Includes auto-fix for safe transformations
 - Comprehensive test coverage
 ```
@@ -141,7 +151,7 @@ Be thorough! Test files should include:
 Before committing, verify:
 
 - [ ] Rule detects all pattern variations
-- [ ] Rule handles both call styles (data-first and piped)
+- [ ] Rule handles piped call style correctly
 - [ ] Auto-fix is safe and correct
 - [ ] Tests are comprehensive
 - [ ] All tests pass locally
