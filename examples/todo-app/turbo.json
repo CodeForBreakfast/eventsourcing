@@ -1,6 +1,10 @@
 {
   "extends": ["//"],
   "tasks": {
+    "demo": {
+      "cache": false,
+      "inputs": ["src/**"]
+    },
     "test": {
       "cache": false,
       "inputs": ["src/**", "tests/**"]

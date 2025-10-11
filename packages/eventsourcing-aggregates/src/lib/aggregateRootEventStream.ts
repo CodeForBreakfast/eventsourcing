@@ -148,8 +148,8 @@ const setStateToNewValue = <TState>(
 ) =>
   pipe(
     stateRef,
-    Ref.update(() => ({
-      nextEventNumber: 0,
+    Ref.update((current) => ({
+      nextEventNumber: current.nextEventNumber + 1,
       data: Option.some(newState),
     }))
   );

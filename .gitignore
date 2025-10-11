@@ -45,6 +45,8 @@ yarn-error.log*
 # Testing
 coverage/
 .nyc_output/
+**/test-todo-data/
+**/todo-data/
 
 # Misc
 .cache/
