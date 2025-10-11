@@ -60,37 +60,35 @@ const createMockWebSocket =
       if (config.shouldFailConnection || config.shouldFailBeforeOpen) {
         dispatchEvent({ type: 'error', error: new Error('Connection failed') });
         readyState = WebSocketState.CLOSED;
-        return;
-      }
-
-      if (config.shouldCloseBeforeOpen) {
+      } else if (config.shouldCloseBeforeOpen) {
         dispatchEvent({ type: 'close', code: 1006, reason: 'Connection refused' });
         readyState = WebSocketState.CLOSED;
-        return;
+      } else {
+        const openDelay = config.openDelay ?? 0;
+        pipe(openDelay, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+          if (!closedEarly) {
+            readyState = WebSocketState.OPEN;
+            dispatchEvent({ type: 'open' });
+
+            if (config.preloadedMessages) {
+              pipe(100, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
+                if (!closedEarly) {
+                  config.preloadedMessages!.forEach((message) => {
+                    dispatchEvent({ type: 'message', data: message });
+                  });
+                }
+              });
+            }
+          }
+        });
       }
-
-      const openDelay = config.openDelay ?? 0;
-      pipe(openDelay, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-        if (closedEarly) return;
-        readyState = WebSocketState.OPEN;
-        dispatchEvent({ type: 'open' });
-
-        // Send preloaded messages if configured
-        if (config.preloadedMessages) {
-          pipe(100, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-            if (closedEarly) return;
-            config.preloadedMessages!.forEach((message) => {
-              dispatchEvent({ type: 'message', data: message });
-            });
-          });
-        }
-      });
     };
 
     // Start connection simulation with delay to allow 'connecting' state to be observed
     pipe(50, Duration.millis, Effect.sleep, Effect.runPromise).then(() => {
-      if (closedEarly) return;
-      simulateConnection();
+      if (!closedEarly) {
+        simulateConnection();
+      }
     });
 
     // Return WebSocket-compatible object
@@ -250,12 +248,12 @@ describe('WebSocket Transport - Error Scenarios', () => {
 // WebSocket-Specific Message Handling Tests
 // =============================================================================
 
-const extractMessageId = (msg: unknown): string => {
-  if (typeof msg === 'object' && msg !== null && 'id' in msg && typeof msg.id === 'string') {
-    return msg.id;
-  }
-  throw new Error('Invalid message structure');
-};
+const extractMessageId = (msg: unknown): string =>
+  typeof msg === 'object' && msg !== null && 'id' in msg && typeof msg.id === 'string'
+    ? msg.id
+    : (() => {
+        throw new Error('Invalid message structure');
+      })();
 
 const takeFirstMessage = <E, R>(subscription: Stream.Stream<unknown, E, R>) =>
   pipe(

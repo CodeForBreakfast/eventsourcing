@@ -167,18 +167,12 @@ const handleParsedMessage = (
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
   subscriptionHandler: (streamId: string) => readonly Event[],
   parsedMessage: ParsedMessage
-) => {
-  const commandEffect = handleCommandMessage(server, commandHandler, parsedMessage);
-  const subscriptionEffect = handleSubscriptionMessage(server, subscriptionHandler, parsedMessage);
-
-  if (parsedMessage.type === 'command') {
-    return commandEffect;
-  }
-  if (parsedMessage.type === 'subscribe') {
-    return subscriptionEffect;
-  }
-  return Effect.void;
-};
+) =>
+  parsedMessage.type === 'command'
+    ? handleCommandMessage(server, commandHandler, parsedMessage)
+    : parsedMessage.type === 'subscribe'
+      ? handleSubscriptionMessage(server, subscriptionHandler, parsedMessage)
+      : Effect.void;
 
 const logParseError = (error: unknown, payload: unknown) =>
   pipe(
@@ -1641,27 +1635,25 @@ describe('Protocol Behavior Tests', () => {
         Effect.provide(ProtocolLive(clientTransport))
       );
 
-    const productStreamHandler = (streamId: string) => {
-      if (streamId === 'product-789') {
-        return [
-          {
-            position: {
-              streamId: unsafeCreateStreamId('product-789'),
-              eventNumber: 42,
+    const productStreamHandler = (streamId: string) =>
+      streamId === 'product-789'
+        ? [
+            {
+              position: {
+                streamId: unsafeCreateStreamId('product-789'),
+                eventNumber: 42,
+              },
+              type: 'ProductCreated',
+              data: {
+                id: 'product-789',
+                name: 'Super Widget',
+                price: 99.99,
+                category: 'electronics',
+              },
+              timestamp: new Date('2024-01-15T14:30:00Z'),
             },
-            type: 'ProductCreated',
-            data: {
-              id: 'product-789',
-              name: 'Super Widget',
-              price: 99.99,
-              category: 'electronics',
-            },
-            timestamp: new Date('2024-01-15T14:30:00Z'),
-          },
-        ];
-      }
-      return [];
-    };
+          ]
+        : [];
 
     const runPublishEventTest = (
       server: ReadonlyDeep<InMemoryServer>,
@@ -1950,10 +1942,7 @@ describe('Protocol Behavior Tests', () => {
           readonly firstEvent: Event | undefined;
         }) => {
           const data = result.firstEvent?.data;
-          if (data && typeof data === 'object' && 'streamId' in data) {
-            return data.streamId;
-          }
-          return undefined;
+          return data && typeof data === 'object' && 'streamId' in data ? data.streamId : undefined;
         };
 
         const uniqueStreamIds = new Set(results.map(extractStreamId));

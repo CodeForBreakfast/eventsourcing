@@ -169,6 +169,32 @@ export type CommandFromDefinitions<T extends readonly CommandDefinition<string, 
     : never;
 }[number];
 
+const buildSchemaFromCommandList = <
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Generic constraint requires any to accept command definitions with any payload type
+  const T extends readonly CommandDefinition<string, any>[],
+>(
+  commands: ReadonlyDeep<T>
+) => {
+  const schemas = commands.map((cmd) =>
+    Schema.Struct({
+      id: Schema.String,
+      target: Schema.String,
+      name: Schema.Literal(cmd.name),
+      payload: cmd.payloadSchema,
+    })
+  );
+
+  return schemas.length === 1
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema
+      (schemas[0]! as any)
+    : schemas.length >= 2
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
+        (Schema.Union(schemas[0]!, schemas[1]!, ...schemas.slice(2)) as any)
+      : (() => {
+          throw new Error('Unexpected state: should have at least 1 schema');
+        })();
+};
+
 /**
  * Builds a discriminated union schema from command definitions
  * This creates an exhaustive schema that can parse any registered command
@@ -181,33 +207,13 @@ export const buildCommandSchema = <
 ): Schema.Schema<
   CommandFromDefinitions<T>,
   { readonly id: string; readonly target: string; readonly name: string; readonly payload: unknown }
-> => {
-  if (commands.length === 0) {
-    throw new Error('At least one command definition is required');
-  }
-
-  const schemas = commands.map((cmd) =>
-    Schema.Struct({
-      id: Schema.String,
-      target: Schema.String,
-      name: Schema.Literal(cmd.name),
-      payload: cmd.payloadSchema,
-    })
-  );
-
-  if (schemas.length === 1) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema array
-    return schemas[0]! as any;
-  }
-
-  // Need at least 2 schemas for Union
-  const [first, second, ...rest] = schemas;
-  if (!first || !second) {
-    throw new Error('Unexpected state: should have at least 2 schemas');
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
-  return Schema.Union(first, second, ...rest) as any;
-};
+> =>
+  // eslint-disable-next-line effect/prefer-match-over-ternary -- Synchronous input validation guard, not pattern matching
+  commands.length === 0
+    ? (() => {
+        throw new Error('At least one command definition is required');
+      })()
+    : buildSchemaFromCommandList(commands);
 
 /**
  * Validates and transforms a wire command into a domain command

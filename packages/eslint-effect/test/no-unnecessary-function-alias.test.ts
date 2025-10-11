@@ -57,7 +57,9 @@ const firstEvent = events[0];
 const secondEvent = events[1];
 
 const useIndexedAccess = () => {
+  // eslint-disable-next-line effect/no-if-statement -- Test helper guards
   if (!firstEvent) throw new Error('Expected first event');
+  // eslint-disable-next-line effect/no-if-statement -- Test helper guards
   if (!secondEvent) throw new Error('Expected second event');
   return [firstEvent.type, secondEvent.type];
 };

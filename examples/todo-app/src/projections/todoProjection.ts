@@ -58,31 +58,35 @@ const applyEventToExistingState = (
 const applyEvent =
   (todoId: TodoId) =>
   (state: Readonly<Option.Option<TodoProjection>>) =>
-  (event: Readonly<TodoEvent>) => {
-    if (event.type === 'TodoCreated') {
-      return Effect.succeed({
-        id: todoId,
-        title: event.data.title,
-        completed: false,
-        deleted: false,
-        createdAt: event.data.createdAt,
-        updatedAt: event.data.createdAt,
-      });
-    }
-
-    return Option.match(state, {
-      onNone: () =>
+  (event: Readonly<TodoEvent>) =>
+    pipe(
+      event,
+      Match.value,
+      Match.when({ type: 'TodoCreated' }, (event) =>
         Effect.succeed({
           id: todoId,
-          title: '',
+          title: event.data.title,
           completed: false,
           deleted: false,
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }),
-      onSome: (currentState) => applyEventToExistingState(currentState, event),
-    });
-  };
+          createdAt: event.data.createdAt,
+          updatedAt: event.data.createdAt,
+        })
+      ),
+      Match.orElse(() =>
+        Option.match(state, {
+          onNone: () =>
+            Effect.succeed({
+              id: todoId,
+              title: '',
+              completed: false,
+              deleted: false,
+              createdAt: new Date(),
+              updatedAt: new Date(),
+            }),
+          onSome: (currentState) => applyEventToExistingState(currentState, event),
+        })
+      )
+    );
 
 const TodoProjectionEventStore = Context.GenericTag<ProjectionEventStore<TodoEvent>>(
   'TodoProjectionEventStore'

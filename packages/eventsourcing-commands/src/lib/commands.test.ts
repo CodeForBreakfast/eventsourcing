@@ -145,13 +145,20 @@ describe('Wire Commands', () => {
       );
 
       expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(CommandValidationError);
-        const validationError = result.left as CommandValidationError;
-        expect(validationError.commandId).toBe('cmd-123');
-        expect(validationError.commandName).toBe('CreateUser');
-        expect(validationError.validationErrors.length).toBeGreaterThan(0);
-      }
+      pipe(
+        result,
+        Either.match({
+          onLeft: (validationError) => {
+            expect(validationError).toBeInstanceOf(CommandValidationError);
+            expect(validationError.commandId).toBe('cmd-123');
+            expect(validationError.commandName).toBe('CreateUser');
+            expect(validationError.validationErrors.length).toBeGreaterThan(0);
+          },
+          onRight: () => {
+            // Should not reach here
+          },
+        })
+      );
     });
   });
 });

@@ -167,6 +167,8 @@ export default [
       // Override runPromise/runSync rules - tests use it.effect() instead
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
+      // Allow if statements in test code where side effects (assertions) are expected
+      'effect/no-if-statement': 'off',
       // Enforce buntest rules
       'buntest/no-runPromise-in-tests': 'error',
       'buntest/no-runSync-in-tests': 'error',

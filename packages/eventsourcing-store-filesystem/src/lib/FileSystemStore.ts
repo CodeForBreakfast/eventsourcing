@@ -293,10 +293,12 @@ const readEventFromFile = <V>(
 
 const parseEventNumber = (filename: string): Readonly<Option.Option<number>> => {
   const match: readonly string[] | null = filename.match(/^(\d+)\.json$/);
-  if (match === null || match[1] === undefined) {
-    return Option.none();
-  }
-  return Option.some(parseInt(match[1], 10));
+  return pipe(
+    match,
+    Option.fromNullable,
+    Option.flatMap((m) => Option.fromNullable(m[1])),
+    Option.map((numStr) => parseInt(numStr, 10))
+  );
 };
 
 const extractEventNumber = (

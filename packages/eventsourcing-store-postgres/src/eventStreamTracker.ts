@@ -38,16 +38,9 @@ const processEventWithTracking =
         (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
           const currentLastEvent = getCurrentLastEvent(lastEvents, streamId);
 
-          // Check if this is a new event we haven't seen
-          if (eventNumber > currentLastEvent) {
-            return [
-              Option.some(event), // Return the event
-              HashMap.set(lastEvents, streamId, eventNumber),
-            ];
-          }
-
-          // Event already processed or out of order
-          return [Option.none(), lastEvents];
+          return eventNumber > currentLastEvent
+            ? [Option.some(event), HashMap.set(lastEvents, streamId, eventNumber)]
+            : [Option.none(), lastEvents];
         }
       ),
       Effect.tap((result) =>

@@ -5,7 +5,15 @@
       "dependsOn": ["ci"]
     },
     "ci": {
-      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check", "validate:docs"]
+      "dependsOn": [
+        "build",
+        "lint",
+        "test",
+        "//#arch:check",
+        "//#deps:check",
+        "//#release:validate",
+        "validate:docs"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],

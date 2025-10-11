@@ -17,6 +17,7 @@ const noGenRules = {
 const preferMatchRules = {
   'effect/no-direct-tag-access': 'error',
   'effect/no-switch-statement': 'error',
+  'effect/no-if-statement': 'error',
 };
 
 // Basic pipe best practices - less controversial (now as named rules)

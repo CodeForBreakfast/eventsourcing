@@ -8,7 +8,12 @@ import {
   createCommandProcessingService,
 } from '../index';
 import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
-import { WireCommand, isCommandSuccess } from '@codeforbreakfast/eventsourcing-commands';
+import {
+  WireCommand,
+  isCommandSuccess,
+  type CommandSuccess,
+  type CommandFailure,
+} from '@codeforbreakfast/eventsourcing-commands';
 
 // ============================================================================
 // Example Usage of Command Processing Service
@@ -52,17 +57,17 @@ const userCommandHandler: CommandHandler<UserEvent> = {
 
 // Example: Create a command router
 const createRouter = (): CommandRouter<UserEvent> => ({
-  route: (command: ReadonlyDeep<WireCommand>) => {
-    if (command.target === 'user' && command.name === 'CreateUser') {
-      return Effect.succeed(userCommandHandler);
-    }
-    return Effect.fail(
-      new CommandRoutingError({
-        target: command.target,
-        message: `No handler found for ${command.target}:${command.name}`,
-      })
-    );
-  },
+  route: (command: ReadonlyDeep<WireCommand>) =>
+    Effect.if(command.target === 'user' && command.name === 'CreateUser', {
+      onTrue: () => Effect.succeed(userCommandHandler),
+      onFalse: () =>
+        Effect.fail(
+          new CommandRoutingError({
+            target: command.target,
+            message: `No handler found for ${command.target}:${command.name}`,
+          })
+        ),
+    }),
 });
 
 // Example: Create the service layer
@@ -83,6 +88,14 @@ export const processUserCommand = (command: ReadonlyDeep<WireCommand>) =>
     // Note: You also need to provide EventStoreService layer
   );
 
+const logSuccess = (result: CommandSuccess) =>
+  // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
+  Effect.sync(() => console.log('Command processed successfully:', result.position));
+
+const logFailure = (result: CommandFailure) =>
+  // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
+  Effect.sync(() => console.error('Command failed:', result.error));
+
 // Example: Complete program with all dependencies
 export const exampleProgram = pipe(
   {
@@ -92,14 +105,10 @@ export const exampleProgram = pipe(
     payload: { name: 'John Doe', email: 'john@example.com' },
   },
   processUserCommand,
-  Effect.map((result) => {
-    if (isCommandSuccess(result)) {
-      // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
-      console.log('Command processed successfully:', result.position);
-    } else {
-      // eslint-disable-next-line effect/prefer-effect-platform -- Example code uses console
-      console.error('Command failed:', result.error);
-    }
-    return result;
-  })
+  Effect.tap((result) =>
+    Effect.if(isCommandSuccess(result), {
+      onTrue: () => logSuccess(result as CommandSuccess),
+      onFalse: () => logFailure(result as CommandFailure),
+    })
+  )
 );

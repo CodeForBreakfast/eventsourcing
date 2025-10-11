@@ -98,10 +98,7 @@ const extractChangedDirectories = (output: string): ReadonlySet<string> =>
     .filter((f) => f.length > 0)
     .reduce((acc, file) => {
       const match = file.match(/^packages\/([^\/]+)\//);
-      if (match?.[1]) {
-        return new Set([...acc, match[1]]);
-      }
-      return acc;
+      return match?.[1] ? new Set([...acc, match[1]]) : acc;
     }, new Set<string>());
 
 const runGitDiffCommand = (root: string, baseBranch: string) =>

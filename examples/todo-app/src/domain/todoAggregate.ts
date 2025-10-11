@@ -56,33 +56,41 @@ const applyEventToExistingState = (
     Match.orElse(() => Effect.succeed(currentState))
   );
 
+const handleNonCreatedEvent = (
+  state: Readonly<Option.Option<TodoState>>,
+  event: Readonly<TodoEvent>
+): Effect.Effect<TodoState, ParseResult.ParseError> =>
+  pipe(
+    state,
+    Option.match({
+      onNone: () =>
+        Effect.fail(
+          new ParseResult.ParseError({
+            issue: new ParseResult.Type(
+              Schema.String.ast,
+              'Cannot apply event to non-existent TODO'
+            ),
+          })
+        ),
+      onSome: (currentState) => applyEventToExistingState(currentState, event),
+    })
+  );
+
 const applyEvent =
   (state: Readonly<Option.Option<TodoState>>) =>
-  (event: Readonly<TodoEvent>): Effect.Effect<TodoState, ParseResult.ParseError> => {
-    if (event.type === 'TodoCreated') {
-      return Effect.succeed({
-        title: event.data.title,
-        completed: false,
-        deleted: false,
-      });
-    }
-
-    return pipe(
-      state,
-      Option.match({
-        onNone: () =>
-          Effect.fail(
-            new ParseResult.ParseError({
-              issue: new ParseResult.Type(
-                Schema.String.ast,
-                'Cannot apply event to non-existent TODO'
-              ),
-            })
-          ),
-        onSome: (currentState) => applyEventToExistingState(currentState, event),
-      })
+  (event: Readonly<TodoEvent>): Effect.Effect<TodoState, ParseResult.ParseError> =>
+    pipe(
+      event,
+      Match.value,
+      Match.when({ type: 'TodoCreated' }, (event) =>
+        Effect.succeed({
+          title: event.data.title,
+          completed: false,
+          deleted: false,
+        })
+      ),
+      Match.orElse(() => handleNonCreatedEvent(state, event))
     );
-  };
 
 const requireExistingTodo = <A, E, R>(
   operation: string,

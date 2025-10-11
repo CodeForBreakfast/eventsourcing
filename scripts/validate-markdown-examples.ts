@@ -46,49 +46,43 @@ const processMarkdownLine =
   (state: ParserState, line: string | undefined): Effect.Effect<ParserState, never, never> => {
     const trimmed = line?.trim() ?? '';
 
-    if (trimmed.match(/^```(?:typescript|ts)$/)) {
-      return pipe(
-        state.inBlock,
-        Match.value,
-        Match.when(true, () => logMalformedCodeBlock(filePath, lineIndex, state)),
-        Match.when(false, () =>
-          Effect.succeed({
+    return trimmed.match(/^```(?:typescript|ts)$/)
+      ? pipe(
+          state.inBlock,
+          Match.value,
+          Match.when(true, () => logMalformedCodeBlock(filePath, lineIndex, state)),
+          Match.when(false, () =>
+            Effect.succeed({
+              ...state,
+              inBlock: true,
+              currentBlock: [],
+              blockStartLine: lineIndex + 1,
+            })
+          ),
+          Match.exhaustive
+        )
+      : trimmed === '```' && state.inBlock
+        ? Effect.succeed({
             ...state,
-            inBlock: true,
+            blocks: [
+              ...state.blocks,
+              {
+                code: state.currentBlock.join('\n'),
+                file: filePath,
+                line: state.blockStartLine,
+                index: state.blockIndex,
+              },
+            ],
+            inBlock: false,
             currentBlock: [],
-            blockStartLine: lineIndex + 1,
+            blockIndex: state.blockIndex + 1,
           })
-        ),
-        Match.exhaustive
-      );
-    }
-
-    if (trimmed === '```' && state.inBlock) {
-      return Effect.succeed({
-        ...state,
-        blocks: [
-          ...state.blocks,
-          {
-            code: state.currentBlock.join('\n'),
-            file: filePath,
-            line: state.blockStartLine,
-            index: state.blockIndex,
-          },
-        ],
-        inBlock: false,
-        currentBlock: [],
-        blockIndex: state.blockIndex + 1,
-      });
-    }
-
-    if (state.inBlock) {
-      return Effect.succeed({
-        ...state,
-        currentBlock: [...state.currentBlock, line ?? ''],
-      });
-    }
-
-    return Effect.succeed(state);
+        : state.inBlock
+          ? Effect.succeed({
+              ...state,
+              currentBlock: [...state.currentBlock, line ?? ''],
+            })
+          : Effect.succeed(state);
   };
 
 const logUnclosedBlock = (filePath: string, state: ParserState) =>
@@ -108,13 +102,14 @@ const logUnclosedBlock = (filePath: string, state: ParserState) =>
 
 const finalizeParserState =
   (filePath: string) =>
-  (state: ParserState): Effect.Effect<readonly CodeBlock[], never, never> => {
-    if (!state.inBlock) {
-      return Effect.succeed(state.blocks);
-    }
-
-    return logUnclosedBlock(filePath, state);
-  };
+  (state: ParserState): Effect.Effect<readonly CodeBlock[], never, never> =>
+    pipe(
+      state.inBlock,
+      Match.value,
+      Match.when(true, () => logUnclosedBlock(filePath, state)),
+      Match.when(false, () => Effect.succeed(state.blocks)),
+      Match.exhaustive
+    );
 
 const processLineWithState = (filePath: string, index: number, line: string) => {
   const processor = processMarkdownLine(filePath, index);
@@ -147,32 +142,40 @@ const joinPath = (...segments: readonly string[]) =>
     Effect.andThen((path) => path.join(...segments))
   );
 
+const processFullPath =
+  (
+    entry: {
+      readonly name: string;
+      readonly isDirectory: () => boolean;
+      readonly isFile: () => boolean;
+    },
+    files: readonly string[]
+  ) =>
+  (fullPath: string): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> =>
+    Effect.if(entry.isDirectory(), {
+      onTrue: () => processDirectory(fullPath, files),
+      onFalse: () =>
+        Effect.if(
+          entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG'),
+          {
+            onTrue: () => Effect.succeed([...files, fullPath]),
+            onFalse: () => Effect.succeed(files),
+          }
+        ),
+    });
+
 const processDirectoryEntry =
   (currentDir: string, files: readonly string[]) =>
   (entry: {
     readonly name: string;
     readonly isDirectory: () => boolean;
     readonly isFile: () => boolean;
-  }): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> => {
-    if (shouldSkipEntry(entry.name)) {
-      return Effect.succeed(files);
-    }
-
-    return pipe(
-      joinPath(currentDir, entry.name),
-      Effect.flatMap((fullPath) => {
-        if (entry.isDirectory()) {
-          return processDirectory(fullPath, files);
-        }
-
-        if (entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG')) {
-          return Effect.succeed([...files, fullPath]);
-        }
-
-        return Effect.succeed(files);
-      })
-    );
-  };
+  }): Effect.Effect<readonly string[], Error, FileSystem.FileSystem | Path.Path> =>
+    Effect.if(shouldSkipEntry(entry.name), {
+      onTrue: () => Effect.succeed(files),
+      onFalse: () =>
+        pipe(joinPath(currentDir, entry.name), Effect.flatMap(processFullPath(entry, files))),
+    });
 
 const applyEntryToFiles =
   (currentDir: string) =>
@@ -399,30 +402,32 @@ const processErrorLine =
   (blockFiles: readonly BlockFile[]) =>
   (line: string): readonly ValidationError[] => {
     const errorMatch = line.match(/(example-\d+)\.ts\((\d+),\d+\): error TS(\d+): (.+)/);
-    if (!errorMatch) return [];
 
-    const filename = `${errorMatch[1]!}.ts`;
-    const lineInFile = parseInt(errorMatch[2]!, 10);
-    const errorCode = errorMatch[3]!;
-    const errorMessage = errorMatch[4]!;
-
-    return pipe(
-      findBlockFileByFilename(filename, blockFiles),
-      Option.match({
-        onNone: () => {
-          Effect.runSync(displayWarningForMissingBlockFile(filename));
-          return [];
-        },
-        onSome: (blockFile) => {
-          if (lineInFile < blockFile.headerLines) {
-            return [];
-          }
-
-          const index = blockFiles.indexOf(blockFile);
-          return [createValidationError(blockFile, lineInFile, index, errorCode, errorMessage)];
-        },
-      })
-    );
+    return errorMatch
+      ? pipe(
+          findBlockFileByFilename(`${errorMatch[1]!}.ts`, blockFiles),
+          Option.match({
+            onNone: () => {
+              Effect.runSync(displayWarningForMissingBlockFile(`${errorMatch[1]!}.ts`));
+              return [];
+            },
+            onSome: (blockFile) => {
+              const lineInFile = parseInt(errorMatch[2]!, 10);
+              return lineInFile < blockFile.headerLines
+                ? []
+                : [
+                    createValidationError(
+                      blockFile,
+                      lineInFile,
+                      blockFiles.indexOf(blockFile),
+                      errorMatch[3]!,
+                      errorMatch[4]!
+                    ),
+                  ];
+            },
+          })
+        )
+      : [];
   };
 
 const parseTypeErrors = (
