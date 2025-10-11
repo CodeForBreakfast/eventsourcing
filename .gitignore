@@ -18,6 +18,7 @@ build/
 !*.config.js
 !*.config.mjs
 !**/build.js
+!packages/eslint-effect/src/**/*.js
 
 # Turbo
 .turbo
