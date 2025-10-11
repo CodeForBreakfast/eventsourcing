@@ -73,6 +73,7 @@ export default [
       'effect/prefer-as': 'off',
       'effect/prefer-as-void': 'off',
       'effect/prefer-as-some': 'off',
+      'effect/prefer-as-some-error': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -180,6 +181,11 @@ export default [
     name: 'prefer-as-some-test',
     files: ['test/prefer-as-some.test.ts'],
     rules: { 'effect/prefer-as-some': 'error' },
+  },
+  {
+    name: 'prefer-as-some-error-test',
+    files: ['test/prefer-as-some-error.test.ts'],
+    rules: { 'effect/prefer-as-some-error': 'error' },
   },
   {
     name: 'prefer-effect-platform-test',
