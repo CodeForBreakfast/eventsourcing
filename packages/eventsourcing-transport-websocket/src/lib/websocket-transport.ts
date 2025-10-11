@@ -492,4 +492,4 @@ export const WebSocketConnector = webSocketConnectorImpl;
  * Layer providing WebSocket transport connector service.
  * Includes the WebSocketConstructor dependency for browser/Node.js environments.
  */
-export const WebSocketTransportLive = Layer.succeed(Client.Connector, WebSocketConnector);
+export const WebSocketTransportLive = Layer.succeed(Client.Connector, webSocketConnectorImpl);

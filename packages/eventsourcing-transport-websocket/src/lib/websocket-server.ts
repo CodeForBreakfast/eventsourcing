@@ -280,8 +280,6 @@ const addClientToServerState = (
 ): Effect.Effect<void, never, never> =>
   Ref.update(serverStateRef, createAddClientToServerStateUpdater(clientState));
 
-const getServerState = Ref.get;
-
 const offerNewConnection =
   (clientState: ClientState) =>
   (state: ServerState): Effect.Effect<void, never, never> =>
@@ -314,7 +312,7 @@ const registerClientAndTransition =
         })
       ),
       Effect.andThen(updateClientConnectionState(clientState, 'connected')),
-      Effect.andThen(getServerState(serverStateRef)),
+      Effect.andThen(Ref.get(serverStateRef)),
       Effect.flatMap(offerNewConnection(clientState))
     );
 
@@ -411,10 +409,7 @@ const createWebSocketServer = (
               pipe(
                 serverStateRef,
                 Ref.get,
-                Effect.flatMap((state) => {
-                  const clientId = ws.data.clientId;
-                  return processClientMessage(state, clientId, message);
-                })
+                Effect.flatMap((state) => processClientMessage(state, ws.data.clientId, message))
               )
             );
           },
@@ -425,10 +420,9 @@ const createWebSocketServer = (
               pipe(
                 serverStateRef,
                 Ref.get,
-                Effect.flatMap((state) => {
-                  const clientId = ws.data.clientId;
-                  return handleClientDisconnection(serverStateRef, state, clientId);
-                })
+                Effect.flatMap((state) =>
+                  handleClientDisconnection(serverStateRef, state, ws.data.clientId)
+                )
               )
             );
           },
@@ -610,14 +604,20 @@ const createWebSocketServerTransport = (
       Queue.unbounded<Server.ClientConnection>(),
       Effect.flatMap(initializeServerStateAndStart(config))
     ),
-    (transport) => {
-      const serverStateRef = (
+    (transport) =>
+      (
         transport as Server.Transport & {
           readonly __serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>;
         }
-      ).__serverStateRef;
-      return serverStateRef ? cleanupServer(serverStateRef) : Effect.void;
-    }
+      ).__serverStateRef
+        ? cleanupServer(
+            (
+              transport as Server.Transport & {
+                readonly __serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>;
+              }
+            ).__serverStateRef
+          )
+        : Effect.void
   );
 
 // =============================================================================
