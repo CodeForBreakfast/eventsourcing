@@ -184,23 +184,15 @@ const buildSchemaFromCommandList = <
     })
   );
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema array
-  const singleSchema = schemas.length === 1 ? (schemas[0]! as any) : null;
-  const returnValue =
-    singleSchema !== null
-      ? singleSchema
+  return schemas.length === 1
+    ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema
+      (schemas[0]! as any)
+    : schemas.length >= 2
+      ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
+        (Schema.Union(schemas[0]!, schemas[1]!, ...schemas.slice(2)) as any)
       : (() => {
-          const [first, second, ...rest] = schemas;
-          const hasRequiredSchemas = !!first && !!second;
-          return hasRequiredSchemas
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
-              (Schema.Union(first, second, ...rest) as any)
-            : (() => {
-                throw new Error('Unexpected state: should have at least 2 schemas');
-              })();
+          throw new Error('Unexpected state: should have at least 1 schema');
         })();
-
-  return returnValue;
 };
 
 /**
@@ -215,13 +207,13 @@ export const buildCommandSchema = <
 ): Schema.Schema<
   CommandFromDefinitions<T>,
   { readonly id: string; readonly target: string; readonly name: string; readonly payload: unknown }
-> => (
-  commands.length === 0 &&
-    (() => {
-      throw new Error('At least one command definition is required');
-    })(),
-  buildSchemaFromCommandList(commands)
-);
+> =>
+  // eslint-disable-next-line effect/prefer-match-over-ternary -- Synchronous input validation guard, not pattern matching
+  commands.length === 0
+    ? (() => {
+        throw new Error('At least one command definition is required');
+      })()
+    : buildSchemaFromCommandList(commands);
 
 /**
  * Validates and transforms a wire command into a domain command
