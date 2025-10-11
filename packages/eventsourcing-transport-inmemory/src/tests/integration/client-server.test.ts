@@ -231,6 +231,9 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.andThen(pipe(states[1], assertStateIsConnected))
     );
 
+  const verifyClientIdsAreDifferent = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+    pipe(connections[0]!.clientId !== connections[1]!.clientId, assertDifferentClientIds);
+
   const verifyConnectionsArray = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
     pipe(
       connections.length === 2,
@@ -239,10 +242,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Effect.andThen(pipe(connections[0]!.clientId !== undefined, assertFirstClientIdDefined)),
       // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
       Effect.andThen(pipe(connections[1]!.clientId !== undefined, assertSecondClientIdDefined)),
-      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-      Effect.andThen(
-        pipe(connections[0]!.clientId !== connections[1]!.clientId, assertDifferentClientIds)
-      )
+      Effect.andThen(verifyClientIdsAreDifferent(connections))
     );
 
   const verifyConnectionsAfterStates =
