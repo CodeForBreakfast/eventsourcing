@@ -1,4 +1,4 @@
-import { Schema, Data, Effect, pipe } from 'effect';
+import { Schema, Data, Effect, pipe, Match } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 
@@ -181,33 +181,50 @@ export const buildCommandSchema = <
 ): Schema.Schema<
   CommandFromDefinitions<T>,
   { readonly id: string; readonly target: string; readonly name: string; readonly payload: unknown }
-> => {
-  if (commands.length === 0) {
-    throw new Error('At least one command definition is required');
-  }
+> =>
+  pipe(
+    Match.value(commands.length === 0),
+    Match.when(true, () => {
+      throw new Error('At least one command definition is required');
+    }),
+    Match.when(false, () => {
+      const schemas = commands.map((cmd) =>
+        Schema.Struct({
+          id: Schema.String,
+          target: Schema.String,
+          name: Schema.Literal(cmd.name),
+          payload: cmd.payloadSchema,
+        })
+      );
 
-  const schemas = commands.map((cmd) =>
-    Schema.Struct({
-      id: Schema.String,
-      target: Schema.String,
-      name: Schema.Literal(cmd.name),
-      payload: cmd.payloadSchema,
-    })
+      return pipe(
+        Match.value(schemas.length),
+        Match.when(
+          1,
+          () =>
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema array
+            schemas[0]! as any
+        ),
+        Match.orElse(() => {
+          const [first, second, ...rest] = schemas;
+          return pipe(
+            Match.value(!!first && !!second),
+            Match.when(
+              true,
+              () =>
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
+                Schema.Union(first!, second!, ...rest) as any
+            ),
+            Match.when(false, () => {
+              throw new Error('Unexpected state: should have at least 2 schemas');
+            }),
+            Match.exhaustive
+          );
+        })
+      );
+    }),
+    Match.exhaustive
   );
-
-  if (schemas.length === 1) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type when single schema array
-    return schemas[0]! as any;
-  }
-
-  // Need at least 2 schemas for Union
-  const [first, second, ...rest] = schemas;
-  if (!first || !second) {
-    throw new Error('Unexpected state: should have at least 2 schemas');
-  }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Type assertion required to match return type for union of variable schemas
-  return Schema.Union(first, second, ...rest) as any;
-};
 
 /**
  * Validates and transforms a wire command into a domain command
