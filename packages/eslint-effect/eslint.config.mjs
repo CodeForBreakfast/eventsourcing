@@ -75,6 +75,7 @@ export default [
       'effect/prefer-as-some': 'off',
       'effect/prefer-as-some-error': 'off',
       'effect/prefer-flatten': 'off',
+      'effect/prefer-zip-left': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -192,6 +193,11 @@ export default [
     name: 'prefer-flatten-test',
     files: ['test/prefer-flatten.test.ts'],
     rules: { 'effect/prefer-flatten': 'error' },
+  },
+  {
+    name: 'prefer-zip-left-test',
+    files: ['test/prefer-zip-left.test.ts'],
+    rules: { 'effect/prefer-zip-left': 'error' },
   },
   {
     name: 'prefer-effect-platform-test',

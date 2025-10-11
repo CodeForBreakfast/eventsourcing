@@ -28,6 +28,7 @@ import noUnnecessaryFunctionAlias from './no-unnecessary-function-alias.js';
 import noIntermediateEffectVariables from './no-intermediate-effect-variables.js';
 import noIfStatement from './no-if-statement.js';
 import preferFlatten from './prefer-flatten.js';
+import preferZipLeft from './prefer-zip-left.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -60,4 +61,5 @@ export default {
   'no-intermediate-effect-variables': noIntermediateEffectVariables,
   'no-if-statement': noIfStatement,
   'prefer-flatten': preferFlatten,
+  'prefer-zip-left': preferZipLeft,
 };

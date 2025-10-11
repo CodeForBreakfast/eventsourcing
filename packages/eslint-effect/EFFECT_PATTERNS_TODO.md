@@ -7,7 +7,7 @@
 - [x] `prefer-as-some` - `map(Option.some)` → `asSome` (Effect)
 - [x] `prefer-as-some-error` - `mapError(Option.some)` → `asSomeError` (Effect)
 - [x] `prefer-flatten` - `flatMap(identity)` → `flatten` (Effect, Option, Array, Cause, STM)
-- [ ] `prefer-zip-left` - `flatMap(a => map(b, () => a))` → `zipLeft(a, b)` (Effect, Option)
+- [x] `prefer-zip-left` - `flatMap(a => map(b, () => a))` → `zipLeft(a, b)` (Effect, Option)
 - [ ] `prefer-zip-right` - `flatMap(() => b)` → `zipRight(a, b)` (Effect, Option)
 - [ ] `prefer-ignore` - Complex ignore pattern → `ignore` (Effect)
 - [ ] `prefer-ignore-logged` - Ignore with logging → `ignoreLogged` (Effect)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (5 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten)
+- Already Analyzed: 27 (6 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left)
 - Not Yet Analyzed: 250
