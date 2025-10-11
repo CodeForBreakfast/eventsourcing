@@ -25,13 +25,13 @@ type ErrorWithMessage = { readonly error: string };
 const myEffect = Effect.succeed('test');
 
 // Params already at end - no reordering needed
-
+// eslint-disable-next-line effect/suggest-currying-opportunity
 const handleError1 = Effect.catchAll(myEffect, (error) =>
   logHandlerError('Failed to process', error)
 );
 
 // Params already at end - no reordering needed
-
+// eslint-disable-next-line effect/suggest-currying-opportunity
 const handleError2 = Effect.catchAll(myEffect, (error: unknown) =>
   logHandlerError('Failed with context', error)
 );

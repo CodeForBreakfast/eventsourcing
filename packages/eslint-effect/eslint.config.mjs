@@ -81,6 +81,130 @@ export default [
       'effect/suggest-currying-opportunity': 'off',
     },
   },
+  // Per-file rule enablement - each test file enables only its own rule
+  {
+    name: 'no-classes-test',
+    files: ['test/no-classes.test.ts'],
+    rules: { 'effect/no-classes': 'error' },
+  },
+  {
+    name: 'no-curried-calls-test',
+    files: ['test/no-curried-calls.test.ts'],
+    rules: { 'effect/no-curried-calls': 'error' },
+  },
+  {
+    name: 'no-direct-tag-access-test',
+    files: ['test/no-direct-tag-access.test.ts'],
+    rules: { 'effect/no-direct-tag-access': 'error' },
+  },
+  {
+    name: 'no-eta-expansion-test',
+    files: ['test/no-eta-expansion.test.ts'],
+    rules: { 'effect/no-eta-expansion': 'error' },
+  },
+  {
+    name: 'no-gen-test',
+    files: ['test/no-gen.test.ts'],
+    rules: { 'effect/no-gen': 'error' },
+  },
+  {
+    name: 'no-if-statement-test',
+    files: ['test/no-if-statement.test.ts'],
+    rules: { 'effect/no-if-statement': 'error' },
+  },
+  {
+    name: 'no-intermediate-effect-variables-test',
+    files: ['test/no-intermediate-effect-variables.test.ts'],
+    rules: { 'effect/no-intermediate-effect-variables': 'error' },
+  },
+  {
+    name: 'no-method-pipe-test',
+    files: ['test/no-method-pipe.test.ts'],
+    rules: { 'effect/no-method-pipe': 'error' },
+  },
+  {
+    name: 'no-nested-pipe-test',
+    files: ['test/no-nested-pipe.test.ts'],
+    rules: { 'effect/no-nested-pipe': 'error' },
+  },
+  {
+    name: 'no-nested-pipes-test',
+    files: ['test/no-nested-pipes.test.ts'],
+    rules: { 'effect/no-nested-pipes': 'error' },
+  },
+  {
+    name: 'no-pipe-first-arg-call-test',
+    files: ['test/no-pipe-first-arg-call.test.ts'],
+    rules: { 'effect/no-pipe-first-arg-call': 'error' },
+  },
+  {
+    name: 'no-runSync-runPromise-test',
+    files: ['test/no-runSync-runPromise.test.ts'],
+    rules: {
+      'effect/no-runSync': 'error',
+      'effect/no-runPromise': 'error',
+    },
+  },
+  {
+    name: 'no-switch-statement-test',
+    files: ['test/no-switch-statement.test.ts'],
+    rules: { 'effect/no-switch-statement': 'error' },
+  },
+  {
+    name: 'no-unnecessary-function-alias-test',
+    files: ['test/no-unnecessary-function-alias.test.ts'],
+    rules: { 'effect/no-unnecessary-function-alias': 'error' },
+  },
+  {
+    name: 'no-unnecessary-pipe-wrapper-test',
+    files: ['test/no-unnecessary-pipe-wrapper.test.ts'],
+    rules: { 'effect/no-unnecessary-pipe-wrapper': 'error' },
+  },
+  {
+    name: 'prefer-andThen-test',
+    files: ['test/prefer-andThen.test.ts'],
+    rules: { 'effect/prefer-andThen': 'error' },
+  },
+  {
+    name: 'prefer-as-test',
+    files: ['test/prefer-as.test.ts'],
+    rules: { 'effect/prefer-as': 'error' },
+  },
+  {
+    name: 'prefer-as-void-test',
+    files: ['test/prefer-as-void.test.ts'],
+    rules: { 'effect/prefer-as-void': 'error' },
+  },
+  {
+    name: 'prefer-effect-platform-test',
+    files: ['test/prefer-effect-platform.test.ts'],
+    rules: { 'effect/prefer-effect-platform': 'error' },
+  },
+  {
+    name: 'prefer-match-over-conditionals-test',
+    files: ['test/prefer-match-over-conditionals.test.ts'],
+    rules: { 'effect/prefer-match-over-conditionals': 'error' },
+  },
+  {
+    name: 'prefer-match-over-ternary-test',
+    files: ['test/prefer-match-over-ternary.test.ts'],
+    rules: { 'effect/prefer-match-over-ternary': 'error' },
+  },
+  {
+    name: 'prefer-match-tag-test',
+    files: ['test/prefer-match-tag.test.ts'],
+    rules: { 'effect/prefer-match-tag': 'error' },
+  },
+  {
+    name: 'prefer-schema-validation-over-assertions-test',
+    files: ['test/prefer-schema-validation-over-assertions.test.ts'],
+    rules: { 'effect/prefer-schema-validation-over-assertions': 'error' },
+  },
+  {
+    name: 'suggest-currying-opportunity-test',
+    files: ['test/suggest-currying-opportunity.test.ts'],
+    rules: { 'effect/suggest-currying-opportunity': 'error' },
+  },
   {
     name: 'ignore-patterns',
     ignores: ['**/node_modules/**', '**/dist/**', '**/*.js', '**/*.mjs', '**/*.d.ts'],

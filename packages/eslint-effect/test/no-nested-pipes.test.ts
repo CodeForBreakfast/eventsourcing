@@ -17,6 +17,7 @@ const multiplePipes = () => {
 
 const nestedPipes = () => {
   return pipe(
+    // eslint-disable-next-line effect/no-nested-pipes
     pipe(42, (x) => x + 1),
     (x) => x * 2
   );

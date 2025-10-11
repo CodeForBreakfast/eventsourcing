@@ -11,26 +11,31 @@ type Event =
 
 const event: Event = { type: 'TodoCreated', data: { title: 'test' } };
 
+// eslint-disable-next-line effect/no-if-statement
 if (either._tag === 'Right') {
   console.log(either.right);
 }
 
+// eslint-disable-next-line effect/no-if-statement
 if (event.type === 'TodoCreated') {
   console.log(event.data.title);
 }
 
+// eslint-disable-next-line effect/no-if-statement
 if (state.deleted) {
   Effect.fail(new Error('Cannot complete deleted TODO'));
 } else {
   Effect.succeed(state);
 }
 
+// eslint-disable-next-line effect/no-if-statement
 if (Option.isSome(option)) {
   console.log(option.value);
 } else {
   console.log('default');
 }
 
+// eslint-disable-next-line effect/no-if-statement
 if (condition) {
   console.log('true branch');
 } else {
@@ -39,6 +44,7 @@ if (condition) {
 
 const event2: Event = { type: 'TodoCompleted' };
 
+// eslint-disable-next-line effect/no-if-statement
 if (event2.type === 'TodoCompleted') {
   console.log('completed');
 }

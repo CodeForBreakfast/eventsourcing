@@ -2,14 +2,17 @@ import { pipe, Effect, Match, Option } from 'effect';
 
 // Should fail - ternary with Effect calls in return statement
 const ternaryWithEffect = (condition: boolean) => {
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   return condition ? Effect.succeed(42) : Effect.fail('error');
 };
 
 // Should fail - ternary with Effect calls in arrow function body
 const arrowTernaryEffect = (condition: boolean) =>
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   condition ? Effect.succeed('yes') : Effect.succeed('no');
 
 // Should fail - ternary with function calls in variable assignment
+// eslint-disable-next-line effect/prefer-match-over-ternary
 const ternaryFunctionCalls = (hasData: boolean) => (hasData ? createDataEffect() : handleNoData());
 
 // Should NOT fail (yet) - ternary inside function argument (not in return/assignment position)
@@ -30,19 +33,23 @@ const handleConditional = <E, R>(
 
 // Should fail - ternary in variable declaration
 const getTodoEffect = (title: string | undefined) => {
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   const result = title ? createTodo(title) : missingArgError('Title required');
   return result;
 };
 
 // Should fail - ternary with Option.some check
 const optionalValue = (value: Option.Option<string>) =>
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   Option.isSome(value) ? processValue(value.value) : defaultValue();
 
 // Should fail - ternary inside Effect.succeed (complex condition)
+// eslint-disable-next-line effect/prefer-match-over-ternary
 const ternaryInEffectSucceed = (condition: boolean) => Effect.succeed(condition ? 'yes' : 'no');
 
 // Should fail - ternary inside Effect.fail (complex condition)
 const ternaryInEffectFail = (hasError: boolean) =>
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   Effect.fail(hasError ? new Error('Critical') : new Error('Warning'));
 
 // Should NOT fail - simple literal equality INSIDE Effect.succeed (no duplication)
@@ -89,6 +96,7 @@ const intermediateCalculation = (x: number) => {
 
 // Should fail - ternary inside Effect.succeed (even with plain values)
 const ternaryAsArgument = (condition: boolean) => {
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   return Effect.succeed(condition ? 'a' : 'b');
 };
 

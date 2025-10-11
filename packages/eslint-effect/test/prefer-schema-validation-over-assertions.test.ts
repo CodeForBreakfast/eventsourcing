@@ -6,6 +6,7 @@ type ProtocolMessage = { readonly type: 'command'; readonly id: string };
 const typeAssertionInFlatMap = pipe(
   Effect.succeed({ type: 'command', id: '123' }),
   Effect.flatMap((msg) => {
+    // eslint-disable-next-line effect/prefer-schema-validation-over-assertions
     const typed = msg as ProtocolMessage;
     return Effect.succeed(typed.id);
   })
@@ -14,7 +15,7 @@ const typeAssertionInFlatMap = pipe(
 // Should fail - type assertion in Effect.map
 const typeAssertionInMap = pipe(
   Effect.succeed({ type: 'command', id: '123' }),
-
+  // eslint-disable-next-line effect/prefer-schema-validation-over-assertions
   Effect.map((msg) => (msg as ProtocolMessage).id)
 );
 
@@ -22,6 +23,7 @@ const typeAssertionInMap = pipe(
 const typeAssertionInTap = pipe(
   Effect.succeed({ type: 'command', id: '123' }),
   Effect.tap((msg) => {
+    // eslint-disable-next-line effect/prefer-schema-validation-over-assertions
     const typed = msg as ProtocolMessage;
     return Effect.log(typed.id);
   })
@@ -31,6 +33,7 @@ const typeAssertionInTap = pipe(
 const doubleAssertion = pipe(
   Effect.succeed('some data'),
   Effect.flatMap((data) => {
+    // eslint-disable-next-line effect/prefer-schema-validation-over-assertions
     const msg = data as unknown as ProtocolMessage;
     return Effect.succeed(msg.id);
   })

@@ -16,10 +16,11 @@ const handleMessage = (msg: MessageType) => Effect.succeed(msg);
 const imperativeFlatMap = pipe(
   Effect.succeed<MessageType>({ _tag: 'Command', id: '123' }),
   Effect.flatMap((msg) => {
+    // eslint-disable-next-line effect/prefer-match-over-conditionals
     if (msg._tag === 'Command') {
       return handleMessage(msg);
     }
-
+    // eslint-disable-next-line effect/prefer-match-over-conditionals
     if (msg._tag === 'Subscribe') {
       return handleMessage(msg);
     }
@@ -32,6 +33,7 @@ const either = { _tag: 'Right' as const, right: 42 };
 const imperativeMap = pipe(
   Effect.succeed(either),
   Effect.map((e) => {
+    // eslint-disable-next-line effect/prefer-match-over-conditionals
     if (e._tag === 'Right') {
       return e.right;
     }
@@ -43,6 +45,7 @@ const imperativeMap = pipe(
 const imperativeReverse = pipe(
   Effect.succeed<MessageType>({ _tag: 'Command', id: '123' }),
   Effect.flatMap((msg) => {
+    // eslint-disable-next-line effect/prefer-match-over-conditionals
     if ('Command' === msg._tag) {
       return handleMessage(msg);
     }

@@ -4,10 +4,12 @@ import { Effect, Chunk } from 'effect';
 // SHOULD TRIGGER - Used once or twice, no semantic value
 // ============================================================================
 
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const succeedEffect = Effect.succeed;
 
 const useOnce = () => succeedEffect(42);
 
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const toArray = Chunk.toReadonlyArray;
 
 const useTwice = () => {
@@ -16,6 +18,7 @@ const useTwice = () => {
   return [toArray(chunk1), toArray(chunk2)];
 };
 
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const syncEffect = Effect.sync;
 
 const useSyncOnce = () => syncEffect(() => console.log('test'));
@@ -65,6 +68,7 @@ const useIndexedAccess = () => {
 // This demonstrates an unnecessary alias that provides no real value
 // The name "toArraySafely" doesn't add meaningful information over "toReadonlyArray"
 
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const toArraySafely = Chunk.toReadonlyArray;
 
 const useSemantic = () => {

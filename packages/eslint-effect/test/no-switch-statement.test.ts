@@ -7,6 +7,7 @@ type Event =
   | { readonly type: 'Updated'; readonly name: string };
 const event: Event = { type: 'Created', name: 'test' } as Event;
 
+// eslint-disable-next-line effect/no-switch-statement
 switch (either._tag) {
   case 'Right':
     break;
@@ -14,6 +15,7 @@ switch (either._tag) {
     break;
 }
 
+// eslint-disable-next-line effect/no-switch-statement
 switch (event.type) {
   case 'Created':
     break;
@@ -23,6 +25,7 @@ switch (event.type) {
     break;
 }
 
+// eslint-disable-next-line effect/no-switch-statement
 switch ('foo' as string) {
   case 'foo':
     break;
@@ -32,6 +35,7 @@ switch ('foo' as string) {
     break;
 }
 
+// eslint-disable-next-line effect/no-switch-statement
 switch (42 as number) {
   case 42:
     break;
