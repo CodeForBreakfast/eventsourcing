@@ -110,6 +110,18 @@ const pluginRulesOnly = {
   'effect/prefer-match-over-ternary': 'error',
   'effect/prefer-effect-if-over-match-boolean': 'error',
   'effect/prefer-schema-validation-over-assertions': 'error',
+  'effect/prefer-as-void': 'error',
+  'effect/prefer-as-some': 'error',
+  'effect/prefer-as-some-error': 'error',
+  'effect/prefer-flatten': 'error',
+  'effect/prefer-zip-left': 'error',
+  'effect/prefer-zip-right': 'error',
+  'effect/prefer-ignore': 'error',
+  'effect/prefer-ignore-logged': 'error',
+  'effect/prefer-from-nullable': 'error',
+  'effect/prefer-get-or-else': 'error',
+  'effect/prefer-get-or-null': 'error',
+  'effect/prefer-succeed-none': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 

@@ -4,41 +4,41 @@ const transform = (x: number) => x * 2;
 const doSomething = (a: string, b: number) => `${a}: ${b}`;
 
 // Arrow function - single parameter
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion with single parameter
+// eslint-disable-next-line effect/no-eta-expansion
 const singleParamWrapper = (x: number) => transform(x);
 
 // Arrow function - multiple parameters
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion with multiple parameters
+// eslint-disable-next-line effect/no-eta-expansion
 const multiParamWrapper = (a: string, b: number) => doSomething(a, b);
 
 // Arrow function - method call
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion with method call
+// eslint-disable-next-line effect/no-eta-expansion
 const methodWrapper = (msg: string) => Console.log(msg);
 
 // Arrow function - Effect method
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion with Effect.succeed
+// eslint-disable-next-line effect/no-eta-expansion
 const effectWrapper = (value: number) => Effect.succeed(value);
 
 // Function declaration - single parameter
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion in function declaration
+// eslint-disable-next-line effect/no-eta-expansion
 function functionDeclWrapper(x: number) {
   return transform(x);
 }
 
 // Function declaration - multiple parameters
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion in function declaration with multiple params
+// eslint-disable-next-line effect/no-eta-expansion
 function functionDeclMultiParam(a: string, b: number) {
   return doSomething(a, b);
 }
 
 // Function expression - single parameter
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion in function expression
+// eslint-disable-next-line effect/no-eta-expansion
 const functionExprWrapper = function (x: number) {
   return transform(x);
 };
 
 // Function expression - multiple parameters
-// eslint-disable-next-line effect/no-eta-expansion -- Testing eta-expansion in function expression with multiple params
+// eslint-disable-next-line effect/no-eta-expansion
 const functionExprMultiParam = function (a: string, b: number) {
   return doSomething(a, b);
 };

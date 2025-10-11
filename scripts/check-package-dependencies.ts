@@ -5,7 +5,7 @@
  * Outputs package information for use in changeset validation.
  */
 
-import { Effect, pipe, Array as EffectArray, Option, Match } from 'effect';
+import { Effect, pipe, Array as EffectArray, Match } from 'effect';
 import { FileSystem, Path, Terminal } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
 
@@ -52,14 +52,14 @@ const parsePackageJson = (content: string): PackageInfo => {
 };
 
 const readPackageJson = (fs: FileSystem.FileSystem, packagePath: string) =>
-  pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.map(Option.some));
+  pipe(packagePath, fs.readFileString, Effect.map(parsePackageJson), Effect.asSome);
 
 const checkAndReadPackage = (fs: FileSystem.FileSystem, packagePath: string) => (exists: boolean) =>
   pipe(
     exists,
     Match.value,
     Match.when(true, () => readPackageJson(fs, packagePath)),
-    Match.when(false, () => Effect.succeed(Option.none<PackageInfo>())),
+    Match.when(false, () => Effect.succeedNone),
     Match.exhaustive
   );
 

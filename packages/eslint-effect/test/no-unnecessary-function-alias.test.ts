@@ -4,12 +4,12 @@ import { Effect, Chunk } from 'effect';
 // SHOULD TRIGGER - Used once or twice, no semantic value
 // ============================================================================
 
-// eslint-disable-next-line effect/no-unnecessary-function-alias -- Testing alias used once
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const succeedEffect = Effect.succeed;
 
 const useOnce = () => succeedEffect(42);
 
-// eslint-disable-next-line effect/no-unnecessary-function-alias -- Testing alias used twice
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const toArray = Chunk.toReadonlyArray;
 
 const useTwice = () => {
@@ -18,10 +18,9 @@ const useTwice = () => {
   return [toArray(chunk1), toArray(chunk2)];
 };
 
-// eslint-disable-next-line effect/no-unnecessary-function-alias -- Testing simple identifier alias
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const syncEffect = Effect.sync;
 
-// eslint-disable-next-line effect/prefer-effect-platform -- Test utility
 const useSyncOnce = () => syncEffect(() => console.log('test'));
 
 // ============================================================================
@@ -45,7 +44,6 @@ export const publicAlias = Effect.succeed;
 
 const wrappedFunction = (x: number) => Effect.succeed(x * 2);
 
-// eslint-disable-next-line effect/no-eta-expansion -- Testing that alias rule doesn't trigger on non-aliases
 const notAnAlias = (x: number) => wrappedFunction(x);
 
 // ============================================================================
@@ -57,9 +55,8 @@ const firstEvent = events[0];
 const secondEvent = events[1];
 
 const useIndexedAccess = () => {
-  // eslint-disable-next-line effect/no-if-statement -- Test helper guards
   if (!firstEvent) throw new Error('Expected first event');
-  // eslint-disable-next-line effect/no-if-statement -- Test helper guards
+
   if (!secondEvent) throw new Error('Expected second event');
   return [firstEvent.type, secondEvent.type];
 };
@@ -70,7 +67,8 @@ const useIndexedAccess = () => {
 
 // This demonstrates an unnecessary alias that provides no real value
 // The name "toArraySafely" doesn't add meaningful information over "toReadonlyArray"
-// eslint-disable-next-line effect/no-unnecessary-function-alias -- Intentional demonstration of the rule
+
+// eslint-disable-next-line effect/no-unnecessary-function-alias
 const toArraySafely = Chunk.toReadonlyArray;
 
 const useSemantic = () => {

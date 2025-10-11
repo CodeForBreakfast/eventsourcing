@@ -34,6 +34,7 @@
   ],
   "scripts": {
     "lint": "eslint test --ext .ts,.tsx --report-unused-disable-directives",
+    "lint:fix": "eslint test --ext .ts,.tsx --fix",
     "typecheck": "tsc --noEmit",
     "test": "bun run lint && bun run typecheck",
     "validate:pack": "bun pm pack --dry-run",

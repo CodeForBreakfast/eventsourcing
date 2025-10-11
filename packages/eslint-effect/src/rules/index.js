@@ -9,6 +9,9 @@ import noRunSync from './no-runSync.js';
 import noRunPromise from './no-runPromise.js';
 import preferAndThen from './prefer-andThen.js';
 import preferAs from './prefer-as.js';
+import preferAsVoid from './prefer-as-void.js';
+import preferAsSome from './prefer-as-some.js';
+import preferAsSomeError from './prefer-as-some-error.js';
 import noGen from './no-gen.js';
 import noDirectTagAccess from './no-direct-tag-access.js';
 import noSwitchStatement from './no-switch-statement.js';
@@ -24,6 +27,15 @@ import noEtaExpansion from './no-eta-expansion.js';
 import noUnnecessaryFunctionAlias from './no-unnecessary-function-alias.js';
 import noIntermediateEffectVariables from './no-intermediate-effect-variables.js';
 import noIfStatement from './no-if-statement.js';
+import preferFlatten from './prefer-flatten.js';
+import preferZipLeft from './prefer-zip-left.js';
+import preferZipRight from './prefer-zip-right.js';
+import preferIgnore from './prefer-ignore.js';
+import preferIgnoreLogged from './prefer-ignore-logged.js';
+import preferFromNullable from './prefer-from-nullable.js';
+import preferGetOrElse from './prefer-get-or-else.js';
+import preferGetOrNull from './prefer-get-or-null.js';
+import preferSucceedNone from './prefer-succeed-none.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -37,6 +49,9 @@ export default {
   'no-runPromise': noRunPromise,
   'prefer-andThen': preferAndThen,
   'prefer-as': preferAs,
+  'prefer-as-void': preferAsVoid,
+  'prefer-as-some': preferAsSome,
+  'prefer-as-some-error': preferAsSomeError,
   'no-gen': noGen,
   'no-direct-tag-access': noDirectTagAccess,
   'no-switch-statement': noSwitchStatement,
@@ -52,4 +67,13 @@ export default {
   'no-unnecessary-function-alias': noUnnecessaryFunctionAlias,
   'no-intermediate-effect-variables': noIntermediateEffectVariables,
   'no-if-statement': noIfStatement,
+  'prefer-flatten': preferFlatten,
+  'prefer-zip-left': preferZipLeft,
+  'prefer-zip-right': preferZipRight,
+  'prefer-ignore': preferIgnore,
+  'prefer-ignore-logged': preferIgnoreLogged,
+  'prefer-from-nullable': preferFromNullable,
+  'prefer-get-or-else': preferGetOrElse,
+  'prefer-get-or-null': preferGetOrNull,
+  'prefer-succeed-none': preferSucceedNone,
 };

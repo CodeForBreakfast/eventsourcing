@@ -96,9 +96,28 @@
         "**/*.spec.tsx",
         "tsconfig*.json",
         "$TURBO_ROOT$/eslint.config.mjs",
+        "eslint.config.mjs",
         "$TURBO_ROOT$/scripts/**/*.ts",
         "$TURBO_ROOT$/package.json",
         "$TURBO_ROOT$/bun.lock",
+        "$TURBO_ROOT$/packages/eslint-effect/src/**/*.js",
+        "package.json"
+      ]
+    },
+    "lint:fix": {
+      "dependsOn": [],
+      "outputs": [],
+      "cache": false,
+      "inputs": [
+        "src/**/*.ts",
+        "src/**/*.tsx",
+        "**/*.test.ts",
+        "**/*.test.tsx",
+        "**/*.spec.ts",
+        "**/*.spec.tsx",
+        "tsconfig*.json",
+        "$TURBO_ROOT$/eslint.config.mjs",
+        "eslint.config.mjs",
         "package.json"
       ]
     },

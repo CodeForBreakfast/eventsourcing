@@ -2,19 +2,18 @@ import { pipe, Effect, Match, Option } from 'effect';
 
 // Should fail - ternary with Effect calls in return statement
 const ternaryWithEffect = (condition: boolean) => {
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary with Effect calls
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   return condition ? Effect.succeed(42) : Effect.fail('error');
 };
 
 // Should fail - ternary with Effect calls in arrow function body
 const arrowTernaryEffect = (condition: boolean) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary in arrow function body
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   condition ? Effect.succeed('yes') : Effect.succeed('no');
 
 // Should fail - ternary with function calls in variable assignment
-const ternaryFunctionCalls = (hasData: boolean) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary with function calls in variable
-  hasData ? createDataEffect() : handleNoData();
+// eslint-disable-next-line effect/prefer-match-over-ternary
+const ternaryFunctionCalls = (hasData: boolean) => (hasData ? createDataEffect() : handleNoData());
 
 // Should NOT fail (yet) - ternary inside function argument (not in return/assignment position)
 // This is a future enhancement - catching ternaries as function arguments
@@ -34,24 +33,23 @@ const handleConditional = <E, R>(
 
 // Should fail - ternary in variable declaration
 const getTodoEffect = (title: string | undefined) => {
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary in variable declaration
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   const result = title ? createTodo(title) : missingArgError('Title required');
   return result;
 };
 
 // Should fail - ternary with Option.some check
 const optionalValue = (value: Option.Option<string>) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary with Option check
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   Option.isSome(value) ? processValue(value.value) : defaultValue();
 
 // Should fail - ternary inside Effect.succeed (complex condition)
-const ternaryInEffectSucceed = (condition: boolean) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary inside Effect constructor with boolean
-  Effect.succeed(condition ? 'yes' : 'no');
+// eslint-disable-next-line effect/prefer-match-over-ternary
+const ternaryInEffectSucceed = (condition: boolean) => Effect.succeed(condition ? 'yes' : 'no');
 
 // Should fail - ternary inside Effect.fail (complex condition)
 const ternaryInEffectFail = (hasError: boolean) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary inside Effect.fail with boolean
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   Effect.fail(hasError ? new Error('Critical') : new Error('Warning'));
 
 // Should NOT fail - simple literal equality INSIDE Effect.succeed (no duplication)
@@ -74,7 +72,6 @@ const stringTernary = (condition: boolean) => (condition ? 'yes' : 'no');
 // Shows the pattern that prefer-match-over-ternary would suggest (though Effect.if is preferred)
 const correctMatchPattern = (condition: boolean) =>
   pipe(
-    // eslint-disable-next-line effect/no-pipe-first-arg-call -- Match.value(condition) is the correct usage pattern here
     Match.value(condition),
     Match.when(true, () => Effect.succeed(42)),
     Match.when(false, () => Effect.fail('error'))
@@ -82,13 +79,11 @@ const correctMatchPattern = (condition: boolean) =>
 
 // Should NOT fail - using Option.match instead
 const correctOptionMatch = (value: Option.Option<string>) =>
-  // eslint-disable-next-line effect/no-unnecessary-pipe-wrapper -- Testing proper Match pattern usage
   pipe(
     value,
     Option.match({
-      // eslint-disable-next-line effect/no-eta-expansion -- Testing Match pattern, not point-free style
       onNone: () => defaultValue(),
-      // eslint-disable-next-line effect/no-eta-expansion -- Testing Match pattern, not point-free style
+
       onSome: (v) => processValue(v),
     })
   );
@@ -101,7 +96,7 @@ const intermediateCalculation = (x: number) => {
 
 // Should fail - ternary inside Effect.succeed (even with plain values)
 const ternaryAsArgument = (condition: boolean) => {
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Testing ternary inside Effect.succeed with plain values
+  // eslint-disable-next-line effect/prefer-match-over-ternary
   return Effect.succeed(condition ? 'a' : 'b');
 };
 
@@ -113,7 +108,7 @@ const createDataEffect = () => Effect.succeed({ data: 'value' });
 const handleNoData = () => Effect.succeed('no-data');
 const formatTodoList = (events: readonly unknown[]) => Effect.succeed('formatted');
 const createTodo = (title: string) => Effect.succeed({ title });
-// eslint-disable-next-line effect/no-eta-expansion -- Simple test helper
+
 const missingArgError = (msg: string) => Effect.fail(msg);
 const processValue = (value: string) => Effect.succeed(value.toUpperCase());
 const defaultValue = () => Effect.succeed('default');

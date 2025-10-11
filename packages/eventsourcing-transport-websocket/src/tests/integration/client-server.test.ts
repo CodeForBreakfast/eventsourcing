@@ -185,7 +185,7 @@ describe('WebSocket Client-Server Specific Tests', () => {
       { port, host },
       WebSocketAcceptor.make,
       Effect.flatMap((acceptor) => acceptor.start()),
-      Effect.flatMap((_server) => connectAndVerify(host, port))
+      Effect.andThen(connectAndVerify(host, port))
     );
   });
 

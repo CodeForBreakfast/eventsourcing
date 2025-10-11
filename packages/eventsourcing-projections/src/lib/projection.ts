@@ -25,7 +25,7 @@ const applyEventAndAnnotate = <TEvent, TData>(
   pipe(
     event as ReadonlyDeep<TEvent>,
     apply(before as ReadonlyDeep<Option.Option<TData>>),
-    Effect.map(Option.some),
+    Effect.asSome,
     Effect.tap((after) =>
       Effect.annotateCurrentSpan({
         eventNumber: nextEventNumber,

@@ -1,8 +1,6 @@
 import { Effect, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { describe, expect, it, silentLogger } from '@codeforbreakfast/buntest';
-// Mock implementation for testing
-const LoggerLive = silentLogger;
 import {
   ConnectionManagerService,
   DefaultConnectionConfig,
@@ -12,7 +10,7 @@ import {
 const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
   pipe(
     manager.getApiPort(),
-    Effect.provide(LoggerLive),
+    Effect.provide(silentLogger),
     Effect.tap((apiPort) => Effect.sync(() => expect(typeof apiPort).toBe('number')))
   );
 
@@ -26,7 +24,7 @@ describe('ConnectionManager', () => {
     pipe(
       DefaultConnectionConfig,
       makeConnectionManager,
-      Effect.provide(LoggerLive),
+      Effect.provide(silentLogger),
       Effect.flatMap(verifyManagerAndApiPort)
     )
   );

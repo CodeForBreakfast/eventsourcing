@@ -28,10 +28,10 @@ const provideInitiatorFromUserId =
   (userId: UserId) =>
     pipe(effect, Effect.provide(provideCommandInitiator(userId)));
 
-const withCommandInitiator = <TEvent extends EventRecord<unknown, UserId>, TResult, TError>(
-  event: TEvent,
-  effect: Effect.Effect<TResult, TError>
-) => pipe(event.metadata.origin, parseUserId, Effect.flatMap(provideInitiatorFromUserId(effect)));
+const withCommandInitiator =
+  <TEvent extends EventRecord<unknown, UserId>, TResult, TError>(event: TEvent) =>
+  (effect: Effect.Effect<TResult, TError>) =>
+    pipe(event.metadata.origin, parseUserId, Effect.flatMap(provideInitiatorFromUserId(effect)));
 
 const commitEvents = (eventNumber: number) => (events: Readonly<ReadonlyArray<TodoListEvent>>) =>
   events.length > 0
@@ -47,11 +47,7 @@ const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
   event: TEvent,
   command: Effect.Effect<ReadonlyArray<TodoListEvent>, TError>
 ) =>
-  pipe(
-    command,
-    (effect) => withCommandInitiator(event, effect),
-    Effect.flatMap(commitEvents(state.nextEventNumber))
-  );
+  pipe(command, withCommandInitiator(event), Effect.flatMap(commitEvents(state.nextEventNumber)));
 
 const parseTodoId = (todoId: string): Effect.Effect<TodoId, Error> =>
   pipe(
