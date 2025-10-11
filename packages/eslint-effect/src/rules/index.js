@@ -35,6 +35,7 @@ import preferIgnoreLogged from './prefer-ignore-logged.js';
 import preferFromNullable from './prefer-from-nullable.js';
 import preferGetOrElse from './prefer-get-or-else.js';
 import preferGetOrNull from './prefer-get-or-null.js';
+import preferGetOrUndefined from './prefer-get-or-undefined.js';
 import preferSucceedNone from './prefer-succeed-none.js';
 
 export default {
@@ -75,5 +76,6 @@ export default {
   'prefer-from-nullable': preferFromNullable,
   'prefer-get-or-else': preferGetOrElse,
   'prefer-get-or-null': preferGetOrNull,
+  'prefer-get-or-undefined': preferGetOrUndefined,
   'prefer-succeed-none': preferSucceedNone,
 };

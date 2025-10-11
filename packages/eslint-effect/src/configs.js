@@ -121,6 +121,7 @@ const pluginRulesOnly = {
   'effect/prefer-from-nullable': 'error',
   'effect/prefer-get-or-else': 'error',
   'effect/prefer-get-or-null': 'error',
+  'effect/prefer-get-or-undefined': 'error',
   'effect/prefer-succeed-none': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
