@@ -122,6 +122,7 @@ export default [
     ignores: [
       '**/eventsourcing-testing-contracts/**',
       '**/buntest/**',
+      '**/eslint-effect/**',
       '**/*.test.ts',
       '**/*.test.tsx',
       '**/*.spec.ts',
@@ -143,7 +144,12 @@ export default [
   {
     name: 'effect-strict',
     files: ['**/*.ts', '**/*.tsx'],
-    ignores: ['**/eventsourcing-testing-contracts/**', '**/buntest/**', '**/testing/**'],
+    ignores: [
+      '**/eventsourcing-testing-contracts/**',
+      '**/buntest/**',
+      '**/eslint-effect/**',
+      '**/testing/**',
+    ],
     languageOptions: commonLanguageOptions,
     plugins: commonPlugins,
     rules: effectPlugin.configs.strict.rules,
@@ -159,7 +165,7 @@ export default [
       '**/*test*.tsx',
       '**/testing/**/*.ts',
     ],
-    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**'],
+    ignores: ['**/buntest/**', '**/eventsourcing-testing-contracts/**', '**/eslint-effect/**'],
     languageOptions: commonLanguageOptions,
     plugins: commonPluginsWithBuntest,
     rules: {
@@ -193,16 +199,6 @@ export default [
       // Allow runPromise/runSync in scripts as they are application entry points
       'effect/no-runPromise': 'off',
       'effect/no-runSync': 'off',
-    },
-  },
-  {
-    name: 'eslint-effect-test-exceptions',
-    files: ['**/eslint-effect/test/**/*.ts', '**/eslint-effect/test/**/*.tsx'],
-    languageOptions: commonLanguageOptions,
-    plugins: commonPlugins,
-    rules: {
-      '@typescript-eslint/no-unused-vars': 'off',
-      ...effectPlugin.configs.strict.rules,
     },
   },
   {
