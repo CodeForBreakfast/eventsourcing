@@ -9,9 +9,8 @@ export type DomainEvent = {
 
 export interface EventBusService {
   readonly publish: (
-    streamId: string,
-    event: TodoEvent | TodoListEvent
-  ) => Effect.Effect<void, never, never>;
+    streamId: string
+  ) => (event: TodoEvent | TodoListEvent) => Effect.Effect<void, never, never>;
 
   readonly subscribe: <TEvent extends DomainEvent['event']>(
     filter: (event: DomainEvent['event']) => event is TEvent
@@ -25,7 +24,7 @@ export interface EventBusService {
 export class EventBus extends Effect.Tag('EventBus')<EventBus, EventBusService>() {}
 
 const createServiceFromPubSub = (pubsub: PubSub.PubSub<DomainEvent>): EventBusService => ({
-  publish: (streamId: string, event: TodoEvent | TodoListEvent) =>
+  publish: (streamId: string) => (event: TodoEvent | TodoListEvent) =>
     PubSub.publish(pubsub, { streamId, event }),
 
   subscribe: <TEvent extends DomainEvent['event']>(

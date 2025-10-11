@@ -36,10 +36,7 @@ const makeTodoListEventStore = () =>
 
 const publishEventsWithBus =
   (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: Readonly<EventBusService>) =>
-    pipe(
-      events,
-      Effect.forEach((event) => eventBus.publish(todoId, event))
-    );
+    pipe(events, Effect.forEach(eventBus.publish(todoId)));
 
 const publishEvents = (todoId: TodoId, events: ReadonlyArray<TodoEvent>) =>
   pipe(EventBus, Effect.flatMap(publishEventsWithBus(todoId, events)));
