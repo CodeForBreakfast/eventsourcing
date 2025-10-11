@@ -9,6 +9,7 @@ import noRunSync from './no-runSync.js';
 import noRunPromise from './no-runPromise.js';
 import preferAndThen from './prefer-andThen.js';
 import preferAs from './prefer-as.js';
+import preferAsVoid from './prefer-as-void.js';
 import noGen from './no-gen.js';
 import noDirectTagAccess from './no-direct-tag-access.js';
 import noSwitchStatement from './no-switch-statement.js';
@@ -36,6 +37,7 @@ export default {
   'no-runPromise': noRunPromise,
   'prefer-andThen': preferAndThen,
   'prefer-as': preferAs,
+  'prefer-as-void': preferAsVoid,
   'no-gen': noGen,
   'no-direct-tag-access': noDirectTagAccess,
   'no-switch-statement': noSwitchStatement,

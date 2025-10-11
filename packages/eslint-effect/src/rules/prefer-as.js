@@ -1,3 +1,5 @@
+import { isVoidReturn } from './utils.js';
+
 export default {
   meta: {
     type: 'suggestion',
@@ -24,6 +26,10 @@ export default {
           node.arguments[0].type === 'ArrowFunctionExpression' &&
           node.arguments[0].params.length === 0
         ) {
+          if (isVoidReturn(node.arguments[0])) {
+            return;
+          }
+
           context.report({
             node,
             messageId: 'preferAs',
