@@ -80,6 +80,7 @@ export default [
       'effect/prefer-ignore': 'off',
       'effect/prefer-ignore-logged': 'off',
       'effect/prefer-from-nullable': 'off',
+      'effect/prefer-get-or-else': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -222,6 +223,11 @@ export default [
     name: 'prefer-from-nullable-test',
     files: ['test/prefer-from-nullable.test.ts'],
     rules: { 'effect/prefer-from-nullable': 'error' },
+  },
+  {
+    name: 'prefer-get-or-else-test',
+    files: ['test/prefer-get-or-else.test.ts'],
+    rules: { 'effect/prefer-get-or-else': 'error' },
   },
   {
     name: 'prefer-effect-platform-test',
