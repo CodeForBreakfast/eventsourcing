@@ -44,15 +44,15 @@ const invalidEqualNullStrict = someValue === null ? Option.none() : Option.some(
 // eslint-disable-next-line effect/prefer-from-nullable
 const invalidEqualUndefined = someValue == undefined ? Option.none() : Option.some(someValue);
 
-// eslint-disable-next-line effect/prefer-from-nullable
 const invalidEqualUndefinedStrict =
+  // eslint-disable-next-line effect/prefer-from-nullable
   someValue === undefined ? Option.none() : Option.some(someValue);
 
 // eslint-disable-next-line effect/prefer-from-nullable
 const invalidNotEqualUndefined = someValue != undefined ? Option.some(someValue) : Option.none();
 
-// eslint-disable-next-line effect/prefer-from-nullable
 const invalidNotEqualUndefinedStrict =
+  // eslint-disable-next-line effect/prefer-from-nullable
   someValue !== undefined ? Option.some(someValue) : Option.none();
 
 // eslint-disable-next-line effect/prefer-from-nullable
@@ -64,7 +64,7 @@ const invalidNested = x.y.z != null ? Option.some(x.y.z) : Option.none();
 // eslint-disable-next-line effect/prefer-from-nullable
 const invalidInFunction = (value: unknown) => (value != null ? Option.some(value) : Option.none());
 
-// eslint-disable-next-line effect/prefer-from-nullable
 const invalidInlinedInExpression = someArray.map((item) =>
+  // eslint-disable-next-line effect/prefer-from-nullable
   item != null ? Option.some(item) : Option.none()
 );
