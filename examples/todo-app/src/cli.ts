@@ -1,11 +1,9 @@
 #!/usr/bin/env bun
 
 import { Effect, Layer, Console, Option, Chunk, pipe, Match, Schema } from 'effect';
+import { BunFileSystem, BunPath } from '@effect/platform-bun';
 import { Projection } from '@codeforbreakfast/eventsourcing-projections';
-import {
-  makeInMemoryEventStore,
-  InMemoryStore,
-} from '@codeforbreakfast/eventsourcing-store-inmemory';
+import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
 import {
   type EventRecord,
   provideCommandInitiator,
@@ -22,17 +20,15 @@ import type { TodoListEvent } from './domain/todoListEvents';
 
 const CURRENT_USER = 'user-1' as UserId;
 
-const makeTodoEventStore = () =>
-  pipe(
-    InMemoryStore.make<EventRecord<TodoEvent, UserId>>(),
-    Effect.flatMap(makeInMemoryEventStore)
-  );
+const makeTodoEventStore = () => {
+  const store = make<EventRecord<TodoEvent, UserId>>({ baseDir: './todo-data/todos' });
+  return pipe(store, Effect.flatMap(makeFileSystemEventStore));
+};
 
-const makeTodoListEventStore = () =>
-  pipe(
-    InMemoryStore.make<EventRecord<TodoListEvent, UserId>>(),
-    Effect.flatMap(makeInMemoryEventStore)
-  );
+const makeTodoListEventStore = () => {
+  const store = make<EventRecord<TodoListEvent, UserId>>({ baseDir: './todo-data/todo-lists' });
+  return pipe(store, Effect.flatMap(makeFileSystemEventStore));
+};
 
 const publishEventsWithBus =
   (todoId: TodoId, events: ReadonlyArray<TodoEvent>) => (eventBus: Readonly<EventBusService>) =>
@@ -124,6 +120,11 @@ const executeCommand = (
   pipe(
     todoId,
     TodoAggregateRoot.load,
+    Effect.tap((state) =>
+      Console.log(
+        `Loaded state: nextEventNumber=${state.nextEventNumber}, hasData=${Option.isSome(state.data)}`
+      )
+    ),
     Effect.flatMap((state) =>
       processCommand(
         state.data,
@@ -304,11 +305,11 @@ const forkProcessManager = () => Effect.fork(startProcessManager());
 
 const runWithProcessManager = (args: ReadonlyArray<string>) =>
   pipe(
-    [forkProcessManager(), Effect.sleep('100 millis')],
+    [forkProcessManager(), Effect.sleep('200 millis')],
     Effect.all,
     Effect.andThen(runCommand(args)),
     Effect.asVoid,
-    Effect.andThen(Effect.sleep('500 millis'))
+    Effect.andThen(Effect.sleep('1 second'))
   );
 
 const scopeAndProvide = (args: ReadonlyArray<string>): Effect.Effect<void, never, never> =>
@@ -317,11 +318,14 @@ const scopeAndProvide = (args: ReadonlyArray<string>): Effect.Effect<void, never
     runWithProcessManager,
     Effect.scoped,
     Effect.provide(
-      Layer.mergeAll(
-        Layer.effect(EventBus, makeEventBus()),
-        Layer.effect(TodoAggregate, makeTodoEventStore()),
-        Layer.effect(TodoListAggregate, makeTodoListEventStore()),
-        provideCommandInitiator(CURRENT_USER)
+      Layer.provide(
+        Layer.mergeAll(
+          Layer.effect(EventBus, makeEventBus()),
+          Layer.effect(TodoAggregate, makeTodoEventStore()),
+          Layer.effect(TodoListAggregate, makeTodoListEventStore()),
+          provideCommandInitiator(CURRENT_USER)
+        ),
+        Layer.mergeAll(BunFileSystem.layer, BunPath.layer)
       )
     )
   ) as Effect.Effect<void, never, never>;
