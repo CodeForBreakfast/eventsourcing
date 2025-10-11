@@ -1,5 +1,5 @@
 /**
- * Forbid wrapping expect() calls in Effect.sync()
+ * Forbid wrapping expect() or assert*() calls in Effect.sync()
  * Use Effect-native assertions like expectSome, assertEqual, etc.
  */
 export default {
@@ -7,12 +7,12 @@ export default {
     type: 'suggestion',
     docs: {
       description:
-        'Forbid wrapping expect() calls in Effect.sync(). Use Effect-native assertions like expectSome, assertEqual, expectLeft, etc. from @codeforbreakfast/buntest instead.',
+        'Forbid wrapping expect() or assert*() calls in Effect.sync(). Use Effect-native assertions like expectSome, assertEqual, expectLeft, etc. from @codeforbreakfast/buntest instead.',
       recommended: true,
     },
     messages: {
       preferEffectAssertions:
-        'Do not wrap expect() in Effect.sync(). Use Effect-native assertions instead: expectSome for Options, expectLeft/expectRight for Either, assertEqual for value comparisons, or expectTrue/expectFalse for booleans.',
+        'Do not wrap expect() or assert*() in Effect.sync(). Use Effect-native assertions instead: expectSome for Options, expectLeft/expectRight for Either, assertEqual for value comparisons, or expectTrue/expectFalse for booleans.',
     },
     schema: [],
   },
@@ -28,28 +28,35 @@ export default {
       );
     };
 
-    const hasExpectCall = (node) => {
+    const hasExpectOrAssertCall = (node) => {
       if (!node) return false;
 
-      if (node.type === 'CallExpression' && node.callee.name === 'expect') {
-        return true;
+      if (node.type === 'CallExpression') {
+        if (node.callee.type === 'Identifier') {
+          if (node.callee.name === 'expect') {
+            return true;
+          }
+          if (node.callee.name.startsWith('assert')) {
+            return true;
+          }
+        }
       }
 
       if (node.type === 'BlockStatement') {
         return node.body.some((statement) => {
           if (statement.type === 'ExpressionStatement') {
-            return hasExpectCall(statement.expression);
+            return hasExpectOrAssertCall(statement.expression);
           }
           return false;
         });
       }
 
       if (node.type === 'MemberExpression') {
-        return hasExpectCall(node.object);
+        return hasExpectOrAssertCall(node.object);
       }
 
       if (node.type === 'CallExpression') {
-        return hasExpectCall(node.callee);
+        return hasExpectOrAssertCall(node.callee);
       }
 
       return false;
@@ -62,7 +69,7 @@ export default {
         const arg = node.arguments[0];
         if (!arg || arg.type !== 'ArrowFunctionExpression') return;
 
-        if (hasExpectCall(arg.body)) {
+        if (hasExpectOrAssertCall(arg.body)) {
           context.report({
             node,
             messageId: 'preferEffectAssertions',
