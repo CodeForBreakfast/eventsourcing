@@ -19,23 +19,23 @@ const validMultipleParams = pipe(
 );
 
 // Invalid: flatMap discards parameter (no params)
-// eslint-disable-next-line effect/prefer-andThen
 const invalidNoParams = pipe(
   Effect.succeed(42),
+  // eslint-disable-next-line effect/prefer-andThen
   Effect.flatMap(() => Effect.succeed('hello'))
 );
 
 // Invalid: flatMap discards parameter (param not used)
-// eslint-disable-next-line effect/prefer-andThen
 const invalidParamNotUsed = pipe(
   Effect.succeed(42),
+  // eslint-disable-next-line effect/prefer-andThen
   Effect.flatMap((x) => Effect.succeed('hello'))
 );
 
 // Invalid: flatMap discards parameter with Effect construction
-// eslint-disable-next-line effect/prefer-andThen
 const invalidWithConstruction = pipe(
   Effect.succeed(42),
+  // eslint-disable-next-line effect/prefer-andThen
   Effect.flatMap(() => Effect.sync(() => Date.now()))
 );
 
@@ -52,23 +52,23 @@ const invalidNestedPipe = pipe(
 );
 
 // Invalid: Option.flatMap
-// eslint-disable-next-line effect/prefer-andThen
 const invalidOption = pipe(
   Option.some(42),
+  // eslint-disable-next-line effect/prefer-andThen
   Option.flatMap(() => Option.some('hello'))
 );
 
 // Invalid: Stream.flatMap
-// eslint-disable-next-line effect/prefer-andThen
 const invalidStream = pipe(
   Stream.make(1, 2, 3),
+  // eslint-disable-next-line effect/prefer-andThen
   Stream.flatMap(() => Stream.make('a', 'b'))
 );
 
 // Invalid: STM.flatMap
-// eslint-disable-next-line effect/prefer-andThen
 const invalidSTM = pipe(
   STM.succeed(42),
+  // eslint-disable-next-line effect/prefer-andThen
   STM.flatMap(() => STM.succeed('hello'))
 );
 
