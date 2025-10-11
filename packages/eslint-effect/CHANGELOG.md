@@ -1,5 +1,17 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.7.0
+
+### Minor Changes
+
+- [#248](https://github.com/CodeForBreakfast/eventsourcing/pull/248) [`bd1cc0e`](https://github.com/CodeForBreakfast/eventsourcing/commit/bd1cc0eddcf8aaae9614bf7df643b56f944c1728) Thanks [@GraemeF](https://github.com/GraemeF)! - Added `no-intermediate-effect-variables` rule to detect single-use intermediate variables in pipe chains. The rule encourages composing Effect/Stream/pipe operations in a single chain for better readability, while allowing variables that are genuinely reused multiple times. The rule is smart enough to exclude execution results (`runSync`, `runPromise`) and factory methods (`Schema.decode`) which return plain values or functions rather than Effects. This rule is included in the `pipeStrict` config preset.
+
+- [#253](https://github.com/CodeForBreakfast/eventsourcing/pull/253) [`e03308f`](https://github.com/CodeForBreakfast/eventsourcing/commit/e03308f5b2a05de661ab05e804b0568cd6878848) Thanks [@GraemeF](https://github.com/GraemeF)! - Added new `prefer-effect-if-over-match-boolean` lint rule that enforces using `Effect.if` for boolean conditionals instead of `Match.value`. This rule helps distinguish between simple boolean branching (where `Effect.if` is clearer) and true pattern matching scenarios (where `Match.value` excels). Updated the `prefer-match-over-ternary` rule to work harmoniously with this new rule, focusing on non-boolean pattern matching use cases.
+
+### Patch Changes
+
+- [#246](https://github.com/CodeForBreakfast/eventsourcing/pull/246) [`212e229`](https://github.com/CodeForBreakfast/eventsourcing/commit/212e229e36ffefe76bf77ef12fb84fa01275d7cc) Thanks [@GraemeF](https://github.com/GraemeF)! - Fixed ESLint configuration to properly handle TypeScript declaration files. This resolves parsing errors that occurred when ESLint attempted to parse generated `.d.ts` files that were not included in TypeScript project configurations.
+
 ## 0.6.0
 
 ### Minor Changes

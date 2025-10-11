@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-websocket",
-  "version": "0.3.9",
+  "version": "0.3.10",
   "description": "Batteries-included WebSocket event sourcing package - Complete WebSocket transport with default protocol for rapid event sourcing development",
   "type": "module",
   "main": "./dist/index.js",

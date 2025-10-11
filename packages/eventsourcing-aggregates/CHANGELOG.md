@@ -1,5 +1,42 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.8.0
+
+### Minor Changes
+
+- [#237](https://github.com/CodeForBreakfast/eventsourcing/pull/237) [`9087d1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/9087d1a1661f3064cb07bf702100df91c4e3dd5f) Thanks [@GraemeF](https://github.com/GraemeF)! - Automatic metadata enrichment for event sourcing. Commands now emit bare business events, and the framework automatically enriches them with metadata (occurredAt, origin) before persisting. This keeps domain logic pure and separates business concerns from infrastructure.
+
+  **Breaking Changes:**
+  - Commands return bare events (`TEvent[]`) without metadata
+  - Framework enriches events to `EventRecord<TEvent, TOrigin>` during commit
+  - Metadata field renamed: `originator` → `origin`
+  - `applyEvent` receives bare `TEvent` (metadata stripped during load)
+  - EventStore type now explicit: `EventStore<EventRecord<TEvent, TOrigin>>`
+  - `eventSchema` signature changed: removed `originSchema` parameter (creates bare events without metadata)
+
+  **New Exports:**
+  - `EventRecord<TEvent, TOrigin>` - Enriched events with metadata wrapper
+  - `EventMetadata<TOrigin>` - Event metadata structure (occurredAt, origin)
+
+  **WebSocket Transport:**
+  - Added optional `authenticateConnection` callback for secure connection authentication
+  - Authentication metadata flows to `ClientConnection.metadata`
+
+### Patch Changes
+
+- [#237](https://github.com/CodeForBreakfast/eventsourcing/pull/237) [`9087d1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/9087d1a1661f3064cb07bf702100df91c4e3dd5f) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved type safety in aggregate state loading and event committing. The aggregate state's `data` field now correctly preserves its type (e.g., `Option<TodoState>`) instead of being typed as `Option<unknown>`, eliminating the need for type assertions when working with aggregate state. Additionally, `CommitOptions` is now generic over the event type, ensuring type safety throughout the commit pipeline.
+
+- [#241](https://github.com/CodeForBreakfast/eventsourcing/pull/241) [`e117dfa`](https://github.com/CodeForBreakfast/eventsourcing/commit/e117dfa216250ce2a6bc24b22fee03fc6e21ef26) Thanks [@GraemeF](https://github.com/GraemeF)! - Enhanced type safety throughout aggregate roots and event handling. The `makeAggregateRoot` function now returns a properly typed `AggregateRoot` interface that preserves command handler types, eliminating the need for unsafe type assertions in consumer code. This improvement allows TypeScript to verify command usage at compile time and prevents runtime type errors.
+
+  **Improvements:**
+  - `makeAggregateRoot` now returns `AggregateRoot<TId, TState, TEvent, TInitiator, TCommands, TTag>` interface
+  - Command handlers maintain their specific return types through the aggregate root
+  - Removed internal `stripMetadata` function (structural typing makes it unnecessary)
+
+- Updated dependencies []:
+  - @codeforbreakfast/eventsourcing-commands@0.4.2
+  - @codeforbreakfast/eventsourcing-store@0.8.2
+
 ## 0.7.2
 
 ### Patch Changes
