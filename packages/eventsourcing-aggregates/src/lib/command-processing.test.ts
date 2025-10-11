@@ -80,15 +80,16 @@ const createMockRouter = (
   route: (command: Readonly<WireCommand>) => {
     const key = `${command.target}:${command.name}`;
     const handler = handlers.get(key);
-    if (!handler) {
-      return Effect.fail(
-        new CommandRoutingError({
-          target: command.target,
-          message: `No handler found for ${key}`,
-        })
-      );
-    }
-    return Effect.succeed(handler);
+    return Effect.if(!!handler, {
+      onTrue: () => Effect.succeed(handler!),
+      onFalse: () =>
+        Effect.fail(
+          new CommandRoutingError({
+            target: command.target,
+            message: `No handler found for ${key}`,
+          })
+        ),
+    });
   },
 });
 
@@ -136,17 +137,16 @@ describe('Command Processing Service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
 
+    const assertSuccess = (result: CommandResult) =>
+      Effect.sync(() => {
+        isCommandSuccess(result) ? expect(result.position).toBeDefined() : expect(true).toBe(false);
+      });
+
     return pipe(
       router,
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map((result) => {
-        if (isCommandSuccess(result)) {
-          expect(result.position).toBeDefined();
-        } else {
-          expect(true).toBe(false);
-        }
-      }),
+      Effect.flatMap(assertSuccess),
       Effect.provide(testLayer)
     );
   });
@@ -208,17 +208,13 @@ describe('Command Processing Service', () => {
       router,
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map((result) => {
-        if (isCommandFailure(result)) {
-          if (isUnknownError(result.error)) {
-            expect(result.error.message).toContain('No handler found');
-          } else {
-            expect(true).toBe(false);
-          }
-        } else {
-          expect(true).toBe(false);
-        }
-      }),
+      Effect.map((result) =>
+        isCommandFailure(result)
+          ? isUnknownError(result.error)
+            ? expect(result.error.message).toContain('No handler found')
+            : expect(true).toBe(false)
+          : expect(true).toBe(false)
+      ),
       Effect.provide(testLayer)
     );
   });
@@ -231,17 +227,13 @@ describe('Command Processing Service', () => {
       router,
       createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map((result) => {
-        if (isCommandFailure(result)) {
-          if (isUnknownError(result.error)) {
-            expect(result.error.message).toContain('Handler execution failed');
-          } else {
-            expect(true).toBe(false);
-          }
-        } else {
-          expect(true).toBe(false);
-        }
-      }),
+      Effect.map((result) =>
+        isCommandFailure(result)
+          ? isUnknownError(result.error)
+            ? expect(result.error.message).toContain('Handler execution failed')
+            : expect(true).toBe(false)
+          : expect(true).toBe(false)
+      ),
       Effect.provide(testLayer)
     );
   });
