@@ -9,7 +9,7 @@
 - [x] `prefer-flatten` - `flatMap(identity)` → `flatten` (Effect, Option, Array, Cause, STM)
 - [x] `prefer-zip-left` - `flatMap(a => map(b, () => a))` → `zipLeft(a, b)` (Effect, Option)
 - [x] `prefer-zip-right` - `flatMap(() => b)` → `zipRight(a, b)` (Effect, Option)
-- [ ] `prefer-ignore` - Complex ignore pattern → `ignore` (Effect)
+- [x] `prefer-ignore` - Complex ignore pattern → `ignore` (Effect)
 - [ ] `prefer-ignore-logged` - Ignore with logging → `ignoreLogged` (Effect)
 - [ ] `prefer-from-nullable` - `value != null ? some(value) : none()` → `fromNullable(value)` (Option)
 - [ ] `prefer-get-or-else` - `isSome(opt) ? opt.value : default` → `getOrElse(() => default)` (Option)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (7 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right)
+- Already Analyzed: 27 (8 completed: prefer-as, prefer-as-void, prefer-as-some, prefer-as-some-error, prefer-flatten, prefer-zip-left, prefer-zip-right, prefer-ignore)
 - Not Yet Analyzed: 250

@@ -116,6 +116,7 @@ const pluginRulesOnly = {
   'effect/prefer-flatten': 'error',
   'effect/prefer-zip-left': 'error',
   'effect/prefer-zip-right': 'error',
+  'effect/prefer-ignore': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 

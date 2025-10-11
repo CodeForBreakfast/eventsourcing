@@ -30,6 +30,7 @@ import noIfStatement from './no-if-statement.js';
 import preferFlatten from './prefer-flatten.js';
 import preferZipLeft from './prefer-zip-left.js';
 import preferZipRight from './prefer-zip-right.js';
+import preferIgnore from './prefer-ignore.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -64,4 +65,5 @@ export default {
   'prefer-flatten': preferFlatten,
   'prefer-zip-left': preferZipLeft,
   'prefer-zip-right': preferZipRight,
+  'prefer-ignore': preferIgnore,
 };
