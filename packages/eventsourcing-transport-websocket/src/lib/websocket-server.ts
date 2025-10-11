@@ -17,6 +17,7 @@ import {
   pipe,
   Schema,
   Either,
+  Match,
 } from 'effect';
 import {
   type TransportMessage,
@@ -434,36 +435,42 @@ const createWebSocketServer = (
         },
 
         fetch: (req, server) => {
-          if (config.authenticateConnection) {
+          const handleAuthenticatedConnection = () => {
             // eslint-disable-next-line effect/no-runSync -- fetch handler is a synchronous callback at application boundary, requires Effect.runSync
             const authResult = Effect.runSync(
               pipe(
                 req,
                 Effect.succeed,
-                Effect.flatMap(config.authenticateConnection),
+                Effect.flatMap(config.authenticateConnection!),
                 Effect.catchAll(Effect.fail),
                 Effect.either
               )
             );
 
-            if (Either.isLeft(authResult)) {
-              return new Response('Authentication failed', { status: 401 });
-            }
-
-            const success = server.upgrade(req, {
-              data: { auth: authResult.right },
+            return Either.match(authResult, {
+              onLeft: () => new Response('Authentication failed', { status: 401 }),
+              onRight: (auth) => {
+                const success = server.upgrade(req, {
+                  data: { auth },
+                });
+                return success
+                  ? undefined
+                  : new Response('WebSocket upgrade failed', { status: 400 });
+              },
             });
-            if (success) {
-              return undefined;
-            }
-            return new Response('WebSocket upgrade failed', { status: 400 });
-          }
+          };
 
-          const success = server.upgrade(req);
-          if (success) {
-            return undefined;
-          }
-          return new Response('WebSocket upgrade failed', { status: 400 });
+          const handleUnauthenticatedConnection = () => {
+            const success = server.upgrade(req);
+            return success ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
+          };
+
+          return pipe(
+            config.authenticateConnection,
+            Match.value,
+            Match.when(Match.undefined, handleUnauthenticatedConnection),
+            Match.orElse(handleAuthenticatedConnection)
+          );
         },
       });
 
@@ -536,9 +543,7 @@ const shutdownServerResources = (state: ServerState): Effect.Effect<void, never,
             }
           });
 
-          if (state.server && state.server.stop) {
-            state.server.stop();
-          }
+          state.server?.stop?.();
         } catch {
           // Ignore cleanup errors
         }

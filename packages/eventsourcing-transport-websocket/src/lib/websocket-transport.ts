@@ -110,17 +110,16 @@ const validateConnectionAndSendMessage =
   ([state, writer]: readonly [
     WebSocketInternalState,
     ((data: string) => Effect.Effect<void, Socket.SocketError>) | null,
-  ]): Effect.Effect<void, TransportError, never> => {
-    if (!writer || state.connectionState !== 'connected') {
-      return Effect.fail(
-        new TransportError({
-          message: 'Cannot publish message: WebSocket is not connected',
-        })
-      );
-    }
-
-    return pipe(message, serializeAndSend(writer));
-  };
+  ]): Effect.Effect<void, TransportError, never> =>
+    Effect.if(!writer || state.connectionState !== 'connected', {
+      onTrue: () =>
+        Effect.fail(
+          new TransportError({
+            message: 'Cannot publish message: WebSocket is not connected',
+          })
+        ),
+      onFalse: () => pipe(message, serializeAndSend(writer!)),
+    });
 
 const publishMessage =
   (
@@ -312,20 +311,20 @@ const handleSocketError =
     pipe(
       connectedDeferred,
       Deferred.isDone,
-      Effect.flatMap((wasConnected) => {
-        if (!wasConnected) {
-          const connectionError = new ConnectionError({
-            message: 'WebSocket connection failed',
-            url,
-            cause: error,
-          });
-          return failDeferredAndUpdateState(connectedDeferred, stateRef, connectionError);
-        }
-        if (Socket.SocketCloseError.is(error)) {
-          return updateConnectionState(stateRef, 'disconnected');
-        }
-        return updateConnectionState(stateRef, 'error');
-      })
+      Effect.flatMap((wasConnected) =>
+        !wasConnected
+          ? (() => {
+              const connectionError = new ConnectionError({
+                message: 'WebSocket connection failed',
+                url,
+                cause: error,
+              });
+              return failDeferredAndUpdateState(connectedDeferred, stateRef, connectionError);
+            })()
+          : Socket.SocketCloseError.is(error)
+            ? updateConnectionState(stateRef, 'disconnected')
+            : updateConnectionState(stateRef, 'error')
+      )
     );
 
 const monitorSocketFiber =
