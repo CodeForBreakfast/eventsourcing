@@ -111,27 +111,19 @@ const parseFrontmatter = (content: string): string => {
   };
 
   const result = lines.reduce<FrontmatterState>(
-    (state, line) => {
-      if (state.done) {
-        return state;
-      }
-
-      if (line === '---') {
-        if (!state.inFrontmatter) {
-          return { ...state, inFrontmatter: true };
-        }
-        return { ...state, done: true };
-      }
-
-      if (state.inFrontmatter) {
-        return {
-          ...state,
-          frontmatterContent: state.frontmatterContent + line + '\n',
-        };
-      }
-
-      return state;
-    },
+    (state, line) =>
+      state.done
+        ? state
+        : line === '---'
+          ? state.inFrontmatter
+            ? { ...state, done: true }
+            : { ...state, inFrontmatter: true }
+          : state.inFrontmatter
+            ? {
+                ...state,
+                frontmatterContent: state.frontmatterContent + line + '\n',
+              }
+            : state,
     { inFrontmatter: false, frontmatterContent: '', done: false }
   );
 
@@ -150,24 +142,23 @@ const parsePackagesFromFrontmatter = (
   };
 
   return matches.reduce<ParseResult>(
-    (acc, match) => {
-      if (!match[1]) {
-        return acc;
-      }
+    (acc, match) =>
+      !match[1]
+        ? acc
+        : (() => {
+            const type = match[2] as 'major' | 'minor' | 'patch';
+            const newChangeType =
+              type === 'major'
+                ? 'major'
+                : type === 'minor' && acc.changeType !== 'major'
+                  ? 'minor'
+                  : acc.changeType;
 
-      const type = match[2] as 'major' | 'minor' | 'patch';
-      const newChangeType =
-        type === 'major'
-          ? 'major'
-          : type === 'minor' && acc.changeType !== 'major'
-            ? 'minor'
-            : acc.changeType;
-
-      return {
-        packages: [...acc.packages, match[1]],
-        changeType: newChangeType,
-      };
-    },
+            return {
+              packages: [...acc.packages, match[1]],
+              changeType: newChangeType,
+            };
+          })(),
     { packages: [], changeType: 'patch' }
   );
 };
@@ -175,14 +166,14 @@ const parsePackagesFromFrontmatter = (
 const parseChangesetContent = (file: string) => (content: string) => {
   const frontmatterContent = parseFrontmatter(content);
   const { packages, changeType } = parsePackagesFromFrontmatter(frontmatterContent);
-  if (packages.length === 0) {
-    return Option.none<ChangesetInfoInternal>();
-  }
-  return Option.some<ChangesetInfoInternal>({
-    filename: file,
-    packages,
-    type: changeType,
-  });
+  // eslint-disable-next-line effect/prefer-match-over-ternary -- Simple value transformation, not pattern matching
+  return packages.length === 0
+    ? Option.none<ChangesetInfoInternal>()
+    : Option.some<ChangesetInfoInternal>({
+        filename: file,
+        packages,
+        type: changeType,
+      });
 };
 
 const parseChangesetFile =
@@ -313,19 +304,19 @@ const hasCodeChanges = (changedFiles: readonly string[]): boolean => {
     /^\.github\/workflows/,
   ];
 
-  return changedFiles.some((file) => {
-    if (file === 'scripts/validate-changesets.ts') {
-      return false;
-    }
-    return codePatterns.some((pattern) => pattern.test(file));
-  });
+  return changedFiles.some((file) =>
+    file === 'scripts/validate-changesets.ts'
+      ? false
+      : codePatterns.some((pattern) => pattern.test(file))
+  );
 };
 
-const toStringOutput = (value: unknown): string => {
-  if (typeof value === 'string') return value;
-  if (value instanceof Uint8Array) return new TextDecoder().decode(value);
-  return '';
-};
+const toStringOutput = (value: unknown): string =>
+  typeof value === 'string'
+    ? value
+    : value instanceof Uint8Array
+      ? new TextDecoder().decode(value)
+      : '';
 
 const extractUnpublishablePackages = (error: unknown): readonly string[] => {
   const errorWithOutput = error as { readonly stdout?: unknown; readonly stderr?: unknown };
@@ -333,16 +324,16 @@ const extractUnpublishablePackages = (error: unknown): readonly string[] => {
   const stderr = toStringOutput(errorWithOutput.stderr);
   const output = stdout || stderr;
   const lines = output.split('\n');
-  return lines.reduce<readonly string[]>((unpublishable, line) => {
-    if (!line.includes('check:publishable') || !line.includes('FAILED')) {
-      return unpublishable;
-    }
-    const match = line.match(/@[\w-]+\/[\w-]+/);
-    if (!match) {
-      return unpublishable;
-    }
-    return [...unpublishable, match[0]];
-  }, []);
+  return lines.reduce<readonly string[]>(
+    (unpublishable, line) =>
+      !line.includes('check:publishable') || !line.includes('FAILED')
+        ? unpublishable
+        : (() => {
+            const match = line.match(/@[\w-]+\/[\w-]+/);
+            return match ? [...unpublishable, match[0]] : unpublishable;
+          })(),
+    []
+  );
 };
 
 const handlePublishableCheckFailure = (error: unknown) =>
@@ -355,6 +346,25 @@ const checkForUnpublishedPackages = pipe(
   Effect.catchAll(handlePublishableCheckFailure)
 );
 
+const validateSinglePackageName =
+  (changeset: ChangesetInfoInternal, validPackageNames: ReadonlySet<string>, rootName: string) =>
+  (pkgName: string): readonly string[] => {
+    const isValid = validPackageNames.has(pkgName);
+    const isRootPackage = pkgName === rootName;
+
+    return isValid
+      ? []
+      : isRootPackage
+        ? [
+            `❌ Changeset ${changeset.filename} references the private monorepo root package: ${pkgName}`,
+            '   The monorepo root is private and cannot be published to npm.',
+          ]
+        : [
+            `❌ Changeset ${changeset.filename} references non-existent package: ${pkgName}`,
+            '   This package does not exist in the workspace.',
+          ];
+  };
+
 const validateChangesetPackages = (
   changesets: readonly ChangesetInfoInternal[],
   packages: readonly PackageInternal[],
@@ -363,23 +373,9 @@ const validateChangesetPackages = (
   const validPackageNames = new Set(packages.map((p) => p.name));
 
   return changesets.flatMap((changeset) =>
-    changeset.packages.flatMap((pkgName) => {
-      if (validPackageNames.has(pkgName)) {
-        return [];
-      }
-
-      if (pkgName === rootPackageJson.name) {
-        return [
-          `❌ Changeset ${changeset.filename} references the private monorepo root package: ${pkgName}`,
-          '   The monorepo root is private and cannot be published to npm.',
-        ];
-      }
-
-      return [
-        `❌ Changeset ${changeset.filename} references non-existent package: ${pkgName}`,
-        '   This package does not exist in the workspace.',
-      ];
-    })
+    changeset.packages.flatMap(
+      validateSinglePackageName(changeset, validPackageNames, rootPackageJson.name)
+    )
   );
 };
 
@@ -572,34 +568,38 @@ const showDependencyValidationFailure = (
     Effect.andThen(Effect.fail('Missing dependent changesets'))
   );
 
-const checkDependencyErrors =
+const buildDependencyError =
   (changedPackages: ReadonlySet<string>, packageDependencyMap: Record<string, readonly string[]>) =>
-  (terminal: Terminal.Terminal) => {
-    const dependencyErrors = Array.from(changedPackages).reduce<readonly MissingDependentError[]>(
-      (errors, changedPackage) => {
-        const dependentNames = packageDependencyMap[changedPackage] || [];
-        const missingDependents = dependentNames.filter((dep) => !changedPackages.has(dep));
+  (
+    errors: readonly MissingDependentError[],
+    changedPackage: string
+  ): readonly MissingDependentError[] => {
+    const dependentNames = packageDependencyMap[changedPackage] || [];
+    const missingDependents = dependentNames.filter((dep) => !changedPackages.has(dep));
 
-        if (missingDependents.length === 0) {
-          return errors;
-        }
-
-        return [
+    return missingDependents.length === 0
+      ? errors
+      : [
           ...errors,
           {
             changed: changedPackage,
             missing: missingDependents,
           },
         ];
-      },
+  };
+
+const checkDependencyErrors =
+  (changedPackages: ReadonlySet<string>, packageDependencyMap: Record<string, readonly string[]>) =>
+  (terminal: Terminal.Terminal) => {
+    const dependencyErrors = Array.from(changedPackages).reduce<readonly MissingDependentError[]>(
+      buildDependencyError(changedPackages, packageDependencyMap),
       []
     );
 
-    if (dependencyErrors.length === 0) {
-      return Effect.void;
-    }
-
-    return showDependencyValidationFailure(terminal, dependencyErrors);
+    return Effect.if(dependencyErrors.length === 0, {
+      onTrue: () => Effect.void,
+      onFalse: () => showDependencyValidationFailure(terminal, dependencyErrors),
+    });
   };
 
 const showSuccessMessages =
@@ -689,6 +689,31 @@ const validateDocChanges = (changesets: readonly ChangesetInfoInternal[]) =>
     Effect.andThen(changesets.length > 0 ? validateChangesetsFlow(changesets) : Effect.void)
   );
 
+const displayNoChangesMessage = pipe(
+  Terminal.Terminal,
+  Effect.flatMap((t) =>
+    t.display('No changes detected. This might not be a PR or might be the first commit.\n')
+  )
+);
+
+const handleNoCodeChanges = (
+  changedFiles: readonly string[],
+  changesets: readonly ChangesetInfoInternal[]
+) =>
+  Effect.if(changedFiles.length === 0, {
+    onTrue: () => displayNoChangesMessage,
+    onFalse: () => validateDocChanges(changesets),
+  });
+
+const handleChangedFiles = (
+  changedFiles: readonly string[],
+  changesets: readonly ChangesetInfoInternal[]
+) =>
+  Effect.if(changedFiles.length > 0 && hasCodeChanges(changedFiles), {
+    onTrue: () => validateCodeChanges(changedFiles, changesets),
+    onFalse: () => handleNoCodeChanges(changedFiles, changesets),
+  });
+
 const validateChangesetLogic =
   (
     packages: readonly PackageInternal[],
@@ -698,22 +723,10 @@ const validateChangesetLogic =
   (rootPackageJson: { readonly name: string }) => {
     const errors = validateChangesetPackages(changesets, packages, rootPackageJson);
 
-    if (errors.length > 0) {
-      return displayValidationFailure(errors, packages);
-    }
-
-    if (changedFiles.length > 0 && hasCodeChanges(changedFiles)) {
-      return validateCodeChanges(changedFiles, changesets);
-    } else if (changedFiles.length === 0) {
-      return pipe(
-        Terminal.Terminal,
-        Effect.flatMap((t) =>
-          t.display('No changes detected. This might not be a PR or might be the first commit.\n')
-        )
-      );
-    } else {
-      return validateDocChanges(changesets);
-    }
+    return Effect.if(errors.length > 0, {
+      onTrue: () => displayValidationFailure(errors, packages),
+      onFalse: () => handleChangedFiles(changedFiles, changesets),
+    });
   };
 
 // Wrapper provides type safety for JSON.parse (returns any)

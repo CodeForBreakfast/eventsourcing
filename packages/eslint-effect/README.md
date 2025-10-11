@@ -268,6 +268,55 @@ pipe(
 );
 ```
 
+### `no-if-statement`
+
+Forbids if statements in functional Effect code. If statements are imperative and don't compose well. Use `Effect.if` for boolean conditionals with Effects, `Match.value` for pattern matching, or type-specific matchers for declarative control flow.
+
+❌ Bad:
+
+```typescript
+if (state.deleted) {
+  return Effect.fail(new Error('Cannot complete deleted TODO'));
+}
+return Effect.succeed(state);
+
+if (event.type === 'TodoCreated') {
+  return Effect.succeed({ title: event.data.title, completed: false });
+}
+return pipe(state, Option.match({ ... }));
+
+if (Option.isSome(option)) {
+  return option.value;
+}
+return defaultValue;
+```
+
+✅ Good:
+
+```typescript
+// Boolean conditionals with Effects
+Effect.if(state.deleted, {
+  onTrue: () => Effect.fail(new Error('Cannot complete deleted TODO')),
+  onFalse: () => Effect.succeed(state),
+})
+
+// Pattern matching on discriminated unions
+pipe(
+  event,
+  Match.value,
+  Match.when({ type: 'TodoCreated' }, (e) => Effect.succeed({ title: e.data.title, completed: false })),
+  Match.orElse((e) => pipe(state, Option.match({ ... })))
+)
+
+// Option/Either with built-in matchers
+pipe(option, Option.getOrElse(() => defaultValue))
+
+// Simple value selection - use ternary operators
+const x = condition ? 'yes' : 'no';
+```
+
+**Rationale**: If statements break functional composition and make code harder to reason about. They don't provide exhaustiveness checking for pattern matching and can't be easily composed in pipes. Using `Effect.if`, `Match.value`, or type-specific matchers like `Option.match` provides better type safety, exhaustiveness checking, and composability. Ternary operators are still allowed for simple value selection as they're appropriate for plain values.
+
 ### `prefer-schema-validation-over-assertions`
 
 Discourages type assertions in Effect callbacks in favor of runtime validation.
@@ -438,6 +487,7 @@ return Response.json({ token: authResult.right });
 - Forbids `Effect.gen` (use `pipe` instead)
 - Forbids direct `_tag` access (use type guards or `Match`)
 - Forbids ALL `switch` statements (use `Match.value` for pattern matching)
+- Forbids ALL `if` statements (use `Effect.if`, `Match.value`, or type-specific matchers)
 - Forbids nested `pipe()` calls
 - Forbids multiple `pipe()` calls in one function
 
@@ -451,7 +501,7 @@ Forbids `Effect.gen` in favor of `pipe` composition. **Controversial** - some te
 
 #### `preferMatch`
 
-Forbids direct `_tag` access and ALL `switch` statements. Encourages declarative `Match` patterns.
+Forbids direct `_tag` access, ALL `switch` statements, and ALL `if` statements. Encourages declarative `Match` patterns, `Effect.if` for boolean conditionals, and type-specific matchers.
 
 #### `pipeStrict`
 
@@ -597,6 +647,7 @@ export default [
 - `effect/prefer-effect-if-over-match-boolean` - Use Effect.if over Match.value for boolean conditionals
 - `effect/prefer-match-over-ternary` - Use Match.value over ternary operators for non-boolean pattern matching
 - `effect/no-switch-statement` - Forbid ALL switch statements (use Match.value instead)
+- `effect/no-if-statement` - Forbid ALL if statements (use Effect.if, Match.value, or type-specific matchers instead)
 - `effect/prefer-schema-validation-over-assertions` - Use Schema over type assertions
 - `effect/suggest-currying-opportunity` - Suggest currying to eliminate arrow function wrappers
 - `effect/no-intermediate-effect-variables` - Forbid storing pipe/Effect results in single-use intermediate variables (opt-in via `pipeStrict` config)

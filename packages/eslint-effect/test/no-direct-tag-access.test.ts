@@ -3,13 +3,13 @@ import { Either, Option } from 'effect';
 const either = Either.right(42);
 const option = Option.some(42);
 
-// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison rule
+// eslint-disable-next-line effect/no-direct-tag-access, effect/no-if-statement -- Testing _tag comparison rule
 if (either._tag === 'Right') {
   // eslint-disable-next-line effect/prefer-effect-platform -- Test file uses console
   console.log('right');
 }
 
-// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison on Option
+// eslint-disable-next-line effect/no-direct-tag-access, effect/no-if-statement -- Testing _tag comparison on Option
 if (option._tag === 'Some') {
   // eslint-disable-next-line effect/prefer-effect-platform -- Test file uses console
   console.log('some');
@@ -26,7 +26,7 @@ switch (either._tag) {
     break;
 }
 
-// eslint-disable-next-line effect/no-direct-tag-access -- Testing _tag comparison on right side
+// eslint-disable-next-line effect/no-direct-tag-access, effect/no-if-statement -- Testing _tag comparison on right side
 if ('Right' === either._tag) {
   // eslint-disable-next-line effect/prefer-effect-platform -- Test file uses console
   console.log('right');

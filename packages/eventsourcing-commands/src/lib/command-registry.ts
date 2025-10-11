@@ -115,19 +115,17 @@ export const makeCommandRegistry = <
       wireCommand,
       Schema.decodeUnknown(commandSchema),
       Effect.either,
-      Effect.flatMap((parseResult) => {
-        if (Either.isLeft(parseResult)) {
-          // Validation failed
-          return Effect.succeed(
-            createValidationErrorFailure(wireCommand.id, wireCommand.name, [
-              parseResult.left.message || 'Command validation failed',
-            ])
-          );
-        }
-
-        // Execute the matcher with exact command type - it handles all the dispatch logic
-        return executeMatcherWithErrorHandling(parseResult.right, wireCommand);
-      })
+      Effect.flatMap(
+        Either.match({
+          onLeft: (parseError) =>
+            Effect.succeed(
+              createValidationErrorFailure(wireCommand.id, wireCommand.name, [
+                parseError.message || 'Command validation failed',
+              ])
+            ),
+          onRight: (command) => executeMatcherWithErrorHandling(command, wireCommand),
+        })
+      )
     );
 
   return {

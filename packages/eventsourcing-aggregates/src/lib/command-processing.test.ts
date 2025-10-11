@@ -80,15 +80,16 @@ const createMockRouter = (
   route: (command: Readonly<WireCommand>) => {
     const key = `${command.target}:${command.name}`;
     const handler = handlers.get(key);
-    if (!handler) {
-      return Effect.fail(
-        new CommandRoutingError({
-          target: command.target,
-          message: `No handler found for ${key}`,
-        })
-      );
-    }
-    return Effect.succeed(handler);
+    return Effect.if(!!handler, {
+      onTrue: () => Effect.succeed(handler!),
+      onFalse: () =>
+        Effect.fail(
+          new CommandRoutingError({
+            target: command.target,
+            message: `No handler found for ${key}`,
+          })
+        ),
+    });
   },
 });
 
@@ -136,17 +137,20 @@ describe('Command Processing Service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
     const router = createMockRouter(handlers);
 
-    return pipe(
-      router,
-      createCommandProcessingService(TestEventStore),
-      Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map((result) => {
+    const assertSuccess = (result: CommandResult) =>
+      Effect.sync(() => {
         if (isCommandSuccess(result)) {
           expect(result.position).toBeDefined();
         } else {
           expect(true).toBe(false);
         }
-      }),
+      });
+
+    return pipe(
+      router,
+      createCommandProcessingService(TestEventStore),
+      Effect.flatMap((service) => service.processCommand(testCommand)),
+      Effect.flatMap(assertSuccess),
       Effect.provide(testLayer)
     );
   });

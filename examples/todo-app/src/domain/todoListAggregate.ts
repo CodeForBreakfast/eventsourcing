@@ -1,4 +1,4 @@
-import { Effect, Option } from 'effect';
+import { Effect, Match, Option, pipe } from 'effect';
 import { makeAggregateRoot, type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
 import { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { TodoId, UserId, UserIdSchema, TodoListIdSchema } from './types';
@@ -21,19 +21,21 @@ const applyEvent =
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
     );
 
-    if (event.type === 'TodoAddedToList') {
-      const newTodoIds = new Set<TodoId>([...currentState.todoIds, event.data.todoId]);
-      return Effect.succeed<TodoListState>({ todoIds: newTodoIds });
-    }
-
-    if (event.type === 'TodoRemovedFromList') {
-      const newTodoIds = new Set<TodoId>(
-        [...currentState.todoIds].filter((id) => id !== event.data.todoId)
-      );
-      return Effect.succeed<TodoListState>({ todoIds: newTodoIds });
-    }
-
-    return Effect.succeed<TodoListState>(currentState);
+    return pipe(
+      event,
+      Match.value,
+      Match.when({ type: 'TodoAddedToList' }, (event) => {
+        const newTodoIds = new Set<TodoId>([...currentState.todoIds, event.data.todoId]);
+        return Effect.succeed<TodoListState>({ todoIds: newTodoIds });
+      }),
+      Match.when({ type: 'TodoRemovedFromList' }, (event) => {
+        const newTodoIds = new Set<TodoId>(
+          [...currentState.todoIds].filter((id) => id !== event.data.todoId)
+        );
+        return Effect.succeed<TodoListState>({ todoIds: newTodoIds });
+      }),
+      Match.orElse(() => Effect.succeed<TodoListState>(currentState))
+    );
   };
 
 const addTodo =
@@ -46,16 +48,16 @@ const addTodo =
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
     );
 
-    if (currentState.todoIds.has(todoId)) {
-      return Effect.succeed([]);
-    }
-
-    return Effect.succeed([
-      {
-        type: 'TodoAddedToList' as const,
-        data: { todoId, title, addedAt: new Date() },
-      } satisfies TodoAddedToList,
-    ]);
+    return Effect.if(currentState.todoIds.has(todoId), {
+      onTrue: () => Effect.succeed([]),
+      onFalse: () =>
+        Effect.succeed([
+          {
+            type: 'TodoAddedToList' as const,
+            data: { todoId, title, addedAt: new Date() },
+          } satisfies TodoAddedToList,
+        ]),
+    });
   };
 
 const removeTodo =
@@ -68,16 +70,16 @@ const removeTodo =
       (): TodoListState => ({ todoIds: new Set<TodoId>() })
     );
 
-    if (!currentState.todoIds.has(todoId)) {
-      return Effect.succeed([]);
-    }
-
-    return Effect.succeed([
-      {
-        type: 'TodoRemovedFromList' as const,
-        data: { todoId, removedAt: new Date() },
-      } satisfies TodoRemovedFromList,
-    ]);
+    return Effect.if(!currentState.todoIds.has(todoId), {
+      onTrue: () => Effect.succeed([]),
+      onFalse: () =>
+        Effect.succeed([
+          {
+            type: 'TodoRemovedFromList' as const,
+            data: { todoId, removedAt: new Date() },
+          } satisfies TodoRemovedFromList,
+        ]),
+    });
   };
 
 export const TodoListAggregateRoot = makeAggregateRoot(

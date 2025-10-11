@@ -125,12 +125,12 @@ const createInMemoryTestContext = (): Effect.Effect<ClientServerTestContext, nev
 
         makeClient: () =>
           pipe(
-            () => {
-              if (!serverInstance) {
-                throw new Error('Server must be created before client');
-              }
-              return serverInstance;
-            },
+            () =>
+              !serverInstance
+                ? (() => {
+                    throw new Error('Server must be created before client');
+                  })()
+                : serverInstance,
             Effect.sync,
             Effect.flatMap((server) => server.connector()),
             Effect.map(createClientTransport),
@@ -167,6 +167,12 @@ runClientServerContractTests('InMemory', createInMemoryTestContext);
 describe('In-Memory Client-Server Specific Tests', () => {
   // In-memory specific tests that directly test the in-memory implementation
 
+  const expectStateConnected = (state: Readonly<Option.Option<ConnectionState>>) =>
+    Option.match(state, {
+      onNone: () => Effect.void,
+      onSome: (value) => Effect.sync(() => expect(value).toBe('connected')),
+    });
+
   const verifyClientConnectionState = (client: {
     readonly connectionState: Stream.Stream<ConnectionState>;
   }) =>
@@ -176,10 +182,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
       Stream.runHead,
       Effect.tap((state) => {
         expect(Option.isSome(state)).toBe(true);
-        if (Option.isSome(state)) {
-          expect(state.value).toBe('connected');
-        }
-        return Effect.void;
+        return expectStateConnected(state);
       })
     );
 

@@ -1,4 +1,4 @@
-import { Context, Effect, Option, pipe } from 'effect';
+import { Context, Effect, Match, Option, pipe } from 'effect';
 import {
   loadProjection,
   makeProjectionEventStore,
@@ -25,31 +25,33 @@ const applyEvent =
   (event: Readonly<TodoListEvent>): Effect.Effect<TodoListProjection, never> => {
     const currentState = Option.getOrElse(state, () => ({ todos: [] }));
 
-    if (event.type === 'TodoAddedToList') {
-      const existingIndex = currentState.todos.findIndex((t) => t.todoId === event.data.todoId);
-      if (existingIndex >= 0) {
-        return Effect.succeed(currentState);
-      }
-
-      return Effect.succeed({
-        todos: [
-          ...currentState.todos,
-          {
-            todoId: event.data.todoId,
-            title: event.data.title,
-            addedAt: event.data.addedAt,
-          },
-        ],
-      });
-    }
-
-    if (event.type === 'TodoRemovedFromList') {
-      return Effect.succeed({
-        todos: currentState.todos.filter((t) => t.todoId !== event.data.todoId),
-      });
-    }
-
-    return Effect.succeed(currentState);
+    return pipe(
+      event,
+      Match.value,
+      Match.when({ type: 'TodoAddedToList' }, (event) => {
+        const existingIndex = currentState.todos.findIndex((t) => t.todoId === event.data.todoId);
+        return Effect.if(existingIndex >= 0, {
+          onTrue: () => Effect.succeed(currentState),
+          onFalse: () =>
+            Effect.succeed({
+              todos: [
+                ...currentState.todos,
+                {
+                  todoId: event.data.todoId,
+                  title: event.data.title,
+                  addedAt: event.data.addedAt,
+                },
+              ],
+            }),
+        });
+      }),
+      Match.when({ type: 'TodoRemovedFromList' }, (event) =>
+        Effect.succeed({
+          todos: currentState.todos.filter((t) => t.todoId !== event.data.todoId),
+        })
+      ),
+      Match.orElse(() => Effect.succeed(currentState))
+    );
   };
 
 const TodoListProjectionEventStore = Context.GenericTag<

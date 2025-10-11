@@ -23,6 +23,7 @@ import suggestCurryingOpportunity from './suggest-currying-opportunity.js';
 import noEtaExpansion from './no-eta-expansion.js';
 import noUnnecessaryFunctionAlias from './no-unnecessary-function-alias.js';
 import noIntermediateEffectVariables from './no-intermediate-effect-variables.js';
+import noIfStatement from './no-if-statement.js';
 
 export default {
   'no-unnecessary-pipe-wrapper': noUnnecessaryPipeWrapper,
@@ -50,4 +51,5 @@ export default {
   'no-eta-expansion': noEtaExpansion,
   'no-unnecessary-function-alias': noUnnecessaryFunctionAlias,
   'no-intermediate-effect-variables': noIntermediateEffectVariables,
+  'no-if-statement': noIfStatement,
 };

@@ -137,6 +137,30 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 // WebSocket-Specific Tests
 // =============================================================================
 
+const verifyStateIsConnected = (
+  state: Option.Option<ConnectionState>
+): Effect.Effect<void, never, never> =>
+  Effect.sync(() => {
+    expect(state.value).toBe('connected');
+  });
+
+const assertConnectionState = (
+  state: Option.Option<ConnectionState>
+): Effect.Effect<void, never, never> =>
+  pipe(
+    state,
+    () =>
+      Effect.sync(() => {
+        expect(Option.isSome(state)).toBe(true);
+      }),
+    Effect.andThen(
+      Effect.if(Option.isSome(state), {
+        onTrue: () => verifyStateIsConnected(state),
+        onFalse: () => Effect.void,
+      })
+    )
+  );
+
 const checkConnectionState = (client: {
   readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 }) =>
@@ -144,13 +168,7 @@ const checkConnectionState = (client: {
     client.connectionState,
     Stream.take(1),
     Stream.runHead,
-    Effect.tap((state) => {
-      expect(Option.isSome(state)).toBe(true);
-      if (Option.isSome(state)) {
-        expect(state.value).toBe('connected');
-      }
-      return Effect.void;
-    })
+    Effect.flatMap(assertConnectionState)
   );
 
 const connectAndVerify = (host: string, port: number) =>
