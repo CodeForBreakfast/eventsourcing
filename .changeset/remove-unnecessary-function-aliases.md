@@ -3,7 +3,7 @@
 '@codeforbreakfast/eslint-effect': minor
 '@codeforbreakfast/eventsourcing-aggregates': patch
 '@codeforbreakfast/eventsourcing-commands': patch
-'@codeforbreakfast/eventsourcing-example-todo': patch
+'@codeforbreakfast/eventsourcing-projections': patch
 '@codeforbreakfast/eventsourcing-protocol': patch
 '@codeforbreakfast/eventsourcing-store': patch
 '@codeforbreakfast/eventsourcing-store-filesystem': patch
