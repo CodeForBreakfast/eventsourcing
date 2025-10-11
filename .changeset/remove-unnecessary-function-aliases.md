@@ -1,11 +1,15 @@
 ---
 '@codeforbreakfast/buntest': minor
 '@codeforbreakfast/eslint-effect': minor
+'@codeforbreakfast/eventsourcing-aggregates': patch
 '@codeforbreakfast/eventsourcing-commands': patch
 '@codeforbreakfast/eventsourcing-example-todo': patch
 '@codeforbreakfast/eventsourcing-protocol': patch
 '@codeforbreakfast/eventsourcing-store': patch
+'@codeforbreakfast/eventsourcing-store-filesystem': patch
 '@codeforbreakfast/eventsourcing-store-inmemory': patch
+'@codeforbreakfast/eventsourcing-store-postgres': patch
+'@codeforbreakfast/eventsourcing-testing-contracts': patch
 '@codeforbreakfast/eventsourcing-transport-inmemory': patch
 '@codeforbreakfast/eventsourcing-transport-websocket': patch
 ---
