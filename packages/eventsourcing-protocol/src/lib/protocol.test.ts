@@ -92,93 +92,85 @@ const handleCommandMessage = (
   server: ReadonlyDeep<InMemoryServer>,
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
   parsedMessage: ParsedMessage
-) => {
-  if (
-    parsedMessage.type === 'command' &&
-    parsedMessage.id &&
-    parsedMessage.target &&
-    parsedMessage.name &&
-    parsedMessage.payload !== undefined
-  ) {
-    const command: WireCommand = {
-      id: parsedMessage.id,
-      target: parsedMessage.target,
-      name: parsedMessage.name,
-      payload: parsedMessage.payload,
-    };
-    const result = commandHandler(command);
-    const response = makeTransportMessage(
-      crypto.randomUUID(),
-      'command_result',
-      JSON.stringify({
-        type: 'command_result',
-        commandId: command.id,
-        success: isCommandSuccess(result),
-        ...(isCommandSuccess(result)
-          ? { position: result.position }
-          : { error: JSON.stringify(result.error) }),
-        context: {
-          traceId: '00000000000000000000000000000000',
-          parentId: '0000000000000000',
-        },
-      })
-    );
-    return server.broadcast(response);
-  }
-  return Effect.void;
-};
+) =>
+  parsedMessage.type === 'command' &&
+  parsedMessage.id &&
+  parsedMessage.target &&
+  parsedMessage.name &&
+  parsedMessage.payload !== undefined
+    ? (() => {
+        const command: WireCommand = {
+          id: parsedMessage.id,
+          target: parsedMessage.target,
+          name: parsedMessage.name,
+          payload: parsedMessage.payload,
+        };
+        const result = commandHandler(command);
+        const response = makeTransportMessage(
+          crypto.randomUUID(),
+          'command_result',
+          JSON.stringify({
+            type: 'command_result',
+            commandId: command.id,
+            success: isCommandSuccess(result),
+            ...(isCommandSuccess(result)
+              ? { position: result.position }
+              : { error: JSON.stringify(result.error) }),
+            context: {
+              traceId: '00000000000000000000000000000000',
+              parentId: '0000000000000000',
+            },
+          })
+        );
+        return server.broadcast(response);
+      })()
+    : Effect.void;
 
 const handleSubscriptionMessage = (
   server: ReadonlyDeep<InMemoryServer>,
   subscriptionHandler: (streamId: string) => readonly Event[],
   parsedMessage: ParsedMessage
-) => {
-  if (parsedMessage.type === 'subscribe' && parsedMessage.streamId) {
-    const events = subscriptionHandler(parsedMessage.streamId);
-    return Effect.forEach(
-      events,
-      (event) =>
-        server.broadcast(
-          makeTransportMessage(
-            crypto.randomUUID(),
-            'event',
-            JSON.stringify({
-              type: 'event',
-              streamId: parsedMessage.streamId,
-              position: event.position,
-              eventType: event.type,
-              data: event.data,
-              timestamp: event.timestamp.toISOString(),
-              context: {
-                traceId: '00000000000000000000000000000000',
-                parentId: '0000000000000000',
-              },
-            })
-          )
-        ),
-      { discard: true }
-    );
-  }
-  return Effect.void;
-};
+) =>
+  parsedMessage.type === 'subscribe' && parsedMessage.streamId
+    ? (() => {
+        const events = subscriptionHandler(parsedMessage.streamId);
+        return Effect.forEach(
+          events,
+          (event) =>
+            server.broadcast(
+              makeTransportMessage(
+                crypto.randomUUID(),
+                'event',
+                JSON.stringify({
+                  type: 'event',
+                  streamId: parsedMessage.streamId,
+                  position: event.position,
+                  eventType: event.type,
+                  data: event.data,
+                  timestamp: event.timestamp.toISOString(),
+                  context: {
+                    traceId: '00000000000000000000000000000000',
+                    parentId: '0000000000000000',
+                  },
+                })
+              )
+            ),
+          { discard: true }
+        );
+      })()
+    : Effect.void;
 
 const handleParsedMessage = (
   server: ReadonlyDeep<InMemoryServer>,
   commandHandler: (cmd: ReadonlyDeep<WireCommand>) => CommandResult,
   subscriptionHandler: (streamId: string) => readonly Event[],
   parsedMessage: ParsedMessage
-) => {
-  const commandEffect = handleCommandMessage(server, commandHandler, parsedMessage);
-  const subscriptionEffect = handleSubscriptionMessage(server, subscriptionHandler, parsedMessage);
-
-  if (parsedMessage.type === 'command') {
-    return commandEffect;
-  }
-  if (parsedMessage.type === 'subscribe') {
-    return subscriptionEffect;
-  }
-  return Effect.void;
-};
+) =>
+  parsedMessage.type === 'command'
+    ? handleCommandMessage(server, commandHandler, parsedMessage)
+    : parsedMessage.type === 'subscribe'
+      ? handleSubscriptionMessage(server, subscriptionHandler, parsedMessage)
+      : Effect.void;
 
 const logParseError = (error: unknown, payload: unknown) =>
   pipe(
@@ -275,36 +267,38 @@ const createTestServerProtocol = (
 const verifySuccessResult = (streamId: string, eventNumber: number) => (result: CommandResult) =>
   Effect.sync(() => {
     expect(isCommandSuccess(result)).toBe(true);
-    if (isCommandSuccess(result)) {
-      expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
-      expect(result.position.eventNumber).toBe(eventNumber);
-    }
+    void (isCommandSuccess(result)
+      ? (() => {
+          expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
+          expect(result.position.eventNumber).toBe(eventNumber);
+        })()
+      : undefined);
   });
 
 const verifyFailureResult =
   (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) =>
     Effect.sync(() => {
       expect(isCommandFailure(result)).toBe(true);
-      if (isCommandFailure(result)) {
-        pipe(
-          result.error,
-          Match.value,
-          Match.tag('UnknownError', (error) => {
-            const parsedError = JSON.parse(error.message) as {
-              readonly _tag: string;
-              readonly validationErrors?: readonly string[];
-            };
-            // eslint-disable-next-line effect/no-direct-tag-access -- Validating serialized error JSON structure
-            expect(parsedError._tag).toBe(expectedErrorTag);
-            if (expectedErrors) {
-              expect(parsedError.validationErrors).toEqual(expectedErrors);
-            }
-          }),
-          Match.orElse(() => {
-            throw new Error('Expected UnknownError');
-          })
-        );
-      }
+      void (isCommandFailure(result)
+        ? pipe(
+            result.error,
+            Match.value,
+            Match.tag('UnknownError', (error) => {
+              const parsedError = JSON.parse(error.message) as {
+                readonly _tag: string;
+                readonly validationErrors?: readonly string[];
+              };
+              // eslint-disable-next-line effect/no-direct-tag-access -- Validating serialized error JSON structure
+              expect(parsedError._tag).toBe(expectedErrorTag);
+              void (expectedErrors
+                ? expect(parsedError.validationErrors).toEqual(expectedErrors)
+                : undefined);
+            }),
+            Match.orElse(() => {
+              throw new Error('Expected UnknownError');
+            })
+          )
+        : undefined);
     });
 
 const sendCommandWithVerification = (
@@ -364,13 +358,17 @@ const verifyTimeoutError =
   (commandId: string) => (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) =>
     Effect.sync(() => {
       expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-        if (result.left instanceof ProtocolCommandTimeoutError) {
-          expect(result.left.commandId).toBe(commandId);
-          expect(result.left.timeoutMs).toBe(10000);
-        }
-      }
+      void (Either.isLeft(result)
+        ? (() => {
+            expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
+            void (result.left instanceof ProtocolCommandTimeoutError
+              ? (() => {
+                  expect(result.left.commandId).toBe(commandId);
+                  expect(result.left.timeoutMs).toBe(10000);
+                })()
+              : undefined);
+          })()
+        : undefined);
     });
 
 const drainEventStream = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
@@ -1268,9 +1266,9 @@ describe('Protocol Behavior Tests', () => {
     const verifyCommandTimeout = (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) =>
       Effect.sync(() => {
         expect(Either.isLeft(result)).toBe(true);
-        if (Either.isLeft(result)) {
-          expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-        }
+        void (Either.isLeft(result)
+          ? expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError)
+          : undefined);
       });
 
     const runDisconnectTimeoutTest = (
@@ -1451,9 +1449,9 @@ describe('Protocol Behavior Tests', () => {
           expect(receivedWireCommand.payload).toEqual(command.payload);
 
           expect(Either.isLeft(commandResult)).toBe(true);
-          if (Either.isLeft(commandResult)) {
-            expect(commandResult.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-          }
+          void (Either.isLeft(commandResult)
+            ? expect(commandResult.left).toBeInstanceOf(ProtocolCommandTimeoutError)
+            : undefined);
         });
 
     const runServerProtocolCommandTest = (
@@ -1553,10 +1551,12 @@ describe('Protocol Behavior Tests', () => {
       Effect.sync(() => {
         const [clientResult] = results;
         expect(isCommandSuccess(clientResult)).toBe(true);
-        if (isCommandSuccess(clientResult)) {
-          expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
-          expect(clientResult.position.eventNumber).toBe(99);
-        }
+        void (isCommandSuccess(clientResult)
+          ? (() => {
+              expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
+              expect(clientResult.position.eventNumber).toBe(99);
+            })()
+          : undefined);
       });
 
     const runSendResultTest = (
@@ -1641,27 +1641,25 @@ describe('Protocol Behavior Tests', () => {
         Effect.provide(ProtocolLive(clientTransport))
       );
 
-    const productStreamHandler = (streamId: string) => {
-      if (streamId === 'product-789') {
-        return [
-          {
-            position: {
-              streamId: unsafeCreateStreamId('product-789'),
-              eventNumber: 42,
+    const productStreamHandler = (streamId: string) =>
+      streamId === 'product-789'
+        ? [
+            {
+              position: {
+                streamId: unsafeCreateStreamId('product-789'),
+                eventNumber: 42,
+              },
+              type: 'ProductCreated',
+              data: {
+                id: 'product-789',
+                name: 'Super Widget',
+                price: 99.99,
+                category: 'electronics',
+              },
+              timestamp: new Date('2024-01-15T14:30:00Z'),
             },
-            type: 'ProductCreated',
-            data: {
-              id: 'product-789',
-              name: 'Super Widget',
-              price: 99.99,
-              category: 'electronics',
-            },
-            timestamp: new Date('2024-01-15T14:30:00Z'),
-          },
-        ];
-      }
-      return [];
-    };
+          ]
+        : [];
 
     const runPublishEventTest = (
       server: ReadonlyDeep<InMemoryServer>,
@@ -1694,15 +1692,21 @@ describe('Protocol Behavior Tests', () => {
         const [result1, result2] = results;
         expect(Either.isRight(result1!)).toBe(true);
         expect(Either.isRight(result2!)).toBe(true);
-        if (Either.isRight(result1!) && Either.isRight(result2!)) {
-          expect(isCommandSuccess(result1!.right)).toBe(true);
-          expect(isCommandSuccess(result2!.right)).toBe(true);
-          if (isCommandSuccess(result1!.right) && isCommandSuccess(result2!.right)) {
-            expect(result1!.right.position.eventNumber).toBe(42);
-            expect(result2!.right.position.eventNumber).toBe(42);
-            expect(result1!.right.position.streamId).toEqual(result2!.right.position.streamId);
-          }
-        }
+        void (Either.isRight(result1!) && Either.isRight(result2!)
+          ? (() => {
+              expect(isCommandSuccess(result1!.right)).toBe(true);
+              expect(isCommandSuccess(result2!.right)).toBe(true);
+              void (isCommandSuccess(result1!.right) && isCommandSuccess(result2!.right)
+                ? (() => {
+                    expect(result1!.right.position.eventNumber).toBe(42);
+                    expect(result2!.right.position.eventNumber).toBe(42);
+                    expect(result1!.right.position.streamId).toEqual(
+                      result2!.right.position.streamId
+                    );
+                  })()
+                : undefined);
+            })()
+          : undefined);
       });
 
     const runDuplicateCommandTest = (
@@ -1752,10 +1756,12 @@ describe('Protocol Behavior Tests', () => {
     const verifyLargeCommandResult = (result: ReadonlyDeep<CommandResult>) =>
       Effect.sync(() => {
         expect(isCommandSuccess(result)).toBe(true);
-        if (isCommandSuccess(result)) {
-          expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
-          expect(result.position.eventNumber).toBe(1);
-        }
+        void (isCommandSuccess(result)
+          ? (() => {
+              expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
+              expect(result.position.eventNumber).toBe(1);
+            })()
+          : undefined);
       });
 
     const sendLargeCommand = (command: ReadonlyDeep<WireCommand>) =>
@@ -1950,10 +1956,7 @@ describe('Protocol Behavior Tests', () => {
           readonly firstEvent: Event | undefined;
         }) => {
           const data = result.firstEvent?.data;
-          if (data && typeof data === 'object' && 'streamId' in data) {
-            return data.streamId;
-          }
-          return undefined;
+          return data && typeof data === 'object' && 'streamId' in data ? data.streamId : undefined;
         };
 
         const uniqueStreamIds = new Set(results.map(extractStreamId));
@@ -2052,11 +2055,13 @@ describe('Protocol Behavior Tests', () => {
         expect(resultsArray).toHaveLength(5);
         resultsArray.forEach((result, index) => {
           expect(isCommandSuccess(result)).toBe(true);
-          if (isCommandSuccess(result)) {
-            expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
-            expect(result.position.eventNumber).toBeGreaterThan(0);
-            expect(result.position.eventNumber).toBeLessThanOrEqual(100);
-          }
+          void (isCommandSuccess(result)
+            ? (() => {
+                expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
+                expect(result.position.eventNumber).toBeGreaterThan(0);
+                expect(result.position.eventNumber).toBeLessThanOrEqual(100);
+              })()
+            : undefined);
         });
       });
 
@@ -2122,19 +2127,23 @@ describe('Protocol Behavior Tests', () => {
           Effect.flatMap((serverSpan) =>
             Effect.sync(() => {
               expect(serverSpan.traceId).toBe(clientTraceId);
-              if (serverSpan.traceId !== clientTraceId) {
-                throw new Error(
-                  `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
-                    `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
-                );
-              }
+              void (serverSpan.traceId !== clientTraceId
+                ? (() => {
+                    throw new Error(
+                      `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
+                        `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
+                    );
+                  })()
+                : undefined);
               expect(serverSpan.spanId).not.toBe(clientTraceId);
-              if (serverSpan.spanId === clientTraceId) {
-                throw new Error(
-                  `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
-                    `This means the server is not creating a new child span.`
-                );
-              }
+              void (serverSpan.spanId === clientTraceId
+                ? (() => {
+                    throw new Error(
+                      `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
+                        `This means the server is not creating a new child span.`
+                    );
+                  })()
+                : undefined);
             })
           ),
           Effect.andThen(
