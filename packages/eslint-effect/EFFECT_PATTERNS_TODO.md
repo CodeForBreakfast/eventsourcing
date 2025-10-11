@@ -4,7 +4,7 @@
 
 - [x] `prefer-as` - `map(() => value)` → `as(value)` (Effect, Option, Stream, Schedule, Channel, STM, Sink, Cause)
 - [x] `prefer-as-void` - `map(() => void)` → `asVoid` (Effect, Option)
-- [ ] `prefer-as-some` - `map(Option.some)` → `asSome` (Effect)
+- [x] `prefer-as-some` - `map(Option.some)` → `asSome` (Effect)
 - [ ] `prefer-as-some-error` - `mapError(Option.some)` → `asSomeError` (Effect)
 - [ ] `prefer-flatten` - `flatMap(identity)` → `flatten` (Effect, Option, Array, Cause, STM)
 - [ ] `prefer-zip-left` - `flatMap(a => map(b, () => a))` → `zipLeft(a, b)` (Effect, Option)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (2 completed: prefer-as, prefer-as-void)
+- Already Analyzed: 27 (3 completed: prefer-as, prefer-as-void, prefer-as-some)
 - Not Yet Analyzed: 250

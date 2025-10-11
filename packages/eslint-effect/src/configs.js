@@ -111,6 +111,7 @@ const pluginRulesOnly = {
   'effect/prefer-effect-if-over-match-boolean': 'error',
   'effect/prefer-schema-validation-over-assertions': 'error',
   'effect/prefer-as-void': 'error',
+  'effect/prefer-as-some': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 

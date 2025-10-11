@@ -40,20 +40,18 @@ Read `packages/eslint-effect/EFFECT_PATTERNS_TODO.md` and select the next unchec
 
 **Do NOT implement a rule based on assumptions. Always verify against the Effect source code first.**
 
-### 3. Implement the Rule
+### 3. Add and enable a placeholder for the rule
 
-Create three files:
+Create the files:
 
 - `packages/eslint-effect/src/rules/[rule-name].js` - The ESLint rule implementation
 - `packages/eslint-effect/test/[rule-name].test.ts` - Comprehensive tests
 
-The rule must:
+Add the new rule to `packages/eslint-effect/src/rules/index.js` exports.
+Add the rule to appropriate configs in `packages/eslint-effect/src/configs.js`.
+Enable ONLY your rule for your test file.
 
-- Detect the verbose pattern in piped style only
-- Provide clear, helpful error messages
-- Include auto-fix where safe and unambiguous
-- Handle edge cases appropriately
-- Support all applicable Effect data types (Effect, Option, Array, Stream, etc.)
+### 4. Write Tests
 
 Tests must cover:
 
@@ -63,13 +61,21 @@ Tests must cover:
 - Edge cases (nested pipes, complex expressions, etc.)
 - Multiple applicable types if relevant
 
-### 4. Update Rule Index
+The tests work by using the `eslint-disable-next-line` comment to indicate which examples should trigger the rule. Add these comments above the relevant lines in your test file.
 
-Add the new rule to `packages/eslint-effect/src/rules/index.js` exports.
+Run `turbo test --filter=eslint-effect` to check your tests have the correct expectations.
 
-### 5. Update Configuration
+### 5. Implement the Rule
 
-Add the rule to appropriate configs in `packages/eslint-effect/src/configs.js`.
+The rule must:
+
+- Detect the verbose pattern in piped style only
+- Provide clear, helpful error messages
+- Include auto-fix where safe and unambiguous
+- Handle edge cases appropriately
+- Support all applicable Effect data types (Effect, Option, Array, Stream, etc.)
+
+Run `turbo test --filter=eslint-effect` frequently to ensure your implementation is correct.
 
 ### 6. Check Off Pattern
 
