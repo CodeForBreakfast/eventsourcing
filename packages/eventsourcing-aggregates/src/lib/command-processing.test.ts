@@ -139,7 +139,9 @@ describe('Command Processing Service', () => {
 
     const assertSuccess = (result: CommandResult) =>
       Effect.sync(() => {
-        isCommandSuccess(result) ? expect(result.position).toBeDefined() : expect(true).toBe(false);
+        void (isCommandSuccess(result)
+          ? expect(result.position).toBeDefined()
+          : expect(true).toBe(false));
       });
 
     return pipe(
