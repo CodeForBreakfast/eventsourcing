@@ -84,6 +84,7 @@ export default [
       'effect/prefer-get-or-null': 'off',
       'effect/prefer-get-or-undefined': 'off',
       'effect/prefer-succeed-none': 'off',
+      'effect/no-effect-if-option-check': 'off',
       'effect/prefer-effect-if-over-match-boolean': 'off',
       'effect/prefer-effect-platform': 'off',
       'effect/prefer-match-over-conditionals': 'off',
@@ -108,6 +109,11 @@ export default [
     name: 'no-direct-tag-access-test',
     files: ['test/no-direct-tag-access.test.ts'],
     rules: { 'effect/no-direct-tag-access': 'error' },
+  },
+  {
+    name: 'no-effect-if-option-check-test',
+    files: ['test/no-effect-if-option-check.test.ts'],
+    rules: { 'effect/no-effect-if-option-check': 'error' },
   },
   {
     name: 'no-eta-expansion-test',

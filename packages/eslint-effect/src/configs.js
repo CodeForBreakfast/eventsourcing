@@ -123,6 +123,7 @@ const pluginRulesOnly = {
   'effect/prefer-get-or-null': 'error',
   'effect/prefer-get-or-undefined': 'error',
   'effect/prefer-succeed-none': 'error',
+  'effect/no-effect-if-option-check': 'error',
   'effect/suggest-currying-opportunity': 'warn',
 };
 

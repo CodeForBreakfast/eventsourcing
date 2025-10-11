@@ -15,6 +15,7 @@
 - [x] `prefer-get-or-else` - `isSome(opt) ? opt.value : default` → `getOrElse(() => default)` (Option)
 - [x] `prefer-get-or-null` - `getOrElse(() => null)` → `getOrNull` (Option)
 - [x] `prefer-get-or-undefined` - `getOrElse(() => undefined)` → `getOrUndefined` (Option)
+- [x] `no-effect-if-option-check` - `Effect.if(Option.isSome/isNone(...))` → Use `Option.match` with Effect branches (Custom pattern)
 - [ ] `prefer-head` - `get(0)` → `head` (Array)
 - [ ] `prefer-get-somes` - `filter(Option.isSome).map(x => x.value)` → `getSomes` (Array)
 - [ ] `prefer-get-rights` - `filter(Either.isRight).map(x => x.right)` → `getRights` (Array)
