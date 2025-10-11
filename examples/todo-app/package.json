@@ -9,6 +9,7 @@
     }
   },
   "scripts": {
+    "demo": "bun src/cli.ts",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",
@@ -19,7 +20,8 @@
     "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
     "@codeforbreakfast/eventsourcing-projections": "workspace:*",
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
-    "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
+    "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
+    "@effect/platform-bun": "0.81.1",
     "effect": "3.18.4"
   },
   "devDependencies": {
