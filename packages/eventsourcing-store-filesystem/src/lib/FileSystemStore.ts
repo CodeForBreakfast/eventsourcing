@@ -287,7 +287,7 @@ const readEventFromFile = <V>(
     readFile,
     Effect.flatMap(parseJsonContent<V>),
     Effect.asSome,
-    Effect.catchAll(() => Effect.succeed(Option.none()))
+    Effect.catchAll(() => Effect.succeedNone)
   );
 };
 
