@@ -5,7 +5,7 @@
  * Outputs package information for use in changeset validation.
  */
 
-import { Effect, pipe, Array as EffectArray, Option, Match } from 'effect';
+import { Effect, pipe, Array as EffectArray, Match } from 'effect';
 import { FileSystem, Path, Terminal } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
 
@@ -59,7 +59,7 @@ const checkAndReadPackage = (fs: FileSystem.FileSystem, packagePath: string) => 
     exists,
     Match.value,
     Match.when(true, () => readPackageJson(fs, packagePath)),
-    Match.when(false, () => Effect.succeed(Option.none<PackageInfo>())),
+    Match.when(false, () => Effect.succeedNone),
     Match.exhaustive
   );
 
