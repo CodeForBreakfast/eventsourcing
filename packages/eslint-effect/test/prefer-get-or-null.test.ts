@@ -31,11 +31,6 @@ const getOrElseWithString = pipe(
   Option.getOrElse(() => 'default')
 );
 
-const getOrElseWithParameter = pipe(
-  Option.some(42),
-  Option.getOrElse((x) => null)
-);
-
 const getOrElseWithComplexExpression = pipe(
   Option.some(42),
   Option.getOrElse(() => {
