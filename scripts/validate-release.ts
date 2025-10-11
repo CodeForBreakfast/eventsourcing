@@ -175,6 +175,8 @@ const runChangesetValidation = (root: string) =>
   pipe(
     Command.make('bun', 'scripts/validate-changesets.ts'),
     Command.workingDirectory(root),
+    Command.stdout('inherit'),
+    Command.stderr('inherit'),
     Command.exitCode,
     Effect.andThen((exitCode) => (exitCode === 0 ? Effect.void : displayChangesetValidationFailed))
   );
