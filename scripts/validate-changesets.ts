@@ -55,7 +55,7 @@ const checkAndReadPackage = (fs: FileSystem.FileSystem, packagePath: string) => 
     exists,
     Match.value,
     Match.when(true, () => readPackageJson(fs, packagePath)),
-    Match.when(false, () => Effect.succeed(Option.none<PackageInternal>())),
+    Match.when(false, () => Effect.succeedNone),
     Match.exhaustive
   );
 
