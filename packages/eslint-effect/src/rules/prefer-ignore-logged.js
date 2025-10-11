@@ -47,6 +47,17 @@ export default {
       if (node.type === 'ArrowFunctionExpression') {
         const body = node.body;
 
+        // Check for () => Effect.void or similar
+        if (
+          body.type === 'MemberExpression' &&
+          body.property.type === 'Identifier' &&
+          body.property.name === 'void' &&
+          body.object.type === 'Identifier' &&
+          (body.object.name === 'Effect' || body.object.name === 'core')
+        ) {
+          return true;
+        }
+
         // Check for () => undefined or (_) => undefined
         if (body.type === 'Identifier' && body.name === 'undefined') {
           return true;
