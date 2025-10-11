@@ -2,7 +2,7 @@
 
 ## High Priority (Already Analyzed - 25 patterns)
 
-- [ ] `prefer-as` - `map(() => value)` → `as(value)` (Effect, Option, Stream, Schedule, Channel, STM, Sink, Cause)
+- [x] `prefer-as` - `map(() => value)` → `as(value)` (Effect, Option, Stream, Schedule, Channel, STM, Sink, Cause)
 - [x] `prefer-as-void` - `map(() => void)` → `asVoid` (Effect, Option)
 - [ ] `prefer-as-some` - `map(Option.some)` → `asSome` (Effect)
 - [ ] `prefer-as-some-error` - `mapError(Option.some)` → `asSomeError` (Effect)
@@ -327,5 +327,5 @@
 
 **Total patterns: 277**
 
-- Already Analyzed: 27 (1 completed: prefer-as-void)
+- Already Analyzed: 27 (2 completed: prefer-as, prefer-as-void)
 - Not Yet Analyzed: 250
