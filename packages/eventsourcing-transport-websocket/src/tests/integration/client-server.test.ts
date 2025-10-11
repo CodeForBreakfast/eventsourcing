@@ -8,8 +8,8 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Stream, pipe, Option, Either } from 'effect';
+import { describe, it, expectSome, assertEqual, expectLeft } from '@codeforbreakfast/buntest';
+import { Effect, Stream, pipe } from 'effect';
 import {
   TransportMessage,
   ConnectionState,
@@ -137,30 +137,6 @@ runClientServerContractTests('WebSocket', createWebSocketTestContext);
 // WebSocket-Specific Tests
 // =============================================================================
 
-const verifyStateIsConnected = (
-  state: Option.Option<ConnectionState>
-): Effect.Effect<void, never, never> =>
-  Effect.sync(() => {
-    expect(state.value).toBe('connected');
-  });
-
-const assertConnectionState = (
-  state: Option.Option<ConnectionState>
-): Effect.Effect<void, never, never> =>
-  pipe(
-    state,
-    () =>
-      Effect.sync(() => {
-        expect(Option.isSome(state)).toBe(true);
-      }),
-    Effect.andThen(
-      Effect.if(Option.isSome(state), {
-        onTrue: () => verifyStateIsConnected(state),
-        onFalse: () => Effect.void,
-      })
-    )
-  );
-
 const checkConnectionState = (client: {
   readonly connectionState: Stream.Stream<ConnectionState, never, never>;
 }) =>
@@ -168,7 +144,8 @@ const checkConnectionState = (client: {
     client.connectionState,
     Stream.take(1),
     Stream.runHead,
-    Effect.flatMap(assertConnectionState)
+    Effect.flatMap(expectSome),
+    Effect.flatMap(assertEqual('connected'))
   );
 
 const connectAndVerify = (host: string, port: number) =>
@@ -197,10 +174,8 @@ describe('WebSocket Client-Server Specific Tests', () => {
       `ws://localhost:${nonExistentPort}`,
       WebSocketConnector.connect,
       Effect.either,
-      Effect.tap((result) => {
-        expect(Either.isLeft(result)).toBe(true);
-        return Effect.void;
-      })
+      Effect.flatMap(expectLeft),
+      Effect.asVoid
     );
   });
 });

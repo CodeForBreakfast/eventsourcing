@@ -53,9 +53,9 @@ const testCommands = {
   increment:
     () =>
     (state: Readonly<Option.Option<TestAggregateState>>): Effect.Effect<readonly TestEvent[]> =>
-      Effect.if(Option.isSome(state), {
-        onTrue: () => Effect.succeed([{ type: 'TestIncremented' as const, data: {} }]),
-        onFalse: () => Effect.succeed([]),
+      Option.match(state, {
+        onNone: () => Effect.succeed([]),
+        onSome: () => Effect.succeed([{ type: 'TestIncremented' as const, data: {} }]),
       }),
 };
 

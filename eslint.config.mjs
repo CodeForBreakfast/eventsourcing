@@ -185,6 +185,7 @@ export default [
       // Enforce buntest rules
       'buntest/no-runPromise-in-tests': 'error',
       'buntest/no-runSync-in-tests': 'error',
+      'buntest/prefer-effect-assertions': 'error',
       ...testFunctionalRules,
     },
   },

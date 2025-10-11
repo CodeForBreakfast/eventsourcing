@@ -57,11 +57,7 @@ describe('Command Registry', () => {
       );
 
     // Dispatch the command
-    return pipe(
-      wireCommand,
-      registry.dispatch,
-      Effect.tap((result) => Effect.sync(() => assertSuccess(result)))
-    );
+    return pipe(wireCommand, registry.dispatch, Effect.map(assertSuccess));
   });
 
   it.effect('should handle validation errors', () => {
@@ -122,11 +118,7 @@ describe('Command Registry', () => {
         Match.exhaustive
       );
 
-    return pipe(
-      invalidCommand,
-      registry.dispatch,
-      Effect.tap((result) => Effect.sync(() => assertValidationError(result)))
-    );
+    return pipe(invalidCommand, registry.dispatch, Effect.map(assertValidationError));
   });
 
   it.effect('should handle unknown commands', () => {
@@ -183,11 +175,7 @@ describe('Command Registry', () => {
         Match.exhaustive
       );
 
-    return pipe(
-      unknownCommand,
-      registry.dispatch,
-      Effect.tap((result) => Effect.sync(() => assertUnknownCommand(result)))
-    );
+    return pipe(unknownCommand, registry.dispatch, Effect.map(assertUnknownCommand));
   });
 
   it.effect('should handle command execution errors', () => {
@@ -241,11 +229,7 @@ describe('Command Registry', () => {
         Match.exhaustive
       );
 
-    return pipe(
-      wireCommand,
-      registry.dispatch,
-      Effect.tap((result) => Effect.sync(() => assertUnknownError(result)))
-    );
+    return pipe(wireCommand, registry.dispatch, Effect.map(assertUnknownError));
   });
 
   it.effect('should support multiple command types', () => {
@@ -324,12 +308,10 @@ describe('Command Registry', () => {
     return pipe(
       [registry.dispatch(createCommand), registry.dispatch(updateCommand)] as const,
       Effect.all,
-      Effect.tap((results) =>
-        Effect.sync(() => {
-          assertSuccess0(results[0]);
-          assertSuccess1(results[1]);
-        })
-      )
+      Effect.map((results) => {
+        assertSuccess0(results[0]);
+        assertSuccess1(results[1]);
+      })
     );
   });
 });

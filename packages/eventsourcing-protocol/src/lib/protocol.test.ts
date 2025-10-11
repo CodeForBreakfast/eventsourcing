@@ -266,50 +266,48 @@ const createTestServerProtocol = (
 // Test Helper Functions
 // ============================================================================
 
-const verifySuccessResult = (streamId: string, eventNumber: number) => (result: CommandResult) =>
-  Effect.sync(() => {
-    expect(isCommandSuccess(result)).toBe(true);
-    if (isCommandSuccess(result)) {
-      expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
-      expect(result.position.eventNumber).toBe(eventNumber);
-    }
-  });
+const verifySuccessResult = (streamId: string, eventNumber: number) => (result: CommandResult) => {
+  expect(isCommandSuccess(result)).toBe(true);
+  if (isCommandSuccess(result)) {
+    expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
+    expect(result.position.eventNumber).toBe(eventNumber);
+  }
+};
 
 const verifyFailureResult =
-  (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) =>
-    Effect.sync(() => {
-      expect(isCommandFailure(result)).toBe(true);
-      if (isCommandFailure(result)) {
-        pipe(
-          result.error,
-          Match.value,
-          Match.tag('UnknownError', (error) => {
-            const parsedError = JSON.parse(error.message) as {
-              readonly _tag: string;
-              readonly validationErrors?: readonly string[];
-            };
-            // eslint-disable-next-line effect/no-direct-tag-access -- Validating serialized error JSON structure
-            expect(parsedError._tag).toBe(expectedErrorTag);
-            if (expectedErrors) {
-              expect(parsedError.validationErrors).toEqual(expectedErrors);
-            }
-          }),
-          Match.orElse(() => {
-            throw new Error('Expected UnknownError');
-          })
-        );
-      }
-    });
+  (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) => {
+    expect(isCommandFailure(result)).toBe(true);
+    if (isCommandFailure(result)) {
+      pipe(
+        result.error,
+        Match.value,
+        Match.tag('UnknownError', (error) => {
+          const parsedError = JSON.parse(error.message) as {
+            readonly _tag: string;
+            readonly validationErrors?: readonly string[];
+          };
+          // eslint-disable-next-line effect/no-direct-tag-access -- Validating serialized error JSON structure
+          expect(parsedError._tag).toBe(expectedErrorTag);
+          if (expectedErrors) {
+            expect(parsedError.validationErrors).toEqual(expectedErrors);
+          }
+        }),
+        Match.orElse(() => {
+          throw new Error('Expected UnknownError');
+        })
+      );
+    }
+  };
 
 const sendCommandWithVerification = (
   command: ReadonlyDeep<WireCommand>,
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
-  verify: (result: CommandResult) => Effect.Effect<void>
+  verify: (result: CommandResult) => void
 ) =>
   pipe(
     command,
     sendWireCommand,
-    Effect.tap(verify),
+    Effect.map(verify),
     Effect.provide(ProtocolLive(clientTransport)),
     Effect.asVoid
   );
@@ -324,14 +322,13 @@ const sendMultipleCommands = (
   );
 
 const verifyMultipleResults =
-  (expectedTags: readonly ('Success' | 'Failure')[]) => (results: readonly CommandResult[]) =>
-    Effect.sync(() => {
-      expect(results).toHaveLength(expectedTags.length);
-      expectedTags.forEach((expectedTag, index) => {
-        const checkFn = expectedTag === 'Success' ? isCommandSuccess : isCommandFailure;
-        expect(checkFn(results[index]!)).toBe(true);
-      });
+  (expectedTags: readonly ('Success' | 'Failure')[]) => (results: readonly CommandResult[]) => {
+    expect(results).toHaveLength(expectedTags.length);
+    expectedTags.forEach((expectedTag, index) => {
+      const checkFn = expectedTag === 'Success' ? isCommandSuccess : isCommandFailure;
+      expect(checkFn(results[index]!)).toBe(true);
     });
+  };
 
 const sendCommandAsEither = (
   command: ReadonlyDeep<WireCommand>,
@@ -355,17 +352,16 @@ const raceCommandWithTimeout = (
   );
 
 const verifyTimeoutError =
-  (commandId: string) => (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) =>
-    Effect.sync(() => {
-      expect(Either.isLeft(result)).toBe(true);
-      if (Either.isLeft(result)) {
-        expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-        if (result.left instanceof ProtocolCommandTimeoutError) {
-          expect(result.left.commandId).toBe(commandId);
-          expect(result.left.timeoutMs).toBe(10000);
-        }
+  (commandId: string) => (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) => {
+    expect(Either.isLeft(result)).toBe(true);
+    if (Either.isLeft(result)) {
+      expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
+      if (result.left instanceof ProtocolCommandTimeoutError) {
+        expect(result.left.commandId).toBe(commandId);
+        expect(result.left.timeoutMs).toBe(10000);
       }
-    });
+    }
+  };
 
 const drainEventStream = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
   pipe(eventStream, Stream.take(0), Stream.runDrain);
@@ -513,12 +509,12 @@ const createWireCommand = (target: string, name: string, payload: unknown): Wire
 });
 
 const subscribeCollectAndVerify =
-  (streamId: string, count: number, verify: (events: readonly Event[]) => Effect.Effect<void>) =>
+  (streamId: string, count: number, verify: (events: readonly Event[]) => void) =>
   (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
     pipe(
       subscribeAndCollect(streamId, count, clientTransport),
       Effect.map(Array.from<Event>),
-      Effect.tap(verify),
+      Effect.map(verify),
       Effect.asVoid
     );
 
@@ -540,7 +536,7 @@ const sendTestCommandWithProtocol = (
   pipe(
     createWireCommand('user-123', 'TestWireCommand', { data: 'test' }),
     sendWireCommand,
-    Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
+    Effect.map((result) => expect(isCommandSuccess(result)).toBe(true)),
     Effect.provide(ProtocolLive(clientTransport))
   );
 
@@ -604,7 +600,7 @@ describe('Protocol Behavior Tests', () => {
               ],
               clientTransport
             ),
-            Effect.tap(verifyMultipleResults(['Success', 'Failure', 'Success']))
+            Effect.map(verifyMultipleResults(['Success', 'Failure', 'Success']))
           )
       )
     );
@@ -617,7 +613,7 @@ describe('Protocol Behavior Tests', () => {
       const command = createWireCommand('user-123', 'SlowWireCommand', { data: 'test' });
       return pipe(
         raceCommandWithTimeout(command, clientTransport, 11),
-        Effect.tap(verifyTimeoutError(command.id))
+        Effect.map(verifyTimeoutError(command.id))
       );
     };
 
@@ -639,7 +635,7 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         createWireCommand('user-123', 'FastWireCommand', { data: 'test' }),
         sendWireCommand,
-        Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
+        Effect.map((result) => expect(isCommandSuccess(result)).toBe(true)),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -672,19 +668,17 @@ describe('Protocol Behavior Tests', () => {
             new Date('2024-01-01T10:01:00Z')
           ),
         ],
-        subscribeCollectAndVerify('user-123', 2, (events) =>
-          Effect.sync(() => {
-            expect(events).toHaveLength(2);
-            expect(events[0]!.type).toBe('UserCreated');
-            expect(events[0]!.data).toEqual({ id: 'user-123', name: 'John Doe' });
-            expect(events[0]!.position.eventNumber).toBe(1);
-            expect(events[1]!.type).toBe('UserEmailUpdated');
-            expect(events[1]!.data).toEqual({ id: 'user-123', email: 'john@example.com' });
-            expect(events[1]!.position.eventNumber).toBe(2);
-            expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T10:00:00Z'));
-            expect(events[1]!.timestamp).toEqual(new Date('2024-01-01T10:01:00Z'));
-          })
-        )
+        subscribeCollectAndVerify('user-123', 2, (events) => {
+          expect(events).toHaveLength(2);
+          expect(events[0]!.type).toBe('UserCreated');
+          expect(events[0]!.data).toEqual({ id: 'user-123', name: 'John Doe' });
+          expect(events[0]!.position.eventNumber).toBe(1);
+          expect(events[1]!.type).toBe('UserEmailUpdated');
+          expect(events[1]!.data).toEqual({ id: 'user-123', email: 'john@example.com' });
+          expect(events[1]!.position.eventNumber).toBe(2);
+          expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T10:00:00Z'));
+          expect(events[1]!.timestamp).toEqual(new Date('2024-01-01T10:01:00Z'));
+        })
       )
     );
 
@@ -718,16 +712,14 @@ describe('Protocol Behavior Tests', () => {
             ),
           ],
         }),
-        subscribeCollectAndVerify('user-123', 2, (events) =>
-          Effect.sync(() => {
-            expect(events).toHaveLength(2);
-            expect(events[0]!.type).toBe('UserCreated');
-            expect(events[0]!.data).toEqual({ id: 'user-123', name: 'John Doe' });
-            expect(events[1]!.type).toBe('UserUpdated');
-            expect(events[1]!.data).toEqual({ id: 'user-123', name: 'John Updated' });
-            expect(events.some((event) => event.type === 'OtherUserCreated')).toBe(false);
-          })
-        )
+        subscribeCollectAndVerify('user-123', 2, (events) => {
+          expect(events).toHaveLength(2);
+          expect(events[0]!.type).toBe('UserCreated');
+          expect(events[0]!.data).toEqual({ id: 'user-123', name: 'John Doe' });
+          expect(events[1]!.type).toBe('UserUpdated');
+          expect(events[1]!.data).toEqual({ id: 'user-123', name: 'John Updated' });
+          expect(events.some((event) => event.type === 'OtherUserCreated')).toBe(false);
+        })
       )
     );
 
@@ -745,16 +737,14 @@ describe('Protocol Behavior Tests', () => {
             ),
           ],
         }),
-        subscribeCollectAndVerify('test-stream', 1, (events) =>
-          Effect.sync(() => {
-            expect(events).toHaveLength(1);
-            expect(events[0]!.type).toBe('TestEvent');
-            expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
-            expect(events[0]!.position.streamId).toEqual(unsafeCreateStreamId('test-stream'));
-            expect(events[0]!.position.eventNumber).toBe(1);
-            expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
-          })
-        )
+        subscribeCollectAndVerify('test-stream', 1, (events) => {
+          expect(events).toHaveLength(1);
+          expect(events[0]!.type).toBe('TestEvent');
+          expect(events[0]!.data).toEqual({ test: 'data', value: 42 });
+          expect(events[0]!.position.streamId).toEqual(unsafeCreateStreamId('test-stream'));
+          expect(events[0]!.position.eventNumber).toBe(1);
+          expect(events[0]!.timestamp).toEqual(new Date('2024-01-01T12:00:00Z'));
+        })
       )
     );
 
@@ -778,17 +768,16 @@ describe('Protocol Behavior Tests', () => {
 
     const verifyConcurrentEventsAndCommands = (
       results: readonly [ReadonlyDeep<Iterable<Event>>, readonly CommandResult[]]
-    ) =>
-      Effect.sync(() => {
-        const [events, commandResults] = results;
-        const collectedEvents = Array.from(events);
-        expect(collectedEvents).toHaveLength(2);
-        expect(collectedEvents[0]!.type).toBe('UserCreated');
-        expect(collectedEvents[1]!.type).toBe('UserUpdated');
-        expect(commandResults).toHaveLength(2);
-        expect(isCommandSuccess(commandResults[0]!)).toBe(true);
-        expect(isCommandSuccess(commandResults[1]!)).toBe(true);
-      });
+    ) => {
+      const [events, commandResults] = results;
+      const collectedEvents = Array.from(events);
+      expect(collectedEvents).toHaveLength(2);
+      expect(collectedEvents[0]!.type).toBe('UserCreated');
+      expect(collectedEvents[1]!.type).toBe('UserUpdated');
+      expect(commandResults).toHaveLength(2);
+      expect(isCommandSuccess(commandResults[0]!)).toBe(true);
+      expect(isCommandSuccess(commandResults[1]!)).toBe(true);
+    };
 
     const runConcurrentEventsAndCommands = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -797,7 +786,7 @@ describe('Protocol Behavior Tests', () => {
         Effect.all([subscribeToUserStream, sendConcurrentUserCommands], {
           concurrency: 'unbounded',
         }),
-        Effect.tap(verifyConcurrentEventsAndCommands),
+        Effect.map(verifyConcurrentEventsAndCommands),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -886,21 +875,20 @@ describe('Protocol Behavior Tests', () => {
         readonly clientId: string;
         readonly events: readonly Event[];
       }[]
-    ) =>
-      Effect.sync(() => {
-        const client1Results = clientResults.find((r) => r.clientId === 'client1')!;
-        const client2Results = clientResults.find((r) => r.clientId === 'client2')!;
-        expect(client1Results.events).toHaveLength(3);
-        expect(client2Results.events).toHaveLength(3);
-        [0, 1, 2].forEach((i) => {
-          expect(client1Results.events[i]!.type).toBe(client2Results.events[i]!.type);
-          expect(client1Results.events[i]!.data).toEqual(client2Results.events[i]!.data);
-          expect(client1Results.events[i]!.position.eventNumber).toBe(
-            client2Results.events[i]!.position.eventNumber
-          );
-          expect(client1Results.events[i]!.timestamp).toEqual(client2Results.events[i]!.timestamp);
-        });
+    ) => {
+      const client1Results = clientResults.find((r) => r.clientId === 'client1')!;
+      const client2Results = clientResults.find((r) => r.clientId === 'client2')!;
+      expect(client1Results.events).toHaveLength(3);
+      expect(client2Results.events).toHaveLength(3);
+      [0, 1, 2].forEach((i) => {
+        expect(client1Results.events[i]!.type).toBe(client2Results.events[i]!.type);
+        expect(client1Results.events[i]!.data).toEqual(client2Results.events[i]!.data);
+        expect(client1Results.events[i]!.position.eventNumber).toBe(
+          client2Results.events[i]!.position.eventNumber
+        );
+        expect(client1Results.events[i]!.timestamp).toEqual(client2Results.events[i]!.timestamp);
       });
+    };
 
     const runBothClientsSubscription = (
       client1Transport: ReadonlyDeep<Server.ClientConnection['transport']>,
@@ -914,7 +902,7 @@ describe('Protocol Behavior Tests', () => {
           ],
           { concurrency: 'unbounded' }
         ),
-        Effect.tap(verifySharedStreamResults)
+        Effect.map(verifySharedStreamResults)
       );
 
     const setupServerAndRunBothClients =
@@ -968,20 +956,19 @@ describe('Protocol Behavior Tests', () => {
         readonly streamType: string;
         readonly events: readonly Event[];
       }[]
-    ) =>
-      Effect.sync(() => {
-        const userResults = streamResults.find((r) => r.streamType === 'user')!;
-        const orderResults = streamResults.find((r) => r.streamType === 'order')!;
-        const productResults = streamResults.find((r) => r.streamType === 'product')!;
-        expect(userResults.events).toHaveLength(2);
-        expect(userResults.events[0]!.type).toBe('UserCreated');
-        expect(orderResults.events).toHaveLength(1);
-        expect(orderResults.events[0]!.type).toBe('OrderCreated');
-        expect(productResults.events).toHaveLength(3);
-        expect(productResults.events[0]!.type).toBe('ProductAdded');
-        expect(userResults.events.some((e) => e.type.startsWith('Order'))).toBe(false);
-        expect(userResults.events.some((e) => e.type.startsWith('Product'))).toBe(false);
-      });
+    ) => {
+      const userResults = streamResults.find((r) => r.streamType === 'user')!;
+      const orderResults = streamResults.find((r) => r.streamType === 'order')!;
+      const productResults = streamResults.find((r) => r.streamType === 'product')!;
+      expect(userResults.events).toHaveLength(2);
+      expect(userResults.events[0]!.type).toBe('UserCreated');
+      expect(orderResults.events).toHaveLength(1);
+      expect(orderResults.events[0]!.type).toBe('OrderCreated');
+      expect(productResults.events).toHaveLength(3);
+      expect(productResults.events[0]!.type).toBe('ProductAdded');
+      expect(userResults.events.some((e) => e.type.startsWith('Order'))).toBe(false);
+      expect(userResults.events.some((e) => e.type.startsWith('Product'))).toBe(false);
+    };
 
     const runMultipleStreamSubscriptions = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -991,7 +978,7 @@ describe('Protocol Behavior Tests', () => {
           [subscribeToUserStreamForMultipleTest, subscribeToOrderStream, subscribeToProductStream],
           { concurrency: 'unbounded' }
         ),
-        Effect.tap(verifyMultipleStreamResults),
+        Effect.map(verifyMultipleStreamResults),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -1059,12 +1046,11 @@ describe('Protocol Behavior Tests', () => {
       Effect.map(Array.from<Event>)
     );
 
-    const verifyFirstBatch = (firstBatch: readonly Event[]) =>
-      Effect.sync(() => {
-        expect(firstBatch).toHaveLength(2);
-        expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
-        expect(firstBatch[1]!.type).toBe('EventBeforeResubscribe2');
-      });
+    const verifyFirstBatch = (firstBatch: readonly Event[]) => {
+      expect(firstBatch).toHaveLength(2);
+      expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
+      expect(firstBatch[1]!.type).toBe('EventBeforeResubscribe2');
+    };
 
     const collectResubscribeBatch = (firstBatch: readonly Event[]) =>
       pipe(
@@ -1078,17 +1064,18 @@ describe('Protocol Behavior Tests', () => {
       resubscribeBatch,
     }: {
       readonly resubscribeBatch: readonly Event[];
-    }) =>
-      Effect.sync(() => {
-        expect(resubscribeBatch).toHaveLength(4);
-        expect(resubscribeBatch[0]!.type).toBe('EventBeforeResubscribe1');
-        expect(resubscribeBatch[2]!.type).toBe('EventAfterResubscribe1');
-        expect(resubscribeBatch[0]!.position.eventNumber).toBe(1);
-        expect(resubscribeBatch[3]!.position.eventNumber).toBe(4);
-      });
+    }) => {
+      expect(resubscribeBatch).toHaveLength(4);
+      expect(resubscribeBatch[0]!.type).toBe('EventBeforeResubscribe1');
+      expect(resubscribeBatch[2]!.type).toBe('EventAfterResubscribe1');
+      expect(resubscribeBatch[0]!.position.eventNumber).toBe(1);
+      expect(resubscribeBatch[3]!.position.eventNumber).toBe(4);
+    };
 
-    const verifyFirstBatchAndResubscribe = (firstBatch: readonly Event[]) =>
-      pipe(firstBatch, verifyFirstBatch, Effect.andThen(collectResubscribeBatch(firstBatch)));
+    const verifyFirstBatchAndResubscribe = (firstBatch: readonly Event[]) => {
+      verifyFirstBatch(firstBatch);
+      return collectResubscribeBatch(firstBatch);
+    };
 
     const runResubscriptionTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1098,7 +1085,7 @@ describe('Protocol Behavior Tests', () => {
         collectFirstBatch,
         Effect.scoped,
         Effect.flatMap(verifyFirstBatchAndResubscribe),
-        Effect.tap(verifyResubscribeBatch),
+        Effect.map(verifyResubscribeBatch),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -1206,7 +1193,7 @@ describe('Protocol Behavior Tests', () => {
           { concurrency: 'unbounded' }
         ),
         Effect.map(([result, _, __]) => result),
-        Effect.tap(verifyTimeoutError(command.id))
+        Effect.map(verifyTimeoutError(command.id))
       );
     };
 
@@ -1249,7 +1236,7 @@ describe('Protocol Behavior Tests', () => {
           { concurrency: 'unbounded' }
         ),
         Effect.map(([result, _, __]) => result),
-        Effect.tap(verifyTimeoutError(command.id))
+        Effect.map(verifyTimeoutError(command.id))
       );
     };
 
@@ -1259,13 +1246,12 @@ describe('Protocol Behavior Tests', () => {
   });
 
   describe('Transport Failure & Recovery', () => {
-    const verifyCommandTimeout = (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) =>
-      Effect.sync(() => {
-        expect(Either.isLeft(result)).toBe(true);
-        if (Either.isLeft(result)) {
-          expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-        }
-      });
+    const verifyCommandTimeout = (result: ReadonlyDeep<Either.Either<CommandResult, unknown>>) => {
+      expect(Either.isLeft(result)).toBe(true);
+      if (Either.isLeft(result)) {
+        expect(result.left).toBeInstanceOf(ProtocolCommandTimeoutError);
+      }
+    };
 
     const runDisconnectTimeoutTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1282,7 +1268,7 @@ describe('Protocol Behavior Tests', () => {
           { concurrency: 'unbounded' }
         ),
         Effect.map(([result]) => result),
-        Effect.tap(verifyCommandTimeout)
+        Effect.map(verifyCommandTimeout)
       );
 
     it.effect('should clean up pending commands when transport disconnects', () =>
@@ -1297,33 +1283,31 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
-    const verifyTestEventBeforeDisconnect = (events: ReadonlyDeep<Iterable<Event>>) =>
-      Effect.sync(() => {
-        const eventArray = Array.from(events);
-        expect(eventArray).toHaveLength(1);
-        expect(eventArray[0]!.type).toBe('TestEvent');
-        expect(eventArray[0]!.data).toEqual({ message: 'before disconnect' });
-      });
+    const verifyTestEventBeforeDisconnect = (events: ReadonlyDeep<Iterable<Event>>) => {
+      const eventArray = Array.from(events);
+      expect(eventArray).toHaveLength(1);
+      expect(eventArray[0]!.type).toBe('TestEvent');
+      expect(eventArray[0]!.data).toEqual({ message: 'before disconnect' });
+    };
 
-    const verifyTestEventAfterReconnect = (events: ReadonlyDeep<Iterable<Event>>) =>
-      Effect.sync(() => {
-        const eventArray = Array.from(events);
-        expect(eventArray).toHaveLength(1);
-        expect(eventArray[0]!.type).toBe('TestEvent');
-      });
+    const verifyTestEventAfterReconnect = (events: ReadonlyDeep<Iterable<Event>>) => {
+      const eventArray = Array.from(events);
+      expect(eventArray).toHaveLength(1);
+      expect(eventArray[0]!.type).toBe('TestEvent');
+    };
 
     const subscribeAndVerifyFirstConnection = pipe(
       'test-stream',
       subscribe,
       Effect.flatMap(collectEventStream(1)),
-      Effect.tap(verifyTestEventBeforeDisconnect)
+      Effect.map(verifyTestEventBeforeDisconnect)
     );
 
     const subscribeAndVerifyAfterReconnection = pipe(
       'test-stream',
       subscribe,
       Effect.flatMap(collectEventStream(1)),
-      Effect.tap(verifyTestEventAfterReconnect)
+      Effect.map(verifyTestEventAfterReconnect)
     );
 
     const runSubscriptionCleanupTest = (
@@ -1358,19 +1342,20 @@ describe('Protocol Behavior Tests', () => {
       pipe(
         createWireCommand('first-connection', 'TestWireCommand', { data: 'first' }),
         sendWireCommand,
-        Effect.tap((result) => Effect.sync(() => expect(isCommandSuccess(result)).toBe(true))),
+        Effect.map((result) => expect(isCommandSuccess(result)).toBe(true)),
         Effect.provide(ProtocolLive(firstTransport))
       );
 
-    const verifyNewTransport = (newTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
-      Effect.sync(() => {
-        expect(newTransport).toBeDefined();
-        expect(typeof newTransport.publish).toBe('function');
-        expect(typeof newTransport.subscribe).toBe('function');
-      });
+    const verifyNewTransport = (
+      newTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) => {
+      expect(newTransport).toBeDefined();
+      expect(typeof newTransport.publish).toBe('function');
+      expect(typeof newTransport.subscribe).toBe('function');
+    };
 
     const connectNewClientAndVerify = (server: ReadonlyDeep<InMemoryServer>) =>
-      pipe(server.connector(), Effect.flatMap(waitForConnection), Effect.tap(verifyNewTransport));
+      pipe(server.connector(), Effect.flatMap(waitForConnection), Effect.map(verifyNewTransport));
 
     const runReconnectionSequence = (
       firstTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
@@ -1433,22 +1418,21 @@ describe('Protocol Behavior Tests', () => {
           ReadonlyDeep<Either.Either<CommandResult, unknown>>,
           unknown,
         ]
-      ) =>
-        Effect.sync(() => {
-          const [receivedWireCommands, commandResult] = results;
-          expect(receivedWireCommands).toHaveLength(1);
+      ) => {
+        const [receivedWireCommands, commandResult] = results;
+        expect(receivedWireCommands).toHaveLength(1);
 
-          const receivedWireCommand = receivedWireCommands[0]!;
-          expect(receivedWireCommand.id).toBe(command.id);
-          expect(receivedWireCommand.target).toBe(command.target);
-          expect(receivedWireCommand.name).toBe(command.name);
-          expect(receivedWireCommand.payload).toEqual(command.payload);
+        const receivedWireCommand = receivedWireCommands[0]!;
+        expect(receivedWireCommand.id).toBe(command.id);
+        expect(receivedWireCommand.target).toBe(command.target);
+        expect(receivedWireCommand.name).toBe(command.name);
+        expect(receivedWireCommand.payload).toEqual(command.payload);
 
-          expect(Either.isLeft(commandResult)).toBe(true);
-          if (Either.isLeft(commandResult)) {
-            expect(commandResult.left).toBeInstanceOf(ProtocolCommandTimeoutError);
-          }
-        });
+        expect(Either.isLeft(commandResult)).toBe(true);
+        if (Either.isLeft(commandResult)) {
+          expect(commandResult.left).toBeInstanceOf(ProtocolCommandTimeoutError);
+        }
+      };
 
     const runServerProtocolCommandTest = (
       serverProtocol: Context.Tag.Service<ServerProtocol>,
@@ -1470,7 +1454,7 @@ describe('Protocol Behavior Tests', () => {
           ],
           { concurrency: 'unbounded' }
         ),
-        Effect.tap(verifyCommandReceivedAndTimedOut(command))
+        Effect.map(verifyCommandReceivedAndTimedOut(command))
       );
     };
 
@@ -1505,23 +1489,21 @@ describe('Protocol Behavior Tests', () => {
     const verifyReceivedCommandMatches = (
       command: ReadonlyDeep<WireCommand>,
       receivedWireCommand: WireCommand
-    ) =>
-      Effect.sync(() => {
-        expect(receivedWireCommand.id).toBe(command.id);
-        expect(receivedWireCommand.target).toBe(command.target);
-        expect(receivedWireCommand.name).toBe(command.name);
-      });
+    ) => {
+      expect(receivedWireCommand.id).toBe(command.id);
+      expect(receivedWireCommand.target).toBe(command.target);
+      expect(receivedWireCommand.name).toBe(command.name);
+    };
 
     const verifyCommandAndSendResult = (
       serverProtocol: Context.Tag.Service<ServerProtocol>,
       command: ReadonlyDeep<WireCommand>,
       receivedWireCommand: WireCommand,
       successResult: ReadonlyDeep<CommandResult>
-    ) =>
-      pipe(
-        verifyReceivedCommandMatches(command, receivedWireCommand),
-        Effect.andThen(serverProtocol.sendResult(receivedWireCommand.id, successResult))
-      );
+    ) => {
+      verifyReceivedCommandMatches(command, receivedWireCommand);
+      return serverProtocol.sendResult(receivedWireCommand.id, successResult);
+    };
 
     const processCommandAndSendResult = (
       serverProtocol: Context.Tag.Service<ServerProtocol>,
@@ -1543,15 +1525,14 @@ describe('Protocol Behavior Tests', () => {
         })
       );
 
-    const verifyClientResult = (results: readonly [CommandResult, void]) =>
-      Effect.sync(() => {
-        const [clientResult] = results;
-        expect(isCommandSuccess(clientResult)).toBe(true);
-        if (isCommandSuccess(clientResult)) {
-          expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
-          expect(clientResult.position.eventNumber).toBe(99);
-        }
-      });
+    const verifyClientResult = (results: readonly [CommandResult, void]) => {
+      const [clientResult] = results;
+      expect(isCommandSuccess(clientResult)).toBe(true);
+      if (isCommandSuccess(clientResult)) {
+        expect(clientResult.position.streamId).toEqual(unsafeCreateStreamId('user-456'));
+        expect(clientResult.position.eventNumber).toBe(99);
+      }
+    };
 
     const runSendResultTest = (
       serverProtocol: Context.Tag.Service<ServerProtocol>,
@@ -1580,7 +1561,7 @@ describe('Protocol Behavior Tests', () => {
           ],
           { concurrency: 'unbounded' }
         ),
-        Effect.tap(verifyClientResult)
+        Effect.map(verifyClientResult)
       );
     };
 
@@ -1607,22 +1588,21 @@ describe('Protocol Behavior Tests', () => {
     const collectProductEvents = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
       pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.map(Array.from<Event>));
 
-    const verifyProductEvent = (receivedEvents: readonly Event[]) =>
-      Effect.sync(() => {
-        expect(receivedEvents).toHaveLength(1);
+    const verifyProductEvent = (receivedEvents: readonly Event[]) => {
+      expect(receivedEvents).toHaveLength(1);
 
-        const receivedEvent = receivedEvents[0]!;
-        expect(receivedEvent.type).toBe('ProductCreated');
-        expect(receivedEvent.position.streamId).toEqual(unsafeCreateStreamId('product-789'));
-        expect(receivedEvent.position.eventNumber).toBe(42);
-        expect(receivedEvent.data).toEqual({
-          id: 'product-789',
-          name: 'Super Widget',
-          price: 99.99,
-          category: 'electronics',
-        });
-        expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
+      const receivedEvent = receivedEvents[0]!;
+      expect(receivedEvent.type).toBe('ProductCreated');
+      expect(receivedEvent.position.streamId).toEqual(unsafeCreateStreamId('product-789'));
+      expect(receivedEvent.position.eventNumber).toBe(42);
+      expect(receivedEvent.data).toEqual({
+        id: 'product-789',
+        name: 'Super Widget',
+        price: 99.99,
+        category: 'electronics',
       });
+      expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
+    };
 
     const subscribeAndVerifyProductEvents = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1631,7 +1611,7 @@ describe('Protocol Behavior Tests', () => {
         'product-789',
         subscribe,
         Effect.flatMap(collectProductEvents),
-        Effect.tap(verifyProductEvent),
+        Effect.map(verifyProductEvent),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -1681,21 +1661,20 @@ describe('Protocol Behavior Tests', () => {
         ReadonlyDeep<Either.Either<CommandResult, unknown>>,
         ReadonlyDeep<Either.Either<CommandResult, unknown>>,
       ]
-    ) =>
-      Effect.sync(() => {
-        const [result1, result2] = results;
-        expect(Either.isRight(result1!)).toBe(true);
-        expect(Either.isRight(result2!)).toBe(true);
-        if (Either.isRight(result1!) && Either.isRight(result2!)) {
-          expect(isCommandSuccess(result1!.right)).toBe(true);
-          expect(isCommandSuccess(result2!.right)).toBe(true);
-          if (isCommandSuccess(result1!.right) && isCommandSuccess(result2!.right)) {
-            expect(result1!.right.position.eventNumber).toBe(42);
-            expect(result2!.right.position.eventNumber).toBe(42);
-            expect(result1!.right.position.streamId).toEqual(result2!.right.position.streamId);
-          }
+    ) => {
+      const [result1, result2] = results;
+      expect(Either.isRight(result1!)).toBe(true);
+      expect(Either.isRight(result2!)).toBe(true);
+      if (Either.isRight(result1!) && Either.isRight(result2!)) {
+        expect(isCommandSuccess(result1!.right)).toBe(true);
+        expect(isCommandSuccess(result2!.right)).toBe(true);
+        if (isCommandSuccess(result1!.right) && isCommandSuccess(result2!.right)) {
+          expect(result1!.right.position.eventNumber).toBe(42);
+          expect(result2!.right.position.eventNumber).toBe(42);
+          expect(result1!.right.position.streamId).toEqual(result2!.right.position.streamId);
         }
-      });
+      }
+    };
 
     const runDuplicateCommandTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1724,7 +1703,7 @@ describe('Protocol Behavior Tests', () => {
 
       return pipe(
         Effect.all([runCommands, adjustClock], { concurrency: 'unbounded' }),
-        Effect.flatMap(([results]) => verifyDuplicateCommandResults(results))
+        Effect.map(([results]) => verifyDuplicateCommandResults(results))
       );
     };
 
@@ -1741,62 +1720,60 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
-    const verifyLargeCommandResult = (result: ReadonlyDeep<CommandResult>) =>
-      Effect.sync(() => {
-        expect(isCommandSuccess(result)).toBe(true);
-        if (isCommandSuccess(result)) {
-          expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
-          expect(result.position.eventNumber).toBe(1);
-        }
-      });
+    const verifyLargeCommandResult = (result: ReadonlyDeep<CommandResult>) => {
+      expect(isCommandSuccess(result)).toBe(true);
+      if (isCommandSuccess(result)) {
+        expect(result.position.streamId).toEqual(unsafeCreateStreamId('bulk-stream'));
+        expect(result.position.eventNumber).toBe(1);
+      }
+    };
 
     const sendLargeCommand = (command: ReadonlyDeep<WireCommand>) =>
-      pipe(command, sendWireCommand, Effect.tap(verifyLargeCommandResult));
+      pipe(command, sendWireCommand, Effect.map(verifyLargeCommandResult));
 
-    const verifyLargeEventData = (collectedEvents: ReadonlyDeep<Iterable<Event>>) =>
-      Effect.sync(() => {
-        const events = Array.from(collectedEvents);
-        expect(events).toHaveLength(1);
+    const verifyLargeEventData = (collectedEvents: ReadonlyDeep<Iterable<Event>>) => {
+      const events = Array.from(collectedEvents);
+      expect(events).toHaveLength(1);
 
-        const event = events[0]!;
-        expect(event.type).toBe('LargeDataEvent');
-        expect(event.position.eventNumber).toBe(1);
+      const event = events[0]!;
+      expect(event.type).toBe('LargeDataEvent');
+      expect(event.position.eventNumber).toBe(1);
 
-        const data = event.data as {
-          readonly description: string;
-          readonly metadata: {
-            readonly tags: readonly string[];
-            readonly attributes: Readonly<Record<string, string>>;
-          };
-          readonly content: ReadonlyArray<{
-            readonly id: number;
-            readonly name: string;
-            readonly data: string;
-          }>;
+      const data = event.data as {
+        readonly description: string;
+        readonly metadata: {
+          readonly tags: readonly string[];
+          readonly attributes: Readonly<Record<string, string>>;
         };
-        expect(data.description).toHaveLength(10000);
-        expect(data.description).toBe('A'.repeat(10000));
-        expect(data.metadata.tags).toHaveLength(100);
-        expect(data.metadata.tags[0]).toBe('tag-0');
-        expect(data.metadata.tags[99]).toBe('tag-99');
-        expect(data.content).toHaveLength(1000);
-        expect(data.content[0]).toEqual({
-          id: 0,
-          name: 'Item 0',
-          data: `${'x'.repeat(50)}-0`,
-        });
-        expect(data.content[999]).toEqual({
-          id: 999,
-          name: 'Item 999',
-          data: `${'x'.repeat(50)}-999`,
-        });
-
-        expect(Object.keys(data.metadata.attributes)).toHaveLength(50);
-        expect(data.metadata.attributes['attr-0']).toBe('value-0'.repeat(20));
+        readonly content: ReadonlyArray<{
+          readonly id: number;
+          readonly name: string;
+          readonly data: string;
+        }>;
+      };
+      expect(data.description).toHaveLength(10000);
+      expect(data.description).toBe('A'.repeat(10000));
+      expect(data.metadata.tags).toHaveLength(100);
+      expect(data.metadata.tags[0]).toBe('tag-0');
+      expect(data.metadata.tags[99]).toBe('tag-99');
+      expect(data.content).toHaveLength(1000);
+      expect(data.content[0]).toEqual({
+        id: 0,
+        name: 'Item 0',
+        data: `${'x'.repeat(50)}-0`,
+      });
+      expect(data.content[999]).toEqual({
+        id: 999,
+        name: 'Item 999',
+        data: `${'x'.repeat(50)}-999`,
       });
 
+      expect(Object.keys(data.metadata.attributes)).toHaveLength(50);
+      expect(data.metadata.attributes['attr-0']).toBe('value-0'.repeat(20));
+    };
+
     const collectAndVerifyLargeEvents = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
-      pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.tap(verifyLargeEventData));
+      pipe(eventStream, Stream.take(1), Stream.runCollect, Effect.map(verifyLargeEventData));
 
     const subscribeToBulkStreamAndVerify = pipe(
       'bulk-stream',
@@ -1921,37 +1898,36 @@ describe('Protocol Behavior Tests', () => {
         readonly eventCount: number;
         readonly firstEvent: Event | undefined;
       }[]
-    ) =>
-      Effect.sync(() => {
-        expect(results).toHaveLength(10);
+    ) => {
+      expect(results).toHaveLength(10);
 
-        results.forEach((result, index) => {
-          expect(result.cycleNumber).toBe(index);
-          expect(result.eventCount).toBe(1);
-          expect(result.firstEvent?.type).toBe('CycleTestEvent');
-          expect(result.firstEvent?.data).toEqual({
-            streamId: `cycle-stream-${index}`,
-            cycle: true,
-          });
-          expect(result.firstEvent?.position.eventNumber).toBe(1);
+      results.forEach((result, index) => {
+        expect(result.cycleNumber).toBe(index);
+        expect(result.eventCount).toBe(1);
+        expect(result.firstEvent?.type).toBe('CycleTestEvent');
+        expect(result.firstEvent?.data).toEqual({
+          streamId: `cycle-stream-${index}`,
+          cycle: true,
         });
-
-        const extractStreamId = (result: {
-          readonly cycleNumber: number;
-          readonly eventCount: number;
-          readonly firstEvent: Event | undefined;
-        }) => {
-          const data = result.firstEvent?.data;
-          return data && typeof data === 'object' && 'streamId' in data ? data.streamId : undefined;
-        };
-
-        const uniqueStreamIds = new Set(results.map(extractStreamId));
-        expect(uniqueStreamIds.size).toBe(10);
-
-        Array.from({ length: 10 }, (_, i) => i).forEach((i) => {
-          expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
-        });
+        expect(result.firstEvent?.position.eventNumber).toBe(1);
       });
+
+      const extractStreamId = (result: {
+        readonly cycleNumber: number;
+        readonly eventCount: number;
+        readonly firstEvent: Event | undefined;
+      }) => {
+        const data = result.firstEvent?.data;
+        return data && typeof data === 'object' && 'streamId' in data ? data.streamId : undefined;
+      };
+
+      const uniqueStreamIds = new Set(results.map(extractStreamId));
+      expect(uniqueStreamIds.size).toBe(10);
+
+      Array.from({ length: 10 }, (_, i) => i).forEach((i) => {
+        expect(uniqueStreamIds.has(`cycle-stream-${i}`)).toBe(true);
+      });
+    };
 
     const runRapidCycles = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -1960,7 +1936,7 @@ describe('Protocol Behavior Tests', () => {
 
       return pipe(
         Effect.all(cycles, { concurrency: 'unbounded' }),
-        Effect.tap(verifyCycleResults),
+        Effect.map(verifyCycleResults),
         Effect.provide(ProtocolLive(clientTransport))
       );
     };
@@ -2035,19 +2011,18 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
-    const verifySequentialResults = (results: ReadonlyDeep<Iterable<CommandResult>>) =>
-      Effect.sync(() => {
-        const resultsArray = Array.from(results);
-        expect(resultsArray).toHaveLength(5);
-        resultsArray.forEach((result, index) => {
-          expect(isCommandSuccess(result)).toBe(true);
-          if (isCommandSuccess(result)) {
-            expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
-            expect(result.position.eventNumber).toBeGreaterThan(0);
-            expect(result.position.eventNumber).toBeLessThanOrEqual(100);
-          }
-        });
+    const verifySequentialResults = (results: ReadonlyDeep<Iterable<CommandResult>>) => {
+      const resultsArray = Array.from(results);
+      expect(resultsArray).toHaveLength(5);
+      resultsArray.forEach((result, index) => {
+        expect(isCommandSuccess(result)).toBe(true);
+        if (isCommandSuccess(result)) {
+          expect(result.position.streamId).toEqual(unsafeCreateStreamId(`user-${index + 1}`));
+          expect(result.position.eventNumber).toBeGreaterThan(0);
+          expect(result.position.eventNumber).toBeLessThanOrEqual(100);
+        }
       });
+    };
 
     const sendSequentialCommands = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
@@ -2061,7 +2036,7 @@ describe('Protocol Behavior Tests', () => {
 
       return pipe(
         Effect.forEach(commands, sendWireCommand, { concurrency: 1 }),
-        Effect.tap(verifySequentialResults),
+        Effect.map(verifySequentialResults),
         Effect.provide(ProtocolLive(clientTransport))
       );
     };
@@ -2108,24 +2083,22 @@ describe('Protocol Behavior Tests', () => {
       const verifySpanAndSendResultForCommand = (commands: ReadonlyDeep<Iterable<WireCommand>>) =>
         pipe(
           Effect.currentSpan,
-          Effect.flatMap((serverSpan) =>
-            Effect.sync(() => {
-              expect(serverSpan.traceId).toBe(clientTraceId);
-              if (serverSpan.traceId !== clientTraceId) {
-                throw new Error(
-                  `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
-                    `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
-                );
-              }
-              expect(serverSpan.spanId).not.toBe(clientTraceId);
-              if (serverSpan.spanId === clientTraceId) {
-                throw new Error(
-                  `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
-                    `This means the server is not creating a new child span.`
-                );
-              }
-            })
-          ),
+          Effect.map((serverSpan) => {
+            expect(serverSpan.traceId).toBe(clientTraceId);
+            if (serverSpan.traceId !== clientTraceId) {
+              throw new Error(
+                `Server span traceId mismatch: expected client traceId "${clientTraceId}" but got "${serverSpan.traceId}". ` +
+                  `This means the server is not restoring the trace context from the incoming ProtocolCommand.`
+              );
+            }
+            expect(serverSpan.spanId).not.toBe(clientTraceId);
+            if (serverSpan.spanId === clientTraceId) {
+              throw new Error(
+                `Server span should be a child span with different spanId, but got same spanId "${serverSpan.spanId}". ` +
+                  `This means the server is not creating a new child span.`
+              );
+            }
+          }),
           Effect.andThen(
             serverProtocol.sendResult(Array.from(commands)[0]!.id, {
               _tag: 'Success',
@@ -2156,12 +2129,10 @@ describe('Protocol Behavior Tests', () => {
           testCommand,
           sendWireCommand,
           Effect.provide(ProtocolLive(clientTransport)),
-          Effect.tap(() =>
-            Effect.sync(() => {
-              expect(clientSpan.traceId).toBeTruthy();
-              expect(clientSpan.spanId).toBeTruthy();
-            })
-          )
+          Effect.map(() => {
+            expect(clientSpan.traceId).toBeTruthy();
+            expect(clientSpan.spanId).toBeTruthy();
+          })
         );
 
       const clientWork = pipe(
@@ -2229,11 +2200,9 @@ describe('Protocol Behavior Tests', () => {
         pipe(
           command,
           sendWireCommand,
-          Effect.tap((result) =>
-            Effect.sync(() => {
-              expect(isCommandSuccess(result)).toBe(true);
-            })
-          ),
+          Effect.map((result) => {
+            expect(isCommandSuccess(result)).toBe(true);
+          }),
           Effect.provide(ProtocolLive(clientTransport))
         );
 
