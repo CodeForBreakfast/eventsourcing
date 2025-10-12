@@ -5,6 +5,9 @@
  * This runs in PR checks to prevent:
  * 1. Merging changes without changesets (would cause npm publish failures)
  * 2. Merging changesets that miss dependent packages
+ *
+ * Private packages (marked with "private": true) are excluded from validation
+ * since they are never published to npm.
  */
 
 import { Effect, pipe, Array as EffectArray, Option, Match } from 'effect';
