@@ -1,5 +1,27 @@
 # @codeforbreakfast/eventsourcing-store-postgres
 
+## 0.6.8
+
+### Patch Changes
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated internal implementation to comply with `no-if-statement` rule.
+
+  Test code now uses if statements where appropriate (for assertions and side effects), while production code follows functional patterns. This is an internal refactoring with no API changes.
+
+- [#259](https://github.com/CodeForBreakfast/eventsourcing/pull/259) [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2) Thanks [@GraemeF](https://github.com/GraemeF)! - Add Effect-native assertions and new ESLint rules
+
+  **New Features:**
+  - **buntest**: Added Effect-native assertion utilities (`expectEffect`, `toSucceedWith`, `toFailWith`) and a new ESLint rule `prefer-effect-assertions` to enforce their usage
+  - **eslint-effect**: Added two new rules: `no-effect-if-option-check` and `prefer-get-or-undefined`
+
+  **Bug Fixes & Improvements:**
+  - Replaced `Effect.sync(expect())` patterns with Effect-native assertions across test suites
+  - Removed unnecessary function aliases to improve code readability
+  - Fixed nested pipe calls and redundant Effect.sync wrappers
+
+- Updated dependencies [[`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2)]:
+  - @codeforbreakfast/eventsourcing-store@0.8.3
+
 ## 0.6.7
 
 ### Patch Changes

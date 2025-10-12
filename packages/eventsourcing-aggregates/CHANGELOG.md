@@ -1,5 +1,30 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.8.1
+
+### Patch Changes
+
+- [#258](https://github.com/CodeForBreakfast/eventsourcing/pull/258) [`74564cd`](https://github.com/CodeForBreakfast/eventsourcing/commit/74564cd90e86c91dd462a747f2ad70d9cdf371ad) Thanks [@GraemeF](https://github.com/GraemeF)! - Fixed a critical bug where aggregate event numbers were not correctly tracked when loading aggregates from the event store. Previously, the `nextEventNumber` was always reset to 0 during event replay, causing concurrency conflicts when attempting to commit new events. Aggregates now correctly maintain their event position after loading, ensuring proper optimistic concurrency control.
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated internal implementation to comply with `no-if-statement` rule.
+
+  Test code now uses if statements where appropriate (for assertions and side effects), while production code follows functional patterns. This is an internal refactoring with no API changes.
+
+- [#259](https://github.com/CodeForBreakfast/eventsourcing/pull/259) [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2) Thanks [@GraemeF](https://github.com/GraemeF)! - Add Effect-native assertions and new ESLint rules
+
+  **New Features:**
+  - **buntest**: Added Effect-native assertion utilities (`expectEffect`, `toSucceedWith`, `toFailWith`) and a new ESLint rule `prefer-effect-assertions` to enforce their usage
+  - **eslint-effect**: Added two new rules: `no-effect-if-option-check` and `prefer-get-or-undefined`
+
+  **Bug Fixes & Improvements:**
+  - Replaced `Effect.sync(expect())` patterns with Effect-native assertions across test suites
+  - Removed unnecessary function aliases to improve code readability
+  - Fixed nested pipe calls and redundant Effect.sync wrappers
+
+- Updated dependencies [[`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe), [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.3
+  - @codeforbreakfast/eventsourcing-store@0.8.3
+
 ## 0.8.0
 
 ### Minor Changes

@@ -1,5 +1,80 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.8.0
+
+### Minor Changes
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Added `no-if-statement` rule to enforce declarative control flow patterns in functional Effect code.
+
+  This new rule forbids all `if` statements, encouraging developers to use more composable alternatives:
+  - `Effect.if` for boolean conditionals returning Effects
+  - `Match.value` for pattern matching on discriminated unions
+  - Type-specific matchers like `Option.match`, `Either.match`, `Exit.match`
+  - Ternary operators for simple value selection
+
+  The rule is included in the `strict` and `preferMatch` configurations, providing exhaustiveness checking and better functional composition compared to imperative if statements.
+
+  **Breaking change for `strict` config users**: Code using if statements will now be flagged as errors. Migrate to declarative patterns using the alternatives listed above.
+
+- [#257](https://github.com/CodeForBreakfast/eventsourcing/pull/257) [`7ebbd40`](https://github.com/CodeForBreakfast/eventsourcing/commit/7ebbd401c0161f86f23ca6ed2dcb1a1272ed10e0) Thanks [@GraemeF](https://github.com/GraemeF)! - Added comprehensive suite of Effect simplification rules to help developers write cleaner, more idiomatic Effect code.
+
+  **New rules for common Effect patterns:**
+  - `prefer-as` - Suggests using `Effect.as` instead of `Effect.map(() => value)` for simpler value replacement
+  - `prefer-as-some` - Suggests `Effect.asSome` instead of `Effect.map(Option.some)`
+  - `prefer-as-some-error` - Suggests `Effect.asSomeError` instead of `Effect.mapError(Option.some)`
+  - `prefer-as-void` - Suggests `Effect.asVoid` instead of `Effect.map(() => undefined)` or similar patterns
+  - `prefer-succeed-none` - Suggests `Effect.succeedNone` instead of `Effect.succeed(Option.none())`
+  - `prefer-ignore` - Suggests `Effect.ignore` instead of manually ignoring errors with `Effect.catchAll(() => Effect.void)`
+  - `prefer-ignore-logged` - Suggests `Effect.ignoreLogged` instead of logging errors then ignoring them
+  - `prefer-flatten` - Suggests `Effect.flatten` instead of `Effect.flatMap(identity)`
+  - `prefer-zip-left` - Suggests `Effect.zipLeft` instead of sequencing with first value using `Effect.flatMap`
+  - `prefer-zip-right` - Suggests `Effect.zipRight` instead of sequencing with second value using `Effect.flatMap`
+  - `prefer-from-nullable` - Suggests `Effect.fromNullable` instead of `Effect.succeed + Effect.flatMap(Option.match)`
+  - `prefer-get-or-else` - Suggests `Option.getOrElse` instead of `Option.match` with identity function
+  - `prefer-get-or-null` - Suggests `Option.getOrNull` instead of `Option.match` returning null
+
+  **Enhanced existing rules:**
+  - `prefer-andThen` - Now supports auto-fixing for multiple Effect types (Option, Either, Exit, Stream, etc.)
+  - `prefer-as` - Enhanced with more pattern detection and auto-fix capabilities
+
+  **Testing improvements:**
+  - Added isolated test linting configuration to prevent rule conflicts in test files
+  - Added per-file rule enablement config for better test organization
+
+  All new rules include auto-fix capabilities where applicable and are enabled in the `recommended` configuration.
+
+- [#259](https://github.com/CodeForBreakfast/eventsourcing/pull/259) [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2) Thanks [@GraemeF](https://github.com/GraemeF)! - Add Effect-native assertions and new ESLint rules
+
+  **New Features:**
+  - **buntest**: Added Effect-native assertion utilities (`expectEffect`, `toSucceedWith`, `toFailWith`) and a new ESLint rule `prefer-effect-assertions` to enforce their usage
+  - **eslint-effect**: Added two new rules: `no-effect-if-option-check` and `prefer-get-or-undefined`
+
+  **Bug Fixes & Improvements:**
+  - Replaced `Effect.sync(expect())` patterns with Effect-native assertions across test suites
+  - Removed unnecessary function aliases to improve code readability
+  - Fixed nested pipe calls and redundant Effect.sync wrappers
+
+### Patch Changes
+
+- [#263](https://github.com/CodeForBreakfast/eventsourcing/pull/263) [`0a7c1d0`](https://github.com/CodeForBreakfast/eventsourcing/commit/0a7c1d0a58cf91e499ef8137c9ea9d3e5e1f8558) Thanks [@GraemeF](https://github.com/GraemeF)! - Internal refactoring to reduce code duplication across ESLint rules. This change improves maintainability and consistency of rule implementations without affecting functionality or rule behavior.
+
+  **Changes:**
+  - Extracted common method call checking logic into a reusable `createMethodCallChecker` factory function
+  - Created shared utilities for common return type checks (`isNullReturn`, `isUndefinedReturn`, `isOptionSome`, `isVoidReturningFunction`)
+  - Refactored multiple rules to use shared utilities, reducing code duplication by 30-40% per rule
+  - Improved code consistency across rule implementations
+
+  **Rules refactored:**
+  - `prefer-get-or-null`
+  - `prefer-get-or-undefined`
+  - `prefer-as-some`
+  - `prefer-as-some-error`
+  - `prefer-zip-left`
+  - `prefer-zip-right`
+  - `prefer-ignore`
+
+  All rules maintain the same functionality and test coverage. No user-facing changes.
+
 ## 0.7.0
 
 ### Minor Changes
