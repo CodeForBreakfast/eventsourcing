@@ -15,6 +15,7 @@ type PackageInternal = {
   readonly name: string;
   readonly version: string;
   readonly path: string;
+  readonly private?: boolean;
 };
 
 type ChangesetInfoInternal = {
@@ -44,6 +45,7 @@ const parsePackageJsonContent = (packagePath: string) => (content: string) => {
     name: pkg.name,
     version: pkg.version,
     path: packagePath,
+    private: pkg.private,
   });
 };
 
@@ -82,23 +84,37 @@ const readAllPackageDirectories =
       Effect.map(EffectArray.getSomes)
     );
 
-const readPackagesFromDirectory = ([fs, path, rootDir]: readonly [
-  FileSystem.FileSystem,
-  Path.Path,
-  string,
-]) => {
-  const packagesDir = path.join(rootDir, 'packages');
-  return pipe(
-    packagesDir,
-    fs.readDirectory,
-    Effect.flatMap(readAllPackageDirectories(fs, path, packagesDir))
-  );
-};
+const readPackagesFromDirectory =
+  (directoryName: string) =>
+  ([fs, path, rootDir]: readonly [FileSystem.FileSystem, Path.Path, string]) => {
+    const packagesDir = path.join(rootDir, directoryName);
+    return pipe(
+      packagesDir,
+      fs.exists,
+      Effect.flatMap((exists) =>
+        exists
+          ? pipe(
+              packagesDir,
+              fs.readDirectory,
+              Effect.flatMap(readAllPackageDirectories(fs, path, packagesDir))
+            )
+          : Effect.succeed([])
+      )
+    );
+  };
 
 const getAllPackages = pipe(
   [FileSystem.FileSystem, Path.Path, getRootDir] as const,
   Effect.all,
-  Effect.flatMap(readPackagesFromDirectory)
+  Effect.flatMap((deps) =>
+    pipe(
+      Effect.all([
+        readPackagesFromDirectory('packages')(deps),
+        readPackagesFromDirectory('examples')(deps),
+      ]),
+      Effect.map(([packages, examples]) => [...packages, ...examples])
+    )
+  )
 );
 
 const parseFrontmatter = (content: string): string => {
@@ -290,7 +306,36 @@ const runGitDiff = (terminal: Terminal.Terminal) => {
 
 const getChangedFiles = pipe(Terminal.Terminal, Effect.flatMap(runGitDiff));
 
-const hasCodeChanges = (changedFiles: readonly string[]): boolean => {
+const getPrivatePackagePaths = (
+  packages: readonly PackageInternal[],
+  rootDir: string
+): readonly string[] => {
+  return packages
+    .filter((pkg) => pkg.private === true)
+    .map((pkg) => {
+      const packageJsonPath = pkg.path;
+      const packageDir = packageJsonPath.replace(rootDir + '/', '').replace('/package.json', '');
+      return packageDir;
+    });
+};
+
+const filterOutPrivatePackageFiles = (
+  changedFiles: readonly string[],
+  privatePackagePaths: readonly string[]
+): readonly string[] => {
+  return changedFiles.filter(
+    (file) => !privatePackagePaths.some((privatePath) => file.startsWith(`${privatePath}/`))
+  );
+};
+
+const hasCodeChanges = (
+  changedFiles: readonly string[],
+  packages: readonly PackageInternal[],
+  rootDir: string
+): boolean => {
+  const privatePackagePaths = getPrivatePackagePaths(packages, rootDir);
+  const publishableFiles = filterOutPrivatePackageFiles(changedFiles, privatePackagePaths);
+
   const codePatterns: readonly RegExp[] = [
     /^packages\//,
     /^scripts\//,
@@ -299,12 +344,12 @@ const hasCodeChanges = (changedFiles: readonly string[]): boolean => {
     /\.js$/,
     /\.jsx$/,
     /^package\.json$/,
-    /^bun\.lockb$/,
+    /^bun\.lock/,
     /^tsconfig/,
     /^\.github\/workflows/,
   ];
 
-  return changedFiles.some((file) =>
+  return publishableFiles.some((file) =>
     file === 'scripts/validate-changesets.ts'
       ? false
       : codePatterns.some((pattern) => pattern.test(file))
@@ -707,9 +752,11 @@ const handleNoCodeChanges = (
 
 const handleChangedFiles = (
   changedFiles: readonly string[],
-  changesets: readonly ChangesetInfoInternal[]
+  changesets: readonly ChangesetInfoInternal[],
+  packages: readonly PackageInternal[],
+  rootDir: string
 ) =>
-  Effect.if(changedFiles.length > 0 && hasCodeChanges(changedFiles), {
+  Effect.if(changedFiles.length > 0 && hasCodeChanges(changedFiles, packages, rootDir), {
     onTrue: () => validateCodeChanges(changedFiles, changesets),
     onFalse: () => handleNoCodeChanges(changedFiles, changesets),
   });
@@ -718,14 +765,15 @@ const validateChangesetLogic =
   (
     packages: readonly PackageInternal[],
     changesets: readonly ChangesetInfoInternal[],
-    changedFiles: readonly string[]
+    changedFiles: readonly string[],
+    rootDir: string
   ) =>
   (rootPackageJson: { readonly name: string }) => {
     const errors = validateChangesetPackages(changesets, packages, rootPackageJson);
 
     return Effect.if(errors.length > 0, {
       onTrue: () => displayValidationFailure(errors, packages),
-      onFalse: () => handleChangedFiles(changedFiles, changesets),
+      onFalse: () => handleChangedFiles(changedFiles, changesets, packages, rootDir),
     });
   };
 
@@ -754,7 +802,7 @@ const validateWithRootPackage = (
 ) =>
   pipe(
     readRootPackageJson(fs, path, rootDir),
-    Effect.flatMap(validateChangesetLogic(packages, changesets, changedFiles))
+    Effect.flatMap(validateChangesetLogic(packages, changesets, changedFiles, rootDir))
   );
 
 const runValidationLogic = ([packages, changesets, changedFiles, [fs, path, rootDir]]: readonly [
