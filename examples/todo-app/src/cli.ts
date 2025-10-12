@@ -1,7 +1,8 @@
 #!/usr/bin/env bun
 
-import { Effect, Layer, Console, Option, Chunk, pipe, Match, Schema } from 'effect';
-import { BunFileSystem, BunPath } from '@effect/platform-bun';
+import { Args, Command, HelpDoc } from '@effect/cli';
+import { Effect, Layer, Console, Option, Chunk, pipe, Schema } from 'effect';
+import { BunFileSystem, BunPath, BunRuntime, BunTerminal } from '@effect/platform-bun';
 import { Projection } from '@codeforbreakfast/eventsourcing-projections';
 import { make, makeFileSystemEventStore } from '@codeforbreakfast/eventsourcing-store-filesystem';
 import {
@@ -214,123 +215,75 @@ const processListProjection = (projection: Readonly<Projection<TodoListProjectio
 
 const listTodos = () => pipe(loadTodoListProjection(), Effect.flatMap(processListProjection));
 
-const showHelp = () =>
-  Console.log(`
-📝 TODO App - Event Sourcing Example
-
-Usage:
-  bun run src/cli.ts <command> [args]
-
-Commands:
-  create <title>      Create a new TODO
-  complete <id>       Mark a TODO as completed
-  uncomplete <id>     Mark a TODO as not completed
-  delete <id>         Delete a TODO
-  list                List all TODOs
-  help                Show this help message
-
-Examples:
-  bun run src/cli.ts create "Buy milk"
-  bun run src/cli.ts complete todo-1234567890
-  bun run src/cli.ts list
-`);
-
-const missingArgError = (message: string, usage: string) =>
-  pipe(
-    Effect.all([Console.error(message), Console.log(usage)], { concurrency: 'unbounded' }),
-    Effect.andThen(Effect.fail(new Error(message)))
-  );
-
-const parseTodoId = (id: string): Effect.Effect<TodoId, Error> =>
+const parseTodoId = (id: string): Effect.Effect<TodoId, HelpDoc.HelpDoc> =>
   pipe(
     id,
     Schema.decode(TodoIdSchema),
-    Effect.mapError(() => new Error(`Invalid TODO ID: ${id}`))
+    Effect.mapError(() => HelpDoc.p(`Invalid TODO ID: ${id}`))
   );
 
-const parseAndCompleteTodo = (id: string) => pipe(id, parseTodoId, Effect.flatMap(completeTodo));
+const titleArg = Args.text({ name: 'title' }).pipe(
+  Args.withDescription('The title of the TODO to create')
+);
 
-const parseAndUncompleteTodo = (id: string) =>
-  pipe(id, parseTodoId, Effect.flatMap(uncompleteTodo));
+const todoIdArg = Args.text({ name: 'id' }).pipe(
+  Args.withDescription('The ID of the TODO to operate on'),
+  Args.mapEffect(parseTodoId)
+);
 
-const parseAndDeleteTodo = (id: string) => pipe(id, parseTodoId, Effect.flatMap(deleteTodo));
+const createCommand = Command.make('create', { title: titleArg }, ({ title }) => createTodo(title));
 
-const runCommand = (args: ReadonlyArray<string>) => {
-  const command = args[0];
+const completeCommand = Command.make('complete', { id: todoIdArg }, ({ id }) => completeTodo(id));
 
-  return pipe(
-    command,
-    Match.value,
-    Match.when('create', () => {
-      const title = args[1];
-      return Effect.if(Boolean(title), {
-        onTrue: () => createTodo(title!),
-        onFalse: () =>
-          missingArgError('Error: Title is required', 'Usage: bun run src/cli.ts create <title>'),
-      });
-    }),
-    Match.when('complete', () => {
-      const id = args[1];
-      return Effect.if(Boolean(id), {
-        onTrue: () => parseAndCompleteTodo(id!),
-        onFalse: () =>
-          missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts complete <id>'),
-      });
-    }),
-    Match.when('uncomplete', () => {
-      const id = args[1];
-      return Effect.if(Boolean(id), {
-        onTrue: () => parseAndUncompleteTodo(id!),
-        onFalse: () =>
-          missingArgError(
-            'Error: TODO ID is required',
-            'Usage: bun run src/cli.ts uncomplete <id>'
-          ),
-      });
-    }),
-    Match.when('delete', () => {
-      const id = args[1];
-      return Effect.if(Boolean(id), {
-        onTrue: () => parseAndDeleteTodo(id!),
-        onFalse: () =>
-          missingArgError('Error: TODO ID is required', 'Usage: bun run src/cli.ts delete <id>'),
-      });
-    }),
-    Match.when('list', listTodos),
-    Match.orElse(showHelp)
-  );
-};
+const uncompleteCommand = Command.make('uncomplete', { id: todoIdArg }, ({ id }) =>
+  uncompleteTodo(id)
+);
+
+const deleteCommand = Command.make('delete', { id: todoIdArg }, ({ id }) => deleteTodo(id));
+
+const listCommand = Command.make('list', {}, () => listTodos());
+
+const todoCommand = Command.make('todo', {}).pipe(
+  Command.withDescription('📝 TODO App - Event Sourcing Example'),
+  Command.withSubcommands([
+    createCommand,
+    completeCommand,
+    uncompleteCommand,
+    deleteCommand,
+    listCommand,
+  ])
+);
 
 const forkProcessManager = () => Effect.fork(startProcessManager());
 
-const runWithProcessManager = (args: ReadonlyArray<string>) =>
+const withProcessManager = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
   pipe(
     [forkProcessManager(), Effect.sleep('200 millis')],
     Effect.all,
-    Effect.andThen(runCommand(args)),
-    Effect.asVoid,
+    Effect.andThen(effect),
     Effect.andThen(Effect.sleep('1 second'))
   );
 
-const scopeAndProvide = (args: ReadonlyArray<string>): Effect.Effect<void, never, never> =>
-  pipe(
-    args,
-    runWithProcessManager,
-    Effect.scoped,
-    Effect.provide(
-      Layer.provide(
-        Layer.mergeAll(
-          Layer.effect(EventBus, makeEventBus()),
-          Layer.effect(TodoAggregate, makeTodoEventStore()),
-          Layer.effect(TodoListAggregate, makeTodoListEventStore()),
-          provideCommandInitiator(CURRENT_USER)
-        ),
-        Layer.mergeAll(BunFileSystem.layer, BunPath.layer)
-      )
-    )
-  ) as Effect.Effect<void, never, never>;
+const platformLayer = Layer.mergeAll(BunFileSystem.layer, BunPath.layer, BunTerminal.layer);
+
+const appLayer = Layer.mergeAll(
+  Layer.effect(EventBus, makeEventBus()),
+  Layer.effect(TodoAggregate, makeTodoEventStore()),
+  Layer.effect(TodoListAggregate, makeTodoListEventStore()),
+  provideCommandInitiator(CURRENT_USER)
+).pipe(Layer.provide(platformLayer));
+
+const cli = Command.run(todoCommand, {
+  name: 'TODO CLI',
+  version: '0.1.2',
+});
 
 // eslint-disable-next-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
-const args = process.argv.slice(2);
-
-pipe(args, scopeAndProvide, Effect.runPromise).catch(console.error);
+pipe(
+  cli(process.argv),
+  withProcessManager,
+  Effect.scoped,
+  Effect.provide(appLayer),
+  Effect.provide(platformLayer),
+  BunRuntime.runMain
+);
