@@ -1,3 +1,7 @@
+import { createMethodCallChecker, isUndefinedReturn } from './utils.js';
+
+const isGetOrElseCall = createMethodCallChecker('getOrElse', ['Option']);
+
 export default {
   meta: {
     type: 'suggestion',
@@ -14,32 +18,6 @@ export default {
   },
 
   create(context) {
-    const sourceCode = context.getSourceCode();
-
-    const isGetOrElseCall = (node) => {
-      return (
-        node.callee.type === 'MemberExpression' &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === 'getOrElse' &&
-        node.callee.object.type === 'Identifier' &&
-        node.callee.object.name === 'Option'
-      );
-    };
-
-    const isUndefinedReturn = (arrowFunc) => {
-      if (arrowFunc.params.length !== 0) {
-        return false;
-      }
-
-      const body = arrowFunc.body;
-
-      if (body.type === 'Identifier' && body.name === 'undefined') {
-        return true;
-      }
-
-      return false;
-    };
-
     return {
       CallExpression(node) {
         if (!isGetOrElseCall(node)) return;

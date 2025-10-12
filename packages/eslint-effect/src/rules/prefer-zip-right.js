@@ -1,4 +1,7 @@
+import { createMethodCallChecker } from './utils.js';
+
 const SUPPORTED_TYPES = ['Effect', 'Option'];
+const isFlatMapCall = createMethodCallChecker('flatMap', SUPPORTED_TYPES);
 
 export default {
   meta: {
@@ -18,16 +21,6 @@ export default {
 
   create(context) {
     const sourceCode = context.getSourceCode();
-
-    const isFlatMapCall = (node) => {
-      return (
-        node.callee.type === 'MemberExpression' &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === 'flatMap' &&
-        node.callee.object.type === 'Identifier' &&
-        SUPPORTED_TYPES.includes(node.callee.object.name)
-      );
-    };
 
     const isZipRightPattern = (arrowFunc) => {
       if (!arrowFunc || arrowFunc.type !== 'ArrowFunctionExpression') {
