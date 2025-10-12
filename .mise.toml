@@ -1,6 +1,6 @@
 [tools]
 bun = "1.2.23"
-gitleaks = "latest"
+gitleaks = "8.27.0"
 
 [env]
 _.path = ["./node_modules/.bin"]
