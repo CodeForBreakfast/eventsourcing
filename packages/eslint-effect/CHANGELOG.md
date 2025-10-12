@@ -1,5 +1,13 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.8.1
+
+### Patch Changes
+
+- [#265](https://github.com/CodeForBreakfast/eventsourcing/pull/265) [`5b1e92e`](https://github.com/CodeForBreakfast/eventsourcing/commit/5b1e92e273af51a2ff1194d4d7e85f20bd878fde) Thanks [@GraemeF](https://github.com/GraemeF)! - chore(tooling): upgrade build tooling to Bun 1.3.0
+
+  Internal tooling upgrade with no functional changes to published packages. Build process now uses Bun 1.3.0 and targets Node.js correctly for better compatibility.
+
 ## 0.8.0
 
 ### Minor Changes
