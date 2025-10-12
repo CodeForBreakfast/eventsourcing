@@ -1,5 +1,30 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
+## 0.5.1
+
+### Patch Changes
+
+- [#262](https://github.com/CodeForBreakfast/eventsourcing/pull/262) [`b772d4d`](https://github.com/CodeForBreakfast/eventsourcing/commit/b772d4d8dbf905b2e88c17ff9793162318370687) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix TypeScript type errors in WebSocket server upgrade calls.
+
+  Made `clientId` optional in `WebSocketData` interface since it's assigned after the WebSocket connection is established in the `open` handler, not during the `upgrade()` call. Added guard clauses in `message` and `close` handlers to ensure `clientId` is defined before use.
+
+  This resolves type errors that surfaced with stricter Bun type definitions while maintaining type safety.
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated internal implementation to comply with `no-if-statement` rule.
+
+  Test code now uses if statements where appropriate (for assertions and side effects), while production code follows functional patterns. This is an internal refactoring with no API changes.
+
+- [#259](https://github.com/CodeForBreakfast/eventsourcing/pull/259) [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2) Thanks [@GraemeF](https://github.com/GraemeF)! - Add Effect-native assertions and new ESLint rules
+
+  **New Features:**
+  - **buntest**: Added Effect-native assertion utilities (`expectEffect`, `toSucceedWith`, `toFailWith`) and a new ESLint rule `prefer-effect-assertions` to enforce their usage
+  - **eslint-effect**: Added two new rules: `no-effect-if-option-check` and `prefer-get-or-undefined`
+
+  **Bug Fixes & Improvements:**
+  - Replaced `Effect.sync(expect())` patterns with Effect-native assertions across test suites
+  - Removed unnecessary function aliases to improve code readability
+  - Fixed nested pipe calls and redundant Effect.sync wrappers
+
 ## 0.5.0
 
 ### Minor Changes
