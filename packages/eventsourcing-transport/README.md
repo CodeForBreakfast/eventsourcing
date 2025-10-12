@@ -86,26 +86,9 @@ The package provides standardized error types:
 
 ## Contract Testing
 
-Use `runClientTransportContractTests` from the testing contracts package to verify your transport implementation meets all requirements:
+The `@codeforbreakfast/eventsourcing-testing-contracts` package provides comprehensive contract tests to verify your transport implementation meets all requirements.
 
-```typescript
-import { runClientTransportContractTests } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import type { TransportTestContext } from '@codeforbreakfast/eventsourcing-testing-contracts';
-import { Effect, Scope } from 'effect';
-
-const setupMyTransport = (): Effect.Effect<TransportTestContext, never, never> =>
-  Effect.succeed({
-    makeConnectedTransport: (url: string) =>
-      Effect.scoped(
-        Effect.acquireRelease(
-          Effect.succeed({} as any), // Your transport creation here
-          () => Effect.void
-        )
-      ),
-  });
-
-runClientTransportContractTests('My Transport', setupMyTransport);
-```
+See the [testing contracts package](../eventsourcing-testing-contracts) for documentation on how to use `runClientTransportContractTests` to validate your implementation.
 
 ## Usage Example
 

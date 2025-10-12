@@ -23,8 +23,14 @@ bun add @codeforbreakfast/eventsourcing-commands
 ```typescript
 import { makeWebSocketProtocolLayer } from '@codeforbreakfast/eventsourcing-websocket';
 import { sendWireCommand, subscribe } from '@codeforbreakfast/eventsourcing-protocol';
-import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
 import { Effect, Stream, pipe } from 'effect';
+
+interface WireCommand {
+  id: string;
+  target: string;
+  name: string;
+  payload: unknown;
+}
 
 const sendCommand = (command: WireCommand) =>
   pipe(

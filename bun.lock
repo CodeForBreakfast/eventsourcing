@@ -7,6 +7,7 @@
         "@changesets/changelog-github": "0.5.1",
         "@changesets/cli": "2.29.7",
         "@codeforbreakfast/buntest": "workspace:*",
+        "@codeforbreakfast/eslint-effect": "workspace:*",
         "@commitlint/cli": "20.1.0",
         "@commitlint/config-conventional": "20.0.0",
         "@effect/language-service": "0.43.0",
