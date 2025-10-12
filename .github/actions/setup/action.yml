@@ -37,9 +37,9 @@ runs:
       with:
         path: |
           .turbo/cache
-        key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.turbo-cache-key }}-${{ github.sha }}
+        key: ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.turbo-cache-key }}-${{ github.event.pull_request.head.sha || github.sha }}
         restore-keys: |
-          ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.restore-turbo-cache-key }}-${{ github.sha }}
+          ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.restore-turbo-cache-key }}-${{ github.event.pull_request.head.sha || github.sha }}
           ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.turbo-cache-key }}-
           ${{ runner.os }}-${{ runner.arch }}-turbo-${{ inputs.restore-turbo-cache-key }}-
           ${{ runner.os }}-${{ runner.arch }}-turbo-
