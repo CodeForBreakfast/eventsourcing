@@ -1,4 +1,7 @@
+import { createMethodCallChecker, isOptionSome } from './utils.js';
+
 const SUPPORTED_TYPES = ['Effect'];
+const isMapErrorCall = createMethodCallChecker('mapError', SUPPORTED_TYPES);
 
 export default {
   meta: {
@@ -17,39 +20,15 @@ export default {
   },
 
   create(context) {
-    const isMapErrorCall = (node) => {
-      if (
-        node.callee.type === 'MemberExpression' &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === 'mapError' &&
-        node.callee.object.type === 'Identifier' &&
-        SUPPORTED_TYPES.includes(node.callee.object.name)
-      ) {
-        return { type: node.callee.object.name, isDataFirst: false };
-      }
-      return null;
-    };
-
-    const isOptionSome = (node) => {
-      return (
-        node.type === 'MemberExpression' &&
-        node.object.type === 'Identifier' &&
-        node.object.name === 'Option' &&
-        node.property.type === 'Identifier' &&
-        node.property.name === 'some'
-      );
-    };
-
     return {
       CallExpression(node) {
-        const mapErrorInfo = isMapErrorCall(node);
-        if (!mapErrorInfo) return;
+        if (!isMapErrorCall(node)) return;
 
         const mapErrorArg = node.arguments[0];
         if (!mapErrorArg) return;
 
         if (isOptionSome(mapErrorArg)) {
-          const effectType = mapErrorInfo.type;
+          const effectType = node.callee.object.name;
 
           context.report({
             node,

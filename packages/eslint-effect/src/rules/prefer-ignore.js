@@ -1,4 +1,7 @@
+import { createMethodCallChecker, isVoidReturningFunction } from './utils.js';
+
 const SUPPORTED_TYPES = ['Effect', 'STM'];
+const isMatchCall = createMethodCallChecker('match', SUPPORTED_TYPES);
 
 export default {
   meta: {
@@ -17,52 +20,6 @@ export default {
 
   create(context) {
     const sourceCode = context.getSourceCode();
-
-    const isMatchCall = (node) => {
-      return (
-        node.callee.type === 'MemberExpression' &&
-        node.callee.property.type === 'Identifier' &&
-        node.callee.property.name === 'match' &&
-        node.callee.object.type === 'Identifier' &&
-        SUPPORTED_TYPES.includes(node.callee.object.name)
-      );
-    };
-
-    const isVoidReturningFunction = (node) => {
-      if (!node) return false;
-
-      // Check for constVoid identifier
-      if (node.type === 'Identifier' && node.name === 'constVoid') {
-        return true;
-      }
-
-      // Check for arrow function
-      if (node.type === 'ArrowFunctionExpression') {
-        const body = node.body;
-
-        // Check for () => undefined or (_) => undefined
-        if (body.type === 'Identifier' && body.name === 'undefined') {
-          return true;
-        }
-
-        // Check for () => void 0 or (_) => void 0 (UnaryExpression with void operator)
-        if (
-          body.type === 'UnaryExpression' &&
-          body.operator === 'void' &&
-          body.argument.type === 'Literal' &&
-          body.argument.value === 0
-        ) {
-          return true;
-        }
-
-        // Check for () => {} (empty block)
-        if (body.type === 'BlockStatement' && body.body.length === 0) {
-          return true;
-        }
-      }
-
-      return false;
-    };
 
     return {
       CallExpression(node) {
