@@ -1,5 +1,5 @@
 [tools]
-bun = "latest"
+bun = "1.2.23"
 gitleaks = "latest"
 
 [env]
