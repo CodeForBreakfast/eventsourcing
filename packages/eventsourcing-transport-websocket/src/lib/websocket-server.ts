@@ -44,7 +44,7 @@ interface WebSocketServerConfig {
 }
 
 interface WebSocketData {
-  readonly clientId: Server.ClientId;
+  readonly clientId?: Server.ClientId;
   readonly auth?: Record<string, unknown>;
 }
 
@@ -404,24 +404,28 @@ const createWebSocketServer = (
             ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
             message: ReadonlyDeep<string>
           ) => {
+            // eslint-disable-next-line effect/no-if-statement -- Guard clause for type safety at application boundary
+            if (!ws.data.clientId) return;
             // eslint-disable-next-line effect/no-runSync -- WebSocket message handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,
                 Ref.get,
-                Effect.flatMap((state) => processClientMessage(state, ws.data.clientId, message))
+                Effect.flatMap((state) => processClientMessage(state, ws.data.clientId!, message))
               )
             );
           },
 
           close: (ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>) => {
+            // eslint-disable-next-line effect/no-if-statement -- Guard clause for type safety at application boundary
+            if (!ws.data.clientId) return;
             // eslint-disable-next-line effect/no-runSync -- WebSocket close handler is a synchronous callback at application boundary, requires Effect.runSync
             Effect.runSync(
               pipe(
                 serverStateRef,
                 Ref.get,
                 Effect.flatMap((state) =>
-                  handleClientDisconnection(serverStateRef, state, ws.data.clientId)
+                  handleClientDisconnection(serverStateRef, state, ws.data.clientId!)
                 )
               )
             );
@@ -455,7 +459,7 @@ const createWebSocketServer = (
           };
 
           const handleUnauthenticatedConnection = () => {
-            const success = server.upgrade(req);
+            const success = server.upgrade(req, { data: {} });
             return success ? undefined : new Response('WebSocket upgrade failed', { status: 400 });
           };
 
