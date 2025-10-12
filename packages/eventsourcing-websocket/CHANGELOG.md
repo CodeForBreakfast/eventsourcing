@@ -1,5 +1,17 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.3.11
+
+### Patch Changes
+
+- [#255](https://github.com/CodeForBreakfast/eventsourcing/pull/255) [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe) Thanks [@GraemeF](https://github.com/GraemeF)! - Updated internal implementation to comply with `no-if-statement` rule.
+
+  Test code now uses if statements where appropriate (for assertions and side effects), while production code follows functional patterns. This is an internal refactoring with no API changes.
+
+- Updated dependencies [[`b772d4d`](https://github.com/CodeForBreakfast/eventsourcing/commit/b772d4d8dbf905b2e88c17ff9793162318370687), [`978ef1a`](https://github.com/CodeForBreakfast/eventsourcing/commit/978ef1ab13de530c3f82c45816b4c861594a90fe), [`df504f3`](https://github.com/CodeForBreakfast/eventsourcing/commit/df504f3658772dbb7f5c6538288d67a7f85a29d2)]:
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.5.1
+  - @codeforbreakfast/eventsourcing-protocol@0.4.3
+
 ## 0.3.10
 
 ### Patch Changes

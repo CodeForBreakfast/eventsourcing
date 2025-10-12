@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-commands",
-  "version": "0.4.2",
+  "version": "0.4.3",
   "description": "Wire command validation and dispatch for event sourcing systems - External boundary layer with schema validation",
   "type": "module",
   "main": "./dist/index.js",
