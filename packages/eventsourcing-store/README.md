@@ -26,10 +26,6 @@ bun add @codeforbreakfast/eventsourcing-store effect
 ```typescript
 import { Effect, Stream, pipe } from 'effect';
 import { type EventStore, toStreamId, beginning } from '@codeforbreakfast/eventsourcing-store';
-import {
-  InMemoryStore,
-  makeInMemoryEventStore,
-} from '@codeforbreakfast/eventsourcing-store-inmemory';
 
 // Define your events
 interface UserRegistered {
@@ -46,11 +42,8 @@ interface UserEmailUpdated {
 
 type UserEvent = UserRegistered | UserEmailUpdated;
 
-// Create an in-memory event store (from separate package)
-const createEventStore = Effect.gen(function* () {
-  const store = yield* InMemoryStore.make<UserEvent>();
-  return yield* makeInMemoryEventStore(store);
-});
+// Declare an event store (provided by implementation packages)
+declare const eventStore: EventStore<UserEvent>;
 
 // Example: Writing events to a stream
 const appendEvents = (eventStore: EventStore<UserEvent>) => (userId: string, events: UserEvent[]) =>
@@ -77,41 +70,35 @@ const readUserEvents = (eventStore: EventStore<UserEvent>) => (userId: string) =
 
 // Usage with pipe composition
 const program = pipe(
-  createEventStore,
-  Effect.flatMap((eventStore) =>
+  Effect.all([
+    Effect.succeed('user-123'),
+    Effect.succeed([
+      {
+        type: 'UserRegistered' as const,
+        userId: 'user-123',
+        email: 'user@example.com',
+      },
+      {
+        type: 'UserEmailUpdated' as const,
+        userId: 'user-123',
+        newEmail: 'newemail@example.com',
+      },
+    ] as UserEvent[]),
+  ]),
+  Effect.flatMap(([userId, events]) =>
     pipe(
-      Effect.all([
-        Effect.succeed('user-123'),
-        Effect.succeed([
-          {
-            type: 'UserRegistered' as const,
-            userId: 'user-123',
-            email: 'user@example.com',
-          },
-          {
-            type: 'UserEmailUpdated' as const,
-            userId: 'user-123',
-            newEmail: 'newemail@example.com',
-          },
-        ] as UserEvent[]),
-      ]),
-      Effect.flatMap(([userId, events]) =>
-        pipe(
-          appendEvents(eventStore)(userId, events),
-          Effect.flatMap(() => readUserEvents(eventStore)(userId)),
-          Effect.map((collectedEvents) => {
-            console.log('Events:', collectedEvents);
-            return collectedEvents;
-          })
-        )
-      )
+      appendEvents(eventStore)(userId, events),
+      Effect.flatMap(() => readUserEvents(eventStore)(userId)),
+      Effect.map((collectedEvents) => {
+        console.log('Events:', collectedEvents);
+        return collectedEvents;
+      })
     )
   )
 );
-
-// Run the program
-Effect.runPromise(program);
 ```
+
+For complete working examples with concrete implementations, see the [In-Memory](#in-memory-event-store) and [PostgreSQL](#postgresql-event-store) sections below.
 
 ## Core Types
 
@@ -222,50 +209,26 @@ This package provides core interfaces and types. For concrete implementations, u
 
 ### In-Memory Event Store
 
-Perfect for testing and development:
+Perfect for testing and development. See the [@codeforbreakfast/eventsourcing-store-inmemory](../eventsourcing-store-inmemory) package for complete documentation and examples.
 
 ```bash
 bun add @codeforbreakfast/eventsourcing-store-inmemory
 ```
 
-```typescript
-import { Effect } from 'effect';
-import {
-  InMemoryStore,
-  makeInMemoryEventStore,
-} from '@codeforbreakfast/eventsourcing-store-inmemory';
-
-interface MyEvent {
-  type: string;
-}
-
-const createEventStore = Effect.gen(function* () {
-  const store = yield* InMemoryStore.make<MyEvent>();
-  return yield* makeInMemoryEventStore(store);
-});
-```
-
 ### PostgreSQL Event Store
 
-For production use with PostgreSQL:
+For production use with PostgreSQL. See the [@codeforbreakfast/eventsourcing-store-postgres](../eventsourcing-store-postgres) package for complete documentation and examples.
 
 ```bash
 bun add @codeforbreakfast/eventsourcing-store-postgres
 ```
 
-```typescript
-import { Effect, Layer, Schema, Context } from 'effect';
-import { SqlEventStoreLive, PostgresLive } from '@codeforbreakfast/eventsourcing-store-postgres';
-import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
+### Filesystem Event Store
 
-interface MyEvent {
-  type: string;
-}
+For local development and debugging. See the [@codeforbreakfast/eventsourcing-store-filesystem](../eventsourcing-store-filesystem) package for complete documentation and examples.
 
-const MyEventStore = Context.GenericTag<EventStore<MyEvent>, EventStore<MyEvent>>('MyEventStore');
-
-// Create the Postgres event store layer
-const eventStoreLayer = Layer.provide(SqlEventStoreLive, PostgresLive);
+```bash
+bun add @codeforbreakfast/eventsourcing-store-filesystem
 ```
 
 ## Utility Functions

@@ -19,7 +19,7 @@
     "src"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target bun --format esm --external effect --external @effect/* && bun x tsc --build",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --external effect --external @effect/* && bun x tsc --build",
     "test": "echo 'Contracts-only package - tests in implementations'",
     "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",
