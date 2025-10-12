@@ -344,13 +344,14 @@ const hasCodeChanges = (
     /\.js$/,
     /\.jsx$/,
     /^package\.json$/,
-    /^bun\.lock/,
     /^tsconfig/,
     /^\.github\/workflows/,
   ];
 
+  const excludedFiles = ['scripts/validate-changesets.ts'];
+
   return publishableFiles.some((file) =>
-    file === 'scripts/validate-changesets.ts'
+    excludedFiles.includes(file) || file.startsWith('bun.lock')
       ? false
       : codePatterns.some((pattern) => pattern.test(file))
   );
