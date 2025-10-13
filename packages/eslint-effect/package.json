@@ -38,6 +38,7 @@
     "typecheck": "tsc --noEmit",
     "test": "bun run lint && bun run typecheck",
     "validate:pack": "bun pm pack --dry-run",
+    "validate:docs": "bun ../../scripts/validate-markdown-examples.ts",
     "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
   },
   "peerDependencies": {

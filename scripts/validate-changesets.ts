@@ -87,37 +87,48 @@ const readAllPackageDirectories =
       Effect.map(EffectArray.getSomes)
     );
 
-const readPackagesFromDirectory =
-  (directoryName: string) =>
-  ([fs, path, rootDir]: readonly [FileSystem.FileSystem, Path.Path, string]) => {
-    const packagesDir = path.join(rootDir, directoryName);
-    return pipe(
-      packagesDir,
-      fs.exists,
-      Effect.flatMap((exists) =>
-        exists
-          ? pipe(
-              packagesDir,
-              fs.readDirectory,
-              Effect.flatMap(readAllPackageDirectories(fs, path, packagesDir))
-            )
-          : Effect.succeed([])
-      )
-    );
-  };
+const readDirectoryPackages = (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) =>
+  pipe(
+    packagesDir,
+    fs.readDirectory,
+    Effect.flatMap(readAllPackageDirectories(fs, path, packagesDir))
+  );
+
+const readPackagesWhenExists =
+  (fs: FileSystem.FileSystem, path: Path.Path, packagesDir: string) => (exists: boolean) =>
+    Effect.if(exists, {
+      onTrue: () => readDirectoryPackages(fs, path, packagesDir),
+      onFalse: () => Effect.succeed([]),
+    });
+
+const readPackagesDir = (
+  directoryName: string,
+  [fs, path, rootDir]: readonly [FileSystem.FileSystem, Path.Path, string]
+) => {
+  const packagesDir = path.join(rootDir, directoryName);
+  return pipe(
+    packagesDir,
+    fs.exists,
+    Effect.flatMap(readPackagesWhenExists(fs, path, packagesDir))
+  );
+};
+
+const combinePackageArrays = ([packages, examples]: readonly [
+  readonly PackageInternal[],
+  readonly PackageInternal[],
+]): readonly PackageInternal[] => [...packages, ...examples];
+
+const readAllWorkspacePackages = (deps: readonly [FileSystem.FileSystem, Path.Path, string]) =>
+  pipe(
+    [readPackagesDir('packages', deps), readPackagesDir('examples', deps)] as const,
+    Effect.all,
+    Effect.map(combinePackageArrays)
+  );
 
 const getAllPackages = pipe(
   [FileSystem.FileSystem, Path.Path, getRootDir] as const,
   Effect.all,
-  Effect.flatMap((deps) =>
-    pipe(
-      Effect.all([
-        readPackagesFromDirectory('packages')(deps),
-        readPackagesFromDirectory('examples')(deps),
-      ]),
-      Effect.map(([packages, examples]) => [...packages, ...examples])
-    )
-  )
+  Effect.flatMap(readAllWorkspacePackages)
 );
 
 const parseFrontmatter = (content: string): string => {
@@ -316,8 +327,7 @@ const getPrivatePackagePaths = (
   return packages
     .filter((pkg) => pkg.private === true)
     .map((pkg) => {
-      const packageJsonPath = pkg.path;
-      const packageDir = packageJsonPath.replace(rootDir + '/', '').replace('/package.json', '');
+      const packageDir = pkg.path.replace(rootDir + '/', '').replace('/package.json', '');
       return packageDir;
     });
 };

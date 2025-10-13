@@ -12,7 +12,6 @@ import {
 import { TodoAggregate, TodoAggregateRoot, TodoState } from './domain/todoAggregate';
 import { TodoListAggregate } from './domain/todoListAggregate';
 import { EventBus, EventBusService, makeEventBus } from './infrastructure/eventBus';
-import { startProcessManager } from './infrastructure/processManager';
 import { loadTodoProjection } from './projections/todoProjection';
 import { loadTodoListProjection, TodoListProjection } from './projections/todoListProjection';
 import { TodoId, TodoIdSchema, UserId } from './domain/types';
@@ -222,6 +221,7 @@ const parseTodoId = (id: string): Effect.Effect<TodoId, HelpDoc.HelpDoc> =>
     Effect.mapError(() => HelpDoc.p(`Invalid TODO ID: ${id}`))
   );
 
+/* eslint-disable effect/no-method-pipe -- @effect/cli API uses method-based pipe pattern */
 const titleArg = Args.text({ name: 'title' }).pipe(
   Args.withDescription('The title of the TODO to create')
 );
@@ -241,7 +241,7 @@ const uncompleteCommand = Command.make('uncomplete', { id: todoIdArg }, ({ id })
 
 const deleteCommand = Command.make('delete', { id: todoIdArg }, ({ id }) => deleteTodo(id));
 
-const listCommand = Command.make('list', {}, () => listTodos());
+const listCommand = Command.make('list', {}, listTodos);
 
 const todoCommand = Command.make('todo', {}).pipe(
   Command.withDescription('📝 TODO App - Event Sourcing Example'),
@@ -254,36 +254,30 @@ const todoCommand = Command.make('todo', {}).pipe(
   ])
 );
 
-const forkProcessManager = () => Effect.fork(startProcessManager());
-
-const withProcessManager = <A, E, R>(effect: Effect.Effect<A, E, R>) =>
-  pipe(
-    [forkProcessManager(), Effect.sleep('200 millis')],
-    Effect.all,
-    Effect.andThen(effect),
-    Effect.andThen(Effect.sleep('1 second'))
-  );
-
 const platformLayer = Layer.mergeAll(BunFileSystem.layer, BunPath.layer, BunTerminal.layer);
-
-const appLayer = Layer.mergeAll(
-  Layer.effect(EventBus, makeEventBus()),
-  Layer.effect(TodoAggregate, makeTodoEventStore()),
-  Layer.effect(TodoListAggregate, makeTodoListEventStore()),
-  provideCommandInitiator(CURRENT_USER)
-).pipe(Layer.provide(platformLayer));
 
 const cli = Command.run(todoCommand, {
   name: 'TODO CLI',
   version: '0.1.2',
 });
+/* eslint-enable -- End @effect/cli API section */
 
-// eslint-disable-next-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
-pipe(
-  cli(process.argv),
-  withProcessManager,
-  Effect.scoped,
-  Effect.provide(appLayer),
-  Effect.provide(platformLayer),
-  BunRuntime.runMain
+const buildServicesLayer = () =>
+  pipe(
+    Layer.mergeAll(
+      Layer.effect(EventBus, makeEventBus()),
+      Layer.effect(TodoAggregate, makeTodoEventStore()),
+      Layer.effect(TodoListAggregate, makeTodoListEventStore()),
+      provideCommandInitiator(CURRENT_USER)
+    ),
+    Layer.provide(platformLayer)
+  );
+
+BunRuntime.runMain(
+  pipe(
+    process.argv, // eslint-disable-line effect/prefer-effect-platform -- CLI entry point requires direct process.argv access
+    cli,
+    Effect.scoped,
+    Effect.provide(Layer.merge(buildServicesLayer(), platformLayer))
+  )
 );

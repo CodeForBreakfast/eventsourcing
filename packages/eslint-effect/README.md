@@ -28,12 +28,18 @@ Detects unnecessary function wrappers around single pipe operations.
 ❌ Bad:
 
 ```typescript
-const fn = (x) => pipe(x, transform);
+import { pipe } from 'effect';
+
+declare const transform: (x: unknown) => unknown;
+
+const fn = (x: unknown) => pipe(x, transform);
 ```
 
 ✅ Good:
 
 ```typescript
+declare const transform: (x: unknown) => unknown;
+
 const fn = transform;
 ```
 
@@ -44,6 +50,11 @@ Detects unnecessary function wrappers (eta-expansion) that only pass parameters 
 ❌ Bad:
 
 ```typescript
+import { Console } from 'effect';
+
+declare const doSomething: (x: number) => unknown;
+declare const processData: (a: string, b: number) => unknown;
+
 const logError = (msg: string) => Console.error(msg);
 const transform = (x: number) => doSomething(x);
 const handler = (a: string, b: number) => processData(a, b);
@@ -52,6 +63,11 @@ const handler = (a: string, b: number) => processData(a, b);
 ✅ Good:
 
 ```typescript
+import { Console } from 'effect';
+
+declare const doSomething: (x: number) => unknown;
+declare const processData: (a: string, b: number) => unknown;
+
 const logError = Console.error;
 const transform = doSomething;
 const handler = processData;
@@ -66,20 +82,34 @@ Detects unnecessary function aliases that provide no semantic value. When a cons
 ❌ Bad:
 
 ```typescript
+import { Array, Ref } from 'effect';
+
+declare const ref: Ref.Ref<unknown>;
+declare const arr: readonly unknown[];
+declare function useOnce(val: unknown): void;
+declare function useTwice(val: unknown): void;
+
 const getState = Ref.get;
 const transform = Array.map;
 
 // Used only once or twice
 useOnce(getState(ref));
-useTwice(transform((x) => x * 2, arr));
+useTwice(transform(arr, (x: unknown) => (x as number) * 2));
 ```
 
 ✅ Good:
 
 ```typescript
+import { Array, Ref, Stream } from 'effect';
+
+declare const ref: Ref.Ref<unknown>;
+declare const arr: readonly unknown[];
+declare function useOnce(val: unknown): void;
+declare function useTwice(val: unknown): void;
+
 // Inline when used infrequently
 useOnce(Ref.get(ref));
-useTwice(Array.map((x) => x * 2, arr));
+useTwice(Array.map(arr, (x: unknown) => (x as number) * 2));
 
 // OR keep the alias if it adds semantic value
 // eslint-disable-next-line effect/no-unnecessary-function-alias -- Alias clarifies stream processing context
@@ -109,13 +139,25 @@ Enforces `Match.tag()` over `Match.when()` for `_tag` discriminators.
 ❌ Bad:
 
 ```typescript
-Match.when({ _tag: 'Success' }, handler);
+import { Match, pipe } from 'effect';
+
+type Tagged = { _tag: 'Success' } | { _tag: 'Error' };
+declare const value: Tagged;
+declare const handler: (val: { _tag: 'Success' }) => unknown;
+
+pipe(Match.value(value), Match.when({ _tag: 'Success' }, handler));
 ```
 
 ✅ Good:
 
 ```typescript
-Match.tag('Success', handler);
+import { Match, pipe } from 'effect';
+
+type Tagged = { _tag: 'Success' } | { _tag: 'Error' };
+declare const value: Tagged;
+declare const handler: (val: { _tag: 'Success' }) => unknown;
+
+pipe(Match.value(value), Match.tag('Success', handler));
 ```
 
 ### `prefer-match-over-conditionals`
@@ -125,16 +167,38 @@ Encourages declarative `Match` patterns over imperative `if` statements in Effec
 ❌ Bad:
 
 ```typescript
-Effect.flatMap((x) => {
-  if (x._tag === 'Success') return handleSuccess(x);
-  return handleError(x);
-});
+import { Effect, Match, pipe } from 'effect';
+
+type TaggedValue = { _tag: 'Success' } | { _tag: 'Error' };
+declare const handleSuccess: (x: { _tag: 'Success' }) => Effect.Effect<unknown>;
+declare const handleError: (x: TaggedValue) => Effect.Effect<unknown>;
+declare const effectValue: Effect.Effect<TaggedValue>;
+
+pipe(
+  effectValue,
+  Effect.flatMap((x: TaggedValue) => {
+    if (x._tag === 'Success') return handleSuccess(x);
+    return handleError(x);
+  })
+);
 ```
 
 ✅ Good:
 
 ```typescript
-Effect.flatMap(Match.value, Match.tag('Success', handleSuccess), Match.orElse(handleError));
+import { Effect, Match, pipe } from 'effect';
+
+type TaggedValue = { _tag: 'Success' } | { _tag: 'Error' };
+declare const handleSuccess: (x: { _tag: 'Success' }) => Effect.Effect<unknown>;
+declare const handleError: (x: TaggedValue) => Effect.Effect<unknown>;
+declare const effectValue: Effect.Effect<TaggedValue>;
+
+pipe(
+  effectValue,
+  Effect.flatMap((x: TaggedValue) =>
+    pipe(Match.value(x), Match.tag('Success', handleSuccess), Match.orElse(handleError))
+  )
+);
 ```
 
 ### `prefer-effect-if-over-match-boolean`
@@ -144,6 +208,13 @@ Enforces `Effect.if` over `Match.value` for boolean conditionals. `Match.value` 
 ❌ Bad:
 
 ```typescript
+import { Effect, Match, pipe } from 'effect';
+
+declare const isValid: boolean;
+declare const user: { isAdmin: boolean };
+declare function grantAccess(): Effect.Effect<unknown>;
+declare function denyAccess(): Effect.Effect<unknown>;
+
 pipe(
   isValid,
   Match.value,
@@ -164,6 +235,13 @@ pipe(
 ✅ Good:
 
 ```typescript
+import { Effect } from 'effect';
+
+declare const isValid: boolean;
+declare const user: { isAdmin: boolean };
+declare function grantAccess(): Effect.Effect<unknown>;
+declare function denyAccess(): Effect.Effect<unknown>;
+
 Effect.if(isValid, {
   onTrue: () => Effect.succeed('valid'),
   onFalse: () => Effect.fail('invalid'),
@@ -186,6 +264,16 @@ Encourages declarative `Match.value` patterns over ternary operators when patter
 ❌ Bad:
 
 ```typescript
+import { Option, Stream } from 'effect';
+
+type FilterFn = (v: unknown) => boolean;
+declare const filter: FilterFn | undefined;
+declare const stream: Stream.Stream<unknown>;
+declare function processValue(val: number): unknown;
+declare function getDefault(): unknown;
+declare function finalizeTask(): unknown;
+declare function continueTask(): unknown;
+
 const result = filter !== undefined ? Stream.filter(stream, filter) : stream;
 
 const handler = (option: Option.Option<number>) =>
@@ -198,6 +286,16 @@ const processStatus = (status: 'pending' | 'active' | 'complete') =>
 ✅ Good:
 
 ```typescript
+import { Match, Option, pipe, Stream } from 'effect';
+
+type FilterFn = (v: unknown) => boolean;
+declare const filter: FilterFn | undefined;
+declare const stream: Stream.Stream<unknown>;
+declare function processValue(val: number): unknown;
+declare function getDefault(): unknown;
+declare function finalizeTask(): unknown;
+declare function continueTask(): unknown;
+
 const result = pipe(
   filter,
   Match.value,
@@ -209,7 +307,7 @@ const handler = (option: Option.Option<number>) =>
   pipe(
     option,
     Match.value,
-    Match.when(Match.some, (opt) => processValue(opt.value)),
+    Match.when({ _tag: 'Some' }, (opt) => processValue(opt.value)),
     Match.orElse(getDefault)
   );
 
@@ -220,6 +318,10 @@ const processStatus = (status: 'pending' | 'active' | 'complete') =>
 **For boolean conditions with Effects, use `Effect.if`:**
 
 ```typescript
+import { Effect } from 'effect';
+
+declare const condition: boolean;
+
 // Boolean condition returning Effects - use Effect.if, NOT Match.value
 const result = Effect.if(condition, {
   onTrue: () => Effect.succeed(42),
@@ -236,19 +338,37 @@ Forbids switch statements in functional Effect code. Switch statements are imper
 ❌ Bad:
 
 ```typescript
-switch (event.type) {
-  case 'Created':
-    return handleCreated(event);
-  case 'Updated':
-    return handleUpdated(event);
-  default:
-    return handleUnknown(event);
+import { Match, pipe } from 'effect';
+
+type Event = { type: 'Created' } | { type: 'Updated' } | { type: 'Other' };
+declare const event: Event;
+declare function handleCreated(e: Event): unknown;
+declare function handleUpdated(e: Event): unknown;
+declare function handleUnknown(e: Event): unknown;
+
+function processEvent() {
+  switch (event.type) {
+    case 'Created':
+      return handleCreated(event);
+    case 'Updated':
+      return handleUpdated(event);
+    default:
+      return handleUnknown(event);
+  }
 }
 ```
 
 ✅ Good:
 
 ```typescript
+import { Match, pipe } from 'effect';
+
+type Event = { type: 'Created' } | { type: 'Updated' } | { type: 'Other' };
+declare const event: Event;
+declare function handleCreated(e: Event): unknown;
+declare function handleUpdated(e: Event): unknown;
+declare function handleUnknown(e: Event): unknown;
+
 pipe(
   Match.value(event),
   Match.when({ type: 'Created' }, handleCreated),
@@ -260,6 +380,13 @@ pipe(
 **For discriminated unions with `_tag`:**
 
 ```typescript
+import { Match, pipe } from 'effect';
+
+type TaggedEither = { _tag: 'Right'; value: unknown } | { _tag: 'Left'; error: unknown };
+declare const either: TaggedEither;
+declare function handleRight(val: { _tag: 'Right'; value: unknown }): unknown;
+declare function handleLeft(val: { _tag: 'Left'; error: unknown }): unknown;
+
 pipe(
   Match.value(either),
   Match.tag('Right', handleRight),
@@ -275,41 +402,72 @@ Forbids if statements in functional Effect code. If statements are imperative an
 ❌ Bad:
 
 ```typescript
-if (state.deleted) {
-  return Effect.fail(new Error('Cannot complete deleted TODO'));
-}
-return Effect.succeed(state);
+import { Effect, Option, pipe } from 'effect';
 
-if (event.type === 'TodoCreated') {
-  return Effect.succeed({ title: event.data.title, completed: false });
-}
-return pipe(state, Option.match({ ... }));
+declare const todoState: { deleted: boolean };
+declare const event: { type: string; data: { title: string } };
+declare const option: Option.Option<string>;
+declare const state: Option.Option<{ deleted: boolean }>;
+declare const defaultValue: string;
 
-if (Option.isSome(option)) {
-  return option.value;
+// Bad pattern 1
+function check1() {
+  if (todoState.deleted) {
+    return Effect.fail(new Error('Cannot complete deleted TODO'));
+  }
+  return Effect.succeed(todoState);
 }
-return defaultValue;
+
+// Bad pattern 2
+function check2() {
+  if (event.type === 'TodoCreated') {
+    return Effect.succeed({ title: event.data.title, completed: false });
+  }
+  return pipe(state, Option.match({ onNone: () => defaultValue, onSome: (s) => s }));
+}
+
+// Bad pattern 3
+function check3() {
+  if (Option.isSome(option)) {
+    return option.value;
+  }
+  return defaultValue;
+}
 ```
 
 ✅ Good:
 
 ```typescript
+import { Effect, Option, Match, pipe } from 'effect';
+
+declare const todoState: { deleted: boolean };
+declare const event: { type: string; data: { title: string } };
+declare const option: Option.Option<string>;
+declare const state: Option.Option<{ deleted: boolean }>;
+declare const defaultValue: string;
+declare const condition: boolean;
+
 // Boolean conditionals with Effects
-Effect.if(state.deleted, {
+Effect.if(todoState.deleted, {
   onTrue: () => Effect.fail(new Error('Cannot complete deleted TODO')),
-  onFalse: () => Effect.succeed(state),
-})
+  onFalse: () => Effect.succeed(todoState),
+});
 
 // Pattern matching on discriminated unions
 pipe(
   event,
   Match.value,
-  Match.when({ type: 'TodoCreated' }, (e) => Effect.succeed({ title: e.data.title, completed: false })),
-  Match.orElse((e) => pipe(state, Option.match({ ... })))
-)
+  Match.when({ type: 'TodoCreated' }, (e) =>
+    Effect.succeed({ title: e.data.title, completed: false })
+  ),
+  Match.orElse((e) => pipe(state, Option.match({ onNone: () => defaultValue, onSome: (s) => s })))
+);
 
 // Option/Either with built-in matchers
-pipe(option, Option.getOrElse(() => defaultValue))
+pipe(
+  option,
+  Option.getOrElse(() => defaultValue)
+);
 
 // Simple value selection - use ternary operators
 const x = condition ? 'yes' : 'no';
@@ -324,13 +482,25 @@ Discourages type assertions in Effect callbacks in favor of runtime validation.
 ❌ Bad:
 
 ```typescript
-Effect.map((x) => handler(x as MyType));
+import { Effect } from 'effect';
+
+type MyType = { value: string };
+declare function handler(x: MyType): unknown;
+
+Effect.map((x: unknown) => handler(x as MyType));
 ```
 
 ✅ Good:
 
 ```typescript
-(Effect.flatMap(Schema.decodeUnknown(MyTypeSchema)), Effect.map(handler));
+import { Effect, pipe, Schema } from 'effect';
+
+type MyType = { value: string };
+declare const MyTypeSchema: Schema.Schema<MyType>;
+declare const input: Effect.Effect<unknown>;
+declare function handler(x: MyType): unknown;
+
+pipe(input, Effect.flatMap(Schema.decodeUnknown(MyTypeSchema)), Effect.map(handler));
 ```
 
 ### `suggest-currying-opportunity`
@@ -340,19 +510,29 @@ Suggests currying user-defined functions to eliminate arrow function wrappers in
 #### ✅ Will Suggest (good pattern - params already at end):
 
 ```typescript
+import { Effect } from 'effect';
+
+declare const myEffect: Effect.Effect<unknown>;
+declare function logError(message: string, error: unknown): Effect.Effect<void>;
+
 // Before
 Effect.catchAll(myEffect, (error) => logError('Failed', error));
 
 // After currying (params already in right order)
-const logError = (message: string) => (error: unknown) =>
+const logErrorCurried = (message: string) => (error: unknown) =>
   Effect.sync(() => console.error(message, error));
 
-Effect.catchAll(myEffect, logError('Failed'));
+Effect.catchAll(myEffect, logErrorCurried('Failed'));
 ```
 
 #### ⚠️ Won't Suggest by Default (would require parameter reordering):
 
 ```typescript
+import { Effect } from 'effect';
+
+declare const myEffect: Effect.Effect<unknown>;
+declare function logError(error: unknown, message: string): Effect.Effect<void>;
+
 // This would break semantic order - error should come before message
 Effect.catchAll(myEffect, (error) => logError(error, 'Failed'));
 
@@ -363,6 +543,11 @@ Effect.catchAll(myEffect, (error) => logError(error, 'Failed'));
 #### ⚠️ Won't Suggest by Default (would create deep currying):
 
 ```typescript
+import { Effect } from 'effect';
+
+declare const myEffect: Effect.Effect<unknown>;
+declare function processData(prefix: string, suffix: string, data: unknown): unknown;
+
 // Would create 2-level currying: (prefix) => (suffix) => (data) => ...
 Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 
@@ -394,14 +579,28 @@ Forbids storing Effect/Stream/pipe results in intermediate variables **when they
 ❌ Bad (single use - should inline):
 
 ```typescript
+import { Effect, pipe, Schema } from 'effect';
+
+type User = { id: string; name: string };
+declare const userId: string;
+declare const UserSchema: Schema.Schema<User>;
+declare const data: unknown;
+declare function fetchUser(id: string): Effect.Effect<User>;
+declare function validateUser(u: User): Effect.Effect<User>;
+declare function formatUserData(u: User): unknown;
+declare function processUser(u: User): User;
+declare function saveToDatabase(u: User): Effect.Effect<void>;
+
 // Breaking up the pipe chain for a single use
 const userEffect = fetchUser(userId);
 const result = pipe(userEffect, Effect.flatMap(validateUser), Effect.map(formatUserData));
 
 // Storing intermediate pipe results used once
-const validated = pipe(data, Schema.decodeUnknown(UserSchema));
-const processed = Effect.map(validated, processUser);
-return Effect.flatMap(processed, saveToDatabase);
+function processData() {
+  const validated = pipe(data, Schema.decodeUnknown(UserSchema));
+  const processed = Effect.map(validated, processUser);
+  return Effect.flatMap(processed, saveToDatabase);
+}
 
 // Schema defined but only used once
 const UserIdSchema = pipe(Schema.String, Schema.nonEmptyString());
@@ -411,16 +610,30 @@ export const decodeUserId = Schema.decode(UserIdSchema); // Only usage
 ✅ Good (inline single-use values):
 
 ```typescript
+import { Effect, pipe, Schema } from 'effect';
+
+type User = { id: string; name: string };
+declare const userId: string;
+declare const UserSchema: Schema.Schema<User>;
+declare const data: unknown;
+declare function fetchUser(id: string): Effect.Effect<User>;
+declare function validateUser(u: User): Effect.Effect<User>;
+declare function formatUserData(u: User): unknown;
+declare function processUser(u: User): User;
+declare function saveToDatabase(u: User): Effect.Effect<void>;
+
 // Single cohesive pipe chain
 const result = pipe(fetchUser(userId), Effect.flatMap(validateUser), Effect.map(formatUserData));
 
 // All transformations in one composition
-return pipe(
-  data,
-  Schema.decodeUnknown(UserSchema),
-  Effect.map(processUser),
-  Effect.flatMap(saveToDatabase)
-);
+function processData() {
+  return pipe(
+    data,
+    Schema.decodeUnknown(UserSchema),
+    Effect.map(processUser),
+    Effect.flatMap(saveToDatabase)
+  );
+}
 
 // Schema inlined directly
 export const decodeUserId = Schema.decode(pipe(Schema.String, Schema.nonEmptyString()));
@@ -429,26 +642,52 @@ export const decodeUserId = Schema.decode(pipe(Schema.String, Schema.nonEmptyStr
 ✅ Good (multiple uses - legitimate reuse):
 
 ```typescript
+import { Context, Effect, Layer, pipe } from 'effect';
+
+declare class PgClientService extends Context.Tag('PgClient')<PgClientService, unknown>() {}
+declare const createPgClient: Effect.Effect<unknown>;
+declare const Migration: { layer: Layer.Layer<unknown> };
+declare const EventStore: { layer: Layer.Layer<unknown> };
+declare function it(name: string, fn: () => unknown): void;
+
 // Layer reused in multiple compositions
-const PgLive = Layer.effect(PgClient, createPgClient);
+const PgLive = Layer.effect(PgClientService, createPgClient);
 const Layer1 = pipe(Migration.layer, Layer.provide(PgLive)); // Use 1
 const Layer2 = pipe(EventStore.layer, Layer.provide(PgLive)); // Use 2
 
 // Effect reused across test cases
-const setupTest = Effect.gen(/* ... */);
-it('test 1', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 1
-it('test 2', () => pipe(setupTest, Effect.flatMap(/* ... */))); // Use 2
+const setupTest = Effect.gen(function* () {
+  yield* Effect.void;
+});
+it('test 1', () =>
+  pipe(
+    setupTest,
+    Effect.flatMap(() => Effect.void)
+  )); // Use 1
+it('test 2', () =>
+  pipe(
+    setupTest,
+    Effect.flatMap(() => Effect.void)
+  )); // Use 2
 ```
 
 ✅ Good (execution results are plain values):
 
 ```typescript
+import { Effect, Either, pipe } from 'effect';
+
+type Request = { token: string };
+declare const req: Request;
+declare function authenticate(r: Request): Effect.Effect<string, Error>;
+
 // runSync returns a plain value, not an Effect
-const authResult = Effect.runSync(pipe(authenticate(req), Effect.either));
-if (Either.isLeft(authResult)) {
-  return Response.json({ error: authResult.left });
+function handleAuth() {
+  const authResult = Effect.runSync(pipe(authenticate(req), Effect.either));
+  if (Either.isLeft(authResult)) {
+    return { json: () => ({ error: authResult.left }) };
+  }
+  return { json: () => ({ token: authResult.right }) };
 }
-return Response.json({ token: authResult.right });
 ```
 
 **Rationale**: Single-use intermediate variables break the flow of pipe composition and make code harder to follow. However, variables that are reused multiple times serve as legitimate building blocks for composition and should be kept. The rule also excludes execution methods (`runSync`, `runPromise`, `runFork`) which return plain values, and factory methods (`Schema.decode`) which return functions.
@@ -657,6 +896,7 @@ export default [
 ### Default Export (Recommended)
 
 ```typescript
+// @ts-nocheck - Package types available at runtime
 import effectPlugin from '@codeforbreakfast/eslint-effect';
 
 effectPlugin.rules; // All custom rules
@@ -681,6 +921,7 @@ Each config (except `functionalImmutabilityRules`) is a complete ESLint flat con
 ### Named Exports
 
 ```typescript
+// @ts-nocheck - Package types available at runtime
 import {
   rules, // All custom rules (for plugin registration)
   functionalImmutabilityRules, // Functional immutability rules object
