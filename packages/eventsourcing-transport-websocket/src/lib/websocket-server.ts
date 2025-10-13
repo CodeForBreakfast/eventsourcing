@@ -59,7 +59,7 @@ interface ClientState {
 }
 
 interface ServerState {
-  readonly server: Bun.Server<WebSocketData> | null; // Bun Server
+  readonly server: Bun.Server | null; // Bun Server
   readonly clients: HashMap.HashMap<Server.ClientId, Readonly<ClientState>>;
   readonly newConnectionsQueue: Readonly<Queue.Queue<Server.ClientConnection>>;
 }
@@ -369,8 +369,8 @@ const handleClientDisconnection = (
 const createWebSocketServer = (
   config: ReadonlyDeep<WebSocketServerConfig>,
   serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>
-): Effect.Effect<Bun.Server<WebSocketData>, Server.ServerStartError, never> =>
-  Effect.async<Bun.Server<WebSocketData>, Server.ServerStartError>((resume) => {
+): Effect.Effect<Bun.Server, Server.ServerStartError, never> =>
+  Effect.async<Bun.Server, Server.ServerStartError>((resume) => {
     try {
       const server = Bun.serve({
         port: config.port,
@@ -560,7 +560,7 @@ const updateServerStateWithBunServer =
     serverStateRef: ReadonlyDeep<Ref.Ref<ServerState>>,
     newConnectionsQueue: ReadonlyDeep<Queue.Queue<Server.ClientConnection>>
   ) =>
-  (server: Bun.Server<WebSocketData>): Effect.Effect<Server.Transport, never, never> =>
+  (server: Bun.Server): Effect.Effect<Server.Transport, never, never> =>
     pipe(
       serverStateRef,
       Ref.update((state) => ({ ...state, server })),
