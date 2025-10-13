@@ -21,6 +21,7 @@
     "@codeforbreakfast/eventsourcing-projections": "workspace:*",
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
+    "@effect/cli": "0.52.1",
     "@effect/platform-bun": "0.81.1",
     "effect": "3.18.4"
   },
