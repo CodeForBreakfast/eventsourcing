@@ -1,5 +1,13 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.8.2
+
+### Patch Changes
+
+- [#268](https://github.com/CodeForBreakfast/eventsourcing/pull/268) [`53bb7c2`](https://github.com/CodeForBreakfast/eventsourcing/commit/53bb7c256d3e9aa0316541d06cbf8ed8c23495e4) Thanks [@GraemeF](https://github.com/GraemeF)! - fix(eslint-effect): correct TypeScript examples and add missing validate:docs script
+
+  Fixed invalid TypeScript examples in README.md that were causing type errors. Examples now include proper imports, type declarations, and correct Match pattern usage. Also added missing validate:docs script to package.json for documentation validation.
+
 ## 0.8.1
 
 ### Patch Changes
