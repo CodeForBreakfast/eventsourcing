@@ -1,17 +1,11 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "declarationDir": "./dist",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "declaration": true,
+    "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "**/*.spec.ts"],
-  "references": [
-    {
-      "path": "../eventsourcing-store"
-    }
-  ]
+  "exclude": ["dist", "node_modules", "**/*.spec.ts"]
 }

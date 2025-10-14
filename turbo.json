@@ -31,14 +31,13 @@
       "cache": true
     },
     "build": {
-      "outputs": ["dist/**", "*.tsbuildinfo"],
+      "outputs": ["dist/**"],
       "dependsOn": ["^build"],
       "inputs": [
         "src/**/*.ts",
         "src/**/*.tsx",
-        "tsconfig*.json",
+        "tsconfig.json",
         "package.json",
-        "build.ts",
         "$TURBO_ROOT$/bun.lock"
       ],
       "cache": true

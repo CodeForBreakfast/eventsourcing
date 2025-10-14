@@ -3,13 +3,9 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "declarationDir": "./dist",
-    "composite": true,
     "declaration": true,
-    "declarationMap": true,
-    "sourceMap": true
+    "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules", "**/*.test.ts"],
-  "references": [{ "path": "../eventsourcing-transport" }, { "path": "../eventsourcing-store" }]
+  "exclude": ["dist", "node_modules", "**/*.test.ts"]
 }
