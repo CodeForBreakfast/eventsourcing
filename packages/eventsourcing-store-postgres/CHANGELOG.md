@@ -1,5 +1,14 @@
 # @codeforbreakfast/eventsourcing-store-postgres
 
+## 0.6.9
+
+### Patch Changes
+
+- [#278](https://github.com/CodeForBreakfast/eventsourcing/pull/278) [`5fdd207`](https://github.com/CodeForBreakfast/eventsourcing/commit/5fdd207a40c5e5f7b6ec8102f28e8d729a56290f) Thanks [@GraemeF](https://github.com/GraemeF)! - Fixed TypeScript declaration file generation to ensure all packages publish with complete type definitions. This resolves an issue where some type declaration files were missing from published packages, which could cause TypeScript errors when importing these packages.
+
+- Updated dependencies [[`5fdd207`](https://github.com/CodeForBreakfast/eventsourcing/commit/5fdd207a40c5e5f7b6ec8102f28e8d729a56290f)]:
+  - @codeforbreakfast/eventsourcing-store@0.8.4
+
 ## 0.6.8
 
 ### Patch Changes
