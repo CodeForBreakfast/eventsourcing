@@ -1,20 +1,11 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "composite": true,
     "outDir": "./dist",
     "rootDir": "./src",
-    "declarationDir": "./dist",
-    "tsBuildInfoFile": "./dist/.tsbuildinfo"
+    "declaration": true,
+    "emitDeclarationOnly": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "node_modules"],
-  "references": [
-    {
-      "path": "../eventsourcing-transport-websocket"
-    },
-    {
-      "path": "../eventsourcing-protocol"
-    }
-  ]
+  "exclude": ["dist", "node_modules"]
 }

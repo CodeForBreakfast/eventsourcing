@@ -3,12 +3,10 @@
   "compilerOptions": {
     "rootDir": "./src",
     "outDir": "./dist",
-    "composite": true,
     "declaration": true,
     "emitDeclarationOnly": true,
     "downlevelIteration": true
   },
   "include": ["src/**/*"],
-  "exclude": ["dist", "build.ts", "**/*.spec.ts"],
-  "references": [{ "path": "../eventsourcing-store" }]
+  "exclude": ["dist", "build.ts", "**/*.spec.ts"]
 }
