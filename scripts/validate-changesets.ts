@@ -341,13 +341,102 @@ const filterOutPrivatePackageFiles = (
   );
 };
 
+const parseJsonSafely = (content: string): unknown => {
+  try {
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+};
+
+const extractDependencies = (pkg: unknown, key: string): Record<string, string> => {
+  const record = pkg as Record<string, unknown> | null;
+  const deps = record?.[key];
+  return (deps as Record<string, string> | undefined) || {};
+};
+
+const compareDependencyChanges = (
+  beforeContent: unknown,
+  afterContent: unknown
+): { readonly onlyDevDepsChanged: boolean; readonly hasChanges: boolean } => {
+  const before = beforeContent as Record<string, unknown>;
+  const after = afterContent as Record<string, unknown>;
+
+  const beforeDevDeps = extractDependencies(before, 'devDependencies');
+  const afterDevDeps = extractDependencies(after, 'devDependencies');
+  const beforeDeps = extractDependencies(before, 'dependencies');
+  const afterDeps = extractDependencies(after, 'dependencies');
+
+  const devDepsChanged = JSON.stringify(beforeDevDeps) !== JSON.stringify(afterDevDeps);
+  const depsChanged = JSON.stringify(beforeDeps) !== JSON.stringify(afterDeps);
+
+  const otherFieldsChanged = Object.keys({ ...before, ...after }).some(
+    (key) =>
+      key !== 'devDependencies' &&
+      key !== 'dependencies' &&
+      JSON.stringify(before[key]) !== JSON.stringify(after[key])
+  );
+
+  return {
+    onlyDevDepsChanged: devDepsChanged && !depsChanged && !otherFieldsChanged,
+    hasChanges: devDepsChanged || depsChanged || otherFieldsChanged,
+  };
+};
+
+const processAfterContent = (beforeContent: unknown) => (afterContent: unknown) =>
+  Effect.if(!beforeContent || !afterContent, {
+    onTrue: () => Effect.succeed({ onlyDevDepsChanged: false, hasChanges: true }),
+    onFalse: () => Effect.succeed(compareDependencyChanges(beforeContent, afterContent)),
+  });
+
+const fetchAfterPackageJson = (beforeContent: unknown, filePath: string) =>
+  pipe(
+    Command.make('git', 'show', `HEAD:${filePath}`),
+    Command.string,
+    Effect.map(parseJsonSafely),
+    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.flatMap(processAfterContent(beforeContent))
+  );
+
+const getPackageJsonDiff = (filePath: string, baseBranch: string) =>
+  pipe(
+    Command.make('git', 'show', `${baseBranch}:${filePath}`),
+    Command.string,
+    Effect.map(parseJsonSafely),
+    Effect.catchAll(() => Effect.succeed(null)),
+    Effect.flatMap((beforeContent) => fetchAfterPackageJson(beforeContent, filePath))
+  );
+
+const isDevOnlyPackageJsonChange = (file: string, baseBranch: string) =>
+  pipe(
+    file.endsWith('/package.json') && file.startsWith('packages/')
+      ? getPackageJsonDiff(file, baseBranch)
+      : Effect.succeed({ onlyDevDepsChanged: false, hasChanges: false }),
+    Effect.map((result) => result.onlyDevDepsChanged)
+  );
+
+const createFileWithDevOnlyFlag = (file: string, baseBranch: string) =>
+  pipe(
+    isDevOnlyPackageJsonChange(file, baseBranch),
+    Effect.map((isDevOnly) => ({ file, isDevOnly }))
+  );
+
+const filterDevOnlyPackageJsonFiles = (files: readonly string[], baseBranch: string) =>
+  pipe(
+    files,
+    EffectArray.map((file) => createFileWithDevOnlyFlag(file, baseBranch)),
+    Effect.all,
+    Effect.map((results) => results.filter((r) => !r.isDevOnly).map((r) => r.file))
+  );
+
 const hasCodeChanges = (
   changedFiles: readonly string[],
   packages: readonly PackageInternal[],
   rootDir: string
-): boolean => {
+) => {
   const privatePackagePaths = getPrivatePackagePaths(packages, rootDir);
   const publishableFiles = filterOutPrivatePackageFiles(changedFiles, privatePackagePaths);
+  const baseBranch = getBaseBranch();
 
   const codePatterns: readonly RegExp[] = [
     /^packages\//,
@@ -363,10 +452,15 @@ const hasCodeChanges = (
 
   const excludedFiles = ['scripts/validate-changesets.ts'];
 
-  return publishableFiles.some((file) =>
-    excludedFiles.includes(file) || file.startsWith('bun.lock')
-      ? false
-      : codePatterns.some((pattern) => pattern.test(file))
+  return pipe(
+    filterDevOnlyPackageJsonFiles(publishableFiles, baseBranch),
+    Effect.map((filteredFiles) =>
+      filteredFiles.some((file) =>
+        excludedFiles.includes(file) || file.startsWith('bun.lock')
+          ? false
+          : codePatterns.some((pattern) => pattern.test(file))
+      )
+    )
   );
 };
 
@@ -764,14 +858,30 @@ const handleNoCodeChanges = (
     onFalse: () => validateDocChanges(changesets),
   });
 
+const processChangedFiles = (
+  changedFiles: readonly string[],
+  changesets: readonly ChangesetInfoInternal[],
+  packages: readonly PackageInternal[],
+  rootDir: string
+) =>
+  pipe(
+    hasCodeChanges(changedFiles, packages, rootDir),
+    Effect.flatMap((hasChanges) =>
+      Effect.if(hasChanges, {
+        onTrue: () => validateCodeChanges(changedFiles, changesets),
+        onFalse: () => handleNoCodeChanges(changedFiles, changesets),
+      })
+    )
+  );
+
 const handleChangedFiles = (
   changedFiles: readonly string[],
   changesets: readonly ChangesetInfoInternal[],
   packages: readonly PackageInternal[],
   rootDir: string
 ) =>
-  Effect.if(changedFiles.length > 0 && hasCodeChanges(changedFiles, packages, rootDir), {
-    onTrue: () => validateCodeChanges(changedFiles, changesets),
+  Effect.if(changedFiles.length > 0, {
+    onTrue: () => processChangedFiles(changedFiles, changesets, packages, rootDir),
     onFalse: () => handleNoCodeChanges(changedFiles, changesets),
   });
 
