@@ -415,7 +415,8 @@ const startAllServices =
     return pipe(
       [forkProcessManager, logStartupMessage, dispatchWithLayer] as const,
       Effect.all,
-      Effect.asVoid
+      Effect.asVoid,
+      Effect.andThen(Effect.never)
     );
   };
 
@@ -443,5 +444,5 @@ BunRuntime.runMain(
         Layer.mergeAll(BunFileSystem.layer, BunPath.layer)
       )
     )
-  ) as Effect.Effect<void, never, never>
+  ) as never
 );
