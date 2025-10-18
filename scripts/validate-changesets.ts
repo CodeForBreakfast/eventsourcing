@@ -456,6 +456,21 @@ const hasCodeChanges = (
   );
 };
 
+const areAllChangesDependencyOnly = (
+  changedFiles: readonly string[],
+  packages: readonly PackageInternal[],
+  rootDir: string
+) => {
+  const privatePackagePaths = getPrivatePackagePaths(packages, rootDir);
+  const publishableFiles = filterOutPrivatePackageFiles(changedFiles, privatePackagePaths);
+  const baseBranch = getBaseBranch();
+
+  return pipe(
+    filterDependencyOnlyPackageJsonFiles(publishableFiles, baseBranch),
+    Effect.map((filteredFiles) => filteredFiles.length === 0 && publishableFiles.length > 0)
+  );
+};
+
 const toStringOutput = (value: unknown): string =>
   typeof value === 'string'
     ? value
@@ -629,6 +644,26 @@ const displayDocOnlyInfo = (terminal: Terminal.Terminal) =>
     Effect.andThen(terminal.display('   - Allow users to see docs were updated via npm\n')),
     Effect.andThen(terminal.display('   - Prevent potential CI issues\n\n'))
   );
+
+const showDependencyOnlyMessages = (terminal: Terminal.Terminal) =>
+  pipe(
+    terminal,
+    (t) =>
+      t.display(
+        '📦 Only dependency updates detected - changeset will be auto-generated during release\n'
+      ),
+    Effect.andThen(
+      terminal.display(
+        '\nℹ️  The release workflow will automatically create a changeset for these dependency changes.\n'
+      )
+    ),
+    Effect.andThen(terminal.display('   No manual changeset is required.\n'))
+  );
+
+const displayDependencyOnlyChanges = pipe(
+  Terminal.Terminal,
+  Effect.flatMap(showDependencyOnlyMessages)
+);
 
 const showDocOnlyMessages =
   (changesets: readonly ChangesetInfoInternal[]) => (terminal: Terminal.Terminal) =>
@@ -812,16 +847,30 @@ const showChangedFilesList = (changedFiles: readonly string[]) => (terminal: Ter
   );
 };
 
+const validateWithNoChangesets = (
+  changedFiles: readonly string[],
+  packages: readonly PackageInternal[],
+  rootDir: string
+) =>
+  pipe(
+    areAllChangesDependencyOnly(changedFiles, packages, rootDir),
+    Effect.flatMap((isDepOnly) =>
+      isDepOnly ? displayDependencyOnlyChanges : displayMissingChangesetError
+    )
+  );
+
 const validateCodeChanges = (
   changedFiles: readonly string[],
-  changesets: readonly ChangesetInfoInternal[]
+  changesets: readonly ChangesetInfoInternal[],
+  packages: readonly PackageInternal[],
+  rootDir: string
 ) =>
   pipe(
     Terminal.Terminal,
     Effect.flatMap(showChangedFilesList(changedFiles)),
     Effect.andThen(
       changesets.length === 0
-        ? displayMissingChangesetError
+        ? validateWithNoChangesets(changedFiles, packages, rootDir)
         : validateAfterCheckingPublishable(changesets)
     ),
     Effect.andThen(changesets.length > 0 ? validateChangesetsFlow(changesets) : Effect.void)
@@ -860,7 +909,7 @@ const processChangedFiles = (
     hasCodeChanges(changedFiles, packages, rootDir),
     Effect.flatMap((hasChanges) =>
       Effect.if(hasChanges, {
-        onTrue: () => validateCodeChanges(changedFiles, changesets),
+        onTrue: () => validateCodeChanges(changedFiles, changesets, packages, rootDir),
         onFalse: () => handleNoCodeChanges(changedFiles, changesets),
       })
     )
