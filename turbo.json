@@ -168,6 +168,12 @@
       "cache": true,
       "env": ["GITHUB_BASE_REF", "GITHUB_HEAD_REF"]
     },
+    "//#release:auto-changeset": {
+      "dependsOn": [],
+      "outputs": [".changeset/*.md"],
+      "inputs": ["packages/**/package.json", "scripts/auto-generate-dependency-changeset.ts"],
+      "cache": false
+    },
     "//#scripts:typecheck": {
       "dependsOn": [],
       "outputs": [],

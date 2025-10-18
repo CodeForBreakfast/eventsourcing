@@ -358,7 +358,11 @@ const extractDependencies = (pkg: unknown, key: string): Record<string, string> 
 const compareDependencyChanges = (
   beforeContent: unknown,
   afterContent: unknown
-): { readonly onlyDevDepsChanged: boolean; readonly hasChanges: boolean } => {
+): {
+  readonly onlyDevDepsChanged: boolean;
+  readonly onlyDepsChanged: boolean;
+  readonly hasChanges: boolean;
+} => {
   const before = beforeContent as Record<string, unknown>;
   const after = afterContent as Record<string, unknown>;
 
@@ -379,13 +383,15 @@ const compareDependencyChanges = (
 
   return {
     onlyDevDepsChanged: devDepsChanged && !depsChanged && !otherFieldsChanged,
+    onlyDepsChanged: depsChanged && !devDepsChanged && !otherFieldsChanged,
     hasChanges: devDepsChanged || depsChanged || otherFieldsChanged,
   };
 };
 
 const processAfterContent = (beforeContent: unknown) => (afterContent: unknown) =>
   Effect.if(!beforeContent || !afterContent, {
-    onTrue: () => Effect.succeed({ onlyDevDepsChanged: false, hasChanges: true }),
+    onTrue: () =>
+      Effect.succeed({ onlyDevDepsChanged: false, onlyDepsChanged: false, hasChanges: true }),
     onFalse: () => Effect.succeed(compareDependencyChanges(beforeContent, afterContent)),
   });
 
@@ -407,26 +413,26 @@ const getPackageJsonDiff = (filePath: string, baseBranch: string) =>
     Effect.flatMap((beforeContent) => fetchAfterPackageJson(beforeContent, filePath))
   );
 
-const isDevOnlyPackageJsonChange = (file: string, baseBranch: string) =>
+const isDependencyOnlyPackageJsonChange = (file: string, baseBranch: string) =>
   pipe(
     file.endsWith('/package.json') && file.startsWith('packages/')
       ? getPackageJsonDiff(file, baseBranch)
-      : Effect.succeed({ onlyDevDepsChanged: false, hasChanges: false }),
-    Effect.map((result) => result.onlyDevDepsChanged)
+      : Effect.succeed({ onlyDevDepsChanged: false, onlyDepsChanged: false, hasChanges: false }),
+    Effect.map((result) => result.onlyDevDepsChanged || result.onlyDepsChanged)
   );
 
-const createFileWithDevOnlyFlag = (file: string, baseBranch: string) =>
+const createFileWithDependencyOnlyFlag = (file: string, baseBranch: string) =>
   pipe(
-    isDevOnlyPackageJsonChange(file, baseBranch),
-    Effect.map((isDevOnly) => ({ file, isDevOnly }))
+    isDependencyOnlyPackageJsonChange(file, baseBranch),
+    Effect.map((isDependencyOnly) => ({ file, isDependencyOnly }))
   );
 
-const filterDevOnlyPackageJsonFiles = (files: readonly string[], baseBranch: string) =>
+const filterDependencyOnlyPackageJsonFiles = (files: readonly string[], baseBranch: string) =>
   pipe(
     files,
-    EffectArray.map((file) => createFileWithDevOnlyFlag(file, baseBranch)),
+    EffectArray.map((file) => createFileWithDependencyOnlyFlag(file, baseBranch)),
     Effect.all,
-    Effect.map((results) => results.filter((r) => !r.isDevOnly).map((r) => r.file))
+    Effect.map((results) => results.filter((r) => !r.isDependencyOnly).map((r) => r.file))
   );
 
 const hasCodeChanges = (
@@ -438,27 +444,13 @@ const hasCodeChanges = (
   const publishableFiles = filterOutPrivatePackageFiles(changedFiles, privatePackagePaths);
   const baseBranch = getBaseBranch();
 
-  const codePatterns: readonly RegExp[] = [
-    /^packages\//,
-    /^scripts\//,
-    /\.ts$/,
-    /\.tsx$/,
-    /\.js$/,
-    /\.jsx$/,
-    /^package\.json$/,
-    /^tsconfig/,
-    /^\.github\/workflows/,
-  ];
-
-  const excludedFiles = ['scripts/validate-changesets.ts'];
+  const codePatterns: readonly RegExp[] = [/^packages\//];
 
   return pipe(
-    filterDevOnlyPackageJsonFiles(publishableFiles, baseBranch),
+    filterDependencyOnlyPackageJsonFiles(publishableFiles, baseBranch),
     Effect.map((filteredFiles) =>
       filteredFiles.some((file) =>
-        excludedFiles.includes(file) || file.startsWith('bun.lock')
-          ? false
-          : codePatterns.some((pattern) => pattern.test(file))
+        file.startsWith('bun.lock') ? false : codePatterns.some((pattern) => pattern.test(file))
       )
     )
   );
