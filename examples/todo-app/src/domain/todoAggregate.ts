@@ -1,6 +1,8 @@
 import { Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
-import { EventRecord, makeAggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
-import { EventStore } from '@codeforbreakfast/eventsourcing-store';
+import {
+  makeAggregateRoot,
+  defineAggregateEventStore,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoIdSchema, UserId, UserIdSchema } from './types';
 import {
   TodoEvent,
@@ -17,10 +19,7 @@ export interface TodoState {
   readonly deleted: boolean;
 }
 
-export class TodoAggregate extends Effect.Tag('TodoAggregate')<
-  TodoAggregate,
-  EventStore<EventRecord<TodoEvent, UserId>>
->() {}
+export const TodoAggregate = defineAggregateEventStore<TodoEvent, UserId>('Todo');
 
 const applyEventToExistingState = (
   currentState: TodoState,

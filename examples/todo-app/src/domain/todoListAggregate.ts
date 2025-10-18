@@ -1,6 +1,8 @@
 import { Effect, Match, Option, pipe } from 'effect';
-import { makeAggregateRoot, type EventRecord } from '@codeforbreakfast/eventsourcing-aggregates';
-import { EventStore } from '@codeforbreakfast/eventsourcing-store';
+import {
+  makeAggregateRoot,
+  defineAggregateEventStore,
+} from '@codeforbreakfast/eventsourcing-aggregates';
 import { TodoId, UserId, UserIdSchema, TodoListIdSchema } from './types';
 import { TodoListEvent, TodoAddedToList, TodoRemovedFromList } from './todoListEvents';
 
@@ -8,10 +10,7 @@ export interface TodoListState {
   readonly todoIds: ReadonlySet<TodoId>;
 }
 
-export class TodoListAggregate extends Effect.Tag('TodoListAggregate')<
-  TodoListAggregate,
-  EventStore<EventRecord<TodoListEvent, UserId>>
->() {}
+export const TodoListAggregate = defineAggregateEventStore<TodoListEvent, UserId>('TodoList');
 
 const applyEvent =
   (state: Readonly<Option.Option<TodoListState>>) =>

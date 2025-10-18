@@ -1,11 +1,14 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Chunk, Schema, Option, pipe, Context, Layer, Exit } from 'effect';
-import { EventStore } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, Chunk, Schema, Option, pipe, Layer, Exit } from 'effect';
 import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { makeAggregateRoot, type EventRecord } from './aggregateRootEventStream';
+import {
+  makeAggregateRoot,
+  type EventRecord,
+  defineAggregateEventStore,
+} from './aggregateRootEventStream';
 import { provideCommandInitiator } from './commandInitiator';
 
 const TestUserId = pipe(Schema.String, Schema.brand('TestUserId'));
@@ -42,10 +45,7 @@ const applyTestEvent =
     return Effect.succeed({ ...current, count: current.count + 1 });
   };
 
-class TestAggregateTag extends Context.Tag('TestAggregate')<
-  TestAggregateTag,
-  EventStore<EventRecord<TestEvent, TestUserId>>
->() {}
+const TestAggregateTag = defineAggregateEventStore<TestEvent, TestUserId>('TestAggregate');
 
 const testCommands = {
   create: (value: string) => (): Effect.Effect<readonly TestEvent[]> =>
