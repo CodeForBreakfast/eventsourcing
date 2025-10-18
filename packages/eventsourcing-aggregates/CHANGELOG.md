@@ -1,5 +1,29 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.9.0
+
+### Minor Changes
+
+- [#291](https://github.com/CodeForBreakfast/eventsourcing/pull/291) [`8bb87c3`](https://github.com/CodeForBreakfast/eventsourcing/commit/8bb87c3605cf30ed020fe5f9bbabb2f60cdaa172) Thanks [@GraemeF](https://github.com/GraemeF)! - Add `defineAggregateEventStore` factory function for creating standardized event store tags.
+
+  This factory provides a consistent, type-safe way to create EventStore tags for aggregates with deterministic keys:
+
+  \`\`\`typescript
+  import { defineAggregateEventStore } from '@codeforbreakfast/eventsourcing-aggregates';
+
+  export const TodoEventStore = defineAggregateEventStore<TodoEvent, UserId>('Todo');
+  \`\`\`
+
+  The factory automatically generates the tag identifier as `{AggregateName}/EventStore`, reducing boilerplate and ensuring consistent naming across all aggregates.
+
+### Patch Changes
+
+- [#281](https://github.com/CodeForBreakfast/eventsourcing/pull/281) [`3de03fa`](https://github.com/CodeForBreakfast/eventsourcing/commit/3de03fa652e0b6fde85fd402fb82b33828e9ec95) Thanks [@renovate](https://github.com/apps/renovate)! - Update type-fest dependency to v5.1.0, which includes new utility types (TupleOf, Xor, SplitOnRestElement) and improvements to existing types (PartialDeep, IsEqual, FixedLengthArray). This internal dependency update has no impact on the public API of these packages.
+
+- Updated dependencies [[`3de03fa`](https://github.com/CodeForBreakfast/eventsourcing/commit/3de03fa652e0b6fde85fd402fb82b33828e9ec95)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.5
+  - @codeforbreakfast/eventsourcing-store@0.8.5
+
 ## 0.8.2
 
 ### Patch Changes
