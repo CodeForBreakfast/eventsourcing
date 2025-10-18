@@ -70,7 +70,7 @@
     "@effect/experimental": "0.56.0",
     "@effect/sql": "0.46.0",
     "@effect/sql-pg": "0.47.0",
-    "type-fest": "5.0.1"
+    "type-fest": "5.1.0"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
