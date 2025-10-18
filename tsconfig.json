@@ -20,7 +20,12 @@
     "exactOptionalPropertyTypes": true,
     "allowSyntheticDefaultImports": true,
     "experimentalDecorators": true,
-    "emitDecoratorMetadata": true
+    "emitDecoratorMetadata": true,
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
   },
   "exclude": ["node_modules", "dist", "lib"]
 }
