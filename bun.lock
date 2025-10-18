@@ -43,7 +43,6 @@
       "version": "0.1.4",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
-        "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-projections": "workspace:*",
         "@codeforbreakfast/eventsourcing-protocol": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
@@ -51,6 +50,8 @@
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
         "@effect/cli": "0.71.0",
+        "@effect/platform": "0.92.1",
+        "@effect/platform-browser": "0.72.0",
         "@effect/platform-bun": "0.81.1",
         "effect": "3.18.4",
       },
@@ -446,6 +447,8 @@
     "@effect/language-service": ["@effect/language-service@0.45.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-l3XLR/MB+TDOLq63Ow1wJWPB8AncFAMRMOf6n1hAwiO4WPX+09Uw9Dpyhyk7rejbylS4ey5F5M2RtsyJ9g4KRg=="],
 
     "@effect/platform": ["@effect/platform@0.92.1", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.18.1" } }, "sha512-XXWCBVwyhaKZISN7aM1fv/3fWDGyxr84ObywnUrL8aHvJLoIeskWFAP/fqw3c5MFCrJ3ZV97RWLbv6JiBQugdg=="],
+
+    "@effect/platform-browser": ["@effect/platform-browser@0.72.0", "", { "dependencies": { "multipasta": "^0.2.7" }, "peerDependencies": { "@effect/platform": "^0.92.0", "effect": "^3.18.0" } }, "sha512-xLlhR2S5yGo7//i8rTOiu1wCyrmrotXk+lK7Y257odxmQ2+HhV4wA2E+xFa0bFbHnqFCE3Yza9r0BkA3y1tgag=="],
 
     "@effect/platform-bun": ["@effect/platform-bun@0.81.1", "", { "dependencies": { "@effect/platform-node-shared": "^0.51.3", "multipasta": "^0.2.7" }, "peerDependencies": { "@effect/cluster": "^0.50.3", "@effect/platform": "^0.92.1", "@effect/rpc": "^0.71.0", "@effect/sql": "^0.46.0", "effect": "^3.18.1" } }, "sha512-wynPXDouKcmzBdWUK4QzaYTAULsNtr+LFX3fmpG+IV+YI4/sm63erPXjei09z+u5SJXavGACxiGnLvXjTQ2t7A=="],
 

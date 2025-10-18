@@ -8,6 +8,7 @@
     "server": {
       "cache": false,
       "persistent": true,
+      "dependsOn": ["build"],
       "inputs": ["src/**", "public/**"]
     },
     "test": {
@@ -15,7 +16,7 @@
       "inputs": ["src/**", "tests/**"]
     },
     "build": {
-      "outputs": ["dist/**"]
+      "outputs": ["public/client.js"]
     }
   }
 }

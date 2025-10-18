@@ -10,7 +10,5 @@ export * from './lib/eventstore';
 // Streaming utilities
 export { StreamingError, type StreamHandlerService } from './lib/streaming';
 
-// Testing utilities
-export * from './lib/testing/eventstore-test-suite';
-
+// Note: Testing utilities moved to '@codeforbreakfast/eventsourcing-store/testing' subpath export
 // Note: SQL/PostgreSQL implementation moved to @codeforbreakfast/eventsourcing-store-postgres

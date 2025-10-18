@@ -31,7 +31,8 @@ import type { TodoEvent } from './domain/todoEvents';
 import type { TodoListEvent } from './domain/todoListEvents';
 
 const SYSTEM_USER = 'system' as UserId;
-const PORT = 8080;
+const WS_PORT = 8080;
+const HTTP_PORT = 3000;
 const HOST = '0.0.0.0';
 
 const makeTodoEventStore = () => {
@@ -387,12 +388,35 @@ const forkProcessManagerEffect = startProcessManager();
 
 const forkProcessManager = pipe(forkProcessManagerEffect, Effect.forkScoped);
 
-const startupMessage = `
-🚀 WebSocket server running on ws://${HOST}:${PORT}
+const startHttpServer = Effect.sync(() => {
+  Bun.serve({
+    port: HTTP_PORT,
+    hostname: HOST,
+    async fetch(req) {
+      const url = new URL(req.url);
+      let filePath = url.pathname === '/' ? '/index.html' : url.pathname;
 
-Try connecting with the frontend:
-  bun run server  (in one terminal)
-  open public/index.html  (in your browser)
+      const file = Bun.file(`./public${filePath}`);
+      const exists = await file.exists();
+
+      if (exists) {
+        return new Response(file);
+      }
+
+      return new Response('Not Found', { status: 404 });
+    },
+  });
+
+  return void 0;
+});
+
+const startupMessage = `
+🚀 Servers running:
+   - HTTP:      http://${HOST}:${HTTP_PORT}
+   - WebSocket: ws://${HOST}:${WS_PORT}
+
+Try the frontend:
+  Open http://localhost:${HTTP_PORT} in your browser
 `;
 
 const logStartupMessage = Console.log(startupMessage);
@@ -413,7 +437,7 @@ const startAllServices =
     const dispatchWithLayer = provideLayer(serverProtocolLayer);
 
     return pipe(
-      [forkProcessManager, logStartupMessage, dispatchWithLayer] as const,
+      [forkProcessManager, startHttpServer, logStartupMessage, dispatchWithLayer] as const,
       Effect.all,
       Effect.asVoid,
       Effect.andThen(Effect.never)
@@ -429,7 +453,7 @@ const startAcceptor = <
 
 BunRuntime.runMain(
   pipe(
-    [WebSocketAcceptor.make({ port: PORT, host: HOST }), EventBus] as const,
+    [WebSocketAcceptor.make({ port: WS_PORT, host: HOST }), EventBus] as const,
     Effect.all,
     Effect.flatMap(([acceptor, eventBus]) => startAcceptor(eventBus, acceptor)),
     Effect.scoped,
