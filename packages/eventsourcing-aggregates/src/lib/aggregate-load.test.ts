@@ -1,11 +1,15 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Chunk, Schema, Option, pipe, Context, Layer, Exit } from 'effect';
-import { EventStore } from '@codeforbreakfast/eventsourcing-store';
+import { Effect, Chunk, Schema, Option, pipe, Layer, Exit } from 'effect';
+import type { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   makeInMemoryEventStore,
   InMemoryStore,
 } from '@codeforbreakfast/eventsourcing-store-inmemory';
-import { makeAggregateRoot, type EventRecord } from './aggregateRootEventStream';
+import {
+  makeAggregateRoot,
+  type EventRecord,
+  defineAggregateEventStore,
+} from './aggregateRootEventStream';
 import { provideCommandInitiator } from './commandInitiator';
 
 const TestUserId = pipe(Schema.String, Schema.brand('TestUserId'));
@@ -42,10 +46,7 @@ const applyTestEvent =
     return Effect.succeed({ ...current, count: current.count + 1 });
   };
 
-class TestAggregateTag extends Context.Tag('TestAggregate')<
-  TestAggregateTag,
-  EventStore<EventRecord<TestEvent, TestUserId>>
->() {}
+const TestAggregateTag = defineAggregateEventStore<TestEvent, TestUserId>('TestAggregate');
 
 const testCommands = {
   create: (value: string) => (): Effect.Effect<readonly TestEvent[]> =>
@@ -75,6 +76,32 @@ const makeTestLayer = () =>
       Effect.flatMap(makeInMemoryEventStore)
     )
   );
+
+describe('defineAggregateEventStore', () => {
+  it('should create a valid Context.Tag that can be used in Effect operations', () => {
+    const tag = defineAggregateEventStore<TestEvent, TestUserId>('TestFactory');
+    const mockStore = {} as EventStore<EventRecord<TestEvent, TestUserId>>;
+
+    const program = pipe(
+      mockStore,
+      Effect.succeed,
+      Effect.provideService(tag, mockStore),
+      Effect.andThen(tag),
+      Effect.map((store) => {
+        expect(store).toBe(mockStore);
+      })
+    );
+
+    return program;
+  });
+
+  it('should create distinct tags for different aggregate names', () => {
+    const tag1 = defineAggregateEventStore<TestEvent, TestUserId>('Aggregate1');
+    const tag2 = defineAggregateEventStore<TestEvent, TestUserId>('Aggregate2');
+
+    expect(tag1).not.toBe(tag2);
+  });
+});
 
 describe('Aggregate Load', () => {
   const testUserId = 'test-user' as TestUserId;

@@ -30,6 +30,9 @@ import {
   // Main aggregate creation function
   makeAggregateRoot,
 
+  // Aggregate event store factory
+  defineAggregateEventStore,
+
   // Core interfaces and types
   AggregateState,
   EventMetadata,
@@ -63,6 +66,7 @@ import {
   CommandContextTest,
   eventSchema,
   eventMetadata,
+  defineAggregateEventStore,
   type EventRecord,
 } from '@codeforbreakfast/eventsourcing-aggregates';
 import type { EventStore } from '@codeforbreakfast/eventsourcing-store';
@@ -125,11 +129,8 @@ const applyUserEvent: (
         : Effect.fail(new Error(`Unknown event type: ${(event as any).type}`))
   );
 
-// 6. Create event store tag
-class UserEventStore extends Context.Tag('UserEventStore')<
-  UserEventStore,
-  EventStore<EventRecord<UserEvent, InitiatorId>>
->() {}
+// 6. Create event store tag using factory
+const UserEventStore = defineAggregateEventStore<UserEvent, InitiatorId>('User');
 
 // 7. Define command handlers that return functions taking state
 // Commands return bare events - framework adds metadata automatically during commit

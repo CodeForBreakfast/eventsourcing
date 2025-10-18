@@ -428,3 +428,36 @@ export const eventSchema = <TType, F extends Schema.Struct.Fields, R>(
     type,
     data: Schema.Struct(data),
   });
+
+/**
+ * Creates a standardized EventStore tag for an aggregate.
+ *
+ * This factory ensures consistent naming and typing across all aggregates,
+ * reducing boilerplate and enforcing deterministic keys for event stores.
+ *
+ * @since 0.4.0
+ * @example
+ * ```typescript
+ * import { defineAggregateEventStore } from '@codeforbreakfast/eventsourcing-aggregates';
+ *
+ * // Define event store for Todo aggregate
+ * export const TodoEventStore = defineAggregateEventStore<TodoEvent, UserId>('Todo');
+ *
+ * // Use in aggregate root
+ * const TodoAggregateRoot = makeAggregateRoot(
+ *   TodoIdSchema,
+ *   UserIdSchema,
+ *   applyEvent,
+ *   TodoEventStore,
+ *   commands
+ * );
+ * ```
+ *
+ * @param aggregateName - The name of the aggregate (e.g., "Todo", "User", "Order")
+ * @returns A Context.Tag for the aggregate's event store
+ */
+export const defineAggregateEventStore = <TEvent extends Record<string, unknown>, TOrigin>(
+  aggregateName: string
+): Readonly<
+  Context.Tag<EventStore<EventRecord<TEvent, TOrigin>>, EventStore<EventRecord<TEvent, TOrigin>>>
+> => Context.GenericTag<EventStore<EventRecord<TEvent, TOrigin>>>(`${aggregateName}/EventStore`);
