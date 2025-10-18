@@ -64,7 +64,7 @@
     "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0"
   },
   "dependencies": {
-    "type-fest": "5.0.1"
+    "type-fest": "5.1.0"
   },
   "devDependencies": {
     "@types/node": "24.7.2",
