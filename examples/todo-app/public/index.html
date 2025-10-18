@@ -254,7 +254,11 @@
         id: commandId,
         target,
         name,
-        payload
+        payload,
+        context: {
+          traceId: crypto.randomUUID(),
+          parentId: crypto.randomUUID()
+        }
       };
 
       ws.send(JSON.stringify(command));
@@ -273,7 +277,11 @@
     function subscribeToStream(streamId) {
       const message = {
         type: 'subscribe',
-        streamId
+        streamId,
+        context: {
+          traceId: crypto.randomUUID(),
+          parentId: crypto.randomUUID()
+        }
       };
       ws.send(JSON.stringify(message));
     }
