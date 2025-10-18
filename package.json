@@ -25,7 +25,8 @@
     "scripts:lint": "eslint scripts",
     "release:validate:changesets": "bun scripts/validate-changesets.ts",
     "release:validate:publish": "bun scripts/orchestrate-publish-validation.ts",
-    "release:validate": "bun scripts/validate-release.ts"
+    "release:validate": "bun scripts/validate-release.ts",
+    "release:auto-changeset": "bun scripts/auto-generate-dependency-changeset.ts"
   },
   "workspaces": [
     "packages/*",

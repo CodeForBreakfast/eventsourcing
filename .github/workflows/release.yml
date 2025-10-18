@@ -36,6 +36,9 @@ jobs:
           app-id: ${{ secrets.RELEASE_APP_ID }}
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
+      - name: Auto-generate changeset for dependency updates
+        run: bun run scripts/auto-generate-dependency-changeset.ts
+
       - name: Create Release Pull Request or Publish to npm
         id: changesets
         uses: changesets/action@v1
