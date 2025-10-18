@@ -53,35 +53,34 @@ const readPackageDirectory = (packagesDir: string) =>
     Effect.andThen((fs) => fs.readDirectory(packagesDir))
   );
 
-const buildPackageInfo = (packagesDir: string, dir: string) =>
+const parsePackageInfo = (packageJsonPath: string) =>
+  pipe(
+    packageJsonPath,
+    readPackageJson,
+    Effect.andThen(getPackageName),
+    Effect.map((name): PackageInfo => ({ name, path: packageJsonPath })),
+    Effect.option
+  );
+
+const buildPackageInfo = (packagesDir: string) => (dir: string) =>
   pipe(
     Path.Path,
     Effect.andThen((path) => {
       const packageJsonPath = path.join(packagesDir, dir, 'package.json');
-      return pipe(
-        readPackageJson(packageJsonPath),
-        Effect.andThen(getPackageName),
-        Effect.map((name): PackageInfo => ({ name, path: packageJsonPath })),
-        Effect.option
-      );
+      return parsePackageInfo(packageJsonPath);
     })
   );
 
 const readPackageInfos = (packagesDir: string) => (dirs: readonly string[]) =>
   pipe(
     dirs,
-    EffectArray.map((dir) => buildPackageInfo(packagesDir, dir)),
+    EffectArray.map(buildPackageInfo(packagesDir)),
     Effect.all,
     Effect.map(EffectArray.getSomes)
   );
 
-const readAllPackages = pipe(
-  rootDir,
-  Effect.andThen(resolvePackagesDir),
-  Effect.andThen((packagesDir) =>
-    pipe(packagesDir, readPackageDirectory, Effect.andThen(readPackageInfos(packagesDir)))
-  )
-);
+const getPackageInfos = (packagesDir: string) =>
+  pipe(packagesDir, readPackageDirectory, Effect.andThen(readPackageInfos(packagesDir)));
 
 const getDependencies = (pkgJson: { readonly dependencies?: Record<string, string> }) =>
   pkgJson.dependencies || {};
@@ -92,7 +91,6 @@ const createDependencyChange = (
   beforeVersion: string | undefined,
   afterVersion: string | undefined
 ): readonly DependencyChange[] => {
-  // eslint-disable-next-line effect/prefer-match-over-ternary -- Simple value transformation, not pattern matching
   return beforeVersion !== afterVersion
     ? [
         {
@@ -139,27 +137,35 @@ const extractChangesFromPackage =
   ]) =>
     Effect.succeed(extractDependencyChanges(packageName, before, after));
 
+const getBothPackageJsons = (relativePath: string, pkgPath: string) =>
+  Effect.all([getPackageJsonFromGit(relativePath, 'HEAD~1'), readPackageJson(pkgPath)]);
+
+const extractChangesForPath = (pkg: PackageInfo) => (relativePath: string) =>
+  pipe(
+    relativePath,
+    (path) => getBothPackageJsons(path, pkg.path),
+    Effect.andThen(extractChangesFromPackage(pkg.name))
+  );
+
 const findDependencyChanges = (pkg: PackageInfo) =>
   pipe(
     rootDir,
     Effect.andThen((root) => resolveRelativePath(root, pkg.path)),
-    Effect.andThen((relativePath) =>
-      pipe(
-        Effect.all([getPackageJsonFromGit(relativePath, 'HEAD~1'), readPackageJson(pkg.path)]),
-        Effect.andThen(extractChangesFromPackage(pkg.name))
-      )
-    )
+    Effect.andThen(extractChangesForPath(pkg))
   );
 
 const flattenChanges = (
   changes: readonly (readonly DependencyChange[])[]
 ): readonly DependencyChange[] => changes.flat();
 
+const collectAllChanges = (packages: readonly PackageInfo[]) =>
+  pipe(packages, EffectArray.map(findDependencyChanges), Effect.all, Effect.map(flattenChanges));
+
 const getAllDependencyChanges = pipe(
-  readAllPackages,
-  Effect.andThen((packages) =>
-    pipe(packages, EffectArray.map(findDependencyChanges), Effect.all, Effect.map(flattenChanges))
-  )
+  rootDir,
+  Effect.andThen(resolvePackagesDir),
+  Effect.andThen(getPackageInfos),
+  Effect.andThen(collectAllChanges)
 );
 
 const formatRemovedDependency = (change: DependencyChange) =>
@@ -232,15 +238,20 @@ const displayNoChanges = pipe(
   )
 );
 
+const displayFirstMessage = (terminal: Terminal.Terminal) =>
+  terminal.display('📦 Generated changeset for dependency updates:\n');
+
+const displayChangesetMessages = (terminal: Terminal.Terminal, path: string) =>
+  pipe(
+    terminal,
+    displayFirstMessage,
+    Effect.andThen(() => terminal.display(`   ${path}\n`))
+  );
+
 const displayChangesetCreated = (path: string) =>
   pipe(
     Terminal.Terminal,
-    Effect.andThen((terminal) =>
-      pipe(
-        terminal.display('📦 Generated changeset for dependency updates:\n'),
-        Effect.andThen(() => terminal.display(`   ${path}\n`))
-      )
-    )
+    Effect.andThen((terminal) => displayChangesetMessages(terminal, path))
   );
 
 const displaySingleChange = (terminal: Terminal.Terminal) => (change: DependencyChange) =>
@@ -249,22 +260,31 @@ const displaySingleChange = (terminal: Terminal.Terminal) => (change: Dependency
 const displayChangeList = (terminal: Terminal.Terminal, changes: readonly DependencyChange[]) =>
   pipe(changes, EffectArray.map(displaySingleChange(terminal)), Effect.all, Effect.asVoid);
 
+const displayFoundMessage = (terminal: Terminal.Terminal, count: number) =>
+  terminal.display(`\n📋 Found ${count} dependency change(s):\n`);
+
+const displayChangeMessages = (terminal: Terminal.Terminal, changes: readonly DependencyChange[]) =>
+  pipe(
+    terminal,
+    (t) => displayFoundMessage(t, changes.length),
+    Effect.andThen(() => displayChangeList(terminal, changes)),
+    Effect.andThen(() => terminal.display('\n'))
+  );
+
 const displayChanges = (changes: readonly DependencyChange[]) =>
   pipe(
     Terminal.Terminal,
-    Effect.andThen((terminal) =>
-      pipe(
-        terminal.display(`\n📋 Found ${changes.length} dependency change(s):\n`),
-        Effect.andThen(() => displayChangeList(terminal, changes)),
-        Effect.andThen(() => terminal.display('\n'))
-      )
-    )
+    Effect.andThen((terminal) => displayChangeMessages(terminal, changes))
   );
+
+const generateContent = (changes: readonly DependencyChange[]) =>
+  Effect.sync(() => generateChangesetContent(changes));
 
 const processChanges = (changes: readonly DependencyChange[]) =>
   pipe(
-    displayChanges(changes),
-    Effect.andThen(() => generateChangesetContent(changes)),
+    changes,
+    displayChanges,
+    Effect.andThen(() => generateContent(changes)),
     Effect.andThen(writeChangesetFile),
     Effect.andThen(displayChangesetCreated)
   );
@@ -279,7 +299,7 @@ const program = pipe(
   Terminal.Terminal,
   Effect.andThen((terminal) => terminal.display('🔍 Checking for dependency changes...\n\n')),
   Effect.andThen(() => getAllDependencyChanges),
-  Effect.andThen((changes: readonly DependencyChange[]) => handleChanges(changes)),
+  Effect.andThen(handleChanges),
   Effect.provide(BunContext.layer),
   Effect.catchAllCause(() => Effect.void)
 );

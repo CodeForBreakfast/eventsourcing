@@ -444,27 +444,13 @@ const hasCodeChanges = (
   const publishableFiles = filterOutPrivatePackageFiles(changedFiles, privatePackagePaths);
   const baseBranch = getBaseBranch();
 
-  const codePatterns: readonly RegExp[] = [
-    /^packages\//,
-    /^scripts\//,
-    /\.ts$/,
-    /\.tsx$/,
-    /\.js$/,
-    /\.jsx$/,
-    /^package\.json$/,
-    /^tsconfig/,
-    /^\.github\/workflows/,
-  ];
-
-  const excludedFiles = ['scripts/validate-changesets.ts'];
+  const codePatterns: readonly RegExp[] = [/^packages\//];
 
   return pipe(
     filterDependencyOnlyPackageJsonFiles(publishableFiles, baseBranch),
     Effect.map((filteredFiles) =>
       filteredFiles.some((file) =>
-        excludedFiles.includes(file) || file.startsWith('bun.lock')
-          ? false
-          : codePatterns.some((pattern) => pattern.test(file))
+        file.startsWith('bun.lock') ? false : codePatterns.some((pattern) => pattern.test(file))
       )
     )
   );
