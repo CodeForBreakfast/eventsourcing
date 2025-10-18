@@ -43,9 +43,13 @@
       "version": "0.1.4",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
+        "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-projections": "workspace:*",
+        "@codeforbreakfast/eventsourcing-protocol": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport": "workspace:*",
+        "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
         "@effect/cli": "0.71.0",
         "@effect/platform-bun": "0.81.1",
         "effect": "3.18.4",

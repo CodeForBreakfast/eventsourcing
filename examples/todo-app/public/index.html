@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TODO App - Event Sourcing with WebSocket</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .container {
+      background: white;
+      border-radius: 12px;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+      max-width: 600px;
+      width: 100%;
+      padding: 30px;
+    }
+
+    h1 {
+      color: #333;
+      margin-bottom: 10px;
+      font-size: 28px;
+    }
+
+    .subtitle {
+      color: #666;
+      margin-bottom: 20px;
+      font-size: 14px;
+    }
+
+    .connection-status {
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      margin-bottom: 20px;
+      text-align: center;
+    }
+
+    .status-connecting {
+      background: #fef3c7;
+      color: #92400e;
+    }
+
+    .status-connected {
+      background: #d1fae5;
+      color: #065f46;
+    }
+
+    .status-disconnected {
+      background: #fee2e2;
+      color: #991b1b;
+    }
+
+    .input-group {
+      display: flex;
+      gap: 10px;
+      margin-bottom: 20px;
+    }
+
+    input[type="text"] {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e5e7eb;
+      border-radius: 8px;
+      font-size: 15px;
+      transition: border-color 0.2s;
+    }
+
+    input[type="text"]:focus {
+      outline: none;
+      border-color: #667eea;
+    }
+
+    button {
+      padding: 12px 24px;
+      background: #667eea;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    button:hover {
+      background: #5568d3;
+    }
+
+    button:disabled {
+      background: #d1d5db;
+      cursor: not-allowed;
+    }
+
+    .todo-list {
+      list-style: none;
+    }
+
+    .todo-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 14px;
+      background: #f9fafb;
+      border-radius: 8px;
+      margin-bottom: 8px;
+      transition: all 0.2s;
+    }
+
+    .todo-item:hover {
+      background: #f3f4f6;
+    }
+
+    .todo-checkbox {
+      width: 20px;
+      height: 20px;
+      cursor: pointer;
+      accent-color: #667eea;
+    }
+
+    .todo-text {
+      flex: 1;
+      font-size: 15px;
+      color: #1f2937;
+    }
+
+    .todo-text.completed {
+      text-decoration: line-through;
+      color: #9ca3af;
+    }
+
+    .todo-delete {
+      padding: 6px 12px;
+      background: #ef4444;
+      color: white;
+      border: none;
+      border-radius: 6px;
+      font-size: 13px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .todo-delete:hover {
+      background: #dc2626;
+    }
+
+    .todo-id {
+      font-size: 11px;
+      color: #9ca3af;
+      font-family: monospace;
+    }
+
+    .empty-state {
+      text-align: center;
+      padding: 40px 20px;
+      color: #9ca3af;
+    }
+
+    .empty-state p {
+      margin-bottom: 8px;
+    }
+
+    @keyframes fadeIn {
+      from {
+        opacity: 0;
+        transform: translateY(-10px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+
+    .todo-item {
+      animation: fadeIn 0.3s ease-out;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>📝 TODO App</h1>
+    <p class="subtitle">Event Sourcing + WebSocket + Effect</p>
+
+    <div class="connection-status status-connecting" id="status">
+      Connecting to server...
+    </div>
+
+    <div class="input-group">
+      <input
+        type="text"
+        id="newTodoInput"
+        placeholder="What needs to be done?"
+        disabled
+      />
+      <button id="addTodoBtn" disabled>Add</button>
+    </div>
+
+    <ul class="todo-list" id="todoList">
+      <div class="empty-state">
+        <p>No todos yet!</p>
+        <p>Create one above to get started.</p>
+      </div>
+    </ul>
+  </div>
+
+  <script>
+    const WS_URL = 'ws://localhost:8080';
+
+    let ws = null;
+    let connected = false;
+    const todos = new Map();
+    const pendingCommands = new Map();
+
+    const statusEl = document.getElementById('status');
+    const inputEl = document.getElementById('newTodoInput');
+    const addBtn = document.getElementById('addTodoBtn');
+    const listEl = document.getElementById('todoList');
+
+    function updateConnectionStatus(status) {
+      const statuses = {
+        connecting: { class: 'status-connecting', text: 'Connecting to server...' },
+        connected: { class: 'status-connected', text: '✓ Connected to server' },
+        disconnected: { class: 'status-disconnected', text: '✗ Disconnected from server' }
+      };
+
+      const config = statuses[status];
+      statusEl.className = `connection-status ${config.class}`;
+      statusEl.textContent = config.text;
+
+      const isConnected = status === 'connected';
+      inputEl.disabled = !isConnected;
+      addBtn.disabled = !isConnected;
+    }
+
+    function sendCommand(name, target, payload) {
+      const commandId = crypto.randomUUID();
+      const command = {
+        type: 'command',
+        id: commandId,
+        target,
+        name,
+        payload
+      };
+
+      ws.send(JSON.stringify(command));
+
+      return new Promise((resolve, reject) => {
+        pendingCommands.set(commandId, { resolve, reject });
+        setTimeout(() => {
+          if (pendingCommands.has(commandId)) {
+            pendingCommands.delete(commandId);
+            reject(new Error('Command timeout'));
+          }
+        }, 5000);
+      });
+    }
+
+    function subscribeToStream(streamId) {
+      const message = {
+        type: 'subscribe',
+        streamId
+      };
+      ws.send(JSON.stringify(message));
+    }
+
+    function renderTodos() {
+      if (todos.size === 0) {
+        listEl.innerHTML = `
+          <div class="empty-state">
+            <p>No todos yet!</p>
+            <p>Create one above to get started.</p>
+          </div>
+        `;
+        return;
+      }
+
+      listEl.innerHTML = '';
+
+      const sortedTodos = Array.from(todos.entries()).sort((a, b) => {
+        const aDeleted = a[1].deleted || false;
+        const bDeleted = b[1].deleted || false;
+        if (aDeleted !== bDeleted) return aDeleted ? 1 : -1;
+
+        const aCompleted = a[1].completed || false;
+        const bCompleted = b[1].completed || false;
+        return aCompleted - bCompleted;
+      });
+
+      sortedTodos.forEach(([id, todo]) => {
+        if (todo.deleted) return;
+
+        const li = document.createElement('li');
+        li.className = 'todo-item';
+
+        const checkbox = document.createElement('input');
+        checkbox.type = 'checkbox';
+        checkbox.className = 'todo-checkbox';
+        checkbox.checked = todo.completed || false;
+        checkbox.onclick = () => toggleTodo(id, todo.completed);
+
+        const textDiv = document.createElement('div');
+        textDiv.className = `todo-text ${todo.completed ? 'completed' : ''}`;
+        textDiv.textContent = todo.title;
+
+        const idSpan = document.createElement('span');
+        idSpan.className = 'todo-id';
+        idSpan.textContent = id;
+
+        const deleteBtn = document.createElement('button');
+        deleteBtn.className = 'todo-delete';
+        deleteBtn.textContent = 'Delete';
+        deleteBtn.onclick = () => deleteTodo(id);
+
+        li.appendChild(checkbox);
+        li.appendChild(textDiv);
+        li.appendChild(idSpan);
+        li.appendChild(deleteBtn);
+        listEl.appendChild(li);
+      });
+    }
+
+    async function addTodo() {
+      const title = inputEl.value.trim();
+      if (!title) return;
+
+      try {
+        await sendCommand('CreateTodo', 'todo-list', { title });
+        inputEl.value = '';
+      } catch (error) {
+        console.error('Failed to create todo:', error);
+        alert('Failed to create todo');
+      }
+    }
+
+    async function toggleTodo(id, isCompleted) {
+      const command = isCompleted ? 'UncompleteTodo' : 'CompleteTodo';
+      try {
+        await sendCommand(command, id, { id });
+      } catch (error) {
+        console.error(`Failed to ${command}:`, error);
+      }
+    }
+
+    async function deleteTodo(id) {
+      try {
+        await sendCommand('DeleteTodo', id, { id });
+      } catch (error) {
+        console.error('Failed to delete todo:', error);
+      }
+    }
+
+    function handleMessage(data) {
+      if (data.type === 'command_result') {
+        const pending = pendingCommands.get(data.commandId);
+        if (pending) {
+          pendingCommands.delete(data.commandId);
+          if (data.success) {
+            pending.resolve(data);
+          } else {
+            pending.reject(new Error(data.error));
+          }
+        }
+      } else if (data.type === 'event') {
+        const todoId = data.streamId;
+
+        if (!todos.has(todoId)) {
+          todos.set(todoId, {});
+          subscribeToStream(todoId);
+        }
+
+        const todo = todos.get(todoId);
+
+        switch (data.eventType) {
+          case 'TodoCreated':
+            todo.title = data.data.title;
+            todo.completed = false;
+            todo.deleted = false;
+            break;
+          case 'TodoTitleChanged':
+            todo.title = data.data.title;
+            break;
+          case 'TodoCompleted':
+            todo.completed = true;
+            break;
+          case 'TodoUncompleted':
+            todo.completed = false;
+            break;
+          case 'TodoDeleted':
+            todo.deleted = true;
+            break;
+        }
+
+        renderTodos();
+      }
+    }
+
+    function connect() {
+      updateConnectionStatus('connecting');
+
+      ws = new WebSocket(WS_URL);
+
+      ws.onopen = () => {
+        console.log('Connected to WebSocket server');
+        updateConnectionStatus('connected');
+        connected = true;
+        subscribeToStream('todo-list-singleton');
+      };
+
+      ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          const payload = JSON.parse(data.payload);
+          handleMessage(payload);
+        } catch (error) {
+          console.error('Failed to parse message:', error);
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+      };
+
+      ws.onclose = () => {
+        console.log('Disconnected from server');
+        updateConnectionStatus('disconnected');
+        connected = false;
+
+        setTimeout(() => {
+          console.log('Attempting to reconnect...');
+          connect();
+        }, 2000);
+      };
+    }
+
+    addBtn.onclick = addTodo;
+    inputEl.onkeypress = (e) => {
+      if (e.key === 'Enter') addTodo();
+    };
+
+    connect();
+  </script>
+</body>
+</html>

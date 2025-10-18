@@ -66,6 +66,8 @@ Each aggregate has its own projection for read models:
 
 ## Usage
 
+### CLI Mode
+
 ```bash
 # Install dependencies
 bun install
@@ -88,6 +90,32 @@ bun run src/cli.ts delete <todo-id>
 # Show help
 bun run src/cli.ts help
 ```
+
+### WebSocket Server + Web Frontend
+
+Run the application as a WebSocket server with a web-based frontend:
+
+```bash
+# Start the WebSocket server
+turbo server --filter=@codeforbreakfast/eventsourcing-example-todo
+
+# Open the frontend in your browser
+open public/index.html
+```
+
+The WebSocket server:
+
+- Listens on `ws://0.0.0.0:8080`
+- Handles todo commands (CreateTodo, CompleteTodo, UncompleteTodo, DeleteTodo)
+- Broadcasts events to all connected clients in real-time
+- Uses the same event sourcing backend as the CLI
+
+The web frontend:
+
+- Connects to the WebSocket server
+- Provides a modern, responsive UI for managing todos
+- Shows real-time updates when todos are modified
+- Handles connection state and reconnection automatically
 
 ## Testing
 
@@ -116,6 +144,10 @@ The tests demonstrate:
 
 6. **Effect PubSub**: Used for cross-aggregate communication without tight coupling.
 
+7. **WebSocket Transport**: The WebSocket implementation uses the `@codeforbreakfast/eventsourcing-transport-websocket` package with the server protocol layer for bidirectional real-time communication.
+
+8. **Shared Backend**: Both CLI and WebSocket server use the same event store and aggregates, demonstrating that the event sourcing layer is transport-agnostic.
+
 ## Learning Points
 
 This example shows:
@@ -126,3 +158,6 @@ This example shows:
 - How to build projections from event streams
 - How to test event-sourced systems
 - How to use Effect library patterns
+- How to build a WebSocket server with Effect and the eventsourcing packages
+- How to integrate real-time web frontends with event sourcing backends
+- How the same domain logic can be used across different transports (CLI, WebSocket, etc.)

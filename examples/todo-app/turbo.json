@@ -5,6 +5,11 @@
       "cache": false,
       "inputs": ["src/**"]
     },
+    "server": {
+      "cache": false,
+      "persistent": true,
+      "inputs": ["src/**", "public/**"]
+    },
     "test": {
       "cache": false,
       "inputs": ["src/**", "tests/**"]
