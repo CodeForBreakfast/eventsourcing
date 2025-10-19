@@ -4,6 +4,31 @@ import type { EventBusService } from './types';
 import { CommandDispatcher } from './commandDispatcher';
 import { EventBus } from './eventBus';
 
+const sendCommandResultToProtocol = (
+  protocol: Context.Tag.Service<typeof ServerProtocol>,
+  dispatcher: Context.Tag.Service<typeof CommandDispatcher>,
+  command: {
+    readonly id: string;
+    readonly name: string;
+    readonly target: string;
+    readonly payload: unknown;
+  }
+) =>
+  pipe(
+    dispatcher.dispatch(command),
+    Effect.flatMap((result) => protocol.sendResult(command.id, result)),
+    Effect.catchAll((error) =>
+      protocol.sendResult(command.id, {
+        _tag: 'Failure',
+        error: {
+          _tag: 'UnknownError',
+          commandId: command.id,
+          message: String(error),
+        },
+      })
+    )
+  );
+
 /**
  * Bridge ServerProtocol commands to CommandDispatcher
  *
@@ -15,29 +40,37 @@ import { EventBus } from './eventBus';
 const bridgeCommandsToDispatcher = (
   protocol: Context.Tag.Service<typeof ServerProtocol>,
   dispatcher: Context.Tag.Service<typeof CommandDispatcher>
-): Effect.Effect<never, never, Scope.Scope> =>
+): Effect.Effect<never, never, Scope.Scope | unknown> =>
   pipe(
     protocol.onWireCommand,
-    Stream.runForEach((command) =>
-      pipe(
-        dispatcher.dispatch(command),
-        Effect.flatMap((result) => protocol.sendResult(command.id, result)),
-        Effect.catchAll((error) =>
-          protocol.sendResult(command.id, {
-            _tag: 'Failure',
-            error: {
-              _tag: 'UnknownError',
-              commandId: command.id,
-              message: String(error),
-            },
-          })
-        )
-      )
-    ),
+    Stream.runForEach((command) => sendCommandResultToProtocol(protocol, dispatcher, command)),
     Effect.forkScoped,
     Effect.asVoid,
     Effect.andThen(Effect.never)
   );
+
+const publishDomainEventToProtocol = (
+  protocol: Context.Tag.Service<typeof ServerProtocol>,
+  domainEvent: {
+    readonly streamId: string;
+    readonly event: Record<string, unknown>;
+    readonly position: number;
+  }
+) => protocol.publishEvent(domainEvent as unknown as Parameters<typeof protocol.publishEvent>[0]);
+
+const runEventStreamPublishing = (
+  protocol: Context.Tag.Service<typeof ServerProtocol>,
+  stream: Stream.Stream<
+    {
+      readonly streamId: string;
+      readonly event: Record<string, unknown>;
+      readonly position: number;
+    },
+    never,
+    never
+  >
+) =>
+  Stream.runForEach(stream, (domainEvent) => publishDomainEventToProtocol(protocol, domainEvent));
 
 /**
  * Bridge EventBus events to ServerProtocol
@@ -51,21 +84,34 @@ const bridgeEventsToProtocol = (
   eventBus: EventBusService
 ): Effect.Effect<never, never, Scope.Scope> =>
   pipe(
-    eventBus.subscribe((_e): _e is any => true), // Subscribe to all events
+    eventBus.subscribe((_e): _e is unknown => true),
     Effect.flatMap((stream) =>
-      pipe(
-        stream,
-        Stream.runForEach(
-          (domainEvent) =>
-            protocol.publishEvent({
-              streamId: domainEvent.streamId,
-              position: domainEvent.position,
-              ...domainEvent.event,
-            } as any) // Type cast needed due to generic event structure
-        )
+      runEventStreamPublishing(
+        protocol,
+        stream as Stream.Stream<
+          {
+            readonly streamId: string;
+            readonly event: Record<string, unknown>;
+            readonly position: number;
+          },
+          never,
+          never
+        >
       )
     ),
     Effect.forkScoped,
+    Effect.asVoid,
+    Effect.andThen(Effect.never)
+  );
+
+const runBothBridges = (
+  protocol: Context.Tag.Service<typeof ServerProtocol>,
+  dispatcher: Context.Tag.Service<typeof CommandDispatcher>,
+  eventBus: EventBusService
+) =>
+  pipe(
+    [bridgeCommandsToDispatcher(protocol, dispatcher), bridgeEventsToProtocol(protocol, eventBus)],
+    Effect.all,
     Effect.asVoid,
     Effect.andThen(Effect.never)
   );
@@ -93,19 +139,9 @@ const bridgeEventsToProtocol = (
  */
 export const makeProtocolBridge = (
   protocol: Context.Tag.Service<typeof ServerProtocol>
-): Effect.Effect<never, never, CommandDispatcher | EventBus | Scope.Scope> =>
+): Effect.Effect<never, never, CommandDispatcher | EventBus | Scope.Scope | unknown> =>
   pipe(
     [CommandDispatcher, EventBus] as const,
     Effect.all,
-    Effect.flatMap(([dispatcher, eventBus]) =>
-      pipe(
-        [
-          bridgeCommandsToDispatcher(protocol, dispatcher),
-          bridgeEventsToProtocol(protocol, eventBus),
-        ],
-        Effect.all,
-        Effect.asVoid,
-        Effect.andThen(Effect.never)
-      )
-    )
+    Effect.flatMap(([dispatcher, eventBus]) => runBothBridges(protocol, dispatcher, eventBus))
   );

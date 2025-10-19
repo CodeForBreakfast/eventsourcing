@@ -43,7 +43,7 @@ export type AggregateConfig<
  * Configuration for a process manager
  * Process managers react to events and trigger commands
  */
-export interface ProcessManagerConfig<TEvent = unknown, __TMetadata = unknown> {
+export interface ProcessManagerConfig<TEvent = unknown, _TMetadata = unknown> {
   /** Descriptive name for logging and debugging */
   readonly name: string;
 
@@ -130,7 +130,7 @@ export interface ServerRuntime<TEvent = unknown> {
     readonly publishEvent: (
       event: ReadonlyDeep<{ readonly streamId: EventStreamId } & Record<string, unknown>>
     ) => Effect.Effect<void, unknown, never>;
-  }) => Effect.Effect<never, ServerError, Scope.Scope>;
+  }) => Effect.Effect<never, ServerError, Scope.Scope | unknown>;
 
   /**
    * Access to the event bus for custom integrations

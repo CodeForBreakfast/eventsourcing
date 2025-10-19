@@ -1,7 +1,7 @@
 import { Effect, Context, Chunk, pipe, Layer } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
-import { toStreamId } from '@codeforbreakfast/eventsourcing-store';
+import type { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
 import type {
   ServerError,
@@ -17,7 +17,7 @@ import { EventBus } from './eventBus';
  */
 export class CommandDispatcher extends Context.Tag('CommandDispatcher')<
   CommandDispatcher,
-  CommandDispatcherService<any>
+  CommandDispatcherService<unknown>
 >() {}
 
 /**
@@ -47,7 +47,7 @@ const findAggregateForCommand = <TEvent extends Record<string, unknown>, TMetada
   command: ReadonlyDeep<WireCommand>,
   aggregates: ReadonlyArray<AggregateConfig<TEvent, TMetadata>>
 ): Effect.Effect<
-  AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, any>,
+  AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
   ServerError
 > => {
   const methodName = toCamelCase(command.name);
@@ -57,7 +57,7 @@ const findAggregateForCommand = <TEvent extends Record<string, unknown>, TMetada
     const commands = root.commands as Record<string, unknown>;
     if (methodName in commands && typeof commands[methodName] === 'function') {
       return Effect.succeed(
-        root as AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, any>
+        root as AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>
       );
     }
   }
@@ -163,6 +163,81 @@ const executeAggregateCommand = <TEvent extends Record<string, unknown>, TMetada
   );
 };
 
+const publishEventsToEventBus = <TEvent extends Record<string, unknown>>(
+  events: ReadonlyArray<TEvent>,
+  streamId: string,
+  baseEventNumber: number,
+  eventBus: EventBusService
+) =>
+  Effect.forEach(events, (event, index) =>
+    eventBus.publish({
+      streamId,
+      event,
+      position: baseEventNumber + index,
+    } as DomainEvent)
+  );
+
+const publishEventsAndReturnSuccess = <TEvent extends Record<string, unknown>>(
+  events: ReadonlyArray<TEvent>,
+  streamId: string,
+  baseEventNumber: number,
+  eventBus: EventBusService
+) =>
+  pipe(
+    publishEventsToEventBus(events, streamId, baseEventNumber, eventBus),
+    Effect.asVoid,
+    Effect.as({
+      _tag: 'Success' as const,
+      position: {
+        streamId: streamId as EventStreamId,
+        eventNumber: baseEventNumber + events.length,
+      },
+    })
+  );
+
+const commitEventsAndPublish = <TEvent extends Record<string, unknown>, TMetadata>(
+  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
+  command: ReadonlyDeep<WireCommand>,
+  events: ReadonlyArray<TEvent>,
+  state: { readonly nextEventNumber: number },
+  eventBus: EventBusService
+) =>
+  pipe(
+    aggregate.commit({
+      id: command.target,
+      eventNumber: state.nextEventNumber,
+      events: Chunk.fromIterable(events),
+    }),
+    Effect.mapError(
+      (error): ServerError =>
+        new (class extends Error {
+          readonly _tag = 'ServerError';
+          constructor(
+            readonly operation: string,
+            readonly reason: string,
+            readonly cause?: unknown
+          ) {
+            super(`${operation} failed: ${reason}`);
+            this.name = 'ServerError';
+          }
+        })('commitEvents', `Failed to commit events: ${String(error)}`, error) as ServerError
+    ),
+    Effect.andThen(
+      publishEventsAndReturnSuccess(events, command.target, state.nextEventNumber, eventBus)
+    )
+  );
+
+const executeCommandAndCommit = <TEvent extends Record<string, unknown>, TMetadata>(
+  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
+  command: ReadonlyDeep<WireCommand>,
+  state: { readonly nextEventNumber: number },
+  eventBus: EventBusService
+) =>
+  pipe(
+    executeAggregateCommand(aggregate, command),
+    Effect.flatMap((events) => commitEventsAndPublish(aggregate, command, events, state, eventBus))
+  );
+
 /**
  * Load aggregate state, execute command, commit events, publish to event bus
  *
@@ -171,12 +246,11 @@ const executeAggregateCommand = <TEvent extends Record<string, unknown>, TMetada
  * @internal
  */
 const processCommand = <TEvent extends Record<string, unknown>, TMetadata>(
-  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, any>,
+  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
   command: ReadonlyDeep<WireCommand>,
   eventBus: EventBusService
 ) =>
   pipe(
-    // 1. Load aggregate state
     aggregate.load(command.target),
     Effect.mapError(
       (error): ServerError =>
@@ -196,61 +270,7 @@ const processCommand = <TEvent extends Record<string, unknown>, TMetadata>(
           error
         ) as ServerError
     ),
-    Effect.flatMap((state) =>
-      pipe(
-        // 2. Execute command
-        executeAggregateCommand(aggregate, command),
-        Effect.flatMap((events) =>
-          pipe(
-            // 3. Commit events
-            aggregate.commit({
-              id: command.target,
-              eventNumber: state.nextEventNumber,
-              events: Chunk.fromIterable(events),
-            }),
-            Effect.mapError(
-              (error): ServerError =>
-                new (class extends Error {
-                  readonly _tag = 'ServerError';
-                  constructor(
-                    readonly operation: string,
-                    readonly reason: string,
-                    readonly cause?: unknown
-                  ) {
-                    super(`${operation} failed: ${reason}`);
-                    this.name = 'ServerError';
-                  }
-                })(
-                  'commitEvents',
-                  `Failed to commit events: ${String(error)}`,
-                  error
-                ) as ServerError
-            ),
-            Effect.andThen(
-              // 4. Publish events to event bus
-              pipe(
-                events,
-                Effect.forEach((event, index) =>
-                  eventBus.publish({
-                    streamId: command.target,
-                    event,
-                    position: state.nextEventNumber + index,
-                  } as DomainEvent)
-                ),
-                Effect.asVoid
-              )
-            ),
-            Effect.as({
-              _tag: 'Success' as const,
-              position: {
-                streamId: toStreamId(command.target),
-                eventNumber: state.nextEventNumber + events.length,
-              },
-            })
-          )
-        )
-      )
-    ),
+    Effect.flatMap((state) => executeCommandAndCommit(aggregate, command, state, eventBus)),
     Effect.catchAll(
       (error): Effect.Effect<CommandResult, never> =>
         Effect.succeed<CommandResult>({
@@ -259,7 +279,7 @@ const processCommand = <TEvent extends Record<string, unknown>, TMetadata>(
             _tag: 'ExecutionError',
             commandId: command.id,
             commandName: command.name,
-            message: error.reason,
+            message: 'reason' in error ? error.reason : String(error),
           },
         })
     )
@@ -288,30 +308,37 @@ const processCommand = <TEvent extends Record<string, unknown>, TMetadata>(
  * );
  * ```
  */
+const dispatchCommandToAggregate = <TEvent extends Record<string, unknown>, TMetadata>(
+  command: ReadonlyDeep<WireCommand>,
+  aggregates: ReadonlyArray<AggregateConfig<TEvent, TMetadata>>,
+  eventBus: EventBusService
+): Effect.Effect<CommandResult, never, unknown> =>
+  pipe(
+    findAggregateForCommand<TEvent, TMetadata>(command, aggregates),
+    Effect.flatMap((aggregate) => processCommand(aggregate, command, eventBus)),
+    Effect.catchAll(
+      (): Effect.Effect<CommandResult, never> =>
+        Effect.succeed<CommandResult>({
+          _tag: 'Failure' as const,
+          error: {
+            _tag: 'HandlerNotFound',
+            commandId: command.id,
+            commandName: command.name,
+            availableHandlers: [],
+          },
+        })
+    )
+  );
+
 export const makeCommandDispatcher = <TEvent extends Record<string, unknown>, TMetadata>(config: {
   readonly aggregates: ReadonlyArray<AggregateConfig<TEvent, TMetadata>>;
-}): Effect.Effect<CommandDispatcherService<any>, never, EventBus> =>
+}): Effect.Effect<CommandDispatcherService<unknown>, never, EventBus> =>
   pipe(
     EventBus,
     Effect.map(
-      (eventBus): CommandDispatcherService<any> => ({
-        dispatch: (command: ReadonlyDeep<WireCommand>): Effect.Effect<CommandResult, never, any> =>
-          pipe(
-            findAggregateForCommand<TEvent, TMetadata>(command, config.aggregates),
-            Effect.flatMap((aggregate) => processCommand(aggregate, command, eventBus)),
-            Effect.catchAll(
-              (): Effect.Effect<CommandResult, never> =>
-                Effect.succeed<CommandResult>({
-                  _tag: 'Failure' as const,
-                  error: {
-                    _tag: 'HandlerNotFound',
-                    commandId: command.id,
-                    commandName: command.name,
-                    availableHandlers: [],
-                  },
-                })
-            )
-          ) as Effect.Effect<CommandResult, never, any>,
+      (eventBus): CommandDispatcherService<unknown> => ({
+        dispatch: (command: ReadonlyDeep<WireCommand>) =>
+          dispatchCommandToAggregate<TEvent, TMetadata>(command, config.aggregates, eventBus),
       })
     )
   );
