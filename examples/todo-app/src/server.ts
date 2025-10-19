@@ -388,34 +388,42 @@ const forkProcessManagerEffect = startProcessManager();
 
 const forkProcessManager = pipe(forkProcessManagerEffect, Effect.forkScoped);
 
+const publishEventToProtocol =
+  (protocol: ProtocolService) =>
+  ({ streamId, event }: { readonly streamId: string; readonly event: TodoEvent | TodoListEvent }) =>
+    protocol.publishEvent({
+      streamId: streamId as never,
+      position: {
+        streamId: streamId as never,
+        eventNumber: 0,
+      },
+      type: event.type,
+      data: event.data,
+      timestamp: new Date(),
+    });
+
+const mapStreamEventToProtocol =
+  (protocol: ProtocolService) =>
+  (
+    stream: Stream.Stream<
+      { readonly streamId: string; readonly event: TodoEvent | TodoListEvent },
+      never,
+      never
+    >
+  ) =>
+    pipe(stream, Stream.mapEffect(publishEventToProtocol(protocol)), Stream.runDrain);
+
+const isAllEvents = (_event: TodoEvent | TodoListEvent): _event is TodoEvent | TodoListEvent =>
+  true;
+
+const subscribeToEventBus =
+  (eventBus: Readonly<EventBusService>) => (protocol: ProtocolService) => {
+    const subscribeEffect = eventBus.subscribe(isAllEvents);
+    return pipe(subscribeEffect, Effect.flatMap(mapStreamEventToProtocol(protocol)));
+  };
+
 const bridgeEventBusToProtocol = (eventBus: Readonly<EventBusService>) =>
-  pipe(
-    ServerProtocol,
-    Effect.flatMap((protocol) =>
-      pipe(
-        eventBus.subscribe((_event): _event is TodoEvent | TodoListEvent => true),
-        Effect.flatMap((stream) =>
-          pipe(
-            stream,
-            Stream.mapEffect(({ streamId, event }) =>
-              protocol.publishEvent({
-                streamId: streamId as never,
-                position: {
-                  streamId: streamId as never,
-                  eventNumber: 0,
-                },
-                type: event.type,
-                data: event.data,
-                timestamp: new Date(),
-              })
-            ),
-            Stream.runDrain
-          )
-        )
-      )
-    ),
-    Effect.forkScoped
-  );
+  pipe(ServerProtocol, Effect.flatMap(subscribeToEventBus(eventBus)), Effect.forkScoped);
 
 const startHttpServer = Effect.sync(() => {
   Bun.serve({
@@ -455,16 +463,21 @@ const provideLayerToDispatch =
     return pipe(dispatchEffect, Effect.provide(serverProtocolLayer));
   };
 
+const createEventBridgeEffect =
+  (eventBus: Readonly<EventBusService>) =>
+  <R>(serverProtocolLayer: Layer.Layer<ServerProtocol, unknown, R>) => {
+    const bridgeEffect = bridgeEventBusToProtocol(eventBus);
+    return pipe(bridgeEffect, Effect.provide(serverProtocolLayer));
+  };
+
 const startAllServices =
   (eventBus: Readonly<EventBusService>) =>
   <T>(serverTransport: T) => {
     const serverProtocolLayer = ServerProtocolLive(serverTransport as never);
     const provideLayer = provideLayerToDispatch(eventBus);
     const dispatchWithLayer = provideLayer(serverProtocolLayer);
-    const eventBridge = pipe(
-      bridgeEventBusToProtocol(eventBus),
-      Effect.provide(serverProtocolLayer)
-    );
+    const createEventBridge = createEventBridgeEffect(eventBus);
+    const eventBridge = createEventBridge(serverProtocolLayer);
 
     return pipe(
       [
