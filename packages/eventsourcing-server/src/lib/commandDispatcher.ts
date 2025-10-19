@@ -1,4 +1,4 @@
-import { Effect, Context, Chunk, pipe, Layer } from 'effect';
+import { Effect, Context, Chunk, pipe, Layer, Array as EffectArray } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import type { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
@@ -30,10 +30,8 @@ export class CommandDispatcher extends Context.Tag('CommandDispatcher')<
  *
  * @internal
  */
-const toCamelCase = (pascalCase: string): string => {
-  if (pascalCase.length === 0) return pascalCase;
-  return pascalCase.charAt(0).toLowerCase() + pascalCase.slice(1);
-};
+const toCamelCase = (pascalCase: string): string =>
+  pascalCase.length === 0 ? pascalCase : pascalCase.charAt(0).toLowerCase() + pascalCase.slice(1);
 
 /**
  * Find the aggregate root that should handle this command
@@ -52,31 +50,44 @@ const findAggregateForCommand = <TEvent extends Record<string, unknown>, TMetada
 > => {
   const methodName = toCamelCase(command.name);
 
-  for (const config of aggregates) {
-    const root = config.root;
-    const commands = root.commands as Record<string, unknown>;
-    if (methodName in commands && typeof commands[methodName] === 'function') {
-      return Effect.succeed(
-        root as AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>
-      );
-    }
-  }
+  const hasCommandMethod = (config: AggregateConfig<TEvent, TMetadata>): boolean => {
+    const commands = config.root.commands as Record<string, unknown>;
+    return methodName in commands && typeof commands[methodName] === 'function';
+  };
 
-  return Effect.fail(
-    new (class extends Error {
-      readonly _tag = 'ServerError';
-      constructor(
-        readonly operation: string,
-        readonly reason: string,
-        readonly cause?: unknown
-      ) {
-        super(`${operation} failed: ${reason}`);
-        this.name = 'ServerError';
-      }
-    })(
-      'findAggregate',
-      `No aggregate found with command method "${methodName}" for command "${command.name}"`
-    ) as ServerError
+  const extractRoot = (
+    config: AggregateConfig<TEvent, TMetadata>
+  ): AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown> =>
+    config.root as AggregateRoot<
+      string,
+      unknown,
+      TEvent,
+      TMetadata,
+      Record<string, unknown>,
+      unknown
+    >;
+
+  return pipe(
+    aggregates,
+    EffectArray.findFirst(hasCommandMethod),
+    Effect.map(extractRoot),
+    Effect.mapError(
+      () =>
+        new (class extends Error {
+          readonly _tag = 'ServerError';
+          constructor(
+            readonly operation: string,
+            readonly reason: string,
+            readonly cause?: unknown
+          ) {
+            super(`${operation} failed: ${reason}`);
+            this.name = 'ServerError';
+          }
+        })(
+          'findAggregate',
+          `No aggregate found with command method "${methodName}" for command "${command.name}"`
+        ) as ServerError
+    )
   );
 };
 
@@ -92,62 +103,78 @@ const executeAggregateCommand = <TEvent extends Record<string, unknown>, TMetada
   const methodName = toCamelCase(command.name);
   const commandMethod = aggregate.commands[methodName];
 
-  if (typeof commandMethod !== 'function') {
-    return Effect.fail(
-      new (class extends Error {
-        readonly _tag = 'ServerError';
-        constructor(
-          readonly operation: string,
-          readonly reason: string,
-          readonly cause?: unknown
-        ) {
-          super(`${operation} failed: ${reason}`);
-          this.name = 'ServerError';
-        }
-      })('executeCommand', `Command method "${methodName}" is not a function`) as ServerError
+  type CommandMethod = (
+    target: string,
+    payload: unknown
+  ) => Effect.Effect<ReadonlyArray<TEvent>, Error>;
+
+  const invokeMethod = (method: CommandMethod) => {
+    const callMethod = () => method(command.target, command.payload);
+
+    return pipe(
+      callMethod,
+      Effect.sync,
+      Effect.flatMap((result) =>
+        Effect.if(Effect.isEffect(result), {
+          onTrue: () => result,
+          onFalse: () =>
+            Effect.fail(
+              new (class extends Error {
+                readonly _tag = 'ServerError';
+                constructor(
+                  readonly operation: string,
+                  readonly reason: string,
+                  readonly cause?: unknown
+                ) {
+                  super(`${operation} failed: ${reason}`);
+                  this.name = 'ServerError';
+                }
+              })(
+                'executeCommand',
+                `Command method must return an Effect, got ${typeof result}`
+              ) as ServerError
+            ),
+        })
+      ),
+      Effect.catchAll((error) =>
+        Effect.fail(
+          new (class extends Error {
+            readonly _tag = 'ServerError';
+            constructor(
+              readonly operation: string,
+              readonly reason: string,
+              readonly cause?: unknown
+            ) {
+              super(`${operation} failed: ${reason}`);
+              this.name = 'ServerError';
+            }
+          })('executeCommand', `Command execution failed: ${String(error)}`, error) as ServerError
+        )
+      )
     );
-  }
+  };
 
   return pipe(
-    Effect.try({
-      try: () => commandMethod(command.target, command.payload),
-      catch: (error) =>
-        new (class extends Error {
-          readonly _tag = 'ServerError';
-          constructor(
-            readonly operation: string,
-            readonly reason: string,
-            readonly cause?: unknown
-          ) {
-            super(`${operation} failed: ${reason}`);
-            this.name = 'ServerError';
-          }
-        })('executeCommand', `Command execution failed: ${String(error)}`, error) as ServerError,
+    Effect.if(typeof commandMethod === 'function', {
+      onTrue: () => Effect.succeed(commandMethod as CommandMethod),
+      onFalse: () =>
+        Effect.fail(
+          new (class extends Error {
+            readonly _tag = 'ServerError';
+            constructor(
+              readonly operation: string,
+              readonly reason: string,
+              readonly cause?: unknown
+            ) {
+              super(`${operation} failed: ${reason}`);
+              this.name = 'ServerError';
+            }
+          })('executeCommand', `Command method "${methodName}" is not a function`) as ServerError
+        ),
     }),
-    Effect.flatMap((result) => {
-      // The result should be Effect<ReadonlyArray<TEvent>, Error>
-      if (Effect.isEffect(result)) {
-        return result as Effect.Effect<ReadonlyArray<TEvent>, Error>;
-      }
-      return Effect.fail(
-        new (class extends Error {
-          readonly _tag = 'ServerError';
-          constructor(
-            readonly operation: string,
-            readonly reason: string,
-            readonly cause?: unknown
-          ) {
-            super(`${operation} failed: ${reason}`);
-            this.name = 'ServerError';
-          }
-        })(
-          'executeCommand',
-          `Command method must return an Effect, got ${typeof result}`
-        ) as ServerError
-      );
-    }),
+    Effect.flatMap(invokeMethod),
     Effect.mapError(
-      (error): ServerError =>
+      (error): Readonly<ServerError> =>
         new (class extends Error {
           readonly _tag = 'ServerError';
           constructor(
@@ -195,21 +222,23 @@ const publishEventsAndReturnSuccess = <TEvent extends Record<string, unknown>>(
     })
   );
 
-const commitEventsAndPublish = <TEvent extends Record<string, unknown>, TMetadata>(
+const commitEventsToStore = <TEvent extends Record<string, unknown>, TMetadata>(
   aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
   command: ReadonlyDeep<WireCommand>,
   events: ReadonlyArray<TEvent>,
-  state: { readonly nextEventNumber: number },
-  eventBus: EventBusService
+  state: { readonly nextEventNumber: number }
 ) =>
   pipe(
-    aggregate.commit({
-      id: command.target,
-      eventNumber: state.nextEventNumber,
-      events: Chunk.fromIterable(events),
-    }),
+    events,
+    Chunk.fromIterable,
+    (eventsChunk) =>
+      aggregate.commit({
+        id: command.target,
+        eventNumber: state.nextEventNumber,
+        events: eventsChunk,
+      }),
     Effect.mapError(
-      (error): ServerError =>
+      (error): Readonly<ServerError> =>
         new (class extends Error {
           readonly _tag = 'ServerError';
           constructor(
@@ -221,7 +250,18 @@ const commitEventsAndPublish = <TEvent extends Record<string, unknown>, TMetadat
             this.name = 'ServerError';
           }
         })('commitEvents', `Failed to commit events: ${String(error)}`, error) as ServerError
-    ),
+    )
+  );
+
+const commitEventsAndPublish = <TEvent extends Record<string, unknown>, TMetadata>(
+  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
+  command: ReadonlyDeep<WireCommand>,
+  events: ReadonlyArray<TEvent>,
+  state: { readonly nextEventNumber: number },
+  eventBus: EventBusService
+) =>
+  pipe(
+    commitEventsToStore(aggregate, command, events, state),
     Effect.andThen(
       publishEventsAndReturnSuccess(events, command.target, state.nextEventNumber, eventBus)
     )
@@ -238,6 +278,33 @@ const executeCommandAndCommit = <TEvent extends Record<string, unknown>, TMetada
     Effect.flatMap((events) => commitEventsAndPublish(aggregate, command, events, state, eventBus))
   );
 
+const loadAggregateState = <TEvent extends Record<string, unknown>, TMetadata>(
+  aggregate: AggregateRoot<string, unknown, TEvent, TMetadata, Record<string, unknown>, unknown>,
+  targetId: string
+) =>
+  pipe(
+    targetId,
+    aggregate.load,
+    Effect.mapError(
+      (error): Readonly<ServerError> =>
+        new (class extends Error {
+          readonly _tag = 'ServerError';
+          constructor(
+            readonly operation: string,
+            readonly reason: string,
+            readonly cause?: unknown
+          ) {
+            super(`${operation} failed: ${reason}`);
+            this.name = 'ServerError';
+          }
+        })(
+          'loadAggregate',
+          `Failed to load aggregate ${targetId}: ${String(error)}`,
+          error
+        ) as ServerError
+    )
+  );
+
 /**
  * Load aggregate state, execute command, commit events, publish to event bus
  *
@@ -251,25 +318,7 @@ const processCommand = <TEvent extends Record<string, unknown>, TMetadata>(
   eventBus: EventBusService
 ) =>
   pipe(
-    aggregate.load(command.target),
-    Effect.mapError(
-      (error): ServerError =>
-        new (class extends Error {
-          readonly _tag = 'ServerError';
-          constructor(
-            readonly operation: string,
-            readonly reason: string,
-            readonly cause?: unknown
-          ) {
-            super(`${operation} failed: ${reason}`);
-            this.name = 'ServerError';
-          }
-        })(
-          'loadAggregate',
-          `Failed to load aggregate ${command.target}: ${String(error)}`,
-          error
-        ) as ServerError
-    ),
+    loadAggregateState(aggregate, command.target),
     Effect.flatMap((state) => executeCommandAndCommit(aggregate, command, state, eventBus)),
     Effect.catchAll(
       (error): Effect.Effect<CommandResult, never> =>
