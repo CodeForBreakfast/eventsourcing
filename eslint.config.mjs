@@ -149,6 +149,8 @@ export default [
       '**/buntest/**',
       '**/eslint-effect/**',
       '**/testing/**',
+      '**/playwright.config.ts',
+      '**/e2e/**',
     ],
     languageOptions: commonLanguageOptions,
     plugins: commonPlugins,
