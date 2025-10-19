@@ -69,7 +69,8 @@
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
-    "@effect/platform": "0.92.1"
+    "@effect/platform": "0.92.1",
+    "type-fest": "5.1.0"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",

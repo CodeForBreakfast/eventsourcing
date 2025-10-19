@@ -46,19 +46,46 @@ This package provides the **core server infrastructure**. For a complete server,
 ### Transport-Agnostic Usage
 
 ```typescript
-import { makeServerRuntime } from '@codeforbreakfast/eventsourcing-server';
 import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
-import { TodoAggregateRoot } from './domain/todoAggregate';
-import { TodoListAggregateRoot } from './domain/todoListAggregate';
+import { Effect, Context, Layer } from 'effect';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+// Your domain types and aggregates
+declare const TodoAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+declare const TodoListAggregateRoot: AggregateRoot<
+  string,
+  any,
+  any,
+  any,
+  { addTodo: (id: string, title: string) => Effect.Effect<readonly any[], Error> },
+  any
+>;
+declare const yourTransportLayer: Layer.Layer<any, any, any>;
+
+type TodoId = string & { readonly _brand: 'TodoId' };
+type TodoListId = string & { readonly _brand: 'TodoListId' };
+type TodoCreatedEvent = { readonly type: 'TodoCreated'; readonly data: { readonly title: string } };
+
+// Declare makeServerRuntime
+declare const makeServerRuntime: <TEvent, TMetadata>(config: {
+  aggregates: readonly any[];
+  processManagers?: readonly any[];
+}) => {
+  handleProtocol: (
+    protocol: Context.Tag.Service<typeof ServerProtocol>
+  ) => Effect.Effect<never, any, any>;
+  eventBus: any;
+  executeCommand: any;
+};
 
 // Create the transport-agnostic runtime
-const runtime = makeServerRuntime({
-  aggregates: [TodoAggregateRoot, TodoListAggregateRoot],
+const runtime = makeServerRuntime<TodoCreatedEvent, string>({
+  aggregates: [{ root: TodoAggregateRoot }, { root: TodoListAggregateRoot }],
   processManagers: [
     {
       name: 'TodoListManager',
       on: 'TodoCreated',
-      execute: (event, { streamId }) =>
+      execute: (event: TodoCreatedEvent, { streamId }: { streamId: string }) =>
         TodoListAggregateRoot.commands.addTodo(streamId as TodoId, event.data.title),
       target: () => 'todo-list-main' as TodoListId,
     },
@@ -66,11 +93,10 @@ const runtime = makeServerRuntime({
 });
 
 // Wire to any transport (WebSocket, HTTP, SSE, etc.)
-const program = pipe(
-  ServerProtocol,
-  Effect.flatMap(runtime.handleProtocol),
-  Effect.provide(yourTransportLayer) // WebSocket, HTTP, etc.
-);
+const program = Effect.gen(function* () {
+  const protocol = yield* ServerProtocol;
+  yield* runtime.handleProtocol(protocol);
+}).pipe(Effect.provide(yourTransportLayer));
 ```
 
 ### With WebSocket (Convenience)
@@ -78,13 +104,21 @@ const program = pipe(
 For the common WebSocket case, use `@codeforbreakfast/eventsourcing-websocket`:
 
 ```typescript
-import { makeEventSourcingServer } from '@codeforbreakfast/eventsourcing-websocket';
-import { TodoAggregateRoot } from './domain/todoAggregate';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { BunRuntime } from '@effect/platform-bun';
+
+// Your domain aggregate
+declare const TodoAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+
+// Future package (not yet implemented)
+declare const makeEventSourcingServer: (config: { port: number; aggregates: readonly any[] }) => {
+  start: () => any;
+};
 
 // One-liner for WebSocket server
 const server = makeEventSourcingServer({
   port: 8080,
-  aggregates: [TodoAggregateRoot],
+  aggregates: [{ root: TodoAggregateRoot }],
   // ... process managers, etc.
 });
 
@@ -100,13 +134,15 @@ See `@codeforbreakfast/eventsourcing-websocket` documentation for WebSocket-spec
 The runtime automatically routes `WireCommand` messages to the appropriate aggregate based on command name and target.
 
 ```typescript
-// Protocol receives:
-{
+import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+
+// Protocol receives a WireCommand:
+const wireCommand: WireCommand = {
   id: 'cmd-123',
   name: 'CreateTodo',
   target: 'todo-456',
-  payload: { title: 'Buy milk' }
-}
+  payload: { title: 'Buy milk' },
+};
 
 // Runtime automatically:
 // 1. Loads TodoAggregate state for 'todo-456'
@@ -132,14 +168,34 @@ No manual bridging required.
 Process managers react to events and trigger commands on other aggregates.
 
 ```typescript
-processManagers: [
-  {
-    name: 'OrderFulfillment',
-    on: 'OrderPlaced',
-    execute: (event) => InventoryAggregate.commands.reserveItems(event.data.items),
-    target: (event) => event.data.warehouseId,
-  },
-];
+import { Effect } from 'effect';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+type OrderPlacedEvent = {
+  readonly type: 'OrderPlaced';
+  readonly data: { readonly items: readonly string[]; readonly warehouseId: string };
+};
+
+declare const InventoryAggregate: AggregateRoot<
+  string,
+  any,
+  any,
+  any,
+  { reserveItems: (items: readonly string[]) => Effect.Effect<readonly any[], Error> },
+  any
+>;
+
+const config = {
+  processManagers: [
+    {
+      name: 'OrderFulfillment',
+      on: 'OrderPlaced' as const,
+      execute: (event: OrderPlacedEvent) =>
+        InventoryAggregate.commands.reserveItems(event.data.items),
+      target: (event: OrderPlacedEvent) => event.data.warehouseId,
+    },
+  ],
+};
 ```
 
 The runtime handles:
@@ -159,7 +215,24 @@ Creates a transport-agnostic server runtime that handles command routing, event 
 **Parameters:**
 
 ```typescript
-interface ServerRuntimeConfig<TEvent, TMetadata> {
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Effect } from 'effect';
+
+interface AggregateRootConfig<TEvent, TMetadata extends Record<string, unknown>> {
+  root: AggregateRoot<any, TEvent, TMetadata, any, any, any>;
+}
+
+interface ProcessManagerConfig<TEvent, TMetadata extends Record<string, unknown>> {
+  name: string;
+  on: string;
+  execute: (
+    event: TEvent,
+    context: { streamId: string }
+  ) => Effect.Effect<readonly TEvent[], Error>;
+  target: (event: TEvent, context: { streamId: string }) => string;
+}
+
+interface ServerRuntimeConfig<TEvent, TMetadata extends Record<string, unknown>> {
   // Aggregate root configurations
   aggregates: Array<AggregateRootConfig<TEvent, TMetadata>>;
 
@@ -174,9 +247,37 @@ interface ServerRuntimeConfig<TEvent, TMetadata> {
 **Returns:**
 
 ```typescript
+import { Effect, Scope, Context, Stream } from 'effect';
+import type { WireCommand, CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+import type { ReadonlyDeep } from 'type-fest';
+
+interface ServerError {
+  readonly _tag: string;
+}
+
+interface EventBusService {
+  publish: (event: any) => Effect.Effect<void, never>;
+  subscribe: (
+    eventType: string,
+    handler: (event: any) => Effect.Effect<void, Error>
+  ) => Effect.Effect<void, never>;
+}
+
+// ServerProtocol is a Tag that provides this interface
+interface ServerProtocolService {
+  readonly onWireCommand: Stream.Stream<WireCommand, never, never>;
+  readonly sendResult: (
+    commandId: string,
+    result: ReadonlyDeep<CommandResult>
+  ) => Effect.Effect<void, any, never>;
+  readonly publishEvent: (event: ReadonlyDeep<any>) => Effect.Effect<void, any, never>;
+}
+
 interface ServerRuntime {
   // Handle ServerProtocol commands and events
-  handleProtocol: (protocol: ServerProtocol) => Effect.Effect<never, ServerError, Scope.Scope>;
+  handleProtocol: (
+    protocol: ServerProtocolService
+  ) => Effect.Effect<never, ServerError, Scope.Scope>;
 
   // Access to the event bus for custom integrations
   eventBus: EventBusService;
@@ -189,20 +290,35 @@ interface ServerRuntime {
 **Usage:**
 
 ```typescript
-import { makeServerRuntime } from '@codeforbreakfast/eventsourcing-server';
 import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
+import { Effect, Context, Layer } from 'effect';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+declare const TodoAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+declare const yourTransportLayer: Layer.Layer<any, any, any>;
+
+// Declare makeServerRuntime with proper signature
+declare const makeServerRuntime: (config: {
+  aggregates: readonly any[];
+  processManagers?: readonly any[];
+}) => {
+  handleProtocol: (
+    protocol: Context.Tag.Service<typeof ServerProtocol>
+  ) => Effect.Effect<never, any, any>;
+  eventBus: any;
+  executeCommand: any;
+};
 
 const runtime = makeServerRuntime({
-  aggregates: [TodoAggregateRoot],
-  processManagers: [...],
+  aggregates: [{ root: TodoAggregateRoot }],
+  processManagers: [],
 });
 
 // Wire to any transport
-const program = pipe(
-  ServerProtocol,
-  Effect.flatMap(runtime.handleProtocol),
-  Effect.provide(yourTransportLayer)
-);
+const program = Effect.gen(function* () {
+  const protocol = yield* ServerProtocol;
+  yield* runtime.handleProtocol(protocol);
+}).pipe(Effect.provide(yourTransportLayer));
 ```
 
 ### Aggregate Root Config
@@ -214,6 +330,24 @@ import {
   makeAggregateRoot,
   defineAggregateEventStore,
 } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Effect, Schema, Option } from 'effect';
+
+type TodoEvent = { readonly type: 'TodoCreated'; readonly data: { readonly title: string } };
+type UserId = string & { readonly _brand: 'UserId' };
+type TodoState = { readonly title: string; readonly completed: boolean };
+
+declare const TodoIdSchema: Schema.Schema<string, string, never>;
+declare const UserIdSchema: Schema.Schema<UserId, string, never>;
+
+// applyEvent must return an Effect that transforms state
+const applyEvent =
+  (state: Readonly<Option.Option<TodoState>>) =>
+  (event: Readonly<TodoEvent>): Effect.Effect<TodoState, never, never> =>
+    Effect.succeed({ title: event.data.title, completed: false });
+
+declare const createTodo: (title: string) => Effect.Effect<readonly TodoEvent[], Error>;
+declare const complete: () => Effect.Effect<readonly TodoEvent[], Error>;
+declare const deleteTodo: () => Effect.Effect<readonly TodoEvent[], Error>;
 
 const TodoAggregate = defineAggregateEventStore<TodoEvent, UserId>('Todo');
 
@@ -224,7 +358,7 @@ const TodoAggregateRoot = makeAggregateRoot(TodoIdSchema, UserIdSchema, applyEve
 });
 
 // Pass to server config
-aggregates: [TodoAggregateRoot];
+const aggregates = [{ root: TodoAggregateRoot }];
 ```
 
 The server automatically:
@@ -237,7 +371,9 @@ The server automatically:
 ### Process Manager Config
 
 ```typescript
-interface ProcessManagerConfig<TEvent, TMetadata> {
+import { Effect } from 'effect';
+
+interface ProcessManagerConfig<TEvent extends { readonly type: string }, TMetadata> {
   // Descriptive name for logging
   name: string;
 
@@ -258,12 +394,29 @@ interface ProcessManagerConfig<TEvent, TMetadata> {
 **Example:**
 
 ```typescript
-{
+import { Effect } from 'effect';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+type UserRegisteredEvent = {
+  readonly type: 'UserRegistered';
+  readonly data: { readonly email: string; readonly userId: string };
+};
+
+declare const EmailAggregate: AggregateRoot<
+  string,
+  any,
+  any,
+  any,
+  { sendWelcome: (email: string) => Effect.Effect<readonly any[], Error> },
+  any
+>;
+
+const processManager = {
   name: 'SendWelcomeEmail',
-  on: 'UserRegistered',
-  execute: (event) => EmailAggregate.commands.sendWelcome(event.data.email),
-  target: (event) => `email-${event.data.userId}`,
-}
+  on: 'UserRegistered' as const,
+  execute: (event: UserRegisteredEvent) => EmailAggregate.commands.sendWelcome(event.data.email),
+  target: (event: UserRegisteredEvent) => `email-${event.data.userId}`,
+};
 ```
 
 ## Architecture
@@ -425,17 +578,30 @@ The common case (single aggregate CRUD) should be trivial.
 **For this package** (transport-agnostic):
 
 ```typescript
+import { makeServerRuntime } from '@codeforbreakfast/eventsourcing-server';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+declare const UserAggregate: AggregateRoot<string, any, any, any, any, any>;
+
 const runtime = makeServerRuntime({
-  aggregates: [UserAggregate],
+  aggregates: [{ root: UserAggregate }],
 });
 ```
 
 **For WebSocket** (via eventsourcing-websocket):
 
 ```typescript
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+
+declare const UserAggregate: AggregateRoot<string, any, any, any, any, any>;
+declare const makeEventSourcingServer: (config: {
+  port: number;
+  aggregates: readonly any[];
+}) => any;
+
 makeEventSourcingServer({
   port: 8080,
-  aggregates: [UserAggregate],
+  aggregates: [{ root: UserAggregate }],
 });
 ```
 
@@ -459,22 +625,28 @@ All event types, command types, and aggregate states should be fully typed. Type
 Prefer:
 
 ```typescript
-processManagers: [
-  {
-    name: 'SendEmail',
-    on: 'UserRegistered',
-    execute: (event) => emailCommand(event),
-    target: (event) => event.data.userId,
-  },
-];
+import { Effect } from 'effect';
+
+type UserRegisteredEvent = {
+  readonly type: 'UserRegistered';
+  readonly data: { readonly userId: string };
+};
+
+declare const emailCommand: (event: UserRegisteredEvent) => Effect.Effect<readonly any[], Error>;
+
+const config = {
+  processManagers: [
+    {
+      name: 'SendEmail',
+      on: 'UserRegistered' as const,
+      execute: (event: UserRegisteredEvent) => emailCommand(event),
+      target: (event: UserRegisteredEvent) => event.data.userId,
+    },
+  ],
+};
 ```
 
-Over:
-
-```typescript
-@OnEvent('UserRegistered')  // Magic decorators
-sendEmail(event) { ... }
-```
+Over magic decorators or implicit conventions.
 
 ## Comparison with Current Approach
 
@@ -520,17 +692,35 @@ const handleCommandDispatch = () => {
 **After (With This Package + WebSocket):**
 
 ```typescript
-import { makeEventSourcingServer } from '@codeforbreakfast/eventsourcing-websocket';
-import { TodoAggregateRoot, TodoListAggregateRoot } from './domain';
+import { BunRuntime } from '@effect/platform-bun';
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Effect } from 'effect';
+
+type TodoCreatedEvent = { readonly type: 'TodoCreated'; readonly data: { readonly title: string } };
+
+declare const TodoAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+declare const TodoListAggregateRoot: AggregateRoot<
+  string,
+  any,
+  any,
+  any,
+  { addTodo: (streamId: string, title: string) => Effect.Effect<readonly any[], Error> },
+  any
+>;
+declare const makeEventSourcingServer: (config: {
+  port: number;
+  aggregates: readonly any[];
+  processManagers?: readonly any[];
+}) => { start: () => any };
 
 const server = makeEventSourcingServer({
   port: 8080,
-  aggregates: [TodoAggregateRoot, TodoListAggregateRoot],
+  aggregates: [{ root: TodoAggregateRoot }, { root: TodoListAggregateRoot }],
   processManagers: [
     {
       name: 'TodoListManager',
-      on: 'TodoCreated',
-      execute: (event, { streamId }) =>
+      on: 'TodoCreated' as const,
+      execute: (event: TodoCreatedEvent, { streamId }: { streamId: string }) =>
         TodoListAggregateRoot.commands.addTodo(streamId, event.data.title),
       target: () => 'todo-list-main',
     },
@@ -549,9 +739,17 @@ That's it. ~25 lines instead of 2,236.
 Override default routing for special cases:
 
 ```typescript
+import type { WireCommand } from '@codeforbreakfast/eventsourcing-commands';
+import { Effect } from 'effect';
+
+declare const makeEventSourcingServer: (config: {
+  commandRouter?: (command: WireCommand) => Effect.Effect<any, Error> | undefined;
+}) => any;
+declare const legacyCommandHandler: (command: WireCommand) => Effect.Effect<any, Error>;
+
 makeEventSourcingServer({
   // ... config
-  commandRouter: (command) => {
+  commandRouter: (command: WireCommand) => {
     if (command.name.startsWith('Legacy')) {
       return legacyCommandHandler(command);
     }
@@ -565,7 +763,17 @@ makeEventSourcingServer({
 Different aggregates can use different stores:
 
 ```typescript
-aggregates: [
+import type { AggregateRoot } from '@codeforbreakfast/eventsourcing-aggregates';
+import { Layer } from 'effect';
+
+declare const TodoAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+declare const UserAggregateRoot: AggregateRoot<string, any, any, any, any, any>;
+declare const makeFileSystemEventStore: (config: { baseDir: string }) => Layer.Layer<any, any, any>;
+declare const makePostgresEventStore: (config: {
+  connectionString: string;
+}) => Layer.Layer<any, any, any>;
+
+const aggregates = [
   {
     root: TodoAggregateRoot,
     store: makeFileSystemEventStore({ baseDir: './todos' }),
@@ -582,6 +790,11 @@ aggregates: [
 Replace the default event bus:
 
 ```typescript
+import type { EventBusService } from '@codeforbreakfast/eventsourcing-server';
+
+declare const makeEventSourcingServer: (config: { eventBus?: EventBusService }) => any;
+declare const myCustomEventBus: EventBusService;
+
 makeEventSourcingServer({
   // ... config
   eventBus: myCustomEventBus, // Must implement EventBusService interface
