@@ -15,7 +15,7 @@
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",
-    "typecheck": "tsc --noEmit",
+    "typecheck": "tsc --noEmit && tsc --project tsconfig.frontend.json --noEmit",
     "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
   },
   "dependencies": {

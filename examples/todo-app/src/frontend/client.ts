@@ -1,4 +1,4 @@
-import { Effect, Layer, Stream, pipe, Ref, HashMap, Console, Scope } from 'effect';
+import { Effect, Layer, Stream, pipe, Ref, HashMap, Console, Match, Option } from 'effect';
 import { WebSocketConnector } from '@codeforbreakfast/eventsourcing-transport-websocket';
 import { Client } from '@codeforbreakfast/eventsourcing-transport';
 import {
@@ -6,8 +6,8 @@ import {
   ProtocolLive,
   type ProtocolEvent,
 } from '@codeforbreakfast/eventsourcing-protocol';
+import { isCommandFailure, type CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import type { TodoEvent } from '../domain/todoEvents';
-import type { TodoId } from '../domain/types';
 
 const WS_URL = 'ws://localhost:8080';
 
@@ -24,83 +24,265 @@ interface AppState {
   readonly connected: boolean;
 }
 
-const updateConnectionStatus = (isConnected: boolean) =>
-  Effect.sync(() => {
-    const statusEl = document.getElementById('status');
-    if (!statusEl) return;
+const getElementByIdEffect = (id: string) => Effect.sync(() => document.getElementById(id));
 
-    if (isConnected) {
-      statusEl.className = 'connection-status status-connected';
-      statusEl.textContent = '✓ Connected to server';
-      (document.getElementById('newTodoInput') as HTMLInputElement).disabled = false;
-      (document.getElementById('addTodoBtn') as HTMLButtonElement).disabled = false;
-    } else {
-      statusEl.className = 'connection-status status-disconnected';
-      statusEl.textContent = '✗ Disconnected from server';
-      (document.getElementById('newTodoInput') as HTMLInputElement).disabled = true;
-      (document.getElementById('addTodoBtn') as HTMLButtonElement).disabled = true;
-    }
+const castToInputElement = (el: Readonly<HTMLElement> | null): Readonly<HTMLInputElement> | null =>
+  el as Readonly<HTMLInputElement> | null;
+
+const castToButtonElement = (
+  el: Readonly<HTMLElement> | null
+): Readonly<HTMLButtonElement> | null => el as Readonly<HTMLButtonElement> | null;
+
+const getInputElementById = (id: string) =>
+  pipe(id, getElementByIdEffect, Effect.map(castToInputElement));
+
+const getButtonElementById = (id: string) =>
+  pipe(id, getElementByIdEffect, Effect.map(castToButtonElement));
+
+const setDisabledOnInput = (disabled: boolean, el: Readonly<HTMLInputElement | null>) =>
+  Effect.sync(() =>
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    el !== null ? ((el as HTMLInputElement).disabled = disabled as boolean) : undefined
+  );
+
+const setDisabledOnButton = (disabled: boolean, el: Readonly<HTMLButtonElement | null>) =>
+  Effect.sync(() =>
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    el !== null ? ((el as HTMLButtonElement).disabled = disabled as boolean) : undefined
+  );
+
+const setStatusElementProps = (isConnected: boolean, statusEl: Readonly<HTMLElement>) =>
+  Effect.sync(() => {
+    const className = isConnected
+      ? 'connection-status status-connected'
+      : 'connection-status status-disconnected';
+    const textContent = isConnected ? '✓ Connected to server' : '✗ Disconnected from server';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (statusEl as HTMLElement).className = className;
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (statusEl as HTMLElement).textContent = textContent;
+    return undefined;
   });
+
+const disableInputElementById = (disabled: boolean, id: string) =>
+  pipe(
+    id,
+    getInputElementById,
+    Effect.flatMap((el) => setDisabledOnInput(disabled, el))
+  );
+
+const disableButtonElementById = (disabled: boolean, id: string) =>
+  pipe(
+    id,
+    getButtonElementById,
+    Effect.flatMap((el) => setDisabledOnButton(disabled, el))
+  );
+
+const updateInputsForConnection = (isConnected: boolean) =>
+  Effect.all([
+    disableInputElementById(!isConnected, 'newTodoInput'),
+    disableButtonElementById(!isConnected, 'addTodoBtn'),
+  ]);
+
+const updateStatusElement = (isConnected: boolean, statusEl: Readonly<HTMLElement | null>) =>
+  statusEl === null
+    ? Effect.void
+    : pipe(
+        setStatusElementProps(isConnected, statusEl),
+        Effect.andThen(updateInputsForConnection(isConnected))
+      );
+
+const updateConnectionStatus = (isConnected: boolean) =>
+  pipe(
+    'status',
+    getElementByIdEffect,
+    Effect.flatMap((el) => updateStatusElement(isConnected, el))
+  );
+
+const createEmptyStateHtml = () => `
+  <div class="empty-state">
+    <p>No todos yet!</p>
+    <p>Create one above to get started.</p>
+  </div>
+`;
+
+const createCheckbox = (id: string, todo: TodoData) =>
+  Effect.sync(() => {
+    const checkbox = document.createElement('input');
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (checkbox as HTMLInputElement).type = 'checkbox';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (checkbox as HTMLInputElement).className = 'todo-checkbox';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (checkbox as HTMLInputElement).checked = todo.completed;
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (checkbox as HTMLInputElement).onclick = () => {
+      const command = todo.completed ? 'UncompleteTodo' : 'CompleteTodo';
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
+      (window as any).__toggleTodo(id, command);
+    };
+    return checkbox;
+  });
+
+const createTextDiv = (todo: TodoData) =>
+  Effect.sync(() => {
+    const textDiv = document.createElement('div');
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (textDiv as HTMLDivElement).className = todo.completed ? 'todo-text completed' : 'todo-text';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (textDiv as HTMLDivElement).textContent = todo.title;
+    return textDiv;
+  });
+
+const createIdSpan = (id: string) =>
+  Effect.sync(() => {
+    const idSpan = document.createElement('span');
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (idSpan as HTMLSpanElement).className = 'todo-id';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (idSpan as HTMLSpanElement).textContent = id;
+    return idSpan;
+  });
+
+const createDeleteButton = (id: string) =>
+  Effect.sync(() => {
+    const deleteBtn = document.createElement('button');
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (deleteBtn as HTMLButtonElement).className = 'todo-delete';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (deleteBtn as HTMLButtonElement).textContent = 'Delete';
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (deleteBtn as HTMLButtonElement).onclick = () => {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
+      (window as any).__deleteTodo(id);
+    };
+    return deleteBtn;
+  });
+
+const assembleListItem = (
+  checkbox: Readonly<HTMLInputElement>,
+  textDiv: Readonly<HTMLDivElement>,
+  idSpan: Readonly<HTMLSpanElement>,
+  deleteBtn: Readonly<HTMLButtonElement>
+) =>
+  Effect.sync(() => {
+    const li = document.createElement('li');
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (li as HTMLLIElement).className = 'todo-item';
+    (li as HTMLLIElement).appendChild(checkbox as HTMLInputElement);
+    (li as HTMLLIElement).appendChild(textDiv as HTMLDivElement);
+    (li as HTMLLIElement).appendChild(idSpan as HTMLSpanElement);
+    (li as HTMLLIElement).appendChild(deleteBtn as HTMLButtonElement);
+    return li;
+  });
+
+const createAllTodoElements = (id: string, todo: TodoData) =>
+  Effect.all({
+    checkbox: createCheckbox(id, todo),
+    textDiv: createTextDiv(todo),
+    idSpan: createIdSpan(id),
+    deleteBtn: createDeleteButton(id),
+  });
+
+const createTodoListItem = (id: string, todo: TodoData) =>
+  pipe(
+    [id, todo] as const,
+    ([i, t]) => createAllTodoElements(i, t),
+    Effect.flatMap(({ checkbox, textDiv, idSpan, deleteBtn }) =>
+      assembleListItem(checkbox, textDiv, idSpan, deleteBtn)
+    )
+  );
+
+const appendChild = (listEl: Readonly<HTMLElement>, li: Readonly<HTMLLIElement>) =>
+  Effect.sync(() => {
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (listEl as HTMLElement).appendChild(li as HTMLLIElement);
+    return undefined;
+  });
+
+const appendTodoToList = (listEl: Readonly<HTMLElement>, id: string, todo: TodoData) =>
+  pipe(
+    [id, todo] as const,
+    ([i, t]) => createTodoListItem(i, t),
+    Effect.flatMap((li) => appendChild(listEl, li))
+  );
+
+const sortTodoEntries = (entries: ReadonlyArray<readonly [string, TodoData]>) =>
+  Array.from(entries).sort(([, a], [, b]) => {
+    const deletedDiff = a.deleted !== b.deleted ? (a.deleted ? 1 : -1) : 0;
+    return deletedDiff !== 0 ? deletedDiff : Number(a.completed) - Number(b.completed);
+  });
+
+const renderNonDeletedTodos = (
+  listEl: Readonly<HTMLElement>,
+  sortedTodos: ReadonlyArray<readonly [string, TodoData]>
+) =>
+  pipe(
+    Effect.forEach(sortedTodos, ([id, todo]) =>
+      todo.deleted ? Effect.void : appendTodoToList(listEl, id, todo)
+    ),
+    Effect.asVoid
+  );
+
+const setInnerHtml = (listEl: Readonly<HTMLElement>, html: string) =>
+  Effect.sync(() => {
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (listEl as HTMLElement).innerHTML = html;
+    return undefined;
+  });
+
+const renderEmptyState = (listEl: Readonly<HTMLElement>) =>
+  setInnerHtml(listEl, createEmptyStateHtml());
+
+const clearList = (listEl: Readonly<HTMLElement>) => setInnerHtml(listEl, '');
+
+const sortEntriesFromTodoMap = (todos: TodoMap) => sortTodoEntries(HashMap.toEntries(todos));
+
+const clearListAndSort = (listEl: Readonly<HTMLElement>, todos: TodoMap) =>
+  pipe(listEl, clearList, Effect.as(sortEntriesFromTodoMap(todos)));
+
+const renderSortedTodos = (listEl: Readonly<HTMLElement>, todos: TodoMap) =>
+  pipe(
+    [listEl, todos] as const,
+    ([l, t]) => clearListAndSort(l, t),
+    Effect.flatMap((sorted) => renderNonDeletedTodos(listEl, sorted))
+  );
+
+const renderTodosToElement = (listEl: Readonly<HTMLElement>, todos: TodoMap) =>
+  pipe(
+    todos,
+    HashMap.isEmpty,
+    Effect.if({
+      onTrue: () => renderEmptyState(listEl),
+      onFalse: () => renderSortedTodos(listEl, todos),
+    })
+  );
+
+const renderTodosToNullableElement = (todos: TodoMap, listEl: Readonly<HTMLElement> | null) =>
+  listEl === null ? Effect.void : renderTodosToElement(listEl, todos);
 
 const renderTodos = (todos: TodoMap) =>
-  Effect.sync(() => {
-    const listEl = document.getElementById('todoList');
-    if (!listEl) return;
+  pipe(
+    'todoList',
+    getElementByIdEffect,
+    Effect.flatMap((el) => renderTodosToNullableElement(todos, el))
+  );
 
-    if (HashMap.isEmpty(todos)) {
-      listEl.innerHTML = `
-        <div class="empty-state">
-          <p>No todos yet!</p>
-          <p>Create one above to get started.</p>
-        </div>
-      `;
-      return;
-    }
+const logCommandResult = (name: string, result: CommandResult) =>
+  pipe(
+    result,
+    Match.value,
+    Match.when(isCommandFailure, (failure) =>
+      Console.error(`Command ${name} failed:`, failure.error)
+    ),
+    Match.orElse(() => Console.log(`Command ${name} succeeded`))
+  );
 
-    listEl.innerHTML = '';
-
-    const sortedTodos = Array.from(HashMap.toEntries(todos)).sort(([, a], [, b]) => {
-      if (a.deleted !== b.deleted) return a.deleted ? 1 : -1;
-      return Number(a.completed) - Number(b.completed);
-    });
-
-    sortedTodos.forEach(([id, todo]) => {
-      if (todo.deleted) return;
-
-      const li = document.createElement('li');
-      li.className = 'todo-item';
-
-      const checkbox = document.createElement('input');
-      checkbox.type = 'checkbox';
-      checkbox.className = 'todo-checkbox';
-      checkbox.checked = todo.completed;
-      checkbox.onclick = () => {
-        const command = todo.completed ? 'UncompleteTodo' : 'CompleteTodo';
-        (window as any).__toggleTodo(id, command);
-      };
-
-      const textDiv = document.createElement('div');
-      textDiv.className = `todo-text ${todo.completed ? 'completed' : ''}`;
-      textDiv.textContent = todo.title;
-
-      const idSpan = document.createElement('span');
-      idSpan.className = 'todo-id';
-      idSpan.textContent = id;
-
-      const deleteBtn = document.createElement('button');
-      deleteBtn.className = 'todo-delete';
-      deleteBtn.textContent = 'Delete';
-      deleteBtn.onclick = () => {
-        (window as any).__deleteTodo(id);
-      };
-
-      li.appendChild(checkbox);
-      li.appendChild(textDiv);
-      li.appendChild(idSpan);
-      li.appendChild(deleteBtn);
-      listEl.appendChild(li);
-    });
-  });
+const handleCommandError = (name: string, error: unknown) =>
+  pipe(
+    Console.error(`Failed to send command ${name}:`, error),
+    Effect.as({ _tag: 'Failure' as const, error })
+  );
 
 const sendCommand = (name: string, target: string, payload: unknown) =>
   pipe(
@@ -113,281 +295,315 @@ const sendCommand = (name: string, target: string, payload: unknown) =>
         payload,
       })
     ),
-    Effect.tap((result) =>
-      result._tag === 'Failure'
-        ? Console.error(`Command ${name} failed: ${result.error}`)
-        : Console.log(`Command ${name} succeeded`)
-    ),
-    Effect.catchAll((error) =>
-      pipe(
-        Console.error(`Failed to send command ${name}:`, error),
-        Effect.as({ _tag: 'Failure' as const, error })
-      )
+    Effect.tap((result) => logCommandResult(name, result)),
+    Effect.catchAll((error) => handleCommandError(name, error))
+  );
+
+const trimInputValue = (inputEl: Readonly<HTMLInputElement>) =>
+  pipe(inputEl.value, (v: string) => v.trim(), Effect.succeed);
+
+const clearInput = (inputEl: Readonly<HTMLInputElement>) =>
+  Effect.sync(() => {
+    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+    (inputEl as HTMLInputElement).value = '';
+    return undefined;
+  });
+
+const addTodoWithTitleAndClearInput = (title: string, inputEl: Readonly<HTMLInputElement>) =>
+  pipe(
+    ['CreateTodo', 'todo-list-singleton', { title }] as const,
+    ([name, target, payload]) => sendCommand(name, target, payload),
+    Effect.andThen(clearInput(inputEl))
+  );
+
+const addTodoWithInput = (inputEl: Readonly<HTMLInputElement>) =>
+  pipe(
+    inputEl,
+    trimInputValue,
+    Effect.flatMap((title) =>
+      title === '' ? Effect.void : addTodoWithTitleAndClearInput(title, inputEl)
     )
   );
 
-const addTodo = (stateRef: Ref.Ref<AppState>) =>
-  Effect.gen(function* () {
-    const inputEl = document.getElementById('newTodoInput') as HTMLInputElement;
-    const title = inputEl.value.trim();
-    if (!title) return;
+const addTodoFromNullableInput = (inputEl: Readonly<HTMLInputElement> | null) =>
+  inputEl === null ? Effect.void : addTodoWithInput(inputEl);
 
-    yield* sendCommand('CreateTodo', 'todo-list', { title });
-    inputEl.value = '';
-  });
+const addTodo = () =>
+  pipe('newTodoInput', getInputElementById, Effect.flatMap(addTodoFromNullableInput));
 
 const toggle = (id: string, command: string) => sendCommand(command, id, { id });
 
 const remove = (id: string) => sendCommand('DeleteTodo', id, { id });
 
+const updateTodoInState = (
+  state: AppState,
+  todoId: string,
+  updateFn: (todo: TodoData) => TodoData
+) =>
+  pipe(
+    HashMap.get(state.todos, todoId),
+    Option.match({
+      onNone: () => state,
+      onSome: (todo) => ({
+        ...state,
+        todos: HashMap.set(state.todos, todoId, updateFn(todo)),
+      }),
+    })
+  );
+
+const handleTodoCreatedEvent = (state: AppState, todoId: string, data: TodoEvent) =>
+  data.type !== 'TodoCreated'
+    ? state
+    : {
+        ...state,
+        todos: HashMap.set(state.todos, todoId, {
+          title: data.data.title,
+          completed: false,
+          deleted: false,
+        }),
+      };
+
+const handleTodoTitleChangedEvent = (state: AppState, todoId: string, data: TodoEvent) =>
+  data.type !== 'TodoTitleChanged'
+    ? state
+    : updateTodoInState(state, todoId, (todo) => ({ ...todo, title: data.data.title }));
+
+const handleTodoCompletedEvent = (state: AppState, todoId: string) =>
+  updateTodoInState(state, todoId, (todo) => ({ ...todo, completed: true }));
+
+const handleTodoUncompletedEvent = (state: AppState, todoId: string) =>
+  updateTodoInState(state, todoId, (todo) => ({ ...todo, completed: false }));
+
+const handleTodoDeletedEvent = (state: AppState, todoId: string) =>
+  updateTodoInState(state, todoId, (todo) => ({ ...todo, deleted: true }));
+
 const applyEventToState =
   (event: ProtocolEvent) =>
   (state: AppState): AppState => {
     const todoId = event.streamId;
-    const currentTodo = HashMap.get(state.todos, todoId);
-
     const data = event.data as TodoEvent;
 
-    switch (event.eventType) {
-      case 'TodoCreated': {
-        const created = data as { readonly title: string };
-        return {
-          ...state,
-          todos: HashMap.set(state.todos, todoId, {
-            title: created.title,
-            completed: false,
-            deleted: false,
-          }),
-        };
-      }
-      case 'TodoTitleChanged': {
-        const changed = data as { readonly title: string };
-        return pipe(
-          currentTodo,
-          (opt) => (opt._tag === 'Some' ? opt.value : null),
-          (todo) =>
-            todo
-              ? {
-                  ...state,
-                  todos: HashMap.set(state.todos, todoId, {
-                    ...todo,
-                    title: changed.title,
-                  }),
-                }
-              : state
-        );
-      }
-      case 'TodoCompleted':
-        return pipe(
-          currentTodo,
-          (opt) => (opt._tag === 'Some' ? opt.value : null),
-          (todo) =>
-            todo
-              ? {
-                  ...state,
-                  todos: HashMap.set(state.todos, todoId, {
-                    ...todo,
-                    completed: true,
-                  }),
-                }
-              : state
-        );
-      case 'TodoUncompleted':
-        return pipe(
-          currentTodo,
-          (opt) => (opt._tag === 'Some' ? opt.value : null),
-          (todo) =>
-            todo
-              ? {
-                  ...state,
-                  todos: HashMap.set(state.todos, todoId, {
-                    ...todo,
-                    completed: false,
-                  }),
-                }
-              : state
-        );
-      case 'TodoDeleted':
-        return pipe(
-          currentTodo,
-          (opt) => (opt._tag === 'Some' ? opt.value : null),
-          (todo) =>
-            todo
-              ? {
-                  ...state,
-                  todos: HashMap.set(state.todos, todoId, {
-                    ...todo,
-                    deleted: true,
-                  }),
-                }
-              : state
-        );
-      default:
-        return state;
-    }
+    return pipe(
+      event.eventType,
+      Match.value,
+      Match.when('TodoCreated', () => handleTodoCreatedEvent(state, todoId, data)),
+      Match.when('TodoTitleChanged', () => handleTodoTitleChangedEvent(state, todoId, data)),
+      Match.when('TodoCompleted', () => handleTodoCompletedEvent(state, todoId)),
+      Match.when('TodoUncompleted', () => handleTodoUncompletedEvent(state, todoId)),
+      Match.when('TodoDeleted', () => handleTodoDeletedEvent(state, todoId)),
+      Match.orElse(() => state)
+    );
   };
 
-const subscribeToStream = (streamId: string) =>
+const subscribeToStreamById = (streamId: string) =>
   pipe(
     Protocol,
     Effect.flatMap((protocol) => protocol.subscribe(streamId)),
+    // eslint-disable-next-line effect/prefer-schema-validation-over-assertions -- Stream events from protocol.subscribe are already validated by the Protocol layer
     Effect.map((stream) => Stream.map(stream, (event) => event as unknown as ProtocolEvent))
+  );
+
+const updateStateAndRender = (stateRef: Ref.Ref<AppState>, event: ProtocolEvent) =>
+  pipe(
+    Ref.update(stateRef, applyEventToState(event)),
+    Effect.andThen(Ref.get(stateRef)),
+    Effect.flatMap((state) => renderTodos(state.todos))
   );
 
 const handleEvent =
   (stateRef: Ref.Ref<AppState>) =>
   (event: ProtocolEvent): Effect.Effect<void> =>
-    pipe(
-      Ref.update(stateRef, applyEventToState(event)),
-      Effect.andThen(Ref.get(stateRef)),
-      Effect.flatMap((state) => renderTodos(state.todos))
-    );
+    updateStateAndRender(stateRef, event);
+
+const subscribeToNewTodoStream = (stateRef: Ref.Ref<AppState>, streamId: string) =>
+  pipe(
+    streamId,
+    subscribeToStreamById,
+    Effect.flatMap((stream) => Stream.runForEach(stream, handleEvent(stateRef))),
+    Effect.forkDaemon
+  );
+
+const processEventForTodoList = (stateRef: Ref.Ref<AppState>, event: ProtocolEvent) =>
+  pipe(
+    updateStateAndRender(stateRef, event),
+    Effect.andThen(
+      event.eventType === 'TodoCreated'
+        ? subscribeToNewTodoStream(stateRef, event.streamId)
+        : Effect.void
+    )
+  );
 
 const handleTodoListEvent =
   (stateRef: Ref.Ref<AppState>) =>
-  (event: ProtocolEvent): Effect.Effect<void> =>
-    pipe(
-      handleEvent(stateRef)(event),
-      Effect.andThen(
-        event.eventType === 'TodoCreated'
-          ? pipe(
-              subscribeToStream(event.streamId),
-              Effect.flatMap((stream) => Stream.runForEach(stream, handleEvent(stateRef))),
-              Effect.forkDaemon
-            )
-          : Effect.void
-      )
-    );
+  (event: ProtocolEvent): Effect.Effect<void, never, Protocol> =>
+    processEventForTodoList(stateRef, event);
 
-const setupGlobalHandlers = (stateRef: Ref.Ref<AppState>, scope: Scope.Scope) => {
-  const connectorLayer = Layer.succeed(Client.Connector, WebSocketConnector);
-
+const setupGlobalHandlers = (protocolLayer: Layer.Layer<Protocol>) => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
   (window as any).__toggleTodo = (id: string, command: string) => {
-    Effect.runPromise(
-      pipe(
-        toggle(id, command),
-        Effect.provide(
-          Layer.unwrapScoped(
-            pipe(
-              Client.Connector,
-              Effect.flatMap((connector) => connector.connect(WS_URL)),
-              Effect.map((transport) => ProtocolLive(transport)),
-              Effect.provide(connectorLayer)
-            )
-          )
-        ),
-        Effect.scoped
-      )
-    );
+    // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
+    Effect.runPromise(pipe(toggle(id, command), Effect.provide(protocolLayer)));
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
   (window as any).__deleteTodo = (id: string) => {
-    Effect.runPromise(
-      pipe(
-        remove(id),
-        Effect.provide(
-          Layer.unwrapScoped(
-            pipe(
-              Client.Connector,
-              Effect.flatMap((connector) => connector.connect(WS_URL)),
-              Effect.map((transport) => ProtocolLive(transport)),
-              Effect.provide(connectorLayer)
-            )
-          )
-        ),
-        Effect.scoped
-      )
-    );
+    // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
+    Effect.runPromise(pipe(id, remove, Effect.provide(protocolLayer)));
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
   (window as any).__addTodo = () => {
-    Effect.runPromise(
-      pipe(
-        addTodo(stateRef),
-        Effect.provide(
-          Layer.unwrapScoped(
-            pipe(
-              Client.Connector,
-              Effect.flatMap((connector) => connector.connect(WS_URL)),
-              Effect.map((transport) => ProtocolLive(transport)),
-              Effect.provide(connectorLayer)
-            )
-          )
-        ),
-        Effect.scoped
-      )
-    );
+    // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
+    Effect.runPromise(pipe(undefined, addTodo, Effect.provide(protocolLayer)));
   };
 };
 
-const initializeUI = (stateRef: Ref.Ref<AppState>, scope: Scope.Scope) =>
-  Effect.sync(() => {
-    setupGlobalHandlers(stateRef, scope);
+const attachClickHandler = (addBtn: Readonly<HTMLElement> | null) =>
+  Effect.sync(() =>
+    addBtn === null
+      ? undefined
+      : // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+        ((addBtn as HTMLElement).onclick = () => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
+          (window as any).__addTodo();
+        })
+  );
 
-    const addBtn = document.getElementById('addTodoBtn');
-    const inputEl = document.getElementById('newTodoInput') as HTMLInputElement;
+const attachAddButtonClickHandler = () =>
+  pipe('addTodoBtn', getElementByIdEffect, Effect.flatMap(attachClickHandler));
 
-    if (addBtn) {
-      addBtn.onclick = () => (window as any).__addTodo();
-    }
+const attachKeyPressHandler = (inputEl: Readonly<HTMLElement> | null) =>
+  Effect.sync(() =>
+    inputEl === null
+      ? undefined
+      : // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
+        ((inputEl as HTMLInputElement).onkeypress = (e) =>
+          e.key === 'Enter'
+            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
+              ((window as any).__addTodo(), undefined)
+            : undefined)
+  );
 
-    if (inputEl) {
-      inputEl.onkeypress = (e) => {
-        if (e.key === 'Enter') (window as any).__addTodo();
-      };
-    }
-  });
+const attachInputEnterKeyHandler = () =>
+  pipe('newTodoInput', getInputElementById, Effect.flatMap(attachKeyPressHandler));
 
-const program = Effect.gen(function* () {
-  yield* Console.log('Starting application...');
+const setupUIEventHandlers = (protocolLayer: Layer.Layer<Protocol>) =>
+  pipe(
+    protocolLayer,
+    (layer) => Effect.sync(() => setupGlobalHandlers(layer)),
+    Effect.andThen(attachAddButtonClickHandler()),
+    Effect.andThen(attachInputEnterKeyHandler())
+  );
 
-  const stateRef = yield* Ref.make<AppState>({
+const initializeUI = setupUIEventHandlers;
+
+const createInitialState = () =>
+  Ref.make<AppState>({
     todos: HashMap.empty(),
     connected: false,
   });
 
-  const scope = yield* Effect.scope;
-  yield* initializeUI(stateRef, scope);
-  yield* updateConnectionStatus(false);
+const connectToWebSocketUrl = (url: string) =>
+  pipe(
+    Client.Connector,
+    Effect.flatMap((connector) => connector.connect(url))
+  );
 
-  yield* Console.log('Connecting to WebSocket...');
+const createProtocolLayerFromTransport = (transport: Client.Transport) =>
+  pipe(transport, ProtocolLive, Layer.orDie);
 
-  const connector = yield* Client.Connector;
-  const transport = yield* connector.connect(WS_URL);
+const updateStateToConnected = (stateRef: Ref.Ref<AppState>) =>
+  Ref.update(stateRef, (state) => ({ ...state, connected: true }));
 
-  yield* Console.log('Connected! Creating protocol layer...');
-
-  const protocolLayer = ProtocolLive(transport);
-
-  yield* Ref.update(stateRef, (state) => ({ ...state, connected: true }));
-  yield* updateConnectionStatus(true);
-
-  yield* Console.log('Subscribing to todo list...');
-
-  const todoListStream = yield* pipe(
-    subscribeToStream('todo-list-singleton'),
+const runTodoListStreamWithLayer = <E>(
+  stateRef: Ref.Ref<AppState>,
+  protocolLayer: Layer.Layer<Protocol>,
+  todoListStream: Stream.Stream<ProtocolEvent, E, Protocol>
+) =>
+  pipe(
+    todoListStream,
+    Stream.runForEach(handleTodoListEvent(stateRef)),
     Effect.provide(protocolLayer)
   );
 
-  yield* Console.log('Running event stream...');
-
-  yield* pipe(
-    Stream.runForEach(todoListStream, handleTodoListEvent(stateRef)),
-    Effect.provide(protocolLayer)
+const subscribeTodoListAndRun = (
+  stateRef: Ref.Ref<AppState>,
+  protocolLayer: Layer.Layer<Protocol>
+) =>
+  pipe(
+    'todo-list-singleton',
+    subscribeToStreamById,
+    Effect.provide(protocolLayer),
+    Effect.flatMap((stream) => runTodoListStreamWithLayer(stateRef, protocolLayer, stream))
   );
-});
 
-const main = pipe(
-  program,
-  Effect.scoped,
-  Effect.provide(Layer.succeed(Client.Connector, WebSocketConnector)),
-  Effect.catchAll((error) =>
-    pipe(
-      Console.error('Application error:', error),
-      Effect.andThen(updateConnectionStatus(false)),
-      Effect.andThen(Effect.void)
-    )
+const subscribeListForStateAndLayer = (
+  stateRef: Ref.Ref<AppState>,
+  protocolLayer: Layer.Layer<Protocol>
+) => pipe([stateRef, protocolLayer] as const, ([s, p]) => subscribeTodoListAndRun(s, p));
+
+const runEventStreamForStateAndLayer = (
+  stateRef: Ref.Ref<AppState>,
+  protocolLayer: Layer.Layer<Protocol>
+) =>
+  pipe(
+    'Running event stream...',
+    Console.log,
+    Effect.andThen(subscribeListForStateAndLayer(stateRef, protocolLayer))
+  );
+
+const updateConnectionToTrue = () => pipe(true, updateConnectionStatus);
+
+const logSubscribingMessage = () => pipe('Subscribing to todo list...', Console.log);
+
+const setupProtocolAndSubscribe = (stateRef: Ref.Ref<AppState>, transport: Client.Transport) =>
+  pipe(
+    'Connected! Creating protocol layer...',
+    Console.log,
+    Effect.as(createProtocolLayerFromTransport(transport)),
+    Effect.tap(initializeUI),
+    Effect.tap(() => updateStateToConnected(stateRef)),
+    Effect.tap(updateConnectionToTrue),
+    Effect.tap(logSubscribingMessage),
+    Effect.flatMap((protocolLayer) => runEventStreamForStateAndLayer(stateRef, protocolLayer))
+  );
+
+const connectAndSetupProtocol = (stateRef: Ref.Ref<AppState>) =>
+  pipe(
+    WS_URL,
+    connectToWebSocketUrl,
+    Effect.flatMap((transport) => setupProtocolAndSubscribe(stateRef, transport))
+  );
+
+const makeInitialState = () => pipe(undefined, createInitialState);
+
+const updateConnectionToFalse = () => pipe(false, updateConnectionStatus);
+
+const logConnectingMessage = () => pipe('Connecting to WebSocket...', Console.log);
+
+const runApplication = () =>
+  pipe(
+    'Starting application...',
+    Console.log,
+    Effect.andThen(makeInitialState()),
+    Effect.tap(updateConnectionToFalse),
+    Effect.tap(logConnectingMessage),
+    Effect.flatMap(connectAndSetupProtocol)
+  );
+
+const handleApplicationError = (error: unknown) =>
+  pipe(
+    Console.error('Application error:', error),
+    Effect.andThen(updateConnectionStatus(false)),
+    Effect.asVoid
+  );
+
+// eslint-disable-next-line effect/no-runPromise -- Application entry point requires runPromise
+Effect.runPromise(
+  pipe(
+    runApplication(),
+    Effect.scoped,
+    Effect.provide(Layer.succeed(Client.Connector, WebSocketConnector)),
+    Effect.catchAll(handleApplicationError)
   )
 );
-
-Effect.runPromise(main);

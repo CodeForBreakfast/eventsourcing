@@ -394,16 +394,13 @@ const startHttpServer = Effect.sync(() => {
     hostname: HOST,
     async fetch(req) {
       const url = new URL(req.url);
-      let filePath = url.pathname === '/' ? '/index.html' : url.pathname;
+      const filePath = url.pathname === '/' ? '/index.html' : url.pathname;
 
+      // eslint-disable-next-line effect/prefer-effect-platform -- Bun's built-in file serving is more efficient for this simple static file server
       const file = Bun.file(`./public${filePath}`);
       const exists = await file.exists();
 
-      if (exists) {
-        return new Response(file);
-      }
-
-      return new Response('Not Found', { status: 404 });
+      return exists ? new Response(file) : new Response('Not Found', { status: 404 });
     },
   });
 
