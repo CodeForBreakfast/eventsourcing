@@ -156,7 +156,10 @@ const processFullPath =
       onTrue: () => processDirectory(fullPath, files),
       onFalse: () =>
         Effect.if(
-          entry.isFile() && entry.name.endsWith('.md') && !entry.name.startsWith('CHANGELOG'),
+          entry.isFile() &&
+            entry.name.endsWith('.md') &&
+            !entry.name.startsWith('CHANGELOG') &&
+            !entry.name.startsWith('IMPLEMENTATION_PLAN'),
           {
             onTrue: () => Effect.succeed([...files, fullPath]),
             onFalse: () => Effect.succeed(files),
