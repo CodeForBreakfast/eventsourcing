@@ -8,6 +8,7 @@ import {
 } from '@codeforbreakfast/eventsourcing-protocol';
 import { isCommandFailure, type CommandResult } from '@codeforbreakfast/eventsourcing-commands';
 import type { TodoEvent } from '../domain/todoEvents';
+import { TODO_LIST_ID } from '../domain/types';
 
 const WS_URL = 'ws://localhost:8080';
 
@@ -372,6 +373,13 @@ const applyEventToState =
       event.eventType,
       Match.value,
       Match.when('TodoCreated', () => handleTodoCreatedEvent(state, todoId, data)),
+      Match.when('TodoAddedToList', () => {
+        const todoData = event.data as { readonly todoId: string; readonly title: string };
+        return handleTodoCreatedEvent(state, todoData.todoId, {
+          type: 'TodoCreated' as const,
+          data: { title: todoData.title },
+        } as TodoEvent);
+      }),
       Match.when('TodoTitleChanged', () => handleTodoTitleChangedEvent(state, todoId, data)),
       Match.when('TodoCompleted', () => handleTodoCompletedEvent(state, todoId)),
       Match.when('TodoUncompleted', () => handleTodoUncompletedEvent(state, todoId)),
@@ -408,15 +416,23 @@ const subscribeToNewTodoStream = (stateRef: Ref.Ref<AppState>, streamId: string)
     Effect.forkDaemon
   );
 
-const processEventForTodoList = (stateRef: Ref.Ref<AppState>, event: ProtocolEvent) =>
-  pipe(
-    updateStateAndRender(stateRef, event),
+const processEventForTodoList = (stateRef: Ref.Ref<AppState>, event: ProtocolEvent) => {
+  const getTodoIdFromEvent = () => {
+    return event.eventType === 'TodoAddedToList'
+      ? (event.data as { readonly todoId: string }).todoId
+      : event.streamId;
+  };
+
+  return pipe(
+    Console.log(`[processEventForTodoList] Received event: ${event.eventType}`, event.data),
+    Effect.andThen(updateStateAndRender(stateRef, event)),
     Effect.andThen(
-      event.eventType === 'TodoCreated'
-        ? subscribeToNewTodoStream(stateRef, event.streamId)
+      event.eventType === 'TodoCreated' || event.eventType === 'TodoAddedToList'
+        ? subscribeToNewTodoStream(stateRef, getTodoIdFromEvent())
         : Effect.void
     )
   );
+};
 
 const handleTodoListEvent =
   (stateRef: Ref.Ref<AppState>) =>
@@ -509,7 +525,7 @@ const subscribeTodoListAndRun = (
   protocolLayer: Layer.Layer<Protocol>
 ) =>
   pipe(
-    'todo-list-singleton',
+    TODO_LIST_ID,
     subscribeToStreamById,
     Effect.provide(protocolLayer),
     Effect.flatMap((stream) => runTodoListStreamWithLayer(stateRef, protocolLayer, stream))

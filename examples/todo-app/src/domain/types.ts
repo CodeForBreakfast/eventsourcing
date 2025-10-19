@@ -11,4 +11,4 @@ export const UserId = UserIdSchema;
 export const TodoListIdSchema = pipe(Schema.String, Schema.brand('TodoListId'));
 export type TodoListId = typeof TodoListIdSchema.Type;
 
-export const TODO_LIST_ID = 'singleton-todo-list' as TodoListId;
+export const TODO_LIST_ID = 'todo-list-singleton' as TodoListId;
