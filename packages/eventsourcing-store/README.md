@@ -308,11 +308,11 @@ This package includes comprehensive testing utilities:
 
 ```typescript
 import { Effect, Layer, Schema } from 'effect';
+import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   runEventStoreTestSuite,
   FooEventStore,
-  type EventStore,
-} from '@codeforbreakfast/eventsourcing-store';
+} from '@codeforbreakfast/eventsourcing-store/testing';
 
 const FooEvent = Schema.Struct({ bar: Schema.String });
 type FooEvent = typeof FooEvent.Type;

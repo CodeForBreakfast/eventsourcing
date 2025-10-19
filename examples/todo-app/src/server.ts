@@ -400,8 +400,7 @@ const bridgeEventBusToProtocol = (eventBus: Readonly<EventBusService>) =>
             Stream.mapEffect(({ streamId, event }) =>
               protocol.publishEvent({
                 streamId: streamId as never,
-                eventNumber: 0,
-                eventType: event.type,
+                type: event.type,
                 data: event.data,
                 timestamp: new Date(),
               })
