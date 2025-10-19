@@ -1,0 +1,88 @@
+{
+  "name": "@codeforbreakfast/eventsourcing-server",
+  "version": "0.1.0",
+  "description": "High-level server framework for event sourcing - Batteries-included server setup with automatic command routing, event publishing, and process manager infrastructure",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "publish:package": "npm publish --access public",
+    "validate:pack": "bun pm pack --dry-run",
+    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0",
+    "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
+  },
+  "keywords": [
+    "event-sourcing",
+    "server",
+    "framework",
+    "batteries-included",
+    "command-routing",
+    "event-publishing",
+    "process-manager",
+    "websocket",
+    "cqrs",
+    "aggregate",
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "fp",
+    "typescript",
+    "type-safe"
+  ],
+  "author": "Code for Breakfast",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
+    "directory": "packages/eventsourcing-server"
+  },
+  "bugs": {
+    "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
+  },
+  "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
+  "peerDependencies": {
+    "effect": "^3.17.0"
+  },
+  "dependencies": {
+    "@codeforbreakfast/eventsourcing-aggregates": "workspace:*",
+    "@codeforbreakfast/eventsourcing-commands": "workspace:*",
+    "@codeforbreakfast/eventsourcing-protocol": "workspace:*",
+    "@codeforbreakfast/eventsourcing-store": "workspace:*",
+    "@codeforbreakfast/eventsourcing-transport": "workspace:*",
+    "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
+    "@effect/platform": "0.92.1"
+  },
+  "devDependencies": {
+    "@codeforbreakfast/buntest": "workspace:*",
+    "@types/node": "24.7.2",
+    "effect": "3.18.4",
+    "typescript": "5.9.3",
+    "eslint": "9.37.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
