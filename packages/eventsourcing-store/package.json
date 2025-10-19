@@ -12,11 +12,6 @@
       "import": "./dist/index.js",
       "default": "./dist/index.js"
     },
-    "./testing": {
-      "types": "./dist/testing.d.ts",
-      "import": "./dist/testing.js",
-      "default": "./dist/testing.js"
-    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -24,7 +19,7 @@
     "src"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts ./src/testing.ts --outdir ./dist --target node --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc",
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc",
     "test": "bun test",
     "test:watch": "bun test --watch",
     "lint": "eslint . --ext .ts,.tsx",

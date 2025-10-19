@@ -70,3 +70,14 @@ export {
   collectMessages,
   makeTestMessage,
 } from './lib/test-utilities';
+
+// ============================================================================
+// EVENT STORE TEST SUITE
+// ============================================================================
+
+export {
+  runEventStoreTestSuite,
+  FooEventStore,
+  newEventStreamId,
+  type EventStoreTestOptions,
+} from './lib/eventstore-test-suite/eventstore-test-suite';

@@ -304,27 +304,13 @@ const processStreamInBatches = (batchSize: number) =>
 
 ## Testing Your Event Store
 
-This package includes comprehensive testing utilities:
+For comprehensive testing utilities, install `@codeforbreakfast/eventsourcing-testing-contracts`:
 
-```typescript
-import { Effect, Layer, Schema } from 'effect';
-import { type EventStore } from '@codeforbreakfast/eventsourcing-store';
-import {
-  runEventStoreTestSuite,
-  FooEventStore,
-} from '@codeforbreakfast/eventsourcing-store/testing';
-
-const FooEvent = Schema.Struct({ bar: Schema.String });
-type FooEvent = typeof FooEvent.Type;
-
-declare const myCustomEventStore: EventStore<FooEvent>;
-
-// Test your custom event store implementation
-const testLayer = Layer.effect(FooEventStore, Effect.succeed(myCustomEventStore));
-
-// Run the full test suite with the implementation name
-runEventStoreTestSuite('My Custom Event Store', () => testLayer);
+```bash
+bun add -d @codeforbreakfast/eventsourcing-testing-contracts
 ```
+
+See the [@codeforbreakfast/eventsourcing-testing-contracts](https://github.com/codeforbreakfast/eventsourcing/tree/main/packages/eventsourcing-testing-contracts) package for test suite documentation and usage examples.
 
 ## Error Handling
 

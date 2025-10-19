@@ -1,7 +1,12 @@
 import { Chunk, Duration, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
-import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
-import { type EventStore, ConcurrencyConflictError } from '../eventstore';
+import {
+  EventStreamId,
+  EventStreamPosition,
+  beginning,
+  type EventStore,
+  ConcurrencyConflictError,
+} from '@codeforbreakfast/eventsourcing-store';
 
 // Helper functions for converting stream events
 const toArraySafely = Chunk.toReadonlyArray;
