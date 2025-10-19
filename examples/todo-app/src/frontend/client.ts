@@ -24,6 +24,12 @@ interface AppState {
   readonly connected: boolean;
 }
 
+interface WindowWithTodoHandlers extends Window {
+  __toggleTodo: (id: string, command: string) => void;
+  __deleteTodo: (id: string) => void;
+  __addTodo: () => void;
+}
+
 const getElementByIdEffect = (id: string) => Effect.sync(() => document.getElementById(id));
 
 const castToInputElement = (el: Readonly<HTMLElement> | null): Readonly<HTMLInputElement> | null =>
@@ -41,13 +47,11 @@ const getButtonElementById = (id: string) =>
 
 const setDisabledOnInput = (disabled: boolean, el: Readonly<HTMLInputElement | null>) =>
   Effect.sync(() =>
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     el !== null ? ((el as HTMLInputElement).disabled = disabled as boolean) : undefined
   );
 
 const setDisabledOnButton = (disabled: boolean, el: Readonly<HTMLButtonElement | null>) =>
   Effect.sync(() =>
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     el !== null ? ((el as HTMLButtonElement).disabled = disabled as boolean) : undefined
   );
 
@@ -57,9 +61,7 @@ const setStatusElementProps = (isConnected: boolean, statusEl: Readonly<HTMLElem
       ? 'connection-status status-connected'
       : 'connection-status status-disconnected';
     const textContent = isConnected ? '✓ Connected to server' : '✗ Disconnected from server';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (statusEl as HTMLElement).className = className;
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (statusEl as HTMLElement).textContent = textContent;
     return undefined;
   });
@@ -109,17 +111,12 @@ const createEmptyStateHtml = () => `
 const createCheckbox = (id: string, todo: TodoData) =>
   Effect.sync(() => {
     const checkbox = document.createElement('input');
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (checkbox as HTMLInputElement).type = 'checkbox';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (checkbox as HTMLInputElement).className = 'todo-checkbox';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (checkbox as HTMLInputElement).checked = todo.completed;
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (checkbox as HTMLInputElement).onclick = () => {
       const command = todo.completed ? 'UncompleteTodo' : 'CompleteTodo';
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
-      (window as any).__toggleTodo(id, command);
+      (window as unknown as WindowWithTodoHandlers).__toggleTodo(id, command);
     };
     return checkbox;
   });
@@ -127,9 +124,7 @@ const createCheckbox = (id: string, todo: TodoData) =>
 const createTextDiv = (todo: TodoData) =>
   Effect.sync(() => {
     const textDiv = document.createElement('div');
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (textDiv as HTMLDivElement).className = todo.completed ? 'todo-text completed' : 'todo-text';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (textDiv as HTMLDivElement).textContent = todo.title;
     return textDiv;
   });
@@ -137,9 +132,7 @@ const createTextDiv = (todo: TodoData) =>
 const createIdSpan = (id: string) =>
   Effect.sync(() => {
     const idSpan = document.createElement('span');
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (idSpan as HTMLSpanElement).className = 'todo-id';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (idSpan as HTMLSpanElement).textContent = id;
     return idSpan;
   });
@@ -147,14 +140,10 @@ const createIdSpan = (id: string) =>
 const createDeleteButton = (id: string) =>
   Effect.sync(() => {
     const deleteBtn = document.createElement('button');
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (deleteBtn as HTMLButtonElement).className = 'todo-delete';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (deleteBtn as HTMLButtonElement).textContent = 'Delete';
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (deleteBtn as HTMLButtonElement).onclick = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
-      (window as any).__deleteTodo(id);
+      (window as unknown as WindowWithTodoHandlers).__deleteTodo(id);
     };
     return deleteBtn;
   });
@@ -167,7 +156,6 @@ const assembleListItem = (
 ) =>
   Effect.sync(() => {
     const li = document.createElement('li');
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (li as HTMLLIElement).className = 'todo-item';
     (li as HTMLLIElement).appendChild(checkbox as HTMLInputElement);
     (li as HTMLLIElement).appendChild(textDiv as HTMLDivElement);
@@ -195,7 +183,6 @@ const createTodoListItem = (id: string, todo: TodoData) =>
 
 const appendChild = (listEl: Readonly<HTMLElement>, li: Readonly<HTMLLIElement>) =>
   Effect.sync(() => {
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (listEl as HTMLElement).appendChild(li as HTMLLIElement);
     return undefined;
   });
@@ -226,7 +213,6 @@ const renderNonDeletedTodos = (
 
 const setInnerHtml = (listEl: Readonly<HTMLElement>, html: string) =>
   Effect.sync(() => {
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (listEl as HTMLElement).innerHTML = html;
     return undefined;
   });
@@ -304,7 +290,6 @@ const trimInputValue = (inputEl: Readonly<HTMLInputElement>) =>
 
 const clearInput = (inputEl: Readonly<HTMLInputElement>) =>
   Effect.sync(() => {
-    // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
     (inputEl as HTMLInputElement).value = '';
     return undefined;
   });
@@ -439,20 +424,17 @@ const handleTodoListEvent =
     processEventForTodoList(stateRef, event);
 
 const setupGlobalHandlers = (protocolLayer: Layer.Layer<Protocol>) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
-  (window as any).__toggleTodo = (id: string, command: string) => {
+  (window as unknown as WindowWithTodoHandlers).__toggleTodo = (id: string, command: string) => {
     // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
     Effect.runPromise(pipe(toggle(id, command), Effect.provide(protocolLayer)));
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
-  (window as any).__deleteTodo = (id: string) => {
+  (window as unknown as WindowWithTodoHandlers).__deleteTodo = (id: string) => {
     // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
     Effect.runPromise(pipe(id, remove, Effect.provide(protocolLayer)));
   };
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any, functional/immutable-data -- Browser global function for event handlers
-  (window as any).__addTodo = () => {
+  (window as unknown as WindowWithTodoHandlers).__addTodo = () => {
     // eslint-disable-next-line effect/no-runPromise -- Browser event handlers require runPromise for imperative execution
     Effect.runPromise(pipe(undefined, addTodo, Effect.provide(protocolLayer)));
   };
@@ -462,10 +444,8 @@ const attachClickHandler = (addBtn: Readonly<HTMLElement> | null) =>
   Effect.sync(() =>
     addBtn === null
       ? undefined
-      : // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
-        ((addBtn as HTMLElement).onclick = () => {
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
-          (window as any).__addTodo();
+      : ((addBtn as HTMLElement).onclick = () => {
+          (window as unknown as WindowWithTodoHandlers).__addTodo();
         })
   );
 
@@ -476,11 +456,9 @@ const attachKeyPressHandler = (inputEl: Readonly<HTMLElement> | null) =>
   Effect.sync(() =>
     inputEl === null
       ? undefined
-      : // eslint-disable-next-line functional/immutable-data -- Browser DOM requires mutation
-        ((inputEl as HTMLInputElement).onkeypress = (e) =>
+      : ((inputEl as HTMLInputElement).onkeypress = (e) =>
           e.key === 'Enter'
-            ? // eslint-disable-next-line @typescript-eslint/no-explicit-any -- Browser global function
-              ((window as any).__addTodo(), undefined)
+            ? ((window as unknown as WindowWithTodoHandlers).__addTodo(), undefined)
             : undefined)
   );
 

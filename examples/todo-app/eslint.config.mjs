@@ -9,5 +9,9 @@ export default [
         project: './tsconfig.frontend.json',
       },
     },
+    rules: {
+      'functional/immutable-data': 'off',
+      'functional/prefer-readonly-type': 'off',
+    },
   },
 ];
