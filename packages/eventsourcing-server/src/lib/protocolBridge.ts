@@ -1,8 +1,16 @@
 import { Effect, Stream, Scope, pipe, Context } from 'effect';
 import { ServerProtocol } from '@codeforbreakfast/eventsourcing-protocol';
-import type { EventBusService } from './types';
+import type { EventBusService, DomainEvent } from './types';
 import { CommandDispatcher } from './commandDispatcher';
 import { EventBus } from './eventBus';
+import { toStreamId, type EventStreamId, type Event } from '@codeforbreakfast/eventsourcing-store';
+import type { ReadonlyDeep } from 'type-fest';
+import { CommandResult } from '@codeforbreakfast/eventsourcing-commands';
+
+const makeSendResultForCommand =
+  (protocol: Context.Tag.Service<typeof ServerProtocol>, commandId: string) =>
+  (result: ReadonlyDeep<CommandResult>) =>
+    protocol.sendResult(commandId, result);
 
 const sendCommandResultToProtocol = (
   protocol: Context.Tag.Service<typeof ServerProtocol>,
@@ -15,8 +23,9 @@ const sendCommandResultToProtocol = (
   }
 ) =>
   pipe(
-    dispatcher.dispatch(command),
-    Effect.flatMap((result) => protocol.sendResult(command.id, result)),
+    command,
+    dispatcher.dispatch,
+    Effect.flatMap(makeSendResultForCommand(protocol, command.id)),
     Effect.catchAll((error) =>
       protocol.sendResult(command.id, {
         _tag: 'Failure',
@@ -49,28 +58,49 @@ const bridgeCommandsToDispatcher = (
     Effect.andThen(Effect.never)
   );
 
-const publishDomainEventToProtocol = (
-  protocol: Context.Tag.Service<typeof ServerProtocol>,
-  domainEvent: {
-    readonly streamId: string;
-    readonly event: Record<string, unknown>;
-    readonly position: number;
-  }
-) => protocol.publishEvent(domainEvent as unknown as Parameters<typeof protocol.publishEvent>[0]);
+const domainEventToProtocolEvent = (
+  domainEvent: DomainEvent<{ readonly type: string; readonly data: unknown }>
+) =>
+  pipe(
+    domainEvent.streamId,
+    toStreamId,
+    Effect.map(
+      (streamId): ReadonlyDeep<Event & { readonly streamId: EventStreamId }> => ({
+        position: {
+          streamId,
+          eventNumber: domainEvent.position,
+        },
+        type: domainEvent.event.type,
+        data: domainEvent.event.data,
+        timestamp: new Date(),
+        streamId,
+      })
+    )
+  );
+
+const publishDomainEventToProtocol =
+  (protocol: Context.Tag.Service<typeof ServerProtocol>) =>
+  (domainEvent: DomainEvent<{ readonly type: string; readonly data: unknown }>) =>
+    pipe(
+      domainEvent,
+      domainEventToProtocolEvent,
+      Effect.flatMap(protocol.publishEvent),
+      Effect.catchAll(() => Effect.void)
+    );
 
 const runEventStreamPublishing = (
   protocol: Context.Tag.Service<typeof ServerProtocol>,
   stream: Stream.Stream<
-    {
-      readonly streamId: string;
-      readonly event: Record<string, unknown>;
-      readonly position: number;
-    },
+    DomainEvent<{ readonly type: string; readonly data: unknown }>,
     never,
     never
   >
-) =>
-  Stream.runForEach(stream, (domainEvent) => publishDomainEventToProtocol(protocol, domainEvent));
+) => Stream.runForEach(stream, publishDomainEventToProtocol(protocol));
+
+const isEventWithTypeAndData = (
+  e: unknown
+): e is { readonly type: string; readonly data: unknown } =>
+  typeof e === 'object' && e !== null && 'type' in e && typeof e.type === 'string' && 'data' in e;
 
 /**
  * Bridge EventBus events to ServerProtocol
@@ -84,21 +114,9 @@ const bridgeEventsToProtocol = (
   eventBus: EventBusService
 ): Effect.Effect<never, never, Scope.Scope> =>
   pipe(
-    eventBus.subscribe((_e): _e is unknown => true),
-    Effect.flatMap((stream) =>
-      runEventStreamPublishing(
-        protocol,
-        stream as Stream.Stream<
-          {
-            readonly streamId: string;
-            readonly event: Record<string, unknown>;
-            readonly position: number;
-          },
-          never,
-          never
-        >
-      )
-    ),
+    isEventWithTypeAndData,
+    eventBus.subscribe,
+    Effect.flatMap((stream) => runEventStreamPublishing(protocol, stream)),
     Effect.forkScoped,
     Effect.asVoid,
     Effect.andThen(Effect.never)
