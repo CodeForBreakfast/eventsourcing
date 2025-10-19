@@ -14,6 +14,9 @@
     "build": "bun build src/frontend/client.ts --outdir public --minify --target browser",
     "test": "bun test",
     "test:watch": "bun test --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui",
+    "test:e2e:headed": "playwright test --headed",
     "lint": "eslint . --ext .ts,.tsx",
     "typecheck": "tsc --noEmit && tsc --project tsconfig.frontend.json --noEmit",
     "validate:docs": "bun ../../scripts/validate-markdown-examples.ts"
@@ -28,11 +31,11 @@
     "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
     "@effect/cli": "0.71.0",
     "@effect/platform": "0.92.1",
-    "@effect/platform-browser": "0.72.0",
     "@effect/platform-bun": "0.81.1",
     "effect": "3.18.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.48.2",
     "@types/bun": "latest"
   }
 }

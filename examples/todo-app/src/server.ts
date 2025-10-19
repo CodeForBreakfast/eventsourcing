@@ -388,6 +388,32 @@ const forkProcessManagerEffect = startProcessManager();
 
 const forkProcessManager = pipe(forkProcessManagerEffect, Effect.forkScoped);
 
+const bridgeEventBusToProtocol = (eventBus: Readonly<EventBusService>) =>
+  pipe(
+    ServerProtocol,
+    Effect.flatMap((protocol) =>
+      pipe(
+        eventBus.subscribe(() => true),
+        Effect.flatMap((stream) =>
+          pipe(
+            stream,
+            Stream.mapEffect(({ streamId, event }) =>
+              protocol.publishEvent({
+                streamId: streamId as never,
+                eventNumber: 0,
+                eventType: event.type,
+                data: event.data,
+                timestamp: new Date(),
+              })
+            ),
+            Stream.runDrain
+          )
+        )
+      )
+    ),
+    Effect.forkScoped
+  );
+
 const startHttpServer = Effect.sync(() => {
   Bun.serve({
     port: HTTP_PORT,
@@ -432,9 +458,19 @@ const startAllServices =
     const serverProtocolLayer = ServerProtocolLive(serverTransport as never);
     const provideLayer = provideLayerToDispatch(eventBus);
     const dispatchWithLayer = provideLayer(serverProtocolLayer);
+    const eventBridge = pipe(
+      bridgeEventBusToProtocol(eventBus),
+      Effect.provide(serverProtocolLayer)
+    );
 
     return pipe(
-      [forkProcessManager, startHttpServer, logStartupMessage, dispatchWithLayer] as const,
+      [
+        forkProcessManager,
+        eventBridge,
+        startHttpServer,
+        logStartupMessage,
+        dispatchWithLayer,
+      ] as const,
       Effect.all,
       Effect.asVoid,
       Effect.andThen(Effect.never)

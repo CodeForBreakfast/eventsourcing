@@ -198,6 +198,20 @@
         "$TURBO_ROOT$/scripts/validate-markdown-examples.ts"
       ],
       "cache": true
+    },
+    "test:e2e": {
+      "dependsOn": ["build", "lint", "test"],
+      "outputs": ["playwright-report/**", "test-results/**"],
+      "inputs": [
+        "e2e/**/*.ts",
+        "e2e/**/*.spec.ts",
+        "playwright.config.ts",
+        "src/**/*.ts",
+        "public/**/*",
+        "package.json",
+        "$TURBO_ROOT$/bun.lock"
+      ],
+      "cache": false
     }
   }
 }
