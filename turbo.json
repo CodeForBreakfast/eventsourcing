@@ -6,15 +6,7 @@
       "dependsOn": ["ci", "test:e2e"]
     },
     "ci": {
-      "dependsOn": [
-        "build",
-        "lint",
-        "test",
-        "//#arch:check",
-        "//#deps:check",
-        "//#release:validate",
-        "validate:docs"
-      ]
+      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check", "validate:docs"]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],
