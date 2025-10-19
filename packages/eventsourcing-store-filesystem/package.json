@@ -68,7 +68,7 @@
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
     "@effect/platform-bun": "0.81.1",
-    "@types/node": "24.7.2",
+    "@types/node": "24.8.0",
     "effect": "3.18.4",
     "eslint": "9.37.0",
     "typescript": "5.9.3"
