@@ -3,10 +3,18 @@
   "globalDependencies": [".mise.toml", ".tool-versions"],
   "tasks": {
     "all": {
-      "dependsOn": ["ci", "test:e2e", "//#release:validate"]
+      "dependsOn": ["ci", "test:e2e"]
     },
     "ci": {
-      "dependsOn": ["build", "lint", "test", "//#arch:check", "//#deps:check", "validate:docs"]
+      "dependsOn": [
+        "build",
+        "lint",
+        "test",
+        "//#arch:check",
+        "//#deps:check",
+        "//#release:validate",
+        "validate:docs"
+      ]
     },
     "typecheck": {
       "dependsOn": ["^build", "^typecheck"],

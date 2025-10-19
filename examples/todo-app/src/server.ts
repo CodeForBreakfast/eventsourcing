@@ -393,13 +393,17 @@ const bridgeEventBusToProtocol = (eventBus: Readonly<EventBusService>) =>
     ServerProtocol,
     Effect.flatMap((protocol) =>
       pipe(
-        eventBus.subscribe(() => true),
+        eventBus.subscribe((_event): _event is TodoEvent | TodoListEvent => true),
         Effect.flatMap((stream) =>
           pipe(
             stream,
             Stream.mapEffect(({ streamId, event }) =>
               protocol.publishEvent({
                 streamId: streamId as never,
+                position: {
+                  streamId: streamId as never,
+                  eventNumber: 0,
+                },
                 type: event.type,
                 data: event.data,
                 timestamp: new Date(),
