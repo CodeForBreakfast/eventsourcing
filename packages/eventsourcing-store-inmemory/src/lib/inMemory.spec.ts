@@ -1,10 +1,10 @@
 import { Effect, Layer, Schema, pipe } from 'effect';
 import { silentLogger } from '@codeforbreakfast/buntest';
-import { encodedEventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   runEventStoreTestSuite,
   FooEventStore,
-} from '@codeforbreakfast/eventsourcing-store/testing';
+  encodedEventStore,
+} from '@codeforbreakfast/eventsourcing-store';
 import { makeInMemoryEventStore } from './index';
 import { type InMemoryStore, make } from './InMemoryStore';
 
