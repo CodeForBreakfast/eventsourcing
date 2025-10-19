@@ -2,11 +2,11 @@ import { Effect, Layer, Schema, pipe } from 'effect';
 import { BunFileSystem, BunPath } from '@effect/platform-bun';
 import { Path } from '@effect/platform';
 import { silentLogger } from '@codeforbreakfast/buntest';
+import { encodedEventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   runEventStoreTestSuite,
   FooEventStore,
-  encodedEventStore,
-} from '@codeforbreakfast/eventsourcing-store';
+} from '@codeforbreakfast/eventsourcing-store/testing';
 import { makeFileSystemEventStore } from './index';
 import { type FileSystemStore, make } from './FileSystemStore';
 import { tmpdir } from 'node:os';
