@@ -62,7 +62,7 @@
     "eslint-plugin-expect-type": "0.6.2",
     "eslint-plugin-functional": "9.0.2",
     "eslint-plugin-import": "2.32.0",
-    "eslint-plugin-package-json": "0.56.4",
+    "eslint-plugin-package-json": "0.57.0",
     "eslint-plugin-unused-imports": "4.2.0",
     "fast-check": "4.3.0",
     "husky": "9.1.7",
