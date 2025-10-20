@@ -43,7 +43,12 @@ export type AggregateConfig<
  * Configuration for a process manager
  * Process managers react to events and trigger commands
  */
-export interface ProcessManagerConfig<TEvent = unknown, _TMetadata = unknown> {
+export interface ProcessManagerConfig<
+  TEvent = unknown,
+  // @ts-expect-error - TMetadata parameter is used by ServerRuntimeConfig but not in this interface body
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- Used by ServerRuntimeConfig
+  TMetadata = unknown,
+> {
   /** Descriptive name for logging and debugging */
   readonly name: string;
 
