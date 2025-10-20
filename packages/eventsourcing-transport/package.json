@@ -63,7 +63,7 @@
     "effect": "^3.17.0"
   },
   "devDependencies": {
-    "@types/node": "24.8.0",
+    "@types/node": "24.8.1",
     "effect": "3.18.4",
     "typescript": "5.9.3",
     "eslint": "9.37.0"

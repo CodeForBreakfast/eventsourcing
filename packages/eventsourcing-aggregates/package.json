@@ -69,7 +69,7 @@
     "type-fest": "5.1.0"
   },
   "devDependencies": {
-    "@types/node": "24.8.0",
+    "@types/node": "24.8.1",
     "@codeforbreakfast/buntest": "workspace:*",
     "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
     "effect": "3.18.4",
