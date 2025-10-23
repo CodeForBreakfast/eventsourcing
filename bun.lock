@@ -26,7 +26,7 @@
         "eslint-plugin-functional": "9.0.2",
         "eslint-plugin-import": "2.32.0",
         "eslint-plugin-package-json": "0.57.0",
-        "eslint-plugin-unused-imports": "4.2.0",
+        "eslint-plugin-unused-imports": "4.3.0",
         "fast-check": "4.3.0",
         "husky": "9.1.7",
         "knip": "5.66.1",
@@ -831,7 +831,7 @@
 
     "eslint-plugin-package-json": ["eslint-plugin-package-json@0.57.0", "", { "dependencies": { "@altano/repository-tools": "^2.0.1", "change-case": "^5.4.4", "detect-indent": "^7.0.2", "detect-newline": "^4.0.1", "eslint-fix-utils": "~0.4.0", "package-json-validator": "~0.31.0", "semver": "^7.7.3", "sort-object-keys": "^2.0.0", "sort-package-json": "^3.4.0", "validate-npm-package-name": "^6.0.2" }, "peerDependencies": { "eslint": ">=8.0.0", "jsonc-eslint-parser": "^2.0.0" } }, "sha512-3X0nODFG+8r0Cqmqmw/JwWdtWNPrQX0mxg6HrHISFm2WIDvmc3hukGKG4so0zDbi+nYsd5/9QbE71MAyWGiFXQ=="],
 
-    "eslint-plugin-unused-imports": ["eslint-plugin-unused-imports@4.2.0", "", { "peerDependencies": { "@typescript-eslint/eslint-plugin": "^8.0.0-0 || ^7.0.0 || ^6.0.0 || ^5.0.0", "eslint": "^9.0.0 || ^8.0.0" }, "optionalPeers": ["@typescript-eslint/eslint-plugin"] }, "sha512-hLbJ2/wnjKq4kGA9AUaExVFIbNzyxYdVo49QZmKCnhk5pc9wcYRbfgLHvWJ8tnsdcseGhoUAddm9gn/lt+d74w=="],
+    "eslint-plugin-unused-imports": ["eslint-plugin-unused-imports@4.3.0", "", { "peerDependencies": { "@typescript-eslint/eslint-plugin": "^8.0.0-0 || ^7.0.0 || ^6.0.0 || ^5.0.0", "eslint": "^9.0.0 || ^8.0.0" }, "optionalPeers": ["@typescript-eslint/eslint-plugin"] }, "sha512-ZFBmXMGBYfHttdRtOG9nFFpmUvMtbHSjsKrS20vdWdbfiVYsO3yA2SGYy9i9XmZJDfMGBflZGBCm70SEnFQtOA=="],
 
     "eslint-scope": ["eslint-scope@8.4.0", "", { "dependencies": { "esrecurse": "^4.3.0", "estraverse": "^5.2.0" } }, "sha512-sNXOfKCn74rt8RICKMvJS7XKV/Xk9kA7DyJr8mJik3S7Cwgy3qlkkmyS2uQB3jiJg6VNdZd/pDBJu0nvG2NlTg=="],
 
