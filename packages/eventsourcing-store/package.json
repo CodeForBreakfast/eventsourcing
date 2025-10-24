@@ -67,7 +67,7 @@
     "type-fest": "5.1.0"
   },
   "devDependencies": {
-    "@types/node": "24.8.1",
+    "@types/node": "24.9.1",
     "@codeforbreakfast/buntest": "workspace:*",
     "effect": "3.18.4",
     "typescript": "5.9.3",
