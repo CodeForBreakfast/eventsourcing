@@ -1,1 +1,1 @@
-export * from './subscribeAll.contract';
+export * from './subscribe-all-contract-tests';
