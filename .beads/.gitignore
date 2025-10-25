@@ -4,14 +4,5 @@
 *.db-wal
 *.db-shm
 
-# Daemon runtime files
-daemon.log
-daemon.pid
-bd.sock
-
-# Legacy database files
-db.sqlite
-bd.db
-
 # Keep JSONL exports (source of truth for git)
 !*.jsonl
