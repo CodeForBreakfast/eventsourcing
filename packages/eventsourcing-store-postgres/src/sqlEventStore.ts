@@ -368,7 +368,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           subscriptionManager,
           notificationListener
         ),
-        subscribeAll: () => subscribeToAllStreams(subscriptionManager),
+        subscribeAll: () => subscribeToAllStreams(subscriptionManager, notificationListener),
       };
 
       return eventStore;
@@ -387,10 +387,14 @@ const subscribeToAllStreams = (
       EventStoreError,
       never
     >;
+  }>,
+  notificationListener: Readonly<{
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
   }>
 ) =>
   pipe(
-    subscriptionManager.subscribeToAllEvents(),
+    notificationListener.listenAll,
+    Effect.andThen(subscriptionManager.subscribeToAllEvents()),
     Effect.map((stream) =>
       Stream.map(stream, (item) => ({
         position: { streamId: item.streamId, eventNumber: 0 },
