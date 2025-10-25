@@ -25,6 +25,17 @@ interface SubscriptionData<T> {
 }
 
 /**
+ * State for the subscription manager
+ */
+interface SubscriptionManagerState {
+  readonly streams: HashMap.HashMap<EventStreamId, SubscriptionData<string>>;
+  readonly allEventsPubSub: PubSub.PubSub<{
+    readonly streamId: EventStreamId;
+    readonly event: string;
+  }>;
+}
+
+/**
  * SubscriptionManager service for managing subscriptions to event streams
  */
 export interface SubscriptionManagerService {
@@ -46,6 +57,23 @@ export interface SubscriptionManagerService {
    * Publish an event to all subscribers of a stream
    */
   readonly publishEvent: (
+    streamId: EventStreamId,
+    event: string
+  ) => Effect.Effect<void, EventStoreError, never>;
+
+  /**
+   * Subscribe to all events from all streams
+   */
+  readonly subscribeToAllEvents: () => Effect.Effect<
+    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never>,
+    EventStoreError,
+    never
+  >;
+
+  /**
+   * Publish an event to all-events subscribers
+   */
+  readonly publishToAllEvents: (
     streamId: EventStreamId,
     event: string
   ) => Effect.Effect<void, EventStoreError, never>;
@@ -97,41 +125,47 @@ const extractSubscriptionData =
       })
     );
 
+const updateStateWithNewSubscription =
+  (streamId: EventStreamId) =>
+  (state: SubscriptionManagerState): SubscriptionManagerState =>
+    pipe(state.streams, getOrCreateSubscription<string>(streamId), (streams) => ({
+      ...state,
+      streams,
+    }));
+
 /**
  * Get or create a PubSub for a stream ID
  */
-const getOrCreatePubSub = <T>(
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
-  >,
+const getOrCreatePubSub = (
+  ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>,
   streamId: EventStreamId
-): Effect.Effect<SubscriptionData<T>, never, never> =>
+): Effect.Effect<SubscriptionData<string>, never, never> =>
   pipe(
-    SynchronizedRef.updateAndGet(ref, getOrCreateSubscription(streamId)),
+    ref,
+    SynchronizedRef.updateAndGet(updateStateWithNewSubscription(streamId)),
+    Effect.map((state) => state.streams),
     Effect.flatMap(extractSubscriptionData(streamId))
   );
 
-const removeStreamFromHashMap =
-  <T>(streamId: EventStreamId) =>
-  (
-    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
-  ): HashMap.HashMap<EventStreamId, SubscriptionData<T>> =>
-    HashMap.remove(subscriptions, streamId);
+const updateStateByRemovingStream =
+  (streamId: EventStreamId) =>
+  (state: SubscriptionManagerState): SubscriptionManagerState => ({
+    ...state,
+    streams: HashMap.remove(state.streams, streamId),
+  });
 
 /**
  * Remove a subscription for a stream ID
  */
-const removeSubscription = <T>(
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
-  >,
+const removeSubscription = (
+  ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>,
   streamId: EventStreamId
 ): Effect.Effect<void, never, never> =>
-  pipe(SynchronizedRef.update(ref, removeStreamFromHashMap(streamId)), Effect.as(undefined));
+  pipe(ref, SynchronizedRef.update(updateStateByRemovingStream(streamId)), Effect.as(undefined));
 
 const publishEventToPubSub =
-  <T>(event: T, streamId: EventStreamId) =>
-  (subData: ReadonlyDeep<SubscriptionData<T>>): Effect.Effect<void, never, never> =>
+  (event: string, streamId: EventStreamId) =>
+  (subData: ReadonlyDeep<SubscriptionData<string>>): Effect.Effect<void, never, never> =>
     pipe(
       subData.pubsub,
       PubSub.publish(event),
@@ -144,9 +178,9 @@ const publishEventToPubSub =
     );
 
 const publishToSubscriptionIfExists =
-  <T>(streamId: EventStreamId, event: T) =>
+  (streamId: EventStreamId, event: string) =>
   (
-    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<T>>
+    subscriptions: HashMap.HashMap<EventStreamId, SubscriptionData<string>>
   ): Effect.Effect<void, never, never> =>
     pipe(
       subscriptions,
@@ -160,14 +194,17 @@ const publishToSubscriptionIfExists =
 /**
  * Publish an event to subscribers of a stream
  */
-const publishToStream = <T>(
-  ref: ReadonlyDeep<
-    SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<T>>>
-  >,
+const publishToStream = (
+  ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>,
   streamId: EventStreamId,
-  event: T
+  event: string
 ): Effect.Effect<void, never, never> =>
-  pipe(ref, SynchronizedRef.get, Effect.flatMap(publishToSubscriptionIfExists(streamId, event)));
+  pipe(
+    ref,
+    SynchronizedRef.get,
+    Effect.map((state) => state.streams),
+    Effect.flatMap(publishToSubscriptionIfExists(streamId, event))
+  );
 
 const createRetrySchedule = (): Schedule.Schedule<Duration.Duration, unknown, never> =>
   pipe(
@@ -185,11 +222,7 @@ const createStreamFromPubSub = (
   );
 
 const createSubscriptionStream =
-  (
-    ref: ReadonlyDeep<
-      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-    >
-  ) =>
+  (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
   (streamId: EventStreamId): Effect.Effect<Stream.Stream<string, never>, EventStoreError, never> =>
     pipe(
       getOrCreatePubSub(ref, streamId),
@@ -198,11 +231,7 @@ const createSubscriptionStream =
     );
 
 const unsubscribeFromStreamWithErrorHandling =
-  (
-    ref: ReadonlyDeep<
-      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-    >
-  ) =>
+  (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
   (streamId: EventStreamId): Effect.Effect<void, EventStoreError, never> =>
     pipe(
       removeSubscription(ref, streamId),
@@ -210,16 +239,95 @@ const unsubscribeFromStreamWithErrorHandling =
     );
 
 const publishEventWithErrorHandling =
-  (
-    ref: ReadonlyDeep<
-      SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>
-    >
-  ) =>
+  (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
   (streamId: EventStreamId, event: string): Effect.Effect<void, EventStoreError, never> =>
     pipe(
       publishToStream(ref, streamId, event),
       Effect.mapError(eventStoreError.write(streamId, 'Failed to publish event to subscribers'))
     );
+
+const createAllEventsStreamFromPubSub = (
+  pubsub: PubSub.PubSub<{ readonly streamId: EventStreamId; readonly event: string }>
+): Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never> =>
+  pipe(
+    pubsub,
+    (p) =>
+      Stream.fromPubSub(
+        p as PubSub.PubSub<{ readonly streamId: EventStreamId; readonly event: string }>
+      ),
+    Stream.retry(createRetrySchedule())
+  );
+
+const subscribeToAllEventsStream =
+  (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
+  (): Effect.Effect<
+    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never>,
+    EventStoreError,
+    never
+  > =>
+    pipe(
+      ref,
+      SynchronizedRef.get,
+      Effect.map((state) => createAllEventsStreamFromPubSub(state.allEventsPubSub)),
+      Effect.mapError(eventStoreError.subscribe('*', 'Failed to subscribe to all events'))
+    );
+
+const publishToAllEventsPubSub =
+  (streamId: EventStreamId, event: string) =>
+  (
+    pubsub: PubSub.PubSub<{ readonly streamId: EventStreamId; readonly event: string }>
+  ): Effect.Effect<void, never, never> =>
+    pipe(
+      pubsub,
+      PubSub.publish({ streamId, event }),
+      Effect.tapError((error) =>
+        Effect.logError('Failed to publish to all-events', { error, streamId })
+      )
+    );
+
+const publishEventToAllEventsPubSub =
+  (streamId: EventStreamId, event: string) =>
+  (state: SubscriptionManagerState): Effect.Effect<void, never, never> =>
+    pipe(state.allEventsPubSub, publishToAllEventsPubSub(streamId, event));
+
+const publishToAllEventsWithErrorHandling =
+  (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
+  (streamId: EventStreamId, event: string): Effect.Effect<void, EventStoreError, never> =>
+    pipe(
+      ref,
+      SynchronizedRef.get,
+      Effect.flatMap(publishEventToAllEventsPubSub(streamId, event)),
+      Effect.mapError(
+        eventStoreError.write(streamId, 'Failed to publish to all-events subscribers')
+      )
+    );
+
+const createSubscriptionManagerService = (
+  ref: SynchronizedRef.SynchronizedRef<SubscriptionManagerState>
+): SubscriptionManagerService => ({
+  subscribeToStream: createSubscriptionStream(ref),
+  unsubscribeFromStream: unsubscribeFromStreamWithErrorHandling(ref),
+  publishEvent: publishEventWithErrorHandling(ref),
+  subscribeToAllEvents: subscribeToAllEventsStream(ref),
+  publishToAllEvents: publishToAllEventsWithErrorHandling(ref),
+});
+
+const makeSubscriptionManagerState = (
+  allEventsPubSub: PubSub.PubSub<{ readonly streamId: EventStreamId; readonly event: string }>
+): SubscriptionManagerState => ({
+  streams: HashMap.empty(),
+  allEventsPubSub,
+});
+
+const createManagerFromState = (
+  allEventsPubSub: PubSub.PubSub<{ readonly streamId: EventStreamId; readonly event: string }>
+): Effect.Effect<SubscriptionManagerService, never, never> =>
+  pipe(
+    allEventsPubSub,
+    makeSubscriptionManagerState,
+    SynchronizedRef.make<SubscriptionManagerState>,
+    Effect.map(createSubscriptionManagerService)
+  );
 
 /**
  * Implementation of SubscriptionManager service
@@ -227,12 +335,7 @@ const publishEventWithErrorHandling =
 export const SubscriptionManagerLive = Layer.effect(
   SubscriptionManager,
   pipe(
-    HashMap.empty(),
-    SynchronizedRef.make<HashMap.HashMap<EventStreamId, SubscriptionData<string>>>,
-    Effect.map((ref) => ({
-      subscribeToStream: createSubscriptionStream(ref),
-      unsubscribeFromStream: unsubscribeFromStreamWithErrorHandling(ref),
-      publishEvent: publishEventWithErrorHandling(ref),
-    }))
+    PubSub.unbounded<{ readonly streamId: EventStreamId; readonly event: string }>(),
+    Effect.flatMap(createManagerFromState)
   )
 );

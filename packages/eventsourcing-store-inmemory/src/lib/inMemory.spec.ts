@@ -4,7 +4,9 @@ import {
   runEventStoreTestSuite,
   FooEventStore,
   encodedEventStore,
+  EventStore,
 } from '@codeforbreakfast/eventsourcing-store';
+import { subscribeAllContract } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { makeInMemoryEventStore } from './index';
 import { type InMemoryStore, make } from './InMemoryStore';
 
@@ -26,4 +28,17 @@ runEventStoreTestSuite(
   'In-memory',
   () => pipe(makeFooEventStoreLayer(), Layer.provide(silentLogger)),
   { supportsHorizontalScaling: false }
+);
+
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
+subscribeAllContract(
+  'InMemoryEventStore',
+  Layer.provide(
+    Layer.effect(StringEventStore, Effect.flatMap(make<string>(), makeInMemoryEventStore)),
+    silentLogger
+  )
 );

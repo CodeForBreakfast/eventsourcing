@@ -195,6 +195,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
+        "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.9.1",
         "effect": "3.18.4",
         "eslint": "9.38.0",

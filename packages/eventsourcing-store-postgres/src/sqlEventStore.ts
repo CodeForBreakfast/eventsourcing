@@ -427,33 +427,28 @@ const createAllEventsStream = (
 ) =>
   pipe(
     notifications,
-    Stream.broadcast(2),
-    Stream.flatMap((sharedStream) => sharedStream),
     Stream.mapEffect(mapNotificationToEvent),
     Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams'))
+  );
+
+const addDebugLoggingToStream = (
+  stream: Stream.Stream<
+    { readonly position: EventStreamPosition; readonly event: string },
+    ParseResult.ParseError | EventStoreError,
+    never
+  >
+) =>
+  Stream.tap(stream, (event) =>
+    Effect.logDebug('Event received', {
+      streamId: event.position.streamId,
+      eventNumber: event.position.eventNumber,
+    })
   );
 
 /**
  * Subscribe to all events from all streams (live-only)
  * Starts listening on the global all-events channel
  */
-const logEventReceived = (event: {
-  readonly position: EventStreamPosition;
-  readonly event: string;
-}) =>
-  Effect.logInfo('subscribeToAllStreams: Event received from stream', {
-    streamId: event.position.streamId,
-    eventNumber: event.position.eventNumber,
-  });
-
-const addEventLogging = (
-  stream: Stream.Stream<
-    { readonly position: EventStreamPosition; readonly event: string },
-    ParseResult.ParseError | EventStoreError,
-    never
-  >
-) => Stream.tap(stream, logEventReceived);
-
 const subscribeToAllStreams = (
   notificationListener: Readonly<{
     readonly listenAll: Effect.Effect<void, EventStoreError, never>;
@@ -466,9 +461,11 @@ const subscribeToAllStreams = (
 ) =>
   pipe(
     notificationListener.listenAll,
-    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: listenAll completed, creating stream')),
+    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: Starting all-events listener')),
     // eslint-disable-next-line effect/prefer-as -- Must use Effect.map to delay stream creation until after listenAll completes
-    Effect.map(() => addEventLogging(createAllEventsStream(notificationListener.notifications)))
+    Effect.map(() =>
+      addDebugLoggingToStream(createAllEventsStream(notificationListener.notifications))
+    )
   );
 
 /**
