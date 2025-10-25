@@ -387,7 +387,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           subscriptionManager,
           notificationListener
         ),
-        subscribeAll: () => subscribeToAllStreams(notificationListener),
+        subscribeAll: () => subscribeToAllStreams(subscriptionManager),
       };
 
       return eventStore;
@@ -395,76 +395,36 @@ export const makeSqlEventStoreWithSubscriptionManager = (
   );
 };
 
-const decodeEventPosition = Schema.decode(
-  Schema.Struct({
-    position: EventStreamPosition,
-    event: Schema.String,
-  })
-);
-
-const mapNotificationToEvent = (notification: {
-  readonly streamId: EventStreamId;
-  readonly payload: NotificationPayload;
-}) =>
-  pipe(
-    {
-      position: {
-        streamId: notification.streamId,
-        eventNumber: notification.payload.event_number,
-      },
-      event: notification.payload.event_payload,
-    },
-    Effect.succeed,
-    Effect.flatMap(decodeEventPosition)
-  );
-
-const createAllEventsStream = (
-  notifications: Stream.Stream<
-    { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
-    EventStoreError,
-    never
-  >
-) =>
-  pipe(
-    notifications,
-    Stream.mapEffect(mapNotificationToEvent),
-    Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams'))
-  );
-
-const addDebugLoggingToStream = (
-  stream: Stream.Stream<
-    { readonly position: EventStreamPosition; readonly event: string },
-    ParseResult.ParseError | EventStoreError,
-    never
-  >
-) =>
-  Stream.tap(stream, (event) =>
-    Effect.logDebug('Event received', {
-      streamId: event.position.streamId,
-      eventNumber: event.position.eventNumber,
-    })
-  );
-
 /**
  * Subscribe to all events from all streams (live-only)
- * Starts listening on the global all-events channel
+ * Consumes from the all-events PubSub
  */
 const subscribeToAllStreams = (
-  notificationListener: Readonly<{
-    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
-    readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+  subscriptionManager: Readonly<{
+    readonly subscribeToAllEvents: () => Effect.Effect<
+      Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never>,
       EventStoreError,
       never
     >;
   }>
 ) =>
   pipe(
-    notificationListener.listenAll,
-    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: Starting all-events listener')),
-    // eslint-disable-next-line effect/prefer-as -- Must use Effect.map to delay stream creation until after listenAll completes
-    Effect.map(() =>
-      addDebugLoggingToStream(createAllEventsStream(notificationListener.notifications))
+    subscriptionManager.subscribeToAllEvents(),
+    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: Subscribing to all-events PubSub')),
+    Effect.map((stream) =>
+      pipe(
+        stream,
+        Stream.map((item) => ({
+          position: { streamId: item.streamId, eventNumber: 0 },
+          event: item.event,
+        })),
+        Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams')),
+        Stream.tap((event) =>
+          Effect.logDebug('Event received from all-events PubSub', {
+            streamId: event.position.streamId,
+          })
+        )
+      )
     )
   );
 
