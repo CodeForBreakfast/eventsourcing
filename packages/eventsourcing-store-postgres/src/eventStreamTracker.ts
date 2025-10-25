@@ -8,11 +8,7 @@ import type { ReadonlyDeep } from 'type-fest';
  * Note: The processEvent method has a generic type parameter, which means
  * it cannot use Effect service accessors. This is by design and doesn't
  * affect functionality - the service is accessed via yield* EventStreamTracker.
- *
- * Effect-LS warning TS21 suppressed: Generic methods cannot have accessors,
- * but this service doesn't use accessors anyway (uses Effect.Tag, not Effect.Service with accessors:true).
  */
-// @ts-expect-error TS21: Effect-LS informational warning about generic methods
 export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
   EventStreamTracker,
   Readonly<{
