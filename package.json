@@ -17,7 +17,7 @@
     "changeset": "changeset",
     "version": "changeset version && bun update",
     "release": "bun run build && changeset publish",
-    "prepare": "husky",
+    "prepare": "husky && bunx effect-language-service patch",
     "arch:check": "dependency-cruiser packages --validate",
     "deps:check": "knip --include dependencies,unlisted,binaries,unresolved",
     "code:check": "knip",

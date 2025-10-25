@@ -4,10 +4,10 @@ import * as Effect from 'effect/Effect';
 declare const myEffect: Effect.Effect<number, string, never>;
 
 // Valid: Already using ignoreLogged
-pipe(myEffect, Effect.ignoreLogged);
+const _valid1 = pipe(myEffect, Effect.ignoreLogged);
 
 // Valid: matchCauseEffect with non-logging onFailure
-pipe(
+const _valid2 = pipe(
   myEffect,
   Effect.matchCauseEffect({
     onFailure: (cause) => Effect.fail('recovered'),
@@ -16,7 +16,7 @@ pipe(
 );
 
 // Valid: matchCauseEffect with non-void onSuccess
-pipe(
+const _valid3 = pipe(
   myEffect,
   Effect.matchCauseEffect({
     onFailure: (cause) => Effect.logDebug(cause),
@@ -25,7 +25,7 @@ pipe(
 );
 
 // Valid: matchCauseEffect without logging
-pipe(
+const _valid4 = pipe(
   myEffect,
   Effect.matchCauseEffect({
     onFailure: (cause) => Effect.die(cause),
@@ -34,7 +34,7 @@ pipe(
 );
 
 // Valid: Different logging level
-pipe(
+const _valid5 = pipe(
   myEffect,
   Effect.matchCauseEffect({
     onFailure: (cause) => Effect.logError(cause),
@@ -43,7 +43,7 @@ pipe(
 );
 
 // Invalid: matchCauseEffect with logDebug on failure and void on success
-pipe(
+const _invalid1 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore-logged
   Effect.matchCauseEffect({
@@ -53,7 +53,7 @@ pipe(
 );
 
 // Invalid: matchCauseEffect with logDebug and message
-pipe(
+const _invalid2 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore-logged
   Effect.matchCauseEffect({
@@ -63,7 +63,7 @@ pipe(
 );
 
 // Invalid: matchCauseEffect with logDebug and arrow function with nested Effect.void
-pipe(
+const _invalid3 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore-logged
   Effect.matchCauseEffect({
@@ -73,7 +73,7 @@ pipe(
 );
 
 // Invalid: matchCauseEffect with logDebug and block statement returning Effect.void
-pipe(
+const _invalid4 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore-logged
   Effect.matchCauseEffect({

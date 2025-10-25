@@ -23,9 +23,9 @@ if (event.type === 'TodoCreated') {
 
 // eslint-disable-next-line effect/no-if-statement
 if (state.deleted) {
-  Effect.fail(new Error('Cannot complete deleted TODO'));
+  const _unused1 = Effect.fail(new Error('Cannot complete deleted TODO'));
 } else {
-  Effect.succeed(state);
+  const _unused2 = Effect.succeed(state);
 }
 
 // eslint-disable-next-line effect/no-if-statement

@@ -4,6 +4,10 @@ import type { ReadonlyDeep } from 'type-fest';
 
 /**
  * EventStreamTracker service for tracking event ordering and deduplication
+ *
+ * Note: The processEvent method has a generic type parameter, which means
+ * it cannot use Effect service accessors. This is by design and doesn't
+ * affect functionality - the service is accessed via yield* EventStreamTracker.
  */
 export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
   EventStreamTracker,
