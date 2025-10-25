@@ -1,8 +1,8 @@
-/* eslint-disable effect/no-intermediate-effect-variables */
-/* eslint-disable effect/no-eta-expansion */
-/* eslint-disable effect/no-pipe-first-arg-call */
-/* eslint-disable effect/no-nested-pipe */
-/* eslint-disable effect/no-curried-calls */
+/* eslint-disable effect/no-intermediate-effect-variables -- Integration tests use intermediate variables for test clarity and debugging */
+/* eslint-disable effect/no-eta-expansion -- Test setup requires explicit eta expansion for proper resource lifecycle management */
+/* eslint-disable effect/no-pipe-first-arg-call -- Integration tests use pipe with first-arg calls for test composition patterns */
+/* eslint-disable effect/no-nested-pipe -- Integration tests may use nested pipes for complex test setup and assertions */
+/* eslint-disable effect/no-curried-calls -- Test utilities use curried calls for composable test helpers */
 
 import { Effect, Layer, Schema, Stream, Fiber, Chunk, pipe } from 'effect';
 import { BunContext } from '@effect/platform-bun';

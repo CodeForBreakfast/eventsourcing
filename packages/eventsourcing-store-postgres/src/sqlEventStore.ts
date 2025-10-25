@@ -395,6 +395,22 @@ export const makeSqlEventStoreWithSubscriptionManager = (
   );
 };
 
+const transformAllEventsStream = (
+  stream: Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never>
+) =>
+  pipe(
+    stream,
+    Stream.map((item) => ({
+      position: { streamId: item.streamId, eventNumber: 0 },
+      event: item.event,
+    })),
+    Stream.tap((event) =>
+      Effect.logDebug('Event received from all-events PubSub', {
+        streamId: event.position.streamId,
+      })
+    )
+  );
+
 /**
  * Subscribe to all events from all streams (live-only)
  * Consumes from the all-events PubSub
@@ -411,21 +427,7 @@ const subscribeToAllStreams = (
   pipe(
     subscriptionManager.subscribeToAllEvents(),
     Effect.tap(() => Effect.logInfo('subscribeToAllStreams: Subscribing to all-events PubSub')),
-    Effect.map((stream) =>
-      pipe(
-        stream,
-        Stream.map((item) => ({
-          position: { streamId: item.streamId, eventNumber: 0 },
-          event: item.event,
-        })),
-        Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams')),
-        Stream.tap((event) =>
-          Effect.logDebug('Event received from all-events PubSub', {
-            streamId: event.position.streamId,
-          })
-        )
-      )
-    )
+    Effect.map(transformAllEventsStream)
   );
 
 /**
