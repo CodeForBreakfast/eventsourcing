@@ -7,11 +7,11 @@ declare const myEffect: Effect.Effect<number, string, never>;
 declare const mySTM: STM.STM<number, string, never>;
 
 // Valid: Already using ignore
-pipe(myEffect, Effect.ignore);
-pipe(mySTM, STM.ignore);
+const _unused1 = pipe(myEffect, Effect.ignore);
+const _unused2 = pipe(mySTM, STM.ignore);
 
 // Valid: match with non-void handlers
-pipe(
+const _unused3 = pipe(
   myEffect,
   Effect.match({
     onFailure: (e) => `Error: ${e}`,
@@ -20,7 +20,7 @@ pipe(
 );
 
 // Valid: match with only one void handler
-pipe(
+const _unused4 = pipe(
   myEffect,
   Effect.match({
     onFailure: constVoid,
@@ -28,7 +28,7 @@ pipe(
   })
 );
 
-pipe(
+const _unused5 = pipe(
   myEffect,
   Effect.match({
     onFailure: (e) => e.length,
@@ -37,7 +37,7 @@ pipe(
 );
 
 // Valid: match with arrow function that returns a value (not void)
-pipe(
+const _unused6 = pipe(
   myEffect,
   Effect.match({
     onFailure: () => 'error',
@@ -46,7 +46,7 @@ pipe(
 );
 
 // Invalid: match with constVoid for both handlers
-pipe(
+const _unused7 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -56,7 +56,7 @@ pipe(
 );
 
 // Invalid: match with arrow functions returning void 0
-pipe(
+const _unused8 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -66,7 +66,7 @@ pipe(
 );
 
 // Invalid: match with arrow functions returning undefined
-pipe(
+const _unused9 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -76,7 +76,7 @@ pipe(
 );
 
 // Invalid: match with arrow functions with parameters returning void 0
-pipe(
+const _unused10 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -86,7 +86,7 @@ pipe(
 );
 
 // Invalid: match with arrow functions with empty block
-pipe(
+const _unused11 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -96,7 +96,7 @@ pipe(
 );
 
 // Invalid: STM with constVoid
-pipe(
+const _unused12 = pipe(
   mySTM,
   // eslint-disable-next-line effect/prefer-ignore
   STM.match({
@@ -106,7 +106,7 @@ pipe(
 );
 
 // Invalid: Mixed styles (constVoid and arrow function)
-pipe(
+const _unused13 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
@@ -116,7 +116,7 @@ pipe(
 );
 
 // Invalid: Mixed styles (arrow functions returning different void representations)
-pipe(
+const _unused14 = pipe(
   myEffect,
   // eslint-disable-next-line effect/prefer-ignore
   Effect.match({
