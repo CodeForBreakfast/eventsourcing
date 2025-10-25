@@ -92,6 +92,7 @@ const testingContractsExceptionRules = {
   'effect/no-gen': 'off',
   'effect/no-runSync': 'off',
   'effect/no-runPromise': 'off',
+  'import/extensions': 'off',
 };
 
 // Common TypeScript rules
