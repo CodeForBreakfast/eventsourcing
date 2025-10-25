@@ -385,12 +385,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           notificationListener
         ),
         subscribeAll: () =>
-          Effect.fail(
-            eventStoreError.read(
-              undefined,
-              'subscribeAll is not yet implemented for PostgreSQL event store'
-            )()
-          ),
+          Effect.dieMessage('subscribeAll not yet implemented for PostgreSQL event store'),
       };
 
       return eventStore;
