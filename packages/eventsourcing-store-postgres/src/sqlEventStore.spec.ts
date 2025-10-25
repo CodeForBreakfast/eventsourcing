@@ -5,6 +5,7 @@ import {
   runEventStoreTestSuite,
   FooEventStore,
   encodedEventStore,
+  type EventStore,
 } from '@codeforbreakfast/eventsourcing-store';
 import { subscribeAllContract } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
@@ -45,20 +46,21 @@ runEventStoreTestSuite('PostgreSQL', () => TestLayer);
 // Simple test to verify it.effect works
 it.effect('Simple test', () => Effect.succeed(42));
 
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
 // Run subscribeAll contract tests (plain string EventStore)
-/* eslint-disable effect/no-nested-pipe, effect/no-nested-pipes -- Nested pipes required to avoid creating intermediate variable that linter also rejects */
 subscribeAllContract(
   'PostgresEventStore',
   pipe(
-    sqlEventStore,
-    Effect.provide(
-      pipe(
-        Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, Logger.pretty),
-        Layer.provide(PostgresLive),
-        Layer.provide(makePgConfigurationLive('TEST_PG')),
-        Layer.provide(BunContext.layer)
-      )
-    )
+    Layer.effect(StringEventStore, sqlEventStore),
+    Layer.provide(
+      Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, Logger.pretty)
+    ),
+    Layer.provide(PostgresLive),
+    Layer.provide(makePgConfigurationLive('TEST_PG')),
+    Layer.provide(BunContext.layer)
   )
 );
-/* eslint-enable effect/no-nested-pipe, effect/no-nested-pipes -- Re-enable nested pipe rules */

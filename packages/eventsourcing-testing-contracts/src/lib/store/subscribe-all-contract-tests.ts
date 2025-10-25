@@ -1,24 +1,45 @@
-import { Chunk, Effect, Fiber, Stream, pipe, Schema } from 'effect';
-import { describe, expect, it } from 'bun:test';
+import { Chunk, Effect, Fiber, Stream, pipe, Schema, Layer } from 'effect';
+import { beforeAll, describe, expect, it } from 'bun:test';
 import type { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 const makeStreamId = (id: string) => Schema.decode(EventStreamId)(id);
 
+const randomId = () => `stream-${Math.random().toString(36).substring(2, 15)}`;
+
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
 /**
  * Contract tests for EventStore.subscribeAll()
  * All implementations must pass these tests
  */
-export const subscribeAllContract = (
+export const subscribeAllContract = <E>(
   storeName: string,
-  makeStore: Effect.Effect<EventStore<string>, never, never>
+  makeStoreLayer: Layer.Layer<StringEventStore, E, never>
 ) => {
   describe(`${storeName} - subscribeAll() contract`, () => {
+    let storeLayer: Layer.Layer<StringEventStore, E, never>;
+
+    const runWithStore = <A, E2>(effect: Effect.Effect<A, E2, StringEventStore>): Promise<A> =>
+      pipe(
+        effect,
+        Effect.provide(storeLayer),
+        (e) => e as Effect.Effect<A, E2 | E, never>,
+        Effect.runPromise
+      );
+
+    beforeAll(() => {
+      storeLayer = makeStoreLayer;
+    });
+
     it('should receive events from multiple streams', () =>
       Effect.gen(function* () {
-        const store = yield* makeStore;
-        const streamId1 = yield* makeStreamId('stream-1');
-        const streamId2 = yield* makeStreamId('stream-2');
+        const store = yield* StringEventStore;
+        const streamId1 = yield* makeStreamId(randomId());
+        const streamId2 = yield* makeStreamId(randomId());
 
         // Start subscription (take 4 events then complete)
         const stream = yield* store.subscribeAll();
@@ -49,13 +70,13 @@ export const subscribeAllContract = (
         expect(events.map((e) => e.event)).toEqual(['event1', 'event2', 'event3', 'event4']);
         expect(events.map((e) => e.position.streamId)).toContain(streamId1);
         expect(events.map((e) => e.position.streamId)).toContain(streamId2);
-      }).pipe(Effect.runPromise));
+      }).pipe(runWithStore));
 
     it('should only receive events committed AFTER subscription starts (live-only)', () =>
       Effect.gen(function* () {
-        const store = yield* makeStore;
-        const streamId1 = yield* makeStreamId('stream-1');
-        const streamId2 = yield* makeStreamId('stream-2');
+        const store = yield* StringEventStore;
+        const streamId1 = yield* makeStreamId(randomId());
+        const streamId2 = yield* makeStreamId(randomId());
 
         // Append events BEFORE subscription
         yield* pipe(
@@ -84,12 +105,12 @@ export const subscribeAllContract = (
         expect(events.map((e) => e.event)).toEqual(['new-event-1', 'new-event-2']);
         expect(events.map((e) => e.event)).not.toContain('old-event-1');
         expect(events.map((e) => e.event)).not.toContain('old-event-2');
-      }).pipe(Effect.runPromise));
+      }).pipe(runWithStore));
 
     it('should support multiple concurrent subscribers', () =>
       Effect.gen(function* () {
-        const store = yield* makeStore;
-        const streamId1 = yield* makeStreamId('stream-1');
+        const store = yield* StringEventStore;
+        const streamId1 = yield* makeStreamId(randomId());
 
         // Start two subscriptions
         const stream1 = yield* store.subscribeAll();
@@ -116,12 +137,12 @@ export const subscribeAllContract = (
         // Both subscribers should receive all events
         expect(events1).toEqual(['event1', 'event2']);
         expect(events2).toEqual(['event1', 'event2']);
-      }).pipe(Effect.runPromise));
+      }).pipe(runWithStore));
 
     it('should clean up properly when subscription is interrupted', () =>
       Effect.gen(function* () {
-        const store = yield* makeStore;
-        const streamId1 = yield* makeStreamId('stream-1');
+        const store = yield* StringEventStore;
+        const streamId1 = yield* makeStreamId(randomId());
 
         const stream = yield* store.subscribeAll();
 
@@ -150,6 +171,6 @@ export const subscribeAllContract = (
         expect(events).toEqual(['event1', 'event2']);
         expect(events).not.toContain('event3');
         expect(events).not.toContain('event4');
-      }).pipe(Effect.runPromise));
+      }).pipe(runWithStore));
   });
 };

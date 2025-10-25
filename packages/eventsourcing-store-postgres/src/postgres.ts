@@ -1,5 +1,5 @@
 import { PgClient, PgMigrator } from '@effect/sql-pg';
-import { Config, Effect, Layer, pipe, Redacted } from 'effect';
+import { Config, Effect, Layer, pipe, Redacted, Option } from 'effect';
 import { loader } from './migrations';
 
 // PgConfiguration service configuration
@@ -9,6 +9,7 @@ export type PgConfigurationService = {
   readonly database: string;
   readonly host: string;
   readonly port: number;
+  readonly maxConnections?: number;
 };
 
 export class PgConfiguration extends Effect.Tag('PgConfiguration')<
@@ -19,7 +20,7 @@ export class PgConfiguration extends Effect.Tag('PgConfiguration')<
 export const PgLive = pipe(
   PgConfiguration,
   Effect.map((config) => {
-    const { username, password, database, host, port } = config;
+    const { username, password, database, host, port, maxConnections } = config;
 
     return PgClient.layer({
       username,
@@ -27,6 +28,7 @@ export const PgLive = pipe(
       database,
       host,
       port,
+      ...(maxConnections !== undefined && { maxConnections }),
     });
   }),
   Layer.unwrapEffect
@@ -43,15 +45,17 @@ export const makePgConfigurationLive = (prefix: string) =>
           Config.string('DATABASE'),
           Config.string('HOST'),
           Config.integer('PORT'),
+          Config.option(Config.integer('MAX_CONNECTIONS')),
         ]),
         prefix
       ),
-      Effect.map(([username, password, database, host, port]) => ({
+      Effect.map(([username, password, database, host, port, maxConnections]) => ({
         username,
         password,
         database,
         host,
         port,
+        ...(Option.isSome(maxConnections) && { maxConnections: maxConnections.value }),
       }))
     )
   );
