@@ -132,4 +132,16 @@ export const encodedEventStore =
       createEncodingSink(schema, eventstore.append(toPosition)),
     read: readAndDecodeEvents(schema, eventstore),
     subscribe: subscribeAndDecodeEvents(schema, eventstore),
+    subscribeAll: () =>
+      Effect.map(eventstore.subscribeAll(), (stream) =>
+        pipe(
+          stream,
+          Stream.mapEffect(({ position, event }) =>
+            Effect.map(Schema.decode(schema)(event), (decoded) => ({
+              position,
+              event: decoded,
+            }))
+          )
+        )
+      ),
   });
