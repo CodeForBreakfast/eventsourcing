@@ -71,8 +71,10 @@ export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 
+const decodeEvent = <A, I>(schema: Schema.Schema<A, I>) => Schema.decode(schema);
+
 const decodeStreamEvents = <A, I>(schema: Schema.Schema<A, I>) =>
-  Stream.flatMap(Schema.decode(schema));
+  Stream.flatMap(decodeEvent(schema));
 
 const readAndDecodeEvents =
   <A, I>(schema: Schema.Schema<A, I>, eventstore: Readonly<EventStore<I>>) =>
@@ -134,14 +136,11 @@ export const encodedEventStore =
     subscribe: subscribeAndDecodeEvents(schema, eventstore),
     subscribeAll: () =>
       Effect.map(eventstore.subscribeAll(), (stream) =>
-        pipe(
-          stream,
-          Stream.mapEffect(({ position, event }) =>
-            Effect.map(Schema.decode(schema)(event), (decoded) => ({
-              position,
-              event: decoded,
-            }))
-          )
+        Stream.mapEffect(stream, ({ position, event }) =>
+          Effect.map(decodeEvent(schema)(event), (decoded) => ({
+            position,
+            event: decoded,
+          }))
         )
       ),
   });

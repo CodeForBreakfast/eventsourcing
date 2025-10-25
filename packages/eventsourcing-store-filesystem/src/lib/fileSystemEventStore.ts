@@ -45,12 +45,28 @@ const createAppendSink =
         )
     );
 
+const subscribeToAllEvents =
+  <T>(store: FileSystemStore<T>, fs: FileSystem.FileSystem, path: Path.Path) =>
+  () =>
+    pipe(
+      store.getAll(),
+      Effect.provideService(FileSystem.FileSystem, fs),
+      Effect.provideService(Path.Path, path),
+      Effect.map((stream) =>
+        Stream.map(stream, ({ event, streamId }) => ({
+          event,
+          position: { streamId, eventNumber: 0 },
+        }))
+      )
+    );
+
 const createEventStoreWithServices =
   <T>(store: FileSystemStore<T>) =>
   ([fs, path]: readonly [FileSystem.FileSystem, Path.Path]): EventStore<T> => ({
     append: createAppendSink(store, fs, path),
     read: readHistoricalEvents(store, fs, path),
     subscribe: readAllEvents(store, fs, path),
+    subscribeAll: subscribeToAllEvents(store, fs, path),
   });
 
 export const makeFileSystemEventStore = <T>(

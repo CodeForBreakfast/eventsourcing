@@ -232,6 +232,7 @@
       "name": "@codeforbreakfast/eventsourcing-testing-contracts",
       "version": "0.3.8",
       "dependencies": {
+        "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
       },
       "devDependencies": {
