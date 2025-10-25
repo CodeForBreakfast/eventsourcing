@@ -14,21 +14,23 @@ The spike branch proved that building a WebSocket event sourcing server requires
 
 The spike created an `eventsourcing-server` package with working implementations, but analysis revealed critical gaps in the architecture around event store subscriptions and client event delivery.
 
-## Solution: Four Building Block Components
+## Solution: Four Building Block Components + EventStore Enhancement
 
 We'll create `@codeforbreakfast/eventsourcing-server` with four discrete, composable components that eliminate boilerplate while maintaining flexibility.
 
+**Pre-requisite:** EventStore must support live cross-stream subscriptions via `subscribeAll()` (see hp-8).
+
 ### 1. EventBus
 
-**Responsibility:** In-memory pub/sub for server-side event distribution
+**Responsibility:** Live event distribution for server-side subscribers
 
 **Boundaries:**
 
-- Receives events from CommandDispatcher after commit
+- Subscribes to EventStore.subscribeAll() to receive all events
 - Distributes to server-side subscribers (process managers, projections)
-- NO historical replay - only current events
+- Live-only, best-effort delivery (no historical replay, no guarantees)
 - NOT connected to clients or transport layer
-- Does NOT know about EventStore or aggregates
+- Does NOT commit events - only distributes them
 
 **Interface:**
 
@@ -36,17 +38,18 @@ We'll create `@codeforbreakfast/eventsourcing-server` with four discrete, compos
 class EventBus extends Context.Tag('EventBus')<
   EventBus,
   {
-    publish: (event: DomainEvent) => Effect.Effect<void>;
     subscribe: (
       filter: (event: DomainEvent) => boolean
     ) => Effect.Effect<Stream.Stream<DomainEvent>>;
   }
 >() {}
 
-const EventBusLive: Layer.Layer<EventBus>;
+const EventBusLive: (config: { store: EventStoreTag }) => Layer.Layer<EventBus, never, EventStore>;
 ```
 
-**Dependencies:** Effect primitives only (PubSub, Stream)
+**Dependencies:** EventStore (with subscribeAll support)
+
+**Key Design:** EventBus uses EventStore.subscribeAll() internally, so process managers see events from ALL server instances, not just the local one.
 
 ### 2. CommandDispatcher
 
@@ -57,8 +60,8 @@ const EventBusLive: Layer.Layer<EventBus>;
 - Receives WireCommand from ProtocolBridge
 - Maps command name to aggregate method (convention: CreateTodo → createTodo)
 - Loads aggregate state, executes command, commits to EventStore
-- Publishes committed events to EventBus
 - Returns CommandResult (Success/Failure)
+- Does NOT publish to EventBus (EventBus gets events via subscribeAll)
 - Does NOT know about ServerProtocol or transport
 
 **Interface:**
@@ -73,10 +76,10 @@ class CommandDispatcher extends Context.Tag('CommandDispatcher')<
 
 const CommandDispatcherLive: (config: {
   aggregates: Array<AggregateConfig>;
-}) => Layer.Layer<CommandDispatcher, never, EventBus>;
+}) => Layer.Layer<CommandDispatcher, never, never>;
 ```
 
-**Dependencies:** EventBus, aggregate configurations
+**Dependencies:** Aggregate configurations, EventStore (implicitly via aggregates)
 
 ### 3. StoreSubscriptionManager
 
@@ -142,54 +145,70 @@ Client → Transport → ServerProtocol
                     ProtocolBridge
                          ↓
                   CommandDispatcher
-                    ↓         ↓
-              EventStore   EventBus
-                              ↓
-                      Process Managers
+                         ↓
+                    EventStore
+                         ↓ subscribeAll()
+                      EventBus
+                         ↓
+                  Process Managers
 ```
 
-### Event Flow
+### Event Flow (to Clients)
 
 ```
 EventStore.commit() by ANY instance
          ↓
-StoreSubscriptionManager (subscribes to streams)
+StoreSubscriptionManager (subscribe per stream)
          ↓
 ServerProtocol.publishEvent()
          ↓
      Clients (filtered by subscription)
 ```
 
-### Process Manager Flow
+### Event Flow (to Process Managers)
 
 ```
-CommandDispatcher → EventStore → EventBus → Process Managers
+EventStore.commit() by ANY instance
+         ↓ subscribeAll()
+      EventBus
+         ↓ filtered subscription
+   Process Managers
 ```
 
-**Critical Insight:** Events flow through TWO separate paths:
+**Critical Insight:** Events flow through TWO separate paths from EventStore:
 
-1. **Client path:** EventStore → StoreSubscriptionManager → ServerProtocol → Clients
-2. **Server path:** CommandDispatcher → EventBus → Process Managers
+1. **Client path:** EventStore.subscribe(streamId) → StoreSubscriptionManager → ServerProtocol → Clients
+   - Per-stream subscriptions
+   - Historical + live events
+   - Filtered by client subscription
 
-This separation ensures process managers get immediate notification (no store roundtrip) while clients get durable, multi-instance event delivery through store subscriptions.
+2. **Process Manager path:** EventStore.subscribeAll() → EventBus → Process Managers
+   - All streams, live-only
+   - Filtered by event type
+   - Best-effort delivery
+
+Both paths work across multiple server instances because they both subscribe to EventStore.
 
 ## Testing Strategy
 
 ### EventBus
 
-- Publish/subscribe with type-safe filtering
+- Subscribes to EventStore.subscribeAll()
+- Type-safe filtering works correctly
 - Multiple subscribers receive same event
 - Scope cleanup (no leaked subscriptions)
-- Integration: Real events from test aggregate
+- Live-only (events committed before subscription don't appear)
+- Multi-instance (events from any server appear)
+- Integration: Real EventStore with subscribeAll support
 
 ### CommandDispatcher
 
 - Convention-based routing (WireCommand name → aggregate method)
 - Aggregate state loading before execution
 - Event commit to store
-- Event publish to EventBus
 - CommandResult mapping (Success/Failure)
 - Error handling (aggregate errors → Failure, not crashes)
+- Does NOT publish to EventBus directly
 - Integration: Real aggregate with real store
 
 ### StoreSubscriptionManager
@@ -236,12 +255,47 @@ This separation ensures process managers get immediate notification (no store ro
 **StoreSubscriptionManager:** Log subscription errors, retry failed subscriptions
 **ProtocolBridge:** Log errors, one direction failing doesn't kill the other
 
+## EventStore.subscribeAll() Requirement
+
+**New requirement for EventStore interface:**
+
+All EventStore implementations must support live cross-stream subscriptions via `subscribeAll()`.
+
+**Purpose:**
+
+- Enable EventBus to receive events from all streams
+- Support process managers across multiple server instances
+- Avoid per-stream subscription management for server-side concerns
+
+**Design Constraints:**
+
+- Live-only (no historical replay, no global event number)
+- Best-effort delivery (not guaranteed)
+- Stream-independent (no global ordering)
+
+**Implementation status:**
+
+- See hp-8 for implementation task
+- Must be completed before EventBus (hp-4) can be implemented
+
+**If process managers need guarantees:**
+Process managers that require guaranteed delivery, exactly-once processing, or replay capabilities should use external queues (SQS, RabbitMQ, etc.) instead of EventBus.
+
+To integrate with external queues, applications can:
+
+1. Create a custom component that subscribes to EventStore.subscribeAll() and publishes to queues
+2. Extend/wrap CommandDispatcher to add queue publishing after commit
+3. Use EventStore triggers (e.g., Postgres NOTIFY → Lambda → SQS)
+
+The eventsourcing-server package itself does NOT provide queue publishing. CommandDispatcher only commits to EventStore, never publishes anywhere.
+
 ## Future Work (Out of Scope)
 
 - Process manager declarative configuration (manual implementation for now)
 - High-level convenience wrappers (users compose building blocks directly)
 - HTTP/SSE transports (WebSocket only initially)
 - Multi-store routing optimization
+- Guaranteed delivery for process managers (use external queues)
 
 ## References
 

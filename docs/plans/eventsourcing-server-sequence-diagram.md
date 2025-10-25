@@ -10,9 +10,7 @@ sequenceDiagram
     participant Bridge as ProtocolBridge<br/>(NEW)
     participant Dispatcher as CommandDispatcher<br/>(NEW)
     participant Aggregate as AggregateRoot<br/>(existing)
-    participant Store as EventStore<br/>(existing)
-    participant Bus as EventBus<br/>(NEW)
-    participant PM as Process Manager
+    participant Store as EventStore<br/>(existing + subscribeAll)
 
     Client->>Transport: Send WireCommand<br/>{CreateTodo, payload}
     Transport->>Protocol: TransportMessage
@@ -30,9 +28,7 @@ sequenceDiagram
     Dispatcher->>Store: commit(events)
     Store-->>Dispatcher: EventStreamPosition
 
-    Dispatcher->>Bus: publish(TodoCreated)
-    Bus->>PM: Stream.emit(TodoCreated)
-    PM->>PM: React to event
+    Note over Store: Events now in store,<br/>subscribeAll() broadcasts them
 
     Dispatcher-->>Bridge: CommandResult.Success
     Bridge->>Protocol: sendResult(commandId, result)
@@ -90,16 +86,19 @@ sequenceDiagram
     participant Protocol as ServerProtocol
     participant Bridge as ProtocolBridge
     participant Dispatcher as CommandDispatcher
-    participant Store as EventStore
+    participant Store as EventStore<br/>(+ subscribeAll)
     participant Bus as EventBus
     participant SubMgr as StoreSubscriptionManager
     participant PM as Process Manager
 
-    Note over C1,PM: Setup: Client 1 already subscribed to "todo-123"
+    Note over C1,PM: Setup: Client 1 subscribed, EventBus subscribed to subscribeAll()
 
     C1->>Protocol: Subscribe(todo-123)
     Protocol->>Protocol: HashMap.set(todo-123, [client1])
     SubMgr->>Store: subscribe(todo-123)
+
+    Bus->>Store: subscribeAll()
+    Store-->>Bus: Live event stream
 
     Note over C1,PM: Client 2 sends command
 
@@ -115,16 +114,19 @@ sequenceDiagram
     Dispatcher->>Dispatcher: Execute command
     Dispatcher->>Store: commit([TodoCreated])
 
-    Note over Dispatcher,Bus: Server-side path (immediate)
-    Dispatcher->>Bus: publish(TodoCreated)
-    Bus->>PM: Stream.emit(TodoCreated)
+    Note over Store: Store broadcasts to ALL subscribers
 
-    Note over Store,SubMgr: Client path (durable)
-    Store->>SubMgr: Stream.emit(TodoCreated)<br/>(from subscription)
+    Note over Store,SubMgr: Client path (per-stream)
+    Store->>SubMgr: Stream.emit(TodoCreated)<br/>(from subscribe)
     SubMgr->>Protocol: publishEvent(TodoCreated)
     Protocol->>Protocol: Check HashMap:<br/>todo-123 → [client1]
     Protocol->>Transport: Broadcast to client1
     Transport-->>C1: Receive TodoCreated
+
+    Note over Store,Bus: Process Manager path (subscribeAll)
+    Store->>Bus: Stream.emit(TodoCreated)<br/>(from subscribeAll)
+    Bus->>PM: Filtered stream
+    PM->>PM: React to event
 
     Dispatcher-->>Bridge: CommandResult.Success
     Bridge->>Protocol: sendResult(commandId)
@@ -171,18 +173,22 @@ sequenceDiagram
 ```mermaid
 sequenceDiagram
     participant Dispatcher as CommandDispatcher
-    participant Store as EventStore
+    participant Store as EventStore<br/>(+ subscribeAll)
     participant Bus as EventBus
     participant PM as Process Manager
     participant Agg2 as Different Aggregate
+
+    Note over Bus,Store: EventBus subscribed to subscribeAll()
 
     Note over Dispatcher,Agg2: Command executes on TodoAggregate
 
     Dispatcher->>Store: commit([TodoCreated])
     Store-->>Dispatcher: Position
 
-    Dispatcher->>Bus: publish(TodoCreated)
-    Note over Bus: Immediate, in-memory
+    Note over Store: Store broadcasts via subscribeAll()
+
+    Store->>Bus: Stream.emit(TodoCreated)
+    Note over Bus: Via subscribeAll(), live-only
 
     Bus->>PM: Stream.emit(TodoCreated)
     PM->>PM: Filter: interested<br/>in TodoCreated
@@ -194,7 +200,10 @@ sequenceDiagram
     Dispatcher->>Agg2: Load & execute
     Agg2-->>Dispatcher: [TodoListUpdated]
     Dispatcher->>Store: commit([TodoListUpdated])
-    Dispatcher->>Bus: publish(TodoListUpdated)
+
+    Note over Store: Broadcast again
+
+    Store->>Bus: Stream.emit(TodoListUpdated)
 ```
 
 ## Component Dependencies Visualization
@@ -208,7 +217,7 @@ graph TB
     Dispatcher[CommandDispatcher<br/>NEW]
     Bus[EventBus<br/>NEW]
     SubMgr[StoreSubscriptionManager<br/>NEW]
-    Store[EventStore<br/>existing]
+    Store[EventStore<br/>existing + subscribeAll]
     Agg[AggregateRoot<br/>existing]
     PM[Process Manager]
 
@@ -219,16 +228,15 @@ graph TB
 
     Dispatcher -->|load/commit| Store
     Dispatcher -->|execute commands| Agg
-    Dispatcher -->|publish events| Bus
 
+    Store -->|subscribeAll| Bus
     Bus -->|subscribe| PM
     PM -->|dispatch commands| Dispatcher
 
     SubMgr -->|watch subscriptions| Protocol
-    SubMgr -->|subscribe| Store
+    SubMgr -->|subscribe per-stream| Store
     SubMgr -->|publishEvent| Protocol
 
-    Store -->|events| SubMgr
     Protocol -->|results & events| Transport
 
     style Bridge fill:#90EE90
@@ -237,45 +245,61 @@ graph TB
     style SubMgr fill:#90EE90
 
     style Protocol fill:#87CEEB
-    style Store fill:#87CEEB
+    style Store fill:#FFD700
     style Agg fill:#87CEEB
+
+    classDef modified fill:#FFD700
 ```
 
 ## Key Insights
 
-### Two Event Paths
+### Two Event Paths from EventStore
 
-1. **Server-side (EventBus):**
-   - CommandDispatcher → EventBus → Process Managers
-   - Immediate, in-memory
-   - No historical replay
-   - Single server instance only
+1. **Process Manager path (via subscribeAll):**
+   - EventStore.subscribeAll() → EventBus → Process Managers
+   - Live-only (no historical replay)
+   - Best-effort delivery
+   - Works across multiple server instances
+   - Filtered by event type
 
-2. **Client-side (StoreSubscriptionManager):**
-   - EventStore → StoreSubscriptionManager → ServerProtocol → Clients
-   - Durable, multi-instance
+2. **Client path (via per-stream subscribe):**
+   - EventStore.subscribe(streamId) → StoreSubscriptionManager → ServerProtocol → Clients
    - Historical + live events
+   - Filtered by client subscription
    - Works across server instances
+
+**Critical:** CommandDispatcher NEVER publishes to EventBus. Events flow: EventStore → EventBus (via subscribeAll).
 
 ### Critical Design Points
 
-1. **StoreSubscriptionManager watches ServerProtocol state**
-   - Creates/destroys EventStore subscriptions dynamically
+1. **EventStore.subscribeAll() is required**
+   - New method added to EventStore interface (hp-8)
+   - Live-only, no global event number
+   - All EventStore implementations must support it
+   - EventBus uses this exclusively
+
+2. **No double events**
+   - CommandDispatcher: commits to EventStore only
+   - EventBus: receives from EventStore.subscribeAll() only
+   - Single path = no duplication
+
+3. **StoreSubscriptionManager watches ServerProtocol state**
+   - Creates/destroys per-stream subscriptions dynamically
    - Based on active client subscriptions
    - Reference counting (last client unsubscribe → cleanup)
 
-2. **ProtocolBridge is just wiring**
+4. **ProtocolBridge is just wiring**
    - Pure function, not a service
    - Commands in, results out
    - No event handling (that's StoreSubscriptionManager)
 
-3. **CommandDispatcher is the orchestrator**
+5. **CommandDispatcher is simple**
    - Routes commands
    - Commits to store
-   - Publishes to bus
    - Returns results
+   - Does NOT publish anywhere
 
-4. **EventBus is server-internal only**
-   - Process managers
-   - Projections
-   - NOT for client delivery
+6. **Multi-instance support**
+   - Both event paths work across server instances
+   - Process managers see events from any instance
+   - Clients receive events regardless of which instance committed them
