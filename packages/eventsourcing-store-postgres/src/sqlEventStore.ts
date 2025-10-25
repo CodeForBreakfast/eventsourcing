@@ -172,6 +172,7 @@ const bridgeNotification = (
   pipe(
     Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
     Effect.andThen(publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
+    Effect.andThen(subscriptionManager.publishToAllEvents(streamId, payload.event_payload)),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
         error,
@@ -343,6 +344,8 @@ export const makeSqlEventStoreWithSubscriptionManager = (
   notificationListener: Readonly<{
     readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+    readonly unlistenAll: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
       { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
       EventStoreError,
@@ -384,7 +387,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           subscriptionManager,
           notificationListener
         ),
-        subscribeAll: () => Effect.succeed(subscribeToAllStreams(notificationListener)),
+        subscribeAll: () => subscribeToAllStreams(notificationListener),
       };
 
       return eventStore;
@@ -415,12 +418,45 @@ const mapNotificationToEvent = (notification: {
     Effect.flatMap(decodeEventPosition)
   );
 
+const createAllEventsStream = (
+  notifications: Stream.Stream<
+    { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+    EventStoreError,
+    never
+  >
+) =>
+  pipe(
+    notifications,
+    Stream.broadcast(2),
+    Stream.flatMap((sharedStream) => sharedStream),
+    Stream.mapEffect(mapNotificationToEvent),
+    Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams'))
+  );
+
 /**
  * Subscribe to all events from all streams (live-only)
- * Leverages NotificationListener which broadcasts all events
+ * Starts listening on the global all-events channel
  */
+const logEventReceived = (event: {
+  readonly position: EventStreamPosition;
+  readonly event: string;
+}) =>
+  Effect.logInfo('subscribeToAllStreams: Event received from stream', {
+    streamId: event.position.streamId,
+    eventNumber: event.position.eventNumber,
+  });
+
+const addEventLogging = (
+  stream: Stream.Stream<
+    { readonly position: EventStreamPosition; readonly event: string },
+    ParseResult.ParseError | EventStoreError,
+    never
+  >
+) => Stream.tap(stream, logEventReceived);
+
 const subscribeToAllStreams = (
   notificationListener: Readonly<{
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
       { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
       EventStoreError,
@@ -429,9 +465,10 @@ const subscribeToAllStreams = (
   }>
 ) =>
   pipe(
-    notificationListener.notifications,
-    Stream.mapEffect(mapNotificationToEvent),
-    Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams'))
+    notificationListener.listenAll,
+    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: listenAll completed, creating stream')),
+    // eslint-disable-next-line effect/prefer-as -- Must use Effect.map to delay stream creation until after listenAll completes
+    Effect.map(() => addEventLogging(createAllEventsStream(notificationListener.notifications)))
   );
 
 /**
@@ -450,6 +487,8 @@ const buildSqlEventStore = ({
   readonly notificationListener: Readonly<{
     readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+    readonly unlistenAll: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
       { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
       EventStoreError,
