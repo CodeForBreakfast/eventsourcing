@@ -71,10 +71,8 @@ export { type EventStore, EventStore as EventStoreTag } from './services';
 // Re-export errors from errors module
 export { ConcurrencyConflictError } from './errors';
 
-const decodeEvent = <A, I>(schema: Schema.Schema<A, I>) => Schema.decode(schema);
-
 const decodeStreamEvents = <A, I>(schema: Schema.Schema<A, I>) =>
-  Stream.flatMap(decodeEvent(schema));
+  Stream.flatMap(Schema.decode(schema));
 
 const readAndDecodeEvents =
   <A, I>(schema: Schema.Schema<A, I>, eventstore: Readonly<EventStore<I>>) =>
@@ -129,18 +127,21 @@ const createEncodingSink = <A, I>(
  */
 export const encodedEventStore =
   <A, I>(schema: Schema.Schema<A, I>) =>
-  (eventstore: Readonly<EventStore<I>>): EventStore<A> => ({
-    append: (toPosition: EventStreamPosition) =>
-      createEncodingSink(schema, eventstore.append(toPosition)),
-    read: readAndDecodeEvents(schema, eventstore),
-    subscribe: subscribeAndDecodeEvents(schema, eventstore),
-    subscribeAll: () =>
-      Effect.map(eventstore.subscribeAll(), (stream) =>
-        Stream.mapEffect(stream, ({ position, event }) =>
-          Effect.map(decodeEvent(schema)(event), (decoded) => ({
-            position,
-            event: decoded,
-          }))
-        )
-      ),
-  });
+  (eventstore: Readonly<EventStore<I>>): EventStore<A> => {
+    const decoder = Schema.decode(schema);
+    return {
+      append: (toPosition: EventStreamPosition) =>
+        createEncodingSink(schema, eventstore.append(toPosition)),
+      read: readAndDecodeEvents(schema, eventstore),
+      subscribe: subscribeAndDecodeEvents(schema, eventstore),
+      subscribeAll: () =>
+        Effect.map(eventstore.subscribeAll(), (stream) =>
+          Stream.mapEffect(stream, ({ position, event }) =>
+            Effect.map(decoder(event), (decoded) => ({
+              position,
+              event: decoded,
+            }))
+          )
+        ),
+    };
+  };
