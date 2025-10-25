@@ -52,6 +52,22 @@ export interface EventStore<TEvent> {
     EventStoreError,
     never
   >;
+
+  /**
+   * Subscribe to live events from ALL streams
+   * Returns only new events committed after subscription starts (no historical replay)
+   * Each event includes its position (streamId + eventNumber)
+   *
+   * @returns A stream of events from all streams with their positions
+   */
+  readonly subscribeAll: () => Effect.Effect<
+    Stream.Stream<
+      { readonly position: EventStreamPosition; readonly event: TEvent },
+      ParseResult.ParseError | EventStoreError
+    >,
+    EventStoreError,
+    never
+  >;
 }
 
 // Projection Store service interface
