@@ -1,5 +1,11 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.8.3
+
+### Patch Changes
+
+- [#314](https://github.com/CodeForBreakfast/eventsourcing/pull/314) [`67dcaa4`](https://github.com/CodeForBreakfast/eventsourcing/commit/67dcaa421109f8e0c9d2ad06d0252166a9200c97) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix floating Effect errors in test files to support Effect Language Service compile-time validation
+
 ## 0.8.2
 
 ### Patch Changes
