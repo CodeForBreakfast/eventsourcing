@@ -384,14 +384,55 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           subscriptionManager,
           notificationListener
         ),
-        subscribeAll: () =>
-          Effect.dieMessage('subscribeAll not yet implemented for PostgreSQL event store'),
+        subscribeAll: () => Effect.succeed(subscribeToAllStreams(notificationListener)),
       };
 
       return eventStore;
     })
   );
 };
+
+const decodeEventPosition = Schema.decode(
+  Schema.Struct({
+    position: EventStreamPosition,
+    event: Schema.String,
+  })
+);
+
+const mapNotificationToEvent = (notification: {
+  readonly streamId: EventStreamId;
+  readonly payload: NotificationPayload;
+}) =>
+  pipe(
+    {
+      position: {
+        streamId: notification.streamId,
+        eventNumber: notification.payload.event_number,
+      },
+      event: notification.payload.event_payload,
+    },
+    Effect.succeed,
+    Effect.flatMap(decodeEventPosition)
+  );
+
+/**
+ * Subscribe to all events from all streams (live-only)
+ * Leverages NotificationListener which broadcasts all events
+ */
+const subscribeToAllStreams = (
+  notificationListener: Readonly<{
+    readonly notifications: Stream.Stream<
+      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      EventStoreError,
+      never
+    >;
+  }>
+) =>
+  pipe(
+    notificationListener.notifications,
+    Stream.mapEffect(mapNotificationToEvent),
+    Stream.mapError(eventStoreError.read('*', 'Failed to subscribe to all streams'))
+  );
 
 /**
  * Layer that provides a SQL EventStore with properly shared SubscriptionManager and NotificationListener
