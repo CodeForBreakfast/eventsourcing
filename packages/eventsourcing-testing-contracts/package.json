@@ -66,6 +66,7 @@
     "effect": "^3.17.0"
   },
   "dependencies": {
+    "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport": "workspace:*"
   },
   "devDependencies": {
