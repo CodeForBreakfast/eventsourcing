@@ -10,7 +10,7 @@
         "@codeforbreakfast/eslint-effect": "workspace:*",
         "@commitlint/cli": "20.1.0",
         "@commitlint/config-conventional": "20.0.0",
-        "@effect/language-service": "0.47.1",
+        "@effect/language-service": "0.47.2",
         "@effect/platform": "0.92.1",
         "@effect/platform-bun": "0.81.1",
         "@eslint-community/eslint-plugin-eslint-comments": "4.5.0",
@@ -439,7 +439,7 @@
 
     "@effect/experimental": ["@effect/experimental@0.56.0", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.92.0", "effect": "^3.18.0", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-ZT9wTUVyDptzdkW4Tfvz5fNzygW9vt5jWcFmKI9SlhZMu9unVJgsBhxWCNYCyfPnxw3n/Z6SEKsqgt8iKQc4MA=="],
 
-    "@effect/language-service": ["@effect/language-service@0.47.1", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-g+abcBxQneS+mm1HnLA98WU2tuFyBlPaDLSOoc1GZ6MqoGyWICfvMaONeoqfmaOBSkVobFnOwvHEW5rXsPIE+Q=="],
+    "@effect/language-service": ["@effect/language-service@0.47.2", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-tRngHDB1liIxNTRQrYcDiutVG8C+EBtEWXxBMyZodYlCq/gqCc1x/vsOvdhAX3IUC4VWPKbR2M+/w094X7DO8w=="],
 
     "@effect/platform": ["@effect/platform@0.92.1", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.18.1" } }, "sha512-XXWCBVwyhaKZISN7aM1fv/3fWDGyxr84ObywnUrL8aHvJLoIeskWFAP/fqw3c5MFCrJ3ZV97RWLbv6JiBQugdg=="],
 
