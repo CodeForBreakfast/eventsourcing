@@ -3,8 +3,8 @@
 **BEFORE ANY CODE CHANGES - USE WORKTREES:**
 
 1. Run `git fetch origin main` to get latest from remote
-2. Create worktree for new feature: `git worktree add ../feat-descriptive-name feat/descriptive-name`
-3. Change to the new worktree: `cd ../feat-descriptive-name`
+2. Create worktree for new feature: `git worktree add worktrees/descriptive-name -b feat/descriptive-name`
+3. Change to the new worktree: `cd worktrees/descriptive-name`
 4. Run `mise trust && mise install` to make tools available
 5. Run `bun install` to set up dependencies
 6. ONLY THEN start making changes in the isolated worktree
@@ -13,18 +13,32 @@
 - Always use Bun instead of node or npm.
 - PR titles must follow conventional commits
 
+## Worktree Structure
+
+```
+brownsauce/               <- Repo root (main branch checkout)
+├── .beads/              <- Shared issue database
+├── .git/                <- Git directory
+├── worktrees/           <- All feature worktrees go here
+│   ├── feature-name-1/  <- Feature worktree
+│   └── feature-name-2/  <- Another feature worktree
+├── packages/            <- Source code
+└── ...
+```
+
 ## Worktree Benefits
 
 - Each feature branch gets its own isolated working directory
 - Never risk contaminating main branch with uncommitted changes
 - Can work on multiple features simultaneously in parallel worktrees
-- Clean separation between main repo and feature development
+- Clean separation between repo root and feature development
+- Shared `.beads/` database discoverable from all worktrees
 
 ## Before Starting Work
 
 - ALWAYS use `/start` command to create proper worktree setup
-- Choose a short branch/worktree name based on the work description
-- NEVER work directly in main worktree for feature development
+- Choose a short worktree name based on the work description (worktrees live in worktrees/ subdirectory)
+- NEVER work directly in repo root for feature development - always use a worktree
 - Verify you're in correct worktree with `pwd` and `git branch`
 - Each worktree is a complete working copy with its own node_modules and mise config
 
@@ -36,9 +50,9 @@ We track work in Beads (bd) instead of Markdown. Beads is a lightweight, git-bas
 
 - **ALWAYS use `bd` CLI commands via Bash tool** - NEVER use MCP beads tools
 - Daemon is disabled (`BEADS_NO_DAEMON=1`) for worktree safety - MCP won't work
-- bd auto-discovers the shared `.beads/hp.db` from any worktree
-- The `.beads/` directory lives in the main worktree and is shared across all feature worktrees
-- Works from main or any feature worktree - bd walks up the tree to find the database
+- bd auto-discovers the shared `.beads/` database from any worktree by walking up the tree
+- The `.beads/` directory lives at the repo root and is shared across all feature worktrees
+- Works from repo root or any feature worktree - bd walks up to find the database
 
 ### The "Let's Continue" Protocol
 

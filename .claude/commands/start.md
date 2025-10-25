@@ -9,20 +9,20 @@ IMPORTANT: Do not discard any local changes. It is possible that the command is 
 
 IMPORTANT: Always use worktrees for feature development to maintain clean separation from main.
 
-1. **Ensure we're in the main worktree and up to date:**
+1. **Ensure we're in the repo root and up to date:**
    - Run `pwd` to confirm current location
    - Run `git fetch origin main` to get latest from remote
-   - If not in main worktree, navigate back to it first
+   - If not in repo root (brownsauce/), navigate back to it first
    - Run `git pull origin main` to update main branch
 
 2. **Create new worktree for feature branch:**
    - Generate appropriate feature name based on the work described by user
    - Use descriptive kebab-case naming: feat/add-user-auth, feat/fix-payment-bug, etc.
-   - Run `git worktree add ../feat-{feature-name} -b feat/{feature-name}`
-   - This creates both the branch and isolated working directory
+   - Run `git worktree add worktrees/{feature-name} -b feat/{feature-name}`
+   - This creates both the branch and isolated working directory in the worktrees/ subdirectory
 
 3. **Set up the new worktree:**
-   - Change to the new worktree: `cd ../feat-{feature-name}`
+   - Change to the new worktree: `cd worktrees/{feature-name}`
    - Run `mise trust` to trust the .mise.toml configuration in the new worktree
    - Run `bun install` to set up dependencies in the new worktree
    - Run `git status` to confirm branch and clean state
