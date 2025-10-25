@@ -170,8 +170,7 @@ const bridgeNotification = (
   payload: NotificationPayload
 ) =>
   pipe(
-    Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
-    Effect.andThen(publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
+    publishPayloadToSubscribers(subscriptionManager, streamId, payload),
     Effect.andThen(subscriptionManager.publishToAllEvents(streamId, payload.event_payload)),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
@@ -217,24 +216,6 @@ const startNotificationListener = (
   pipe(
     notificationListener.start,
     Effect.andThen(consumeNotifications(notificationListener, subscriptionManager))
-  );
-
-const startBridge = (
-  notificationListener: Readonly<{
-    readonly start: Effect.Effect<void, EventStoreError, never>;
-    readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
-      EventStoreError,
-      never
-    >;
-  }>,
-  subscriptionManager: SubscriptionManagerService
-) =>
-  Effect.andThen(
-    Effect.logInfo(
-      'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
-    ),
-    startNotificationListener(notificationListener, subscriptionManager)
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface) => (from: EventStreamPosition) =>
@@ -363,7 +344,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       notificationListener,
     })),
     Effect.tap(({ notificationListener, subscriptionManager }) =>
-      startBridge(notificationListener, subscriptionManager)
+      startNotificationListener(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
       const eventStore: EventStore<string> = {
@@ -395,22 +376,6 @@ export const makeSqlEventStoreWithSubscriptionManager = (
   );
 };
 
-const transformAllEventsStream = (
-  stream: Stream.Stream<{ readonly streamId: EventStreamId; readonly event: string }, never>
-) =>
-  pipe(
-    stream,
-    Stream.map((item) => ({
-      position: { streamId: item.streamId, eventNumber: 0 },
-      event: item.event,
-    })),
-    Stream.tap((event) =>
-      Effect.logDebug('Event received from all-events PubSub', {
-        streamId: event.position.streamId,
-      })
-    )
-  );
-
 /**
  * Subscribe to all events from all streams (live-only)
  * Consumes from the all-events PubSub
@@ -426,8 +391,12 @@ const subscribeToAllStreams = (
 ) =>
   pipe(
     subscriptionManager.subscribeToAllEvents(),
-    Effect.tap(() => Effect.logInfo('subscribeToAllStreams: Subscribing to all-events PubSub')),
-    Effect.map(transformAllEventsStream)
+    Effect.map((stream) =>
+      Stream.map(stream, (item) => ({
+        position: { streamId: item.streamId, eventNumber: 0 },
+        event: item.event,
+      }))
+    )
   );
 
 /**
