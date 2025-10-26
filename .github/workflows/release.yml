@@ -5,8 +5,6 @@ on:
   push:
     branches:
       - main
-    paths-ignore:
-      - '.beads/issues.jsonl'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
@@ -25,13 +23,40 @@ jobs:
           # This makes Actions fetch all Git history so that Changesets can generate changelogs with the correct commits
           fetch-depth: 0
 
+      - name: Check if beads-only commit
+        id: beads_check
+        run: |
+          # Get list of changed files in the last commit
+          FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "Changed files in last commit:"
+          echo "$FILES"
+
+          # Check if ONLY .beads/issues.jsonl changed
+          if [ "$FILES" = ".beads/issues.jsonl" ]; then
+            echo "beads_only=true" >> $GITHUB_OUTPUT
+            echo "✓ Beads-only commit detected - will skip release"
+          else
+            echo "beads_only=false" >> $GITHUB_OUTPUT
+            echo "✓ Code changes detected - will run release workflow"
+          fi
+
+      - name: Skip release for beads-only commit
+        if: steps.beads_check.outputs.beads_only == 'true'
+        run: |
+          echo "✓ Beads-only commit - skipping release workflow"
+          echo "This commit only changes .beads/issues.jsonl (beads issue tracker database)"
+          echo "No packages changed - nothing to release"
+          exit 0
+
       - name: Setup
+        if: steps.beads_check.outputs.beads_only == 'false'
         uses: ./.github/actions/setup
         with:
           turbo-cache-key: 'release'
 
       # Generate a GitHub App token for verified commits
       - name: Generate GitHub App Token
+        if: steps.beads_check.outputs.beads_only == 'false'
         id: github-app-token
         uses: actions/create-github-app-token@67018539274d69449ef7c02e8e71183d1719ab42 # v2
         with:
@@ -39,9 +64,11 @@ jobs:
           private-key: ${{ secrets.RELEASE_APP_PRIVATE_KEY }}
 
       - name: Auto-generate changeset for dependency updates
+        if: steps.beads_check.outputs.beads_only == 'false'
         run: bun run scripts/auto-generate-dependency-changeset.ts
 
       - name: Create Release Pull Request or Publish to npm
+        if: steps.beads_check.outputs.beads_only == 'false'
         id: changesets
         uses: changesets/action@v1
         with:

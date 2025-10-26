@@ -4,8 +4,6 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - '.beads/issues.jsonl'
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
@@ -36,16 +34,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Check if beads-only PR
+        id: beads_check
+        run: |
+          # Get list of changed files compared to PR base branch
+          FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD)
+          echo "Changed files:"
+          echo "$FILES"
+
+          # Check if ONLY .beads/issues.jsonl changed
+          if [ "$FILES" = ".beads/issues.jsonl" ]; then
+            echo "beads_only=true" >> $GITHUB_OUTPUT
+            echo "✓ Beads-only PR detected - will skip CI"
+          else
+            echo "beads_only=false" >> $GITHUB_OUTPUT
+            echo "✓ Code changes detected - will run full CI"
+          fi
+
+      - name: Skip CI for beads-only PR
+        if: steps.beads_check.outputs.beads_only == 'true'
+        run: |
+          echo "✓ Beads-only PR - skipping build, lint, and test"
+          echo "This PR only changes .beads/issues.jsonl (beads issue tracker database)"
+          echo "No code validation needed - marking as success"
+          exit 0
+
       - name: Setup
+        if: steps.beads_check.outputs.beads_only == 'false'
         uses: ./.github/actions/setup
         with:
           turbo-cache-key: 'ci'
 
       - name: Validate release readiness
+        if: steps.beads_check.outputs.beads_only == 'false' && github.event_name == 'pull_request'
         run: bun run release:validate
-        if: github.event_name == 'pull_request'
 
       - name: Build, lint, test, and validate architecture
+        if: steps.beads_check.outputs.beads_only == 'false'
         run: bun run all
         env:
           TEST_PG_USERNAME: postgres
