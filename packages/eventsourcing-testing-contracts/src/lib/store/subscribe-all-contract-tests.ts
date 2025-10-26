@@ -172,5 +172,29 @@ export const subscribeAllContract = <E>(
         expect(events).not.toContain('event3');
         expect(events).not.toContain('event4');
       }).pipe(runWithStore));
+
+    it('should include correct event numbers in positions', () =>
+      Effect.gen(function* () {
+        const store = yield* StringEventStore;
+        const streamId = yield* makeStreamId(randomId());
+
+        const stream = yield* store.subscribeAll();
+        const fiber = yield* pipe(stream, Stream.take(3), Stream.runCollect, Effect.fork);
+
+        yield* Effect.sleep('100 millis');
+
+        yield* pipe(
+          Stream.make('event1', 'event2', 'event3'),
+          Stream.run(store.append({ streamId, eventNumber: 0 }))
+        );
+
+        const chunk = yield* Fiber.join(fiber);
+        const events = Chunk.toReadonlyArray(chunk);
+
+        expect(events.length).toBe(3);
+        expect(events[0]?.position.eventNumber).toBe(0);
+        expect(events[1]?.position.eventNumber).toBe(1);
+        expect(events[2]?.position.eventNumber).toBe(2);
+      }).pipe(runWithStore));
   });
 };

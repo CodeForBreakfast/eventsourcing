@@ -70,22 +70,52 @@ const updateEventStreamsById =
       Effect.tap(() => publishEventsToStream(updatedEventStream.pubsub, newEvents))
     );
 
-const tagEventsWithStreamId = <V>(newEvents: Chunk.Chunk<V>, streamId: EventStreamId) =>
-  Chunk.map(newEvents, (event) => ({ streamId, event }));
+const tagEventsWithStreamId = <V>(
+  newEvents: Chunk.Chunk<V>,
+  streamId: EventStreamId,
+  startingEventNumber: number
+) =>
+  pipe(
+    newEvents,
+    Chunk.toReadonlyArray,
+    (arr) =>
+      arr.map((event, index) => ({
+        streamId,
+        eventNumber: startingEventNumber + index,
+        event,
+      })),
+    Chunk.fromIterable
+  );
 
 const publishToAllEventsStream = <V>(
-  allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
-  taggedEvents: Chunk.Chunk<{ readonly streamId: EventStreamId; readonly event: V }>
+  allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>,
+  taggedEvents: Chunk.Chunk<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>
 ) => publishEventsToStream(allEventsStream.pubsub, taggedEvents);
 
 const createUpdatedValue =
   <V>(
-    allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+    allEventsStream: EventStream<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>,
     newEvents: Chunk.Chunk<V>,
     streamEnd: EventStreamPosition
   ) =>
   (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>): Value<V> => {
-    const taggedEvents = tagEventsWithStreamId(newEvents, streamEnd.streamId);
+    const taggedEvents = tagEventsWithStreamId(
+      newEvents,
+      streamEnd.streamId,
+      streamEnd.eventNumber
+    );
     return {
       eventStreamsById,
       allEventsStream: {
@@ -97,7 +127,11 @@ const createUpdatedValue =
 
 const applyUpdatedEventStreamToValue =
   <V>(
-    allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+    allEventsStream: EventStream<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>,
     streamEnd: EventStreamPosition,
     newEvents: Chunk.Chunk<V>,
     eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>
@@ -110,7 +144,7 @@ const applyUpdatedEventStreamToValue =
       Effect.tap((_value) =>
         publishToAllEventsStream(
           allEventsStream,
-          tagEventsWithStreamId(newEvents, streamEnd.streamId)
+          tagEventsWithStreamId(newEvents, streamEnd.streamId, streamEnd.eventNumber)
         )
       )
     );
@@ -157,7 +191,13 @@ const modifyEventStreamsByIdWithEmptyStream = <V>(
   );
 
 const buildValueFromEventStreamsById =
-  <V>(allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>) =>
+  <V>(
+    allEventsStream: EventStream<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>
+  ) =>
   (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>): Value<V> => ({
     eventStreamsById,
     allEventsStream,
@@ -176,7 +216,11 @@ const ensureEventStream =
 
 interface Value<V> {
   readonly eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>;
-  readonly allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>;
+  readonly allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>;
 }
 
 export interface InMemoryStore<V = never> {
@@ -192,12 +236,20 @@ export interface InMemoryStore<V = never> {
     streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, never>;
   readonly getAll: () => Effect.Effect<
-    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+    Stream.Stream<
+      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+      never,
+      never
+    >,
     never,
     never
   >;
   readonly getAllLiveOnly: () => Effect.Effect<
-    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+    Stream.Stream<
+      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+      never,
+      never
+    >,
     never,
     never
   >;
@@ -275,7 +327,11 @@ const getHistoricalStreamForId =
 const getAllEventsStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
 ): Effect.Effect<
-  Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+  Stream.Stream<
+    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+    never,
+    never
+  >,
   never,
   never
 > =>
@@ -288,7 +344,11 @@ const getAllEventsStream = <V>(
 const getAllEventsLiveOnlyStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
 ): Effect.Effect<
-  Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+  Stream.Stream<
+    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+    never,
+    never
+  >,
   never,
   never
 > =>
@@ -316,9 +376,19 @@ const getHistoricalForStore =
 
 export const make = <V>() =>
   pipe(
-    emptyStream<{ readonly streamId: EventStreamId; readonly event: V }>(),
+    emptyStream<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>(),
     Effect.flatMap(
-      (allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>) =>
+      (
+        allEventsStream: EventStream<{
+          readonly streamId: EventStreamId;
+          readonly eventNumber: number;
+          readonly event: V;
+        }>
+      ) =>
         SynchronizedRef.make<Value<V>>({
           eventStreamsById: HashMap.empty<EventStreamId, EventStream<V>>(),
           allEventsStream,

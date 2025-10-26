@@ -38,12 +38,20 @@ export interface FileSystemStore<V = never> {
     streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path>;
   readonly getAll: () => Effect.Effect<
-    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+    Stream.Stream<
+      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+      never,
+      never
+    >,
     never,
     FileSystem.FileSystem | Path.Path
   >;
   readonly getAllLiveOnly: () => Effect.Effect<
-    Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+    Stream.Stream<
+      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+      never,
+      never
+    >,
     never,
     never
   >;
@@ -55,7 +63,11 @@ interface EventStream<V> {
 
 interface FileSystemStoreState<V> {
   readonly pubSubsByStreamId: HashMap.HashMap<EventStreamId, PubSub.PubSub<V>>;
-  readonly allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>;
+  readonly allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>;
 }
 
 const getStreamDirectoryPath = (
@@ -227,19 +239,45 @@ const publishEventsToStream = <V>(
   events: Chunk.Chunk<V>
 ): Effect.Effect<void, never, never> => pipe(pubsub, PubSub.publishAll(events), Effect.asVoid);
 
-const tagEventsWithStreamId = <V>(newEvents: Chunk.Chunk<V>, streamId: EventStreamId) =>
-  Chunk.map(newEvents, (event) => ({ streamId, event }));
+const tagEventsWithStreamId = <V>(
+  newEvents: Chunk.Chunk<V>,
+  streamId: EventStreamId,
+  startingEventNumber: number
+) =>
+  pipe(
+    newEvents,
+    Chunk.toReadonlyArray,
+    (arr) =>
+      arr.map((event, index) => ({
+        streamId,
+        eventNumber: startingEventNumber + index,
+        event,
+      })),
+    Chunk.fromIterable
+  );
 
 const publishToAllEventsStream = <V>(
-  allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
-  taggedEvents: Chunk.Chunk<{ readonly streamId: EventStreamId; readonly event: V }>
+  allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>,
+  taggedEvents: Chunk.Chunk<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>
 ) => publishEventsToStream(allEventsStream.pubsub, taggedEvents);
 
 const publishEventsToStreams = <V>(
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>,
   state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+  allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>,
   newPosition: EventStreamPosition
 ): Effect.Effect<EventStreamPosition, never, never> =>
   pipe(
@@ -248,7 +286,7 @@ const publishEventsToStreams = <V>(
     Effect.tap(() =>
       publishToAllEventsStream(
         allEventsStream,
-        tagEventsWithStreamId(newEvents, streamEnd.streamId)
+        tagEventsWithStreamId(newEvents, streamEnd.streamId, streamEnd.eventNumber)
       )
     ),
     Effect.as(newPosition)
@@ -497,13 +535,6 @@ const getAllStreams = (
 ): Effect.Effect<readonly EventStreamId[], never, FileSystem.FileSystem> =>
   pipe(FileSystem.FileSystem, Effect.flatMap(getAllStreamsWithFs(config)));
 
-const wrapEventWithStreamId =
-  (streamId: EventStreamId) =>
-  <V>(event: V): { readonly streamId: EventStreamId; readonly event: V } => ({
-    streamId,
-    event,
-  });
-
 const getStreamEventsWithServices = <V>(config: FileSystemStoreConfig, streamId: EventStreamId) =>
   pipe(
     Path.Path,
@@ -511,13 +542,33 @@ const getStreamEventsWithServices = <V>(config: FileSystemStoreConfig, streamId:
     Effect.flatMap(readEventsFromDirectory<V>)
   );
 
+const wrapEventsWithStreamId =
+  <V>(streamId: EventStreamId) =>
+  (
+    chunk: Chunk.Chunk<V>
+  ): Chunk.Chunk<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }> =>
+    pipe(
+      chunk,
+      Chunk.toReadonlyArray,
+      (arr) => arr.map((event, index) => ({ streamId, eventNumber: index, event })),
+      Chunk.fromIterable
+    );
+
 const collectStreamEventsWithServices = <V>(
   config: FileSystemStoreConfig,
   fs: FileSystem.FileSystem,
   path: Path.Path,
   streamId: EventStreamId
 ): Effect.Effect<
-  Chunk.Chunk<{ readonly streamId: EventStreamId; readonly event: V }>,
+  Chunk.Chunk<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>,
   never,
   never
 > => {
@@ -527,7 +578,7 @@ const collectStreamEventsWithServices = <V>(
     Effect.provideService(FileSystem.FileSystem, fs),
     Effect.provideService(Path.Path, path),
     Effect.flatMap(Stream.runCollect),
-    Effect.map(Chunk.map(wrapEventWithStreamId(streamId)))
+    Effect.map(wrapEventsWithStreamId(streamId))
   );
 };
 
@@ -540,7 +591,11 @@ const getAllEventsFromAllStreamsWithServices = <V>(
   fs: FileSystem.FileSystem,
   path: Path.Path
 ): Effect.Effect<
-  Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+  Stream.Stream<
+    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+    never,
+    never
+  >,
   never,
   never
 > =>
@@ -554,7 +609,11 @@ const getAllEventsFromAllStreamsWithServices = <V>(
 const getAllEventsFromAllStreams = <V>(
   config: FileSystemStoreConfig
 ): Effect.Effect<
-  Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+  Stream.Stream<
+    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+    never,
+    never
+  >,
   never,
   FileSystem.FileSystem | Path.Path
 > => {
@@ -588,17 +647,29 @@ const wrapPubSubInEventStream = <V>(pubsub: PubSub.PubSub<V>): EventStream<V> =>
 const createBoundedPubSub = <V>() => PubSub.bounded<V>(256);
 
 const createAllEventsStream = <V>(): Effect.Effect<
-  EventStream<{ readonly streamId: EventStreamId; readonly event: V }>,
+  EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>,
   never,
   never
 > =>
   pipe(
-    createBoundedPubSub<{ readonly streamId: EventStreamId; readonly event: V }>(),
+    createBoundedPubSub<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>(),
     Effect.map(wrapPubSubInEventStream)
   );
 
 const createInitialStateWithAllEventsStream = <V>(
-  allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>
+  allEventsStream: EventStream<{
+    readonly streamId: EventStreamId;
+    readonly eventNumber: number;
+    readonly event: V;
+  }>
 ): FileSystemStoreState<V> => ({
   pubSubsByStreamId: HashMap.empty(),
   allEventsStream,
@@ -607,7 +678,11 @@ const createInitialStateWithAllEventsStream = <V>(
 const getAllEventsLiveOnlyStream = <V>(
   state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
 ): Effect.Effect<
-  Stream.Stream<{ readonly streamId: EventStreamId; readonly event: V }, never, never>,
+  Stream.Stream<
+    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
+    never,
+    never
+  >,
   never,
   never
 > =>
@@ -630,7 +705,11 @@ const createStoreFromState =
 const createStoreWithAllEventsStream =
   <V>(config: FileSystemStoreConfig) =>
   (
-    allEventsStream: EventStream<{ readonly streamId: EventStreamId; readonly event: V }>
+    allEventsStream: EventStream<{
+      readonly streamId: EventStreamId;
+      readonly eventNumber: number;
+      readonly event: V;
+    }>
   ): Effect.Effect<FileSystemStore<V>, never, never> =>
     pipe(
       allEventsStream,

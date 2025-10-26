@@ -40,8 +40,8 @@ const subscribeToAllStreams = <T>(store: InMemoryStore<T>) =>
   pipe(
     store.getAllLiveOnly(),
     Effect.map((stream) =>
-      Stream.map(stream, ({ streamId, event }) => ({
-        position: { streamId, eventNumber: 0 },
+      Stream.map(stream, ({ streamId, eventNumber, event }) => ({
+        position: { streamId, eventNumber },
         event,
       }))
     )
