@@ -237,17 +237,10 @@ const tagEventsWithStreamId = <V>(
 ) =>
   pipe(
     newEvents,
-    Chunk.reduce(
-      Chunk.empty<{
-        readonly position: EventStreamPosition;
-        readonly event: V;
-      }>(),
-      (acc, event, index) =>
-        Chunk.append(acc, {
-          position: { streamId, eventNumber: startingEventNumber + index },
-          event,
-        })
-    )
+    Chunk.map((event, index) => ({
+      position: { streamId, eventNumber: startingEventNumber + index },
+      event,
+    }))
   );
 
 const publishEventsToStreams = <V>(
@@ -523,17 +516,10 @@ const getStreamEventsWithServices = <V>(config: FileSystemStoreConfig, streamId:
   );
 
 const wrapEventsWithStreamId = <V>(streamId: EventStreamId) =>
-  Chunk.reduce(
-    Chunk.empty<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>(),
-    (
-      acc: Chunk.Chunk<{ readonly position: EventStreamPosition; readonly event: V }>,
-      event: V,
-      index: number
-    ) => Chunk.append(acc, { position: { streamId, eventNumber: index }, event })
-  );
+  Chunk.map((event: V, index: number) => ({
+    position: { streamId, eventNumber: index },
+    event,
+  }));
 
 const collectStreamEventsWithServices = <V>(
   config: FileSystemStoreConfig,

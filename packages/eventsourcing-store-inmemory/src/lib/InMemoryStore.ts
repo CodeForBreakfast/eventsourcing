@@ -77,25 +77,19 @@ const tagEventsWithStreamId = <V>(
 ) =>
   pipe(
     newEvents,
-    Chunk.toReadonlyArray,
-    (arr) =>
-      arr.map((event, index) => ({
-        streamId,
-        eventNumber: startingEventNumber + index,
-        event,
-      })),
-    Chunk.fromIterable
+    Chunk.map((event, index) => ({
+      position: { streamId, eventNumber: startingEventNumber + index },
+      event,
+    }))
   );
 
 const publishToAllEventsStream = <V>(
   allEventsStream: EventStream<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: V;
   }>,
   taggedEvents: Chunk.Chunk<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: V;
   }>
 ) => publishEventsToStream(allEventsStream.pubsub, taggedEvents);
@@ -103,8 +97,7 @@ const publishToAllEventsStream = <V>(
 const createUpdatedValue =
   <V>(
     allEventsStream: EventStream<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: V;
     }>,
     newEvents: Chunk.Chunk<V>,
@@ -128,8 +121,7 @@ const createUpdatedValue =
 const applyUpdatedEventStreamToValue =
   <V>(
     allEventsStream: EventStream<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: V;
     }>,
     streamEnd: EventStreamPosition,
@@ -193,8 +185,7 @@ const modifyEventStreamsByIdWithEmptyStream = <V>(
 const buildValueFromEventStreamsById =
   <V>(
     allEventsStream: EventStream<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: V;
     }>
   ) =>
@@ -217,8 +208,7 @@ const ensureEventStream =
 interface Value<V> {
   readonly eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>;
   readonly allEventsStream: EventStream<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: V;
   }>;
 }
@@ -236,20 +226,12 @@ export interface InMemoryStore<V = never> {
     streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, never>;
   readonly getAll: () => Effect.Effect<
-    Stream.Stream<
-      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
-      never,
-      never
-    >,
+    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
     never,
     never
   >;
   readonly getAllLiveOnly: () => Effect.Effect<
-    Stream.Stream<
-      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
-      never,
-      never
-    >,
+    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
     never,
     never
   >;
@@ -327,11 +309,7 @@ const getHistoricalStreamForId =
 const getAllEventsStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
 ): Effect.Effect<
-  Stream.Stream<
-    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
-    never,
-    never
-  >,
+  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
   never,
   never
 > =>
@@ -344,11 +322,7 @@ const getAllEventsStream = <V>(
 const getAllEventsLiveOnlyStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
 ): Effect.Effect<
-  Stream.Stream<
-    { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: V },
-    never,
-    never
-  >,
+  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
   never,
   never
 > =>
@@ -377,15 +351,13 @@ const getHistoricalForStore =
 export const make = <V>() =>
   pipe(
     emptyStream<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: V;
     }>(),
     Effect.flatMap(
       (
         allEventsStream: EventStream<{
-          readonly streamId: EventStreamId;
-          readonly eventNumber: number;
+          readonly position: EventStreamPosition;
           readonly event: V;
         }>
       ) =>
