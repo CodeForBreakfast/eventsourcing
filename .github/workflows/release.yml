@@ -5,6 +5,8 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - '.beads/issues.jsonl'
 
 concurrency: ${{ github.workflow }}-${{ github.ref }}
 
