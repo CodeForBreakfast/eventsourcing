@@ -48,6 +48,12 @@ export { runClientServerContractTests } from './lib/transport/client-server-cont
 export { runServerTransportContractTests } from './lib/transport/server-transport-contract-tests';
 
 // ============================================================================
+// EVENT STORE CONTRACT TESTS
+// ============================================================================
+
+export { subscribeAllContract } from './lib/store';
+
+// ============================================================================
 // TEST UTILITIES AND HELPERS
 // ============================================================================
 

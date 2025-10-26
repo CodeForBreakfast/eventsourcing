@@ -127,9 +127,21 @@ const createEncodingSink = <A, I>(
  */
 export const encodedEventStore =
   <A, I>(schema: Schema.Schema<A, I>) =>
-  (eventstore: Readonly<EventStore<I>>): EventStore<A> => ({
-    append: (toPosition: EventStreamPosition) =>
-      createEncodingSink(schema, eventstore.append(toPosition)),
-    read: readAndDecodeEvents(schema, eventstore),
-    subscribe: subscribeAndDecodeEvents(schema, eventstore),
-  });
+  (eventstore: Readonly<EventStore<I>>): EventStore<A> => {
+    const decoder = Schema.decode(schema);
+    return {
+      append: (toPosition: EventStreamPosition) =>
+        createEncodingSink(schema, eventstore.append(toPosition)),
+      read: readAndDecodeEvents(schema, eventstore),
+      subscribe: subscribeAndDecodeEvents(schema, eventstore),
+      subscribeAll: () =>
+        Effect.map(eventstore.subscribeAll(), (stream) =>
+          Stream.mapEffect(stream, ({ position, event }) =>
+            Effect.map(decoder(event), (decoded) => ({
+              position,
+              event: decoded,
+            }))
+          )
+        ),
+    };
+  };

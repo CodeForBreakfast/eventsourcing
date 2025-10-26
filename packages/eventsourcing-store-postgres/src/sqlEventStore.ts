@@ -1,5 +1,5 @@
 import { SqlClient, SqlResolver } from '@effect/sql';
-import { Effect, Layer, ParseResult, Schema, Sink, Stream, identity, pipe } from 'effect';
+import { Effect, Layer, Match, ParseResult, Schema, Sink, Stream, identity, pipe } from 'effect';
 import {
   EventNumber,
   EventStreamId,
@@ -120,22 +120,6 @@ export const EventSubscriptionServicesLive = Layer.mergeAll(
   pipe(NotificationListenerLive, Layer.provide(ConnectionManagerLive))
 );
 
-const publishEventToSubscribers = (
-  subscriptionManager: SubscriptionManagerService,
-  streamId: EventStreamId,
-  payload: string
-) => pipe(subscriptionManager.publishEvent(streamId, payload), Effect.asVoid);
-
-const notifySubscribers = (
-  subscriptionManager: SubscriptionManagerService,
-  streamId: EventStreamId,
-  payload: string
-) =>
-  pipe(
-    publishEventToSubscribers(subscriptionManager, streamId, payload),
-    Effect.catchAll(() => Effect.succeed(undefined))
-  );
-
 const concatStreams =
   (liveStream: Stream.Stream<string, EventStoreError, never>) =>
   (historicalStream: Stream.Stream<string, EventStoreError | ParseResult.ParseError, never>) =>
@@ -158,22 +142,29 @@ const getHistoricalEventsAndConcatWithLive =
       Effect.map(concatStreams(liveStream))
     );
 
-const publishPayloadToSubscribers = (
-  subscriptionManager: SubscriptionManagerService,
-  streamId: EventStreamId,
-  payload: NotificationPayload
-) => publishEventToSubscribers(subscriptionManager, streamId, payload.event_payload);
-
-const bridgeNotification = (
+const bridgeStreamNotification = (
   subscriptionManager: SubscriptionManagerService,
   streamId: EventStreamId,
   payload: NotificationPayload
 ) =>
   pipe(
-    Effect.logDebug(`Bridging notification for stream ${streamId}`, { payload }),
-    Effect.andThen(publishPayloadToSubscribers(subscriptionManager, streamId, payload)),
+    subscriptionManager.publishEvent(streamId, payload.event_payload),
     Effect.catchAll((error) =>
-      Effect.logError(`Failed to bridge notification for stream ${streamId}`, {
+      Effect.logError(`Failed to bridge stream notification for stream ${streamId}`, {
+        error,
+      })
+    )
+  );
+
+const bridgeAllEventsNotification = (
+  subscriptionManager: SubscriptionManagerService,
+  streamId: EventStreamId,
+  payload: NotificationPayload
+) =>
+  pipe(
+    subscriptionManager.publishToAllEvents(streamId, payload.event_number, payload.event_payload),
+    Effect.catchAll((error) =>
+      Effect.logError(`Failed to bridge all-events notification for stream ${streamId}`, {
         error,
       })
     )
@@ -181,13 +172,35 @@ const bridgeNotification = (
 
 const bridgeNotificationEvent =
   (subscriptionManager: SubscriptionManagerService) =>
-  (notification: { readonly streamId: EventStreamId; readonly payload: NotificationPayload }) =>
-    bridgeNotification(subscriptionManager, notification.streamId, notification.payload);
+  (notification: {
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
+  }) =>
+    pipe(
+      notification.isAllEvents,
+      Match.value,
+      Match.when(true, () =>
+        bridgeAllEventsNotification(
+          subscriptionManager,
+          notification.streamId,
+          notification.payload
+        )
+      ),
+      Match.when(false, () =>
+        bridgeStreamNotification(subscriptionManager, notification.streamId, notification.payload)
+      ),
+      Match.exhaustive
+    );
 
 const consumeNotifications = (
   notificationListener: Readonly<{
     readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      {
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
+        readonly isAllEvents: boolean;
+      },
       EventStoreError,
       never
     >;
@@ -206,7 +219,11 @@ const startNotificationListener = (
   notificationListener: Readonly<{
     readonly start: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      {
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
+        readonly isAllEvents: boolean;
+      },
       EventStoreError,
       never
     >;
@@ -216,24 +233,6 @@ const startNotificationListener = (
   pipe(
     notificationListener.start,
     Effect.andThen(consumeNotifications(notificationListener, subscriptionManager))
-  );
-
-const startBridge = (
-  notificationListener: Readonly<{
-    readonly start: Effect.Effect<void, EventStoreError, never>;
-    readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
-      EventStoreError,
-      never
-    >;
-  }>,
-  subscriptionManager: SubscriptionManagerService
-) =>
-  Effect.andThen(
-    Effect.logInfo(
-      'Starting notification bridge between PostgreSQL LISTEN/NOTIFY and SubscriptionManager'
-    ),
-    startNotificationListener(notificationListener, subscriptionManager)
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface) => (from: EventStreamPosition) =>
@@ -289,8 +288,7 @@ const createWriteError = (streamId: string, error: unknown) =>
   pipe(error, eventStoreError.write(streamId, 'Failed to append event'));
 
 const appendEventToStream =
-  (eventRows: EventRowServiceInterface, subscriptionManager: SubscriptionManagerService) =>
-  (end: EventStreamPosition, payload: string) =>
+  (eventRows: EventRowServiceInterface) => (end: EventStreamPosition, payload: string) =>
     pipe(
       end.streamId,
       eventRows.selectAllEventsInStream,
@@ -326,7 +324,6 @@ const appendEventToStream =
         streamId: row.stream_id,
         eventNumber: row.event_number + 1,
       })),
-      Effect.tap(() => notifySubscribers(subscriptionManager, end.streamId, payload)),
       Effect.tapError((error) => Effect.logError('Error writing to event store', { error })),
       Effect.mapError((error) =>
         error instanceof ConcurrencyConflictError ? error : createWriteError(end.streamId, error)
@@ -343,8 +340,14 @@ export const makeSqlEventStoreWithSubscriptionManager = (
   notificationListener: Readonly<{
     readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+    readonly unlistenAll: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      {
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
+        readonly isAllEvents: boolean;
+      },
       EventStoreError,
       never
     >;
@@ -360,16 +363,12 @@ export const makeSqlEventStoreWithSubscriptionManager = (
       notificationListener,
     })),
     Effect.tap(({ notificationListener, subscriptionManager }) =>
-      startBridge(notificationListener, subscriptionManager)
+      startNotificationListener(notificationListener, subscriptionManager)
     ),
     Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
       const eventStore: EventStore<string> = {
         append: (to: EventStreamPosition) => {
-          const sink = Sink.foldEffect(
-            to,
-            () => true,
-            appendEventToStream(eventRows, subscriptionManager)
-          );
+          const sink = Sink.foldEffect(to, () => true, appendEventToStream(eventRows));
 
           return sink as Sink.Sink<
             EventStreamPosition,
@@ -384,12 +383,43 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           subscriptionManager,
           notificationListener
         ),
+        subscribeAll: () => subscribeToAllStreams(subscriptionManager, notificationListener),
       };
 
       return eventStore;
     })
   );
 };
+
+/**
+ * Subscribe to all events from all streams (live-only)
+ * Consumes from the all-events PubSub
+ */
+const subscribeToAllStreams = (
+  subscriptionManager: Readonly<{
+    readonly subscribeToAllEvents: () => Effect.Effect<
+      Stream.Stream<
+        { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: string },
+        never
+      >,
+      EventStoreError,
+      never
+    >;
+  }>,
+  notificationListener: Readonly<{
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+  }>
+) =>
+  pipe(
+    notificationListener.listenAll,
+    Effect.andThen(subscriptionManager.subscribeToAllEvents()),
+    Effect.map((stream) =>
+      Stream.map(stream, (item) => ({
+        position: { streamId: item.streamId, eventNumber: item.eventNumber },
+        event: item.event,
+      }))
+    )
+  );
 
 /**
  * Layer that provides a SQL EventStore with properly shared SubscriptionManager and NotificationListener
@@ -407,8 +437,14 @@ const buildSqlEventStore = ({
   readonly notificationListener: Readonly<{
     readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+    readonly unlistenAll: Effect.Effect<void, EventStoreError, never>;
     readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      {
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
+        readonly isAllEvents: boolean;
+      },
       EventStoreError,
       never
     >;

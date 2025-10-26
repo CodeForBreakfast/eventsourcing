@@ -51,6 +51,7 @@ const createEventStoreWithServices =
     append: createAppendSink(store, fs, path),
     read: readHistoricalEvents(store, fs, path),
     subscribe: readAllEvents(store, fs, path),
+    subscribeAll: store.getAllLiveOnly,
   });
 
 export const makeFileSystemEventStore = <T>(

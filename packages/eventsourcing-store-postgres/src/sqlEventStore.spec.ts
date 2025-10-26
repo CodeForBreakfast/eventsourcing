@@ -5,7 +5,9 @@ import {
   runEventStoreTestSuite,
   FooEventStore,
   encodedEventStore,
+  type EventStore,
 } from '@codeforbreakfast/eventsourcing-store';
+import { subscribeAllContract } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import {
   sqlEventStore,
   EventSubscriptionServicesLive,
@@ -43,3 +45,22 @@ runEventStoreTestSuite('PostgreSQL', () => TestLayer);
 
 // Simple test to verify it.effect works
 it.effect('Simple test', () => Effect.succeed(42));
+
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
+// Run subscribeAll contract tests (plain string EventStore)
+subscribeAllContract(
+  'PostgresEventStore',
+  pipe(
+    Layer.effect(StringEventStore, sqlEventStore),
+    Layer.provide(
+      Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive, Logger.pretty)
+    ),
+    Layer.provide(PostgresLive),
+    Layer.provide(makePgConfigurationLive('TEST_PG')),
+    Layer.provide(BunContext.layer)
+  )
+);

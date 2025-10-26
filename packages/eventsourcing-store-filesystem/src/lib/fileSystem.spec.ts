@@ -6,7 +6,9 @@ import {
   runEventStoreTestSuite,
   FooEventStore,
   encodedEventStore,
+  EventStore,
 } from '@codeforbreakfast/eventsourcing-store';
+import { subscribeAllContract } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { makeFileSystemEventStore } from './index';
 import { type FileSystemStore, make } from './FileSystemStore';
 import { tmpdir } from 'node:os';
@@ -20,22 +22,17 @@ export const FooEventStoreTest = (store: FileSystemStore<FooEvent>) =>
     pipe(store, makeFileSystemEventStore, Effect.map(encodedEventStore(FooEvent)))
   );
 
-const makeFooEventStoreLayer = () => {
-  const testDir = pipe(
+const makeFooEventStoreLayer = () =>
+  pipe(
     Path.Path,
     Effect.map((path) =>
-      path.join(
-        tmpdir(),
-        `eventsourcing-test-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      )
+      path.join(tmpdir(), `eventsourcing-test-${crypto.randomUUID().substring(0, 8)}`)
     ),
+    Effect.flatMap((testDir) => make<FooEvent>({ baseDir: testDir })),
+    Effect.map(FooEventStoreTest),
     Effect.provide(BunPath.layer),
     Effect.runSync
   );
-  // eslint-disable-next-line buntest/no-runSync-in-tests, effect/no-intermediate-effect-variables -- test setup needs synchronous store creation to share PubSub state across tests, testDir extracted from Effect for use as plain value
-  const store = Effect.runSync(make<FooEvent>({ baseDir: testDir }));
-  return FooEventStoreTest(store);
-};
 
 runEventStoreTestSuite(
   'Filesystem',
@@ -47,4 +44,33 @@ runEventStoreTestSuite(
       Layer.provide(silentLogger)
     ),
   { supportsHorizontalScaling: false }
+);
+
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
+const makeStringEventStoreLayer = () =>
+  Layer.effect(
+    StringEventStore,
+    pipe(
+      Path.Path,
+      Effect.map((path) =>
+        path.join(tmpdir(), `eventsourcing-test-${crypto.randomUUID().substring(0, 8)}`)
+      ),
+      Effect.flatMap((testDir) => make<string>({ baseDir: testDir })),
+      Effect.flatMap(makeFileSystemEventStore),
+      Effect.provide(BunPath.layer)
+    )
+  );
+
+subscribeAllContract(
+  'FileSystemEventStore',
+  pipe(
+    makeStringEventStoreLayer(),
+    Layer.provide(BunFileSystem.layer),
+    Layer.provide(BunPath.layer),
+    Layer.provide(silentLogger)
+  )
 );

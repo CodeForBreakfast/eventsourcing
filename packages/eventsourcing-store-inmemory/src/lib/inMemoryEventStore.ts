@@ -36,6 +36,8 @@ const subscribeToStreamWithError =
   (store: InMemoryStore<T>) =>
     pipe(streamId, store.get, Effect.mapError(createSubscribeError(streamId)));
 
+const subscribeToAllStreams = <T>(store: InMemoryStore<T>) => store.getAllLiveOnly();
+
 export const makeInMemoryEventStore = <T>(
   store: InMemoryStore<T>
 ): Effect.Effect<EventStore<T>, never, never> =>
@@ -48,6 +50,7 @@ export const makeInMemoryEventStore = <T>(
       ),
     read: readHistoricalEvents(store),
     subscribe: readAllEvents(store),
+    subscribeAll: () => subscribeToAllStreams(store),
   });
 
 const addSubscribeMethod =

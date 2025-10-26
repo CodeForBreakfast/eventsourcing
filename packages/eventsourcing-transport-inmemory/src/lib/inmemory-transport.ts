@@ -283,7 +283,7 @@ const createClientState = (
     )
   );
 
-const generateClientId = (): string => `client-${Date.now()}-${Math.random()}`;
+const generateClientId = (): string => `client-${crypto.randomUUID()}`;
 
 const createConnectionQueues = (): Effect.Effect<{
   readonly connectionStatePubSub: PubSub.PubSub<ConnectionState>;

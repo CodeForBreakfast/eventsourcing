@@ -35,7 +35,6 @@ const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
   pipe(
     listenConnection,
     (client) => client.unsafe(healthCheckQuery),
-    Effect.tap(() => Effect.logDebug('PostgreSQL notification listener health check passed')),
     Effect.tapError((error) =>
       Effect.logError('PostgreSQL notification listener health check failed', { error })
     ),
@@ -43,10 +42,8 @@ const executeHealthCheck = (listenConnection: PgClient.PgClient) =>
     Effect.as(undefined)
   );
 
-const shutdownMessage = 'PostgreSQL notification listener connection cleanup initiated';
-
 const executeShutdown = (_listenConnection: PgClient.PgClient) =>
-  pipe(shutdownMessage, Effect.logInfo, Effect.as(undefined));
+  Effect.logInfo('PostgreSQL notification listener connection cleanup initiated');
 
 /**
  * Implementation of ConnectionManager service
@@ -57,7 +54,6 @@ export const ConnectionManagerLive = Layer.effect(
   ConnectionManager,
   pipe(
     PgClient.PgClient,
-    Effect.tap(() => Effect.logDebug('PostgreSQL notification listener connection established')),
     Effect.tapError((error) =>
       Effect.logError('Failed to establish notification listener connection', {
         error,

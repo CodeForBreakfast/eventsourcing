@@ -21,6 +21,11 @@ export interface NotificationPayload {
 export const makeChannelName = (streamId: EventStreamId): string => `eventstore_events_${streamId}`;
 
 /**
+ * Global channel name for all events (used by subscribeAll)
+ */
+export const ALL_EVENTS_CHANNEL = 'eventstore_events_all';
+
+/**
  * Parse notification payload from PostgreSQL trigger JSON
  */
 const decodeNotificationSchema = Schema.decodeUnknown(
@@ -64,10 +69,24 @@ export class NotificationListener extends Effect.Tag('NotificationListener')<
     readonly unlisten: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
 
     /**
+     * Listen for notifications on the global all-events channel
+     */
+    readonly listenAll: Effect.Effect<void, EventStoreError, never>;
+
+    /**
+     * Stop listening to the global all-events channel
+     */
+    readonly unlistenAll: Effect.Effect<void, EventStoreError, never>;
+
+    /**
      * Get a stream of notifications for all channels we're listening to
      */
     readonly notifications: Stream.Stream<
-      { readonly streamId: EventStreamId; readonly payload: NotificationPayload },
+      {
+        readonly streamId: EventStreamId;
+        readonly payload: NotificationPayload;
+        readonly isAllEvents: boolean;
+      },
       EventStoreError,
       never
     >;
@@ -87,53 +106,59 @@ export class NotificationListener extends Effect.Tag('NotificationListener')<
 /**
  * Full PostgreSQL LISTEN/NOTIFY implementation using @effect/sql-pg
  */
-const queueNotification =
+const parseStreamIdAndQueueNotification =
   (
     notificationQueue: Queue.Queue<{
       readonly streamId: EventStreamId;
       readonly payload: NotificationPayload;
+      readonly isAllEvents: boolean;
     }>,
-    streamId: EventStreamId
+    isAllEvents: boolean
   ) =>
   (payload: NotificationPayload) =>
     pipe(
-      Queue.offer(notificationQueue, {
-        streamId,
-        payload,
-      }),
-      Effect.tap(() => Effect.logDebug(`Queued notification for stream ${streamId}`))
+      payload.stream_id,
+      Schema.decode(EventStreamId),
+      Effect.flatMap((parsedStreamId) =>
+        Queue.offer(notificationQueue, {
+          streamId: parsedStreamId,
+          payload,
+          isAllEvents,
+        })
+      ),
+      Effect.mapError(
+        eventStoreError.read(undefined, 'Failed to parse stream_id from notification')
+      )
     );
 
-const parseAndQueueNotification = (
+const parseAndQueueStreamNotification = (
   rawPayload: string,
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>,
-  streamId: EventStreamId
+  isAllEvents: boolean
 ) =>
   pipe(
     rawPayload,
     parseNotificationPayload,
-    Effect.flatMap(queueNotification(notificationQueue, streamId))
+    Effect.flatMap(parseStreamIdAndQueueNotification(notificationQueue, isAllEvents))
   );
-
-const logReceivedNotification = (channelName: string, rawPayload: string) =>
-  Effect.logDebug(`Received raw notification on ${channelName}: ${rawPayload}`);
 
 const processRawNotification =
   (
     notificationQueue: Queue.Queue<{
       readonly streamId: EventStreamId;
       readonly payload: NotificationPayload;
+      readonly isAllEvents: boolean;
     }>,
-    streamId: EventStreamId,
-    channelName: string
+    channelName: string,
+    isAllEvents: boolean
   ) =>
   (rawPayload: string) =>
     pipe(
-      logReceivedNotification(channelName, rawPayload),
-      Effect.andThen(parseAndQueueNotification(rawPayload, notificationQueue, streamId)),
+      parseAndQueueStreamNotification(rawPayload, notificationQueue, isAllEvents),
       Effect.catchAll((error) =>
         Effect.logError(`Failed to process notification for ${channelName}`, {
           error,
@@ -146,14 +171,14 @@ const startListeningOnChannel = (
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>,
-  streamId: EventStreamId,
   channelName: string
 ) =>
   pipe(
     channelName,
     client.listen,
-    Stream.tap(processRawNotification(notificationQueue, streamId, channelName)),
+    Stream.tap(processRawNotification(notificationQueue, channelName, false)),
     Stream.runDrain,
     Effect.fork,
     Effect.asVoid
@@ -165,15 +190,13 @@ const activateChannelAndStartListening = (
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>,
-  streamId: EventStreamId,
   channelName: string
 ) =>
   pipe(
-    activeChannels,
-    Ref.update(HashSet.add(channelName)),
-    Effect.andThen(Effect.logDebug(`Successfully started listening on channel: ${channelName}`)),
-    Effect.tap(() => startListeningOnChannel(client, notificationQueue, streamId, channelName))
+    Ref.update(activeChannels, HashSet.add(channelName)),
+    Effect.tap(() => startListeningOnChannel(client, notificationQueue, channelName))
   );
 
 const activateAndListen = (
@@ -182,21 +205,13 @@ const activateAndListen = (
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>,
   streamId: EventStreamId
 ) => {
   const channelName = makeChannelName(streamId);
-  return activateChannelAndStartListening(
-    activeChannels,
-    client,
-    notificationQueue,
-    streamId,
-    channelName
-  );
+  return activateChannelAndStartListening(activeChannels, client, notificationQueue, channelName);
 };
-
-const logStartListen = (streamId: EventStreamId) =>
-  Effect.logDebug(`Starting LISTEN for stream: ${streamId}`);
 
 const startListenForStream =
   (
@@ -205,13 +220,12 @@ const startListenForStream =
     notificationQueue: Queue.Queue<{
       readonly streamId: EventStreamId;
       readonly payload: NotificationPayload;
+      readonly isAllEvents: boolean;
     }>
   ) =>
   (streamId: EventStreamId) =>
     pipe(
-      streamId,
-      logStartListen,
-      Effect.andThen(activateAndListen(activeChannels, client, notificationQueue, streamId)),
+      activateAndListen(activeChannels, client, notificationQueue, streamId),
       Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to listen to stream'))
     );
 
@@ -228,15 +242,10 @@ const removeChannelForStream = (
   return removeChannelFromActive(activeChannels, channelName);
 };
 
-const logStopListen = (streamId: EventStreamId) =>
-  Effect.logDebug(`Stopping LISTEN for stream: ${streamId}`);
-
 const stopListenForStream =
   (activeChannels: Ref.Ref<HashSet.HashSet<string>>) => (streamId: EventStreamId) =>
     pipe(
-      streamId,
-      logStopListen,
-      Effect.andThen(removeChannelForStream(activeChannels, streamId)),
+      removeChannelForStream(activeChannels, streamId),
       Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unlisten from stream'))
     );
 
@@ -244,6 +253,7 @@ const createNotificationsStream = (
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>
 ) =>
   pipe(
@@ -265,14 +275,125 @@ const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =
   pipe(
     'PostgreSQL notification listener stopped',
     Effect.logInfo,
-    Effect.andThen(Ref.get(activeChannels)),
-    Effect.flatMap((channels) =>
-      Effect.forEach(Array.from(channels), (channelName) =>
-        Effect.logDebug(`Cleaning up channel: ${channelName}`)
-      )
-    ),
     Effect.andThen(clearActiveChannels(activeChannels)),
     Effect.asVoid
+  );
+
+const parseStreamIdFromPayload = (payload: NotificationPayload) =>
+  pipe(
+    payload.stream_id,
+    Schema.decode(EventStreamId),
+    Effect.mapError(eventStoreError.read(undefined, 'Failed to parse stream_id from notification'))
+  );
+
+const queueParsedNotification = (
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
+  }>,
+  payload: NotificationPayload,
+  streamId: EventStreamId,
+  isAllEvents: boolean
+) =>
+  Queue.offer(notificationQueue, {
+    streamId,
+    payload,
+    isAllEvents,
+  });
+
+const parseAndQueue =
+  (
+    notificationQueue: Queue.Queue<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+      readonly isAllEvents: boolean;
+    }>,
+    isAllEvents: boolean
+  ) =>
+  (payload: NotificationPayload) =>
+    pipe(
+      payload,
+      parseStreamIdFromPayload,
+      Effect.flatMap((streamId) =>
+        queueParsedNotification(notificationQueue, payload, streamId, isAllEvents)
+      )
+    );
+
+const processAllEventsNotification =
+  (
+    notificationQueue: Queue.Queue<{
+      readonly streamId: EventStreamId;
+      readonly payload: NotificationPayload;
+      readonly isAllEvents: boolean;
+    }>
+  ) =>
+  (rawPayload: string) =>
+    pipe(
+      rawPayload,
+      parseNotificationPayload,
+      Effect.flatMap(parseAndQueue(notificationQueue, true)),
+      Effect.catchAll((error) =>
+        Effect.logError(`Failed to process all-events notification`, { error })
+      )
+    );
+
+const startListeningOnAllEventsChannel = (
+  client: PgClient.PgClient,
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
+  }>
+) =>
+  pipe(
+    ALL_EVENTS_CHANNEL,
+    client.listen,
+    Stream.tap(processAllEventsNotification(notificationQueue)),
+    Stream.runDrain,
+    Effect.fork,
+    Effect.asVoid
+  );
+
+const activateAllEventsChannel = (
+  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+  client: PgClient.PgClient,
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
+  }>
+) =>
+  pipe(
+    Ref.update(activeChannels, HashSet.add(ALL_EVENTS_CHANNEL)),
+    Effect.tap(() => startListeningOnAllEventsChannel(client, notificationQueue))
+  );
+
+const listenAllEvents = (
+  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+  client: PgClient.PgClient,
+  notificationQueue: Queue.Queue<{
+    readonly streamId: EventStreamId;
+    readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
+  }>
+) =>
+  pipe(
+    activeChannels,
+    Ref.get,
+    Effect.flatMap((channels) =>
+      Effect.if(HashSet.has(channels, ALL_EVENTS_CHANNEL), {
+        onTrue: () => Effect.succeed(undefined),
+        onFalse: () => activateAllEventsChannel(activeChannels, client, notificationQueue),
+      })
+    ),
+    Effect.mapError(eventStoreError.subscribe('*', 'Failed to listen to all events'))
+  );
+
+const unlistenAllEvents = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
+  pipe(
+    removeChannelFromActive(activeChannels, ALL_EVENTS_CHANNEL),
+    Effect.mapError(eventStoreError.subscribe('*', 'Failed to unlisten from all events'))
   );
 
 const buildNotificationListener = ({
@@ -285,11 +406,16 @@ const buildNotificationListener = ({
   readonly notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>;
 }) => ({
   listen: startListenForStream(activeChannels, client, notificationQueue),
 
   unlisten: stopListenForStream(activeChannels),
+
+  listenAll: listenAllEvents(activeChannels, client, notificationQueue),
+
+  unlistenAll: unlistenAllEvents(activeChannels),
 
   notifications: createNotificationsStream(notificationQueue),
 
@@ -305,6 +431,7 @@ const createNotificationListenerDependencies = {
   notificationQueue: Queue.unbounded<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
+    readonly isAllEvents: boolean;
   }>(),
 };
 

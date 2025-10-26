@@ -481,10 +481,14 @@ const createResilientSubscribe =
   (baseStore: EventStore<string>) => (position: EventStreamPosition) =>
     pipe(baseStore.subscribe(position), Effect.retry(createFixedRetrySchedule()));
 
+const createResilientSubscribeAll = (baseStore: EventStore<string>) => () =>
+  pipe(baseStore.subscribeAll(), Effect.retry(createFixedRetrySchedule()));
+
 const createResilientEventStore = (baseStore: EventStore<string>): EventStore<string> => ({
   append: baseStore.append,
   read: createResilientRead(baseStore),
   subscribe: createResilientSubscribe(baseStore),
+  subscribeAll: createResilientSubscribeAll(baseStore),
 });
 
 const program = pipe(sqlEventStore, Effect.map(createResilientEventStore));
