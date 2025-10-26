@@ -177,21 +177,6 @@ bd dep add hp-12 hp-10 --type parent-child
 - Issue IDs use the prefix `hp-` (configured during `bd init`)
 - Dependencies are directional: `bd dep add A B` means A depends on B (A is blocked by B)
 
-### CI Workflow Optimization
-
-**Beads-only PRs skip CI:**
-
-- PRs that only change `.beads/issues.jsonl` automatically skip CI and release workflows
-- Uses GitHub Actions `paths-ignore` filter for complete skip (no workflow run at all)
-- These PRs show no CI checks in GitHub UI - this is intentional and correct
-- Beads-only PRs are mergeable immediately without waiting for CI
-
-**When CI still runs:**
-
-- Any PR that changes `.beads/issues.jsonl` + other files runs CI normally
-- Renovate dependency update PRs always run CI
-- Any code, config, or dependency changes require full validation
-
 ## Releasing
 
 - Start each new piece of work in a new branch from the latest origin/main. Changes are always submitted via a PR.
