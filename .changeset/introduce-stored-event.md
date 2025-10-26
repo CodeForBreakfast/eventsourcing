@@ -8,6 +8,9 @@
 '@codeforbreakfast/eventsourcing-testing-contracts': patch
 '@codeforbreakfast/eventsourcing-projections': patch
 '@codeforbreakfast/eventsourcing-commands': patch
+'@codeforbreakfast/eventsourcing-websocket': patch
+'@codeforbreakfast/eventsourcing-transport-websocket': patch
+'@codeforbreakfast/eventsourcing-transport-inmemory': patch
 ---
 
 Introduce `StreamEvent<T>` type to consolidate event-with-position pattern
