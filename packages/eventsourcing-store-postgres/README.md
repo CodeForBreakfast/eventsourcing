@@ -290,8 +290,7 @@ const processEventsWithTracking = (
   eventStore: EventStore<MyEvent>,
   tracker: {
     readonly processEvent: <T>(
-      streamId: typeof toStreamId extends (id: string) => Effect.Effect<infer R> ? R : never,
-      eventNumber: number,
+      position: EventStreamPosition,
       event: T
     ) => Effect.Effect<Option.Option<T>>;
   }
@@ -417,8 +416,7 @@ const buildProjectionWithCheckpoints = (
   eventStore: EventStore<MyEvent>,
   tracker: {
     readonly processEvent: <T>(
-      streamId: typeof toStreamId extends (id: string) => Effect.Effect<infer R> ? R : never,
-      eventNumber: number,
+      position: EventStreamPosition,
       event: T
     ) => Effect.Effect<Option.Option<T>>;
   }

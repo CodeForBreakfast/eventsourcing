@@ -1,5 +1,5 @@
 import { Effect, HashMap, Layer, Option, SynchronizedRef, pipe } from 'effect';
-import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
+import { EventStreamId, EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';
 import type { ReadonlyDeep } from 'type-fest';
 
 /**
@@ -17,8 +17,7 @@ export class EventStreamTracker extends Effect.Tag('EventStreamTracker')<
      * Returns Some(event) if the event should be processed, None if it's a duplicate or out of order
      */
     readonly processEvent: <T>(
-      streamId: EventStreamId,
-      eventNumber: number,
+      position: EventStreamPosition,
       event: T
     ) => Effect.Effect<Option.Option<T>, never, never>;
   }>
@@ -35,14 +34,14 @@ const processEventWithTracking =
       SynchronizedRef.SynchronizedRef<HashMap.HashMap<EventStreamId, number>>
     >
   ) =>
-  (streamId: EventStreamId, eventNumber: number, event: T) =>
+  (position: EventStreamPosition, event: T) =>
     SynchronizedRef.modify(
       lastEventNumbers,
       (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
-        const currentLastEvent = getCurrentLastEvent(lastEvents, streamId);
+        const currentLastEvent = getCurrentLastEvent(lastEvents, position.streamId);
 
-        return eventNumber > currentLastEvent
-          ? [Option.some(event), HashMap.set(lastEvents, streamId, eventNumber)]
+        return position.eventNumber > currentLastEvent
+          ? [Option.some(event), HashMap.set(lastEvents, position.streamId, position.eventNumber)]
           : [Option.none(), lastEvents];
       }
     );

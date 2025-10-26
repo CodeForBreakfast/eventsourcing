@@ -13,6 +13,7 @@ import {
 import type { ReadonlyDeep } from 'type-fest';
 import {
   EventStreamId,
+  EventStreamPosition,
   EventStoreError,
   eventStoreError,
 } from '@codeforbreakfast/eventsourcing-store';
@@ -30,8 +31,7 @@ interface SubscriptionData<T> {
 interface SubscriptionManagerState {
   readonly streams: HashMap.HashMap<EventStreamId, SubscriptionData<string>>;
   readonly allEventsPubSub: PubSub.PubSub<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: string;
   }>;
 }
@@ -66,10 +66,7 @@ export interface SubscriptionManagerService {
    * Subscribe to all events from all streams
    */
   readonly subscribeToAllEvents: () => Effect.Effect<
-    Stream.Stream<
-      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: string },
-      never
-    >,
+    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
     EventStoreError,
     never
   >;
@@ -78,8 +75,7 @@ export interface SubscriptionManagerService {
    * Publish an event to all-events subscribers
    */
   readonly publishToAllEvents: (
-    streamId: EventStreamId,
-    eventNumber: number,
+    position: EventStreamPosition,
     event: string
   ) => Effect.Effect<void, EventStoreError, never>;
 }
@@ -253,21 +249,16 @@ const publishEventWithErrorHandling =
 
 const createAllEventsStreamFromPubSub = (
   pubsub: PubSub.PubSub<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: string;
   }>
-): Stream.Stream<
-  { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: string },
-  never
-> =>
+): Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never> =>
   pipe(
     pubsub,
     (p) =>
       Stream.fromPubSub(
         p as PubSub.PubSub<{
-          readonly streamId: EventStreamId;
-          readonly eventNumber: number;
+          readonly position: EventStreamPosition;
           readonly event: string;
         }>
       ),
@@ -277,10 +268,7 @@ const createAllEventsStreamFromPubSub = (
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
   (): Effect.Effect<
-    Stream.Stream<
-      { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: string },
-      never
-    >,
+    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
     EventStoreError,
     never
   > =>
@@ -292,40 +280,35 @@ const subscribeToAllEventsStream =
     );
 
 const publishToAllEventsPubSub =
-  (streamId: EventStreamId, eventNumber: number, event: string) =>
+  (position: EventStreamPosition, event: string) =>
   (
     pubsub: PubSub.PubSub<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: string;
     }>
   ): Effect.Effect<void, never, never> =>
     pipe(
       pubsub,
-      PubSub.publish({ streamId, eventNumber, event }),
+      PubSub.publish({ position, event }),
       Effect.tapError((error) =>
-        Effect.logError('Failed to publish to all-events', { error, streamId })
+        Effect.logError('Failed to publish to all-events', { error, streamId: position.streamId })
       )
     );
 
 const publishEventToAllEventsPubSub =
-  (streamId: EventStreamId, eventNumber: number, event: string) =>
+  (position: EventStreamPosition, event: string) =>
   (state: SubscriptionManagerState): Effect.Effect<void, never, never> =>
-    pipe(state.allEventsPubSub, publishToAllEventsPubSub(streamId, eventNumber, event));
+    pipe(state.allEventsPubSub, publishToAllEventsPubSub(position, event));
 
 const publishToAllEventsWithErrorHandling =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
-  (
-    streamId: EventStreamId,
-    eventNumber: number,
-    event: string
-  ): Effect.Effect<void, EventStoreError, never> =>
+  (position: EventStreamPosition, event: string): Effect.Effect<void, EventStoreError, never> =>
     pipe(
       ref,
       SynchronizedRef.get,
-      Effect.flatMap(publishEventToAllEventsPubSub(streamId, eventNumber, event)),
+      Effect.flatMap(publishEventToAllEventsPubSub(position, event)),
       Effect.mapError(
-        eventStoreError.write(streamId, 'Failed to publish to all-events subscribers')
+        eventStoreError.write(position.streamId, 'Failed to publish to all-events subscribers')
       )
     );
 
@@ -341,8 +324,7 @@ const createSubscriptionManagerService = (
 
 const makeSubscriptionManagerState = (
   allEventsPubSub: PubSub.PubSub<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: string;
   }>
 ): SubscriptionManagerState => ({
@@ -352,8 +334,7 @@ const makeSubscriptionManagerState = (
 
 const createManagerFromState = (
   allEventsPubSub: PubSub.PubSub<{
-    readonly streamId: EventStreamId;
-    readonly eventNumber: number;
+    readonly position: EventStreamPosition;
     readonly event: string;
   }>
 ): Effect.Effect<SubscriptionManagerService, never, never> =>
@@ -371,8 +352,7 @@ export const SubscriptionManagerLive = Layer.effect(
   SubscriptionManager,
   pipe(
     PubSub.unbounded<{
-      readonly streamId: EventStreamId;
-      readonly eventNumber: number;
+      readonly position: EventStreamPosition;
       readonly event: string;
     }>(),
     Effect.flatMap(createManagerFromState)
