@@ -26,10 +26,7 @@ const makeFooEventStoreLayer = () =>
   pipe(
     Path.Path,
     Effect.map((path) =>
-      path.join(
-        tmpdir(),
-        `eventsourcing-test-${Date.now()}-${Math.random().toString(36).substring(7)}`
-      )
+      path.join(tmpdir(), `eventsourcing-test-${crypto.randomUUID().substring(0, 8)}`)
     ),
     Effect.flatMap((testDir) => make<FooEvent>({ baseDir: testDir })),
     Effect.map(FooEventStoreTest),
@@ -60,10 +57,7 @@ const makeStringEventStoreLayer = () =>
     pipe(
       Path.Path,
       Effect.map((path) =>
-        path.join(
-          tmpdir(),
-          `eventsourcing-test-${Date.now()}-${Math.random().toString(36).substring(7)}`
-        )
+        path.join(tmpdir(), `eventsourcing-test-${crypto.randomUUID().substring(0, 8)}`)
       ),
       Effect.flatMap((testDir) => make<string>({ baseDir: testDir })),
       Effect.flatMap(makeFileSystemEventStore),
