@@ -6,7 +6,9 @@ import {
   runEventStoreTestSuite,
   FooEventStore,
   encodedEventStore,
+  EventStore,
 } from '@codeforbreakfast/eventsourcing-store';
+import { subscribeAllContract } from '@codeforbreakfast/eventsourcing-testing-contracts';
 import { makeFileSystemEventStore } from './index';
 import { type FileSystemStore, make } from './FileSystemStore';
 import { tmpdir } from 'node:os';
@@ -47,4 +49,39 @@ runEventStoreTestSuite(
       Layer.provide(silentLogger)
     ),
   { supportsHorizontalScaling: false }
+);
+
+class StringEventStore extends Effect.Tag('StringEventStore')<
+  StringEventStore,
+  EventStore<string>
+>() {}
+
+const makeStringEventStoreLayer = () => {
+  // eslint-disable-next-line buntest/no-runSync-in-tests -- test setup needs synchronous store creation to share PubSub state across tests
+  const store = Effect.runSync(
+    make<string>({
+      baseDir: pipe(
+        Path.Path,
+        Effect.map((path) =>
+          path.join(
+            tmpdir(),
+            `eventsourcing-test-${Date.now()}-${Math.random().toString(36).substring(7)}`
+          )
+        ),
+        Effect.provide(BunPath.layer),
+        Effect.runSync
+      ),
+    })
+  );
+  return Layer.effect(StringEventStore, makeFileSystemEventStore(store));
+};
+
+subscribeAllContract(
+  'FileSystemEventStore',
+  pipe(
+    makeStringEventStoreLayer(),
+    Layer.provide(BunFileSystem.layer),
+    Layer.provide(BunPath.layer),
+    Layer.provide(silentLogger)
+  )
 );
