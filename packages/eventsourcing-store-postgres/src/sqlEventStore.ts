@@ -162,7 +162,10 @@ const bridgeAllEventsNotification = (
   payload: NotificationPayload
 ) =>
   pipe(
-    subscriptionManager.publishToAllEvents(streamId, payload.event_number, payload.event_payload),
+    subscriptionManager.publishToAllEvents(
+      { streamId, eventNumber: payload.event_number },
+      payload.event_payload
+    ),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge all-events notification for stream ${streamId}`, {
         error,
@@ -398,10 +401,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
 const subscribeToAllStreams = (
   subscriptionManager: Readonly<{
     readonly subscribeToAllEvents: () => Effect.Effect<
-      Stream.Stream<
-        { readonly streamId: EventStreamId; readonly eventNumber: number; readonly event: string },
-        never
-      >,
+      Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
       EventStoreError,
       never
     >;
@@ -415,7 +415,7 @@ const subscribeToAllStreams = (
     Effect.andThen(subscriptionManager.subscribeToAllEvents()),
     Effect.map((stream) =>
       Stream.map(stream, (item) => ({
-        position: { streamId: item.streamId, eventNumber: item.eventNumber },
+        position: item.position,
         event: item.event,
       }))
     )
