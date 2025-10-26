@@ -16,6 +16,7 @@ import {
   EventStreamPosition,
   EventStoreError,
   eventStoreError,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 
 /**
@@ -66,7 +67,7 @@ export interface SubscriptionManagerService {
    * Subscribe to all events from all streams
    */
   readonly subscribeToAllEvents: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
+    Stream.Stream<StreamEvent<string>, never>,
     EventStoreError,
     never
   >;
@@ -252,7 +253,7 @@ const createAllEventsStreamFromPubSub = (
     readonly position: EventStreamPosition;
     readonly event: string;
   }>
-): Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never> =>
+): Stream.Stream<StreamEvent<string>, never> =>
   pipe(
     pubsub,
     (p) =>
@@ -267,11 +268,7 @@ const createAllEventsStreamFromPubSub = (
 
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
-  (): Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
-    EventStoreError,
-    never
-  > =>
+  (): Effect.Effect<Stream.Stream<StreamEvent<string>, never>, EventStoreError, never> =>
     pipe(
       ref,
       SynchronizedRef.get,
@@ -281,12 +278,7 @@ const subscribeToAllEventsStream =
 
 const publishToAllEventsPubSub =
   (position: EventStreamPosition, event: string) =>
-  (
-    pubsub: PubSub.PubSub<{
-      readonly position: EventStreamPosition;
-      readonly event: string;
-    }>
-  ): Effect.Effect<void, never, never> =>
+  (pubsub: PubSub.PubSub<StreamEvent<string>>): Effect.Effect<void, never, never> =>
     pipe(
       pubsub,
       PubSub.publish({ position, event }),
