@@ -36,26 +36,15 @@ const processEventWithTracking =
     >
   ) =>
   (streamId: EventStreamId, eventNumber: number, event: T) =>
-    pipe(
-      SynchronizedRef.modify(
-        lastEventNumbers,
-        (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
-          const currentLastEvent = getCurrentLastEvent(lastEvents, streamId);
+    SynchronizedRef.modify(
+      lastEventNumbers,
+      (lastEvents: HashMap.HashMap<EventStreamId, number>) => {
+        const currentLastEvent = getCurrentLastEvent(lastEvents, streamId);
 
-          return eventNumber > currentLastEvent
-            ? [Option.some(event), HashMap.set(lastEvents, streamId, eventNumber)]
-            : [Option.none(), lastEvents];
-        }
-      ),
-      Effect.tap((result) =>
-        Option.match(result, {
-          onNone: () =>
-            Effect.logDebug(
-              `Duplicate or out-of-order event skipped: stream=${streamId}, eventNumber=${eventNumber}`
-            ),
-          onSome: () => Effect.succeed(undefined),
-        })
-      )
+        return eventNumber > currentLastEvent
+          ? [Option.some(event), HashMap.set(lastEvents, streamId, eventNumber)]
+          : [Option.none(), lastEvents];
+      }
     );
 
 /**
