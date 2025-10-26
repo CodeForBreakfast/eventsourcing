@@ -12,7 +12,7 @@ import {
 import * as Logger from 'effect/Logger';
 
 const decodeStreamId = Schema.decode(EventStreamId);
-const randomId = () => `bridge-test-${Math.random().toString(36).substring(2, 15)}`;
+const randomId = () => `bridge-${crypto.randomUUID().substring(0, 8)}`;
 
 class StringEventStore extends Effect.Tag('StringEventStore')<
   StringEventStore,

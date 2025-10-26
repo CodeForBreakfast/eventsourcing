@@ -5,7 +5,7 @@ import { EventStreamId } from '@codeforbreakfast/eventsourcing-store';
 
 const makeStreamId = (id: string) => Schema.decode(EventStreamId)(id);
 
-const randomId = () => `stream-${Math.random().toString(36).substring(2, 15)}`;
+const randomId = () => `stream-${crypto.randomUUID().substring(0, 8)}`;
 
 class StringEventStore extends Effect.Tag('StringEventStore')<
   StringEventStore,
