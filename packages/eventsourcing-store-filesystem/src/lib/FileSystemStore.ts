@@ -15,6 +15,7 @@ import {
   EventStreamId,
   EventStreamPosition,
   ConcurrencyConflictError,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 
 export interface FileSystemStoreConfig {
@@ -38,12 +39,12 @@ export interface FileSystemStore<V = never> {
     streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path>;
   readonly getAll: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
+    Stream.Stream<StreamEvent<V>, never, never>,
     never,
     FileSystem.FileSystem | Path.Path
   >;
   readonly getAllLiveOnly: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
+    Stream.Stream<StreamEvent<V>, never, never>,
     never,
     never
   >;
@@ -55,10 +56,7 @@ interface EventStream<V> {
 
 interface FileSystemStoreState<V> {
   readonly pubSubsByStreamId: HashMap.HashMap<EventStreamId, PubSub.PubSub<V>>;
-  readonly allEventsStream: EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>;
+  readonly allEventsStream: EventStream<StreamEvent<V>>;
 }
 
 const getStreamDirectoryPath = (
@@ -247,10 +245,7 @@ const publishEventsToStreams = <V>(
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>,
   state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  allEventsStream: EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>,
+  allEventsStream: EventStream<StreamEvent<V>>,
   newPosition: EventStreamPosition
 ): Effect.Effect<EventStreamPosition, never, never> =>
   pipe(
@@ -552,11 +547,7 @@ const getAllEventsFromAllStreamsWithServices = <V>(
   streamIds: readonly EventStreamId[],
   fs: FileSystem.FileSystem,
   path: Path.Path
-): Effect.Effect<
-  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
-  never,
-  never
-> =>
+): Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never> =>
   pipe(
     streamIds,
     Effect.forEach((streamId) => collectStreamEventsWithServices<V>(config, fs, path, streamId)),
@@ -567,7 +558,7 @@ const getAllEventsFromAllStreamsWithServices = <V>(
 const getAllEventsFromAllStreams = <V>(
   config: FileSystemStoreConfig
 ): Effect.Effect<
-  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
+  Stream.Stream<StreamEvent<V>, never, never>,
   never,
   FileSystem.FileSystem | Path.Path
 > => {
@@ -600,27 +591,11 @@ const wrapPubSubInEventStream = <V>(pubsub: PubSub.PubSub<V>): EventStream<V> =>
 
 const createBoundedPubSub = <V>() => PubSub.bounded<V>(256);
 
-const createAllEventsStream = <V>(): Effect.Effect<
-  EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>,
-  never,
-  never
-> =>
-  pipe(
-    createBoundedPubSub<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>(),
-    Effect.map(wrapPubSubInEventStream)
-  );
+const createAllEventsStream = <V>(): Effect.Effect<EventStream<StreamEvent<V>>, never, never> =>
+  pipe(createBoundedPubSub<StreamEvent<V>>(), Effect.map(wrapPubSubInEventStream));
 
 const createInitialStateWithAllEventsStream = <V>(
-  allEventsStream: EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>
+  allEventsStream: EventStream<StreamEvent<V>>
 ): FileSystemStoreState<V> => ({
   pubSubsByStreamId: HashMap.empty(),
   allEventsStream,
@@ -628,11 +603,7 @@ const createInitialStateWithAllEventsStream = <V>(
 
 const getAllEventsLiveOnlyStream = <V>(
   state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
-): Effect.Effect<
-  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
-  never,
-  never
-> =>
+): Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never> =>
   pipe(
     state,
     SynchronizedRef.get,
@@ -651,12 +622,7 @@ const createStoreFromState =
 
 const createStoreWithAllEventsStream =
   <V>(config: FileSystemStoreConfig) =>
-  (
-    allEventsStream: EventStream<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>
-  ): Effect.Effect<FileSystemStore<V>, never, never> =>
+  (allEventsStream: EventStream<StreamEvent<V>>): Effect.Effect<FileSystemStore<V>, never, never> =>
     pipe(
       allEventsStream,
       createInitialStateWithAllEventsStream<V>,

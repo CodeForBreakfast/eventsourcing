@@ -19,6 +19,18 @@ export const EventStreamPosition = Schema.Struct({
 });
 export type EventStreamPosition = typeof EventStreamPosition.Type;
 
+// Stored event with position information
+export const StreamEvent = <T extends Schema.Schema.All>(eventSchema: T) =>
+  Schema.Struct({
+    position: EventStreamPosition,
+    event: eventSchema,
+  });
+
+export type StreamEvent<T> = {
+  readonly position: EventStreamPosition;
+  readonly event: T;
+};
+
 // Stream reference for subscriptions
 export const StreamRef = Schema.Struct({
   streamId: EventStreamId,

@@ -16,6 +16,7 @@ import {
   EventStreamPosition,
   EventStoreError,
   eventStoreError,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 
 /**
@@ -30,10 +31,7 @@ interface SubscriptionData<T> {
  */
 interface SubscriptionManagerState {
   readonly streams: HashMap.HashMap<EventStreamId, SubscriptionData<string>>;
-  readonly allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>;
+  readonly allEventsPubSub: PubSub.PubSub<StreamEvent<string>>;
 }
 
 /**
@@ -66,7 +64,7 @@ export interface SubscriptionManagerService {
    * Subscribe to all events from all streams
    */
   readonly subscribeToAllEvents: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
+    Stream.Stream<StreamEvent<string>, never>,
     EventStoreError,
     never
   >;
@@ -248,30 +246,13 @@ const publishEventWithErrorHandling =
     );
 
 const createAllEventsStreamFromPubSub = (
-  pubsub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
-): Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never> =>
-  pipe(
-    pubsub,
-    (p) =>
-      Stream.fromPubSub(
-        p as PubSub.PubSub<{
-          readonly position: EventStreamPosition;
-          readonly event: string;
-        }>
-      ),
-    Stream.retry(createRetrySchedule())
-  );
+  pubsub: PubSub.PubSub<StreamEvent<string>>
+): Stream.Stream<StreamEvent<string>, never> =>
+  Stream.retry(Stream.fromPubSub(pubsub), createRetrySchedule());
 
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
-  (): Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
-    EventStoreError,
-    never
-  > =>
+  (): Effect.Effect<Stream.Stream<StreamEvent<string>, never>, EventStoreError, never> =>
     pipe(
       ref,
       SynchronizedRef.get,
@@ -281,12 +262,7 @@ const subscribeToAllEventsStream =
 
 const publishToAllEventsPubSub =
   (position: EventStreamPosition, event: string) =>
-  (
-    pubsub: PubSub.PubSub<{
-      readonly position: EventStreamPosition;
-      readonly event: string;
-    }>
-  ): Effect.Effect<void, never, never> =>
+  (pubsub: PubSub.PubSub<StreamEvent<string>>): Effect.Effect<void, never, never> =>
     pipe(
       pubsub,
       PubSub.publish({ position, event }),
@@ -323,20 +299,14 @@ const createSubscriptionManagerService = (
 });
 
 const makeSubscriptionManagerState = (
-  allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
+  allEventsPubSub: PubSub.PubSub<StreamEvent<string>>
 ): SubscriptionManagerState => ({
   streams: HashMap.empty(),
   allEventsPubSub,
 });
 
 const createManagerFromState = (
-  allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
+  allEventsPubSub: PubSub.PubSub<StreamEvent<string>>
 ): Effect.Effect<SubscriptionManagerService, never, never> =>
   pipe(
     allEventsPubSub,
@@ -350,11 +320,5 @@ const createManagerFromState = (
  */
 export const SubscriptionManagerLive = Layer.effect(
   SubscriptionManager,
-  pipe(
-    PubSub.unbounded<{
-      readonly position: EventStreamPosition;
-      readonly event: string;
-    }>(),
-    Effect.flatMap(createManagerFromState)
-  )
+  pipe(PubSub.unbounded<StreamEvent<string>>(), Effect.flatMap(createManagerFromState))
 );

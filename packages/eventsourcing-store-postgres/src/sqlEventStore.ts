@@ -8,6 +8,7 @@ import {
   EventStoreError,
   eventStoreError,
   ConcurrencyConflictError,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 import { ConnectionManagerLive } from './connectionManager';
 import { EventStreamTrackerLive } from './eventStreamTracker';
@@ -401,7 +402,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
 const subscribeToAllStreams = (
   subscriptionManager: Readonly<{
     readonly subscribeToAllEvents: () => Effect.Effect<
-      Stream.Stream<{ readonly position: EventStreamPosition; readonly event: string }, never>,
+      Stream.Stream<StreamEvent<string>, never>,
       EventStoreError,
       never
     >;
@@ -410,16 +411,7 @@ const subscribeToAllStreams = (
     readonly listenAll: Effect.Effect<void, EventStoreError, never>;
   }>
 ) =>
-  pipe(
-    notificationListener.listenAll,
-    Effect.andThen(subscriptionManager.subscribeToAllEvents()),
-    Effect.map((stream) =>
-      Stream.map(stream, (item) => ({
-        position: item.position,
-        event: item.event,
-      }))
-    )
-  );
+  pipe(notificationListener.listenAll, Effect.andThen(subscriptionManager.subscribeToAllEvents()));
 
 /**
  * Layer that provides a SQL EventStore with properly shared SubscriptionManager and NotificationListener

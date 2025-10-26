@@ -1,5 +1,5 @@
 import { Effect, ParseResult, Sink, Stream } from 'effect';
-import { EventStreamPosition } from './streamTypes';
+import { EventStreamPosition, type StreamEvent } from './streamTypes';
 import {
   EventStoreError,
   ConcurrencyConflictError,
@@ -61,10 +61,7 @@ export interface EventStore<TEvent> {
    * @returns A stream of events from all streams with their positions
    */
   readonly subscribeAll: () => Effect.Effect<
-    Stream.Stream<
-      { readonly position: EventStreamPosition; readonly event: TEvent },
-      ParseResult.ParseError | EventStoreError
-    >,
+    Stream.Stream<StreamEvent<TEvent>, ParseResult.ParseError | EventStoreError>,
     EventStoreError,
     never
   >;

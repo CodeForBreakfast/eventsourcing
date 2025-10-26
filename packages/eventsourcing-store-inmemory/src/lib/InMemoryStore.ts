@@ -3,6 +3,7 @@ import {
   EventStreamId,
   EventStreamPosition,
   ConcurrencyConflictError,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 
 interface EventStream<V> {
@@ -84,22 +85,13 @@ const tagEventsWithStreamId = <V>(
   );
 
 const publishToAllEventsStream = <V>(
-  allEventsStream: EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>,
-  taggedEvents: Chunk.Chunk<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>
+  allEventsStream: EventStream<StreamEvent<V>>,
+  taggedEvents: Chunk.Chunk<StreamEvent<V>>
 ) => publishEventsToStream(allEventsStream.pubsub, taggedEvents);
 
 const createUpdatedValue =
   <V>(
-    allEventsStream: EventStream<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>,
+    allEventsStream: EventStream<StreamEvent<V>>,
     newEvents: Chunk.Chunk<V>,
     streamEnd: EventStreamPosition
   ) =>
@@ -120,10 +112,7 @@ const createUpdatedValue =
 
 const applyUpdatedEventStreamToValue =
   <V>(
-    allEventsStream: EventStream<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>,
+    allEventsStream: EventStream<StreamEvent<V>>,
     streamEnd: EventStreamPosition,
     newEvents: Chunk.Chunk<V>,
     eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>
@@ -183,12 +172,7 @@ const modifyEventStreamsByIdWithEmptyStream = <V>(
   );
 
 const buildValueFromEventStreamsById =
-  <V>(
-    allEventsStream: EventStream<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>
-  ) =>
+  <V>(allEventsStream: EventStream<StreamEvent<V>>) =>
   (eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>): Value<V> => ({
     eventStreamsById,
     allEventsStream,
@@ -207,10 +191,7 @@ const ensureEventStream =
 
 interface Value<V> {
   readonly eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>;
-  readonly allEventsStream: EventStream<{
-    readonly position: EventStreamPosition;
-    readonly event: V;
-  }>;
+  readonly allEventsStream: EventStream<StreamEvent<V>>;
 }
 
 export interface InMemoryStore<V = never> {
@@ -225,13 +206,9 @@ export interface InMemoryStore<V = never> {
   readonly getHistorical: (
     streamId: EventStreamId
   ) => Effect.Effect<Stream.Stream<V, never, never>, never, never>;
-  readonly getAll: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
-    never,
-    never
-  >;
+  readonly getAll: () => Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never>;
   readonly getAllLiveOnly: () => Effect.Effect<
-    Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
+    Stream.Stream<StreamEvent<V>, never, never>,
     never,
     never
   >;
@@ -308,11 +285,7 @@ const getHistoricalStreamForId =
 
 const getAllEventsStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
-): Effect.Effect<
-  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
-  never,
-  never
-> =>
+): Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never> =>
   pipe(
     value,
     SynchronizedRef.get,
@@ -321,11 +294,7 @@ const getAllEventsStream = <V>(
 
 const getAllEventsLiveOnlyStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
-): Effect.Effect<
-  Stream.Stream<{ readonly position: EventStreamPosition; readonly event: V }, never, never>,
-  never,
-  never
-> =>
+): Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never> =>
   pipe(
     value,
     SynchronizedRef.get,
@@ -350,21 +319,12 @@ const getHistoricalForStore =
 
 export const make = <V>() =>
   pipe(
-    emptyStream<{
-      readonly position: EventStreamPosition;
-      readonly event: V;
-    }>(),
-    Effect.flatMap(
-      (
-        allEventsStream: EventStream<{
-          readonly position: EventStreamPosition;
-          readonly event: V;
-        }>
-      ) =>
-        SynchronizedRef.make<Value<V>>({
-          eventStreamsById: HashMap.empty<EventStreamId, EventStream<V>>(),
-          allEventsStream,
-        })
+    emptyStream<StreamEvent<V>>(),
+    Effect.flatMap((allEventsStream: EventStream<StreamEvent<V>>) =>
+      SynchronizedRef.make<Value<V>>({
+        eventStreamsById: HashMap.empty<EventStreamId, EventStream<V>>(),
+        allEventsStream,
+      })
     ),
     Effect.map(
       (value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({

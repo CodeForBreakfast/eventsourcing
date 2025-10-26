@@ -112,6 +112,7 @@ import {
   EventStoreError,
   ConcurrencyConflictError,
   type EventStreamPosition,
+  type StreamEvent,
 } from '@codeforbreakfast/eventsourcing-store';
 
 interface EventStore<TEvent> {
@@ -139,12 +140,19 @@ interface EventStore<TEvent> {
     EventStoreError,
     never
   >;
+
+  readonly subscribeAll: () => Effect.Effect<
+    Stream.Stream<StreamEvent<TEvent>, ParseResult.ParseError | EventStoreError>,
+    EventStoreError,
+    never
+  >;
 }
 ```
 
 - `append`: Append events to the end of a stream at a specific position (used for optimistic concurrency control)
 - `read`: Read historical events only (no live updates)
 - `subscribe`: Read historical events then continue with live updates
+- `subscribeAll`: Subscribe to live events from all streams (no historical replay, includes stream position metadata)
 
 ### Stream Types
 
@@ -157,6 +165,12 @@ interface EventStreamPosition {
   readonly streamId: EventStreamId;
   readonly eventNumber: EventNumber;
 }
+
+// Event with position metadata (used by subscribeAll)
+type StreamEvent<T> = {
+  readonly position: EventStreamPosition;
+  readonly event: T;
+};
 ```
 
 ### Creating Event Store Service Tags
@@ -300,6 +314,39 @@ const processStreamInBatches = (batchSize: number) =>
       )
     )
   );
+```
+
+### Subscribe to All Events
+
+The `subscribeAll()` method allows you to subscribe to live events from all streams in the event store. Each event includes position metadata (stream ID and event number):
+
+```typescript
+import { Effect, Stream, pipe } from 'effect';
+import { type EventStore, type StreamEvent } from '@codeforbreakfast/eventsourcing-store';
+
+interface MyEvent {
+  type: string;
+  data: unknown;
+}
+
+declare const eventStore: EventStore<MyEvent>;
+
+// Subscribe to all events across all streams
+const subscribeToAllEvents = pipe(
+  eventStore.subscribeAll(),
+  Effect.flatMap((stream) =>
+    pipe(
+      stream,
+      Stream.runForEach((storedEvent: StreamEvent<MyEvent>) => {
+        console.log(
+          `Event from stream ${storedEvent.position.streamId} at position ${storedEvent.position.eventNumber}:`,
+          storedEvent.event
+        );
+        return Effect.void;
+      })
+    )
+  )
+);
 ```
 
 ## Testing Your Event Store
