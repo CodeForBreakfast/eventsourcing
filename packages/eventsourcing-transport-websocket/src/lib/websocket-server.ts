@@ -383,7 +383,7 @@ const createWebSocketServer = (
               never
             > =>
               Effect.sync(() => ({
-                clientId: Server.makeClientId(`client-${Date.now()}-${Math.random()}`),
+                clientId: Server.makeClientId(`client-${crypto.randomUUID()}`),
                 connectedAt: new Date(),
               }));
 
