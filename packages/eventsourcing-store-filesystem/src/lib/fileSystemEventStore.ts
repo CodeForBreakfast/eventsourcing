@@ -45,15 +45,13 @@ const createAppendSink =
         )
     );
 
-const subscribeToAllStreams = <T>(store: FileSystemStore<T>) => store.getAllLiveOnly();
-
 const createEventStoreWithServices =
   <T>(store: FileSystemStore<T>) =>
   ([fs, path]: readonly [FileSystem.FileSystem, Path.Path]): EventStore<T> => ({
     append: createAppendSink(store, fs, path),
     read: readHistoricalEvents(store, fs, path),
     subscribe: readAllEvents(store, fs, path),
-    subscribeAll: () => subscribeToAllStreams(store),
+    subscribeAll: store.getAllLiveOnly,
   });
 
 export const makeFileSystemEventStore = <T>(
