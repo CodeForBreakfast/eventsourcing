@@ -48,12 +48,7 @@ const createAppendSink =
 const subscribeToAllStreams = <T>(store: FileSystemStore<T>) =>
   pipe(
     store.getAllLiveOnly(),
-    Effect.map((stream) =>
-      Stream.map(stream, ({ streamId, eventNumber, event }) => ({
-        position: { streamId, eventNumber },
-        event,
-      }))
-    )
+    Effect.map((stream) => Stream.map(stream, ({ position, event }) => ({ position, event })))
   );
 
 const createEventStoreWithServices =
