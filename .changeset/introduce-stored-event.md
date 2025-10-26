@@ -3,6 +3,11 @@
 '@codeforbreakfast/eventsourcing-store-postgres': patch
 '@codeforbreakfast/eventsourcing-store-inmemory': patch
 '@codeforbreakfast/eventsourcing-store-filesystem': patch
+'@codeforbreakfast/eventsourcing-aggregates': patch
+'@codeforbreakfast/eventsourcing-protocol': patch
+'@codeforbreakfast/eventsourcing-testing-contracts': patch
+'@codeforbreakfast/eventsourcing-projections': patch
+'@codeforbreakfast/eventsourcing-commands': patch
 ---
 
 Introduce `StreamEvent<T>` type to consolidate event-with-position pattern
