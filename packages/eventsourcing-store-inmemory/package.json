@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store-inmemory",
-  "version": "0.2.10",
+  "version": "0.2.11",
   "description": "In-memory event store implementation for development and testing - Fast in-memory storage with complete EventStore interface implementation",
   "type": "module",
   "main": "./dist/index.js",

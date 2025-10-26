@@ -1,5 +1,58 @@
 # @codeforbreakfast/eventsourcing-store-postgres
 
+## 0.6.11
+
+### Patch Changes
+
+- [#332](https://github.com/CodeForBreakfast/eventsourcing/pull/332) [`e177936`](https://github.com/CodeForBreakfast/eventsourcing/commit/e177936ba898dcf8dfdaabbf413cd483cd5b90b7) Thanks [@GraemeF](https://github.com/GraemeF)! - Introduce `StreamEvent<T>` type to consolidate event-with-position pattern
+
+  This change introduces a new `StreamEvent<T>` type that represents an event with its stream position metadata. This replaces the verbose `{ readonly position: EventStreamPosition; readonly event: T }` pattern used throughout the codebase.
+
+  **What changed:**
+  - Added `StreamEvent<T>` type and Schema to `@codeforbreakfast/eventsourcing-store`
+  - Updated `EventStore.subscribeAll()` to return `Stream<StreamEvent<T>>` instead of `Stream<{ position, event }>`
+  - Refactored internal implementations in postgres, inmemory, and filesystem stores to use the new type
+  - Removed redundant object mapping in SQL event store subscription
+
+  **Migration:**
+  If you're using `EventStore.subscribeAll()`, you can now use the `StreamEvent<T>` type for better type inference:
+
+  ```typescript
+  // Before
+  type EventWithPos = { readonly position: EventStreamPosition; readonly event: MyEvent };
+
+  // After
+  import { type StreamEvent } from '@codeforbreakfast/eventsourcing-store';
+  type EventWithPos = StreamEvent<MyEvent>;
+  ```
+
+  The change is backward compatible as the structure remains identical.
+
+- [#330](https://github.com/CodeForBreakfast/eventsourcing/pull/330) [`0ebafcc`](https://github.com/CodeForBreakfast/eventsourcing/commit/0ebafcc3fea21500e54475df7114a78d9e96be7a) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactor to use `EventStreamPosition` type throughout the codebase instead of separate `streamId` and `eventNumber` parameters. This change improves type safety and API consistency by consolidating stream position information into a single, well-defined type.
+
+  **Breaking changes:**
+  - `EventStreamTracker.processEvent` now accepts `position: EventStreamPosition` instead of separate `streamId` and `eventNumber` parameters
+  - `SubscriptionManagerService.publishToAllEvents` now accepts `position: EventStreamPosition` instead of separate `streamId` and `eventNumber` parameters
+  - Internal subscription types now use `{ position: EventStreamPosition; event: string }` instead of `{ streamId: EventStreamId; eventNumber: number; event: string }`
+
+  **Migration guide:**
+  Replace separate streamId/eventNumber parameters with EventStreamPosition:
+
+  ```typescript
+  // Before
+  tracker.processEvent(streamId, eventNumber, event);
+  subscriptionManager.publishToAllEvents(streamId, eventNumber, event);
+
+  // After
+  tracker.processEvent({ streamId, eventNumber }, event);
+  subscriptionManager.publishToAllEvents({ streamId, eventNumber }, event);
+  ```
+
+- [#323](https://github.com/CodeForBreakfast/eventsourcing/pull/323) [`654e7b3`](https://github.com/CodeForBreakfast/eventsourcing/commit/654e7b39585dd5c8c10d3fe9cffd675cddf3c039) Thanks [@GraemeF](https://github.com/GraemeF)! - Improved documentation and test maintainability. Updated README examples to include subscribeAll() method, and refactored integration tests to eliminate deeply nested code structure.
+
+- Updated dependencies [[`e177936`](https://github.com/CodeForBreakfast/eventsourcing/commit/e177936ba898dcf8dfdaabbf413cd483cd5b90b7)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.0
+
 ## 0.6.10
 
 ### Patch Changes
