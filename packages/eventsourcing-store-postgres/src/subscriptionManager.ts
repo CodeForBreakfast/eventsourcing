@@ -248,7 +248,7 @@ const publishEventWithErrorHandling =
 const createAllEventsStreamFromPubSub = (
   pubsub: PubSub.PubSub<StreamEvent<string>>
 ): Stream.Stream<StreamEvent<string>, never> =>
-  pipe(Stream.fromPubSub(pubsub), Stream.retry(createRetrySchedule()));
+  Stream.retry(Stream.fromPubSub(pubsub), createRetrySchedule());
 
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
