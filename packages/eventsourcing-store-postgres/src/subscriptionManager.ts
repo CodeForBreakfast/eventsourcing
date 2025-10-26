@@ -31,10 +31,7 @@ interface SubscriptionData<T> {
  */
 interface SubscriptionManagerState {
   readonly streams: HashMap.HashMap<EventStreamId, SubscriptionData<string>>;
-  readonly allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>;
+  readonly allEventsPubSub: PubSub.PubSub<StreamEvent<string>>;
 }
 
 /**
@@ -249,22 +246,9 @@ const publishEventWithErrorHandling =
     );
 
 const createAllEventsStreamFromPubSub = (
-  pubsub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
+  pubsub: PubSub.PubSub<StreamEvent<string>>
 ): Stream.Stream<StreamEvent<string>, never> =>
-  pipe(
-    pubsub,
-    (p) =>
-      Stream.fromPubSub(
-        p as PubSub.PubSub<{
-          readonly position: EventStreamPosition;
-          readonly event: string;
-        }>
-      ),
-    Stream.retry(createRetrySchedule())
-  );
+  pipe(Stream.fromPubSub(pubsub), Stream.retry(createRetrySchedule()));
 
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
@@ -315,20 +299,14 @@ const createSubscriptionManagerService = (
 });
 
 const makeSubscriptionManagerState = (
-  allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
+  allEventsPubSub: PubSub.PubSub<StreamEvent<string>>
 ): SubscriptionManagerState => ({
   streams: HashMap.empty(),
   allEventsPubSub,
 });
 
 const createManagerFromState = (
-  allEventsPubSub: PubSub.PubSub<{
-    readonly position: EventStreamPosition;
-    readonly event: string;
-  }>
+  allEventsPubSub: PubSub.PubSub<StreamEvent<string>>
 ): Effect.Effect<SubscriptionManagerService, never, never> =>
   pipe(
     allEventsPubSub,
@@ -342,11 +320,5 @@ const createManagerFromState = (
  */
 export const SubscriptionManagerLive = Layer.effect(
   SubscriptionManager,
-  pipe(
-    PubSub.unbounded<{
-      readonly position: EventStreamPosition;
-      readonly event: string;
-    }>(),
-    Effect.flatMap(createManagerFromState)
-  )
+  pipe(PubSub.unbounded<StreamEvent<string>>(), Effect.flatMap(createManagerFromState))
 );
