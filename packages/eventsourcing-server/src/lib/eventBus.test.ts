@@ -1,7 +1,7 @@
 /* eslint-disable effect/no-intermediate-effect-variables, effect/no-eta-expansion, effect/no-curried-calls, effect/no-pipe-first-arg-call, effect/no-nested-pipe -- Test code legitimately needs these patterns for readability */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Layer, Schema, Stream, pipe, Context } from 'effect';
+import { Effect, Layer, Schema, Stream, pipe, Context, Fiber } from 'effect';
 import { EventBus, EventBusLive } from './eventBus';
 import {
   InMemoryStore,
@@ -26,6 +26,7 @@ const TodoEvent = Schema.Union(TodoCreated, TodoCompleted);
 type TodoEvent = typeof TodoEvent.Type;
 
 const isTodoCreated = Schema.is(TodoCreated);
+const isTodoCompleted = Schema.is(TodoCompleted);
 
 class TestEventStore extends Context.Tag('TestEventStore')<
   TestEventStore,
@@ -204,10 +205,118 @@ describe('EventBus', () => {
     );
   });
 
-  it.skip('distributes same events to multiple subscribers independently', async () => {
-    // TODO: This test has a timing issue where the second subscription doesn't receive events.
-    // This needs investigation into PubSub behavior with concurrent subscribers and filtered streams.
-    expect(true).toBe(true);
+  it.skip('distributes same events to multiple subscribers independently', () => {
+    // BUG: EventBus has an issue with multiple concurrent subscribers.
+    // Even without filtering, when two subscribers are created, the second subscriber
+    // receives partial or no events. This suggests a fundamental issue with how
+    // PubSub.subscribe creates Dequeues or how Stream.filterMap interacts with them.
+    //
+    // Investigation needed:
+    // 1. Verify PubSub.subscribe creates independent Dequeues for each subscriber
+    // 2. Check if Stream.filterMap on Dequeue maintains proper backpressure
+    // 3. Test if multiple PubSub.subscribe calls work correctly with unbounded PubSub
+    //
+    // Simplified test without filtering still fails - second sub gets 1 event instead of 2
+    const TodoEventBus = EventBus<TodoEvent>();
+    const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
+
+    const testStoreLayer = Layer.effect(
+      TestEventStore,
+      pipe(
+        InMemoryStore.make<TodoEvent>(),
+        Effect.flatMap(makeInMemoryEventStore),
+        Effect.map((store) => encodedEventStore(TodoEvent)(store))
+      )
+    );
+    const eventBusLayer = EventBusLive({ store: TestEventStore });
+
+    const makePosition: Effect.Effect<EventStreamPosition> = Effect.succeed({
+      streamId: 'todo-multi',
+      eventNumber: 0,
+    } as EventStreamPosition);
+
+    const writeEvents = (
+      store: ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      position: EventStreamPosition
+    ) =>
+      pipe(
+        Stream.make<TodoEvent>(
+          { _tag: 'TodoCreated', id: 'todo-multi', title: 'Multi Subscriber Test' },
+          { _tag: 'TodoCompleted', id: 'todo-multi' }
+        ),
+        Stream.run(store.append(position))
+      );
+
+    const collectTwo = (subscription: Stream.Stream<{ readonly event: TodoEvent }>) =>
+      pipe(subscription, Stream.take(2), Stream.timeout('1 second'), Stream.runCollect);
+
+    const setupSubscriptions = ([store, eventBus, position]: readonly [
+      ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      ReturnType<typeof EventBus<TodoEvent>>,
+      EventStreamPosition,
+    ]) =>
+      pipe(
+        eventBus.subscribe(acceptAll),
+        Effect.flatMap((sub1) =>
+          pipe(
+            eventBus.subscribe(acceptAll),
+            Effect.map((sub2) => [store, sub1, sub2, position] as const)
+          )
+        )
+      );
+
+    const writeAndCollectBoth = ([store, sub1, sub2, position]: readonly [
+      ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      Stream.Stream<{ readonly event: TodoEvent }>,
+      Stream.Stream<{ readonly event: TodoEvent }>,
+      EventStreamPosition,
+    ]) =>
+      pipe(
+        collectTwo(sub1),
+        Effect.fork,
+        Effect.flatMap((fiber1) =>
+          pipe(
+            collectTwo(sub2),
+            Effect.fork,
+            Effect.flatMap((fiber2) =>
+              pipe(
+                Effect.sleep('100 millis'),
+                Effect.andThen(writeEvents(store, position)),
+                Effect.andThen(Effect.all([Fiber.join(fiber1), Fiber.join(fiber2)]))
+              )
+            )
+          )
+        )
+      );
+
+    const verifyBothSubscriptions = ([events1, events2]: readonly [
+      ReadonlyArray<{ readonly event: TodoEvent }>,
+      ReadonlyArray<{ readonly event: TodoEvent }>,
+    ]) => {
+      const arr1 = Array.from(events1);
+      const arr2 = Array.from(events2);
+
+      expect(arr1.length).toBe(2);
+      expect(arr2.length).toBe(2);
+
+      expect(isTodoCreated(arr1[0].event)).toBe(true);
+      expect(isTodoCompleted(arr1[1].event)).toBe(true);
+
+      expect(isTodoCreated(arr2[0].event)).toBe(true);
+      expect(isTodoCompleted(arr2[1].event)).toBe(true);
+    };
+
+    const eventBusWithStore = pipe(eventBusLayer, Layer.provide(testStoreLayer));
+    const combinedLayer = Layer.merge(testStoreLayer, eventBusWithStore);
+
+    return pipe(
+      Effect.all([TestEventStore, TodoEventBus, makePosition]),
+      Effect.flatMap(setupSubscriptions),
+      Effect.flatMap(writeAndCollectBoth),
+      Effect.map(verifyBothSubscriptions),
+      Effect.provide(combinedLayer),
+      Effect.scoped
+    );
   });
 
   it.effect('cleans up subscriptions when scope closes', () => {
