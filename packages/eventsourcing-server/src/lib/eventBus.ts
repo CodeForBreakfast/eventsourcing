@@ -1,10 +1,9 @@
-/* eslint-disable functional/prefer-immutable-types, effect/no-pipe-first-arg-call, effect/no-eta-expansion -- Implementation patterns required for functional composition */
+/* eslint-disable functional/prefer-immutable-types -- Implementation patterns required for functional composition */
 
 import {
   Context,
   Effect,
   Layer,
-  Match,
   Option,
   ParseResult,
   pipe,
@@ -50,8 +49,9 @@ export const EventBus = <TEvent>() =>
   Context.GenericTag<EventBusService<TEvent>, EventBusService<TEvent>>('EventBus');
 
 /**
- * Creates an EventBus layer that subscribes to EventStore.subscribeAll()
- * and distributes events to subscribers via internal PubSub.
+ * Creates an EventBus layer with a single shared subscription to EventStore.subscribeAll().
+ * Each subscriber gets their own Dequeue from a shared PubSub, ensuring events are delivered
+ * independently to all subscribers without race conditions.
  *
  * @param config.store - The EventStore tag to subscribe to (must be EventStore<TEvent>)
  * @returns Layer providing EventBus service
@@ -73,53 +73,57 @@ export const EventBusLive = <TEvent>(config: {
   const filterEvent =
     <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
     (streamEvent: StreamEvent<TEvent>): Option.Option<StreamEvent<TFiltered>> =>
-      pipe(
-        filter(streamEvent.event),
-        Match.value,
-        Match.when(
-          true,
-          (): Option.Option<StreamEvent<TFiltered>> =>
-            Option.some({
-              position: streamEvent.position,
-              event: streamEvent.event as TFiltered,
-            })
-        ),
-        Match.when(false, (): Option.Option<StreamEvent<TFiltered>> => Option.none()),
-        Match.exhaustive
-      );
+      // eslint-disable-next-line effect/prefer-match-over-ternary -- Simple boolean check for type guard, Match pattern would be unnecessarily verbose
+      filter(streamEvent.event)
+        ? Option.some({
+            position: streamEvent.position,
+            event: streamEvent.event as TFiltered,
+          })
+        : Option.none();
 
-  const convertDequeueToFilteredStream =
+  const createQueueStream =
     <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
     (dequeue: Queue.Dequeue<StreamEvent<TEvent>>) =>
-      Stream.filterMap(Stream.fromQueue(dequeue, { shutdown: true }), filterEvent(filter));
+      pipe(dequeue, Stream.fromQueue, Stream.filterMap(filterEvent(filter)));
 
-  const createSubscriber =
+  const createFilteredStream =
     (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
-    <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
-      pipe(PubSub.subscribe(pubsub), Effect.map(convertDequeueToFilteredStream(filter)));
+    <TFiltered extends TEvent>(
+      filter: (event: TEvent) => event is TFiltered
+    ): Effect.Effect<
+      Stream.Stream<StreamEvent<TFiltered>, ParseResult.ParseError | EventStoreError>,
+      never,
+      Scope.Scope
+    > =>
+      pipe(pubsub, PubSub.subscribe, Effect.map(createQueueStream(filter)));
 
-  const createService = (pubsub: PubSub.PubSub<StreamEvent<TEvent>>): EventBusService<TEvent> => ({
-    subscribe: createSubscriber(pubsub),
-  });
+  const publishEvent =
+    (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) => (event: StreamEvent<TEvent>) =>
+      pipe(pubsub, PubSub.publish(event));
 
-  const setupPump =
+  const forkPumpAndCreateService =
     (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
-    (
-      allEventsStream: Stream.Stream<StreamEvent<TEvent>, ParseResult.ParseError | EventStoreError>
-    ) =>
+    (eventStream: Stream.Stream<StreamEvent<TEvent>, ParseResult.ParseError | EventStoreError>) =>
       pipe(
-        allEventsStream,
-        Stream.runForEach((streamEvent) => PubSub.publish(pubsub, streamEvent)),
+        eventStream,
+        Stream.runForEach(publishEvent(pubsub)),
         Effect.forkScoped,
-        Effect.as(createService(pubsub))
+        Effect.zipRight(Effect.yieldNow()),
+        Effect.as(
+          Context.make(eventBusTag, {
+            subscribe: createFilteredStream(pubsub),
+          })
+        )
       );
 
-  const setupAllWithStore =
-    (store: EventStore<TEvent>) => (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
-      pipe(store.subscribeAll(), Effect.flatMap(setupPump(pubsub)));
+  const subscribeStoreAndFork =
+    (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) => (store: EventStore<TEvent>) =>
+      pipe(store.subscribeAll(), Effect.orDie, Effect.flatMap(forkPumpAndCreateService(pubsub)));
 
-  const setupPubSub = (store: EventStore<TEvent>) =>
-    pipe(PubSub.bounded<StreamEvent<TEvent>>(1024), Effect.flatMap(setupAllWithStore(store)));
+  const subscribeAndFork = (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
+    pipe(config.store, Effect.flatMap(subscribeStoreAndFork(pubsub)));
 
-  return Layer.scoped(eventBusTag, pipe(config.store, Effect.flatMap(setupPubSub)));
+  return Layer.scopedContext(
+    pipe(PubSub.unbounded<StreamEvent<TEvent>>(), Effect.flatMap(subscribeAndFork))
+  );
 };

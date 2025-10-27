@@ -1,4 +1,4 @@
-/* eslint-disable effect/no-intermediate-effect-variables, effect/no-eta-expansion, effect/no-curried-calls, effect/no-pipe-first-arg-call, effect/no-nested-pipe -- Test code legitimately needs these patterns for readability */
+/* eslint-disable effect/no-intermediate-effect-variables, effect/no-eta-expansion, effect/no-curried-calls, effect/no-pipe-first-arg-call, effect/no-nested-pipe, effect/prefer-zip-right, effect/prefer-andThen -- Test code legitimately needs these patterns for readability */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Layer, Schema, Stream, pipe, Context, Fiber } from 'effect';
@@ -272,19 +272,13 @@ describe('EventBus', () => {
       EventStreamPosition,
     ]) =>
       pipe(
-        collectTwo(sub1),
-        Effect.fork,
+        writeEvents(store, position),
+        Effect.zipRight(Effect.yieldNow()),
+        Effect.flatMap(() => Effect.fork(collectTwo(sub1))),
         Effect.flatMap((fiber1) =>
           pipe(
-            collectTwo(sub2),
-            Effect.fork,
-            Effect.flatMap((fiber2) =>
-              pipe(
-                Effect.sleep('100 millis'),
-                Effect.andThen(writeEvents(store, position)),
-                Effect.andThen(Effect.all([Fiber.join(fiber1), Fiber.join(fiber2)]))
-              )
-            )
+            Effect.fork(collectTwo(sub2)),
+            Effect.flatMap((fiber2) => Effect.all([Fiber.join(fiber1), Fiber.join(fiber2)]))
           )
         )
       );
