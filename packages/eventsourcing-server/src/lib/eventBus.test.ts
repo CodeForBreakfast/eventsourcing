@@ -1,5 +1,3 @@
-/* eslint-disable effect/no-intermediate-effect-variables, effect/no-eta-expansion, effect/no-curried-calls, effect/no-pipe-first-arg-call, effect/no-nested-pipe, effect/prefer-zip-right, effect/prefer-andThen -- Test code legitimately needs these patterns for readability */
-
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Layer, Schema, Stream, pipe, Context, Fiber } from 'effect';
 import { EventBus, EventBusLive } from './eventBus';
