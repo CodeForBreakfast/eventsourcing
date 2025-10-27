@@ -54,5 +54,6 @@ coverage/
 .cache/
 tmp/
 temp/
+worktrees/
 
 *.local.*
