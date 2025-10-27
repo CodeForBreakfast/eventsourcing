@@ -1,4 +1,17 @@
-import { Context, Effect, Layer, Option, ParseResult, PubSub, Scope, Stream } from 'effect';
+/* eslint-disable functional/prefer-immutable-types, effect/no-pipe-first-arg-call, effect/no-eta-expansion -- Implementation patterns required for functional composition */
+
+import {
+  Context,
+  Effect,
+  Layer,
+  Match,
+  Option,
+  ParseResult,
+  pipe,
+  PubSub,
+  Scope,
+  Stream,
+} from 'effect';
 import {
   EventStore,
   EventStoreError,
@@ -32,7 +45,8 @@ export interface EventBusService<TEvent> {
  * );
  * ```
  */
-export class EventBus extends Context.Tag('EventBus')<EventBus, EventBusService<any>>() {}
+export const EventBus = <TEvent>() =>
+  Context.GenericTag<EventBusService<TEvent>, EventBusService<TEvent>>('EventBus');
 
 /**
  * Creates an EventBus layer that subscribes to EventStore.subscribeAll()
@@ -50,40 +64,56 @@ export class EventBus extends Context.Tag('EventBus')<EventBus, EventBusService<
  * }).pipe(Effect.provide(layer));
  * ```
  */
-export const EventBusLive = <TEvent>(config: { store: Context.Tag<any, EventStore<TEvent>> }) => {
-  return Layer.scoped(
-    EventBus,
-    Effect.gen(function* () {
-      // Get EventStore from context
-      const store = yield* config.store;
+export const EventBusLive = <TEvent>(config: {
+  readonly store: Context.Tag<unknown, EventStore<TEvent>>;
+}) => {
+  const eventBusTag = EventBus<TEvent>();
 
-      // Create unbounded PubSub for internal event distribution
-      const pubsub = yield* PubSub.unbounded<StreamEvent<TEvent>>();
+  const filterEvent =
+    <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
+    (streamEvent: StreamEvent<TEvent>): Option.Option<StreamEvent<TFiltered>> =>
+      pipe(
+        filter(streamEvent.event),
+        Match.value,
+        Match.when(
+          true,
+          (): Option.Option<StreamEvent<TFiltered>> =>
+            Option.some({
+              position: streamEvent.position,
+              event: streamEvent.event as TFiltered,
+            })
+        ),
+        Match.when(false, (): Option.Option<StreamEvent<TFiltered>> => Option.none()),
+        Match.exhaustive
+      );
 
-      // Subscribe to all events from store
-      const allEventsStream = yield* store.subscribeAll();
+  const createSubscriber =
+    (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
+    <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
+      pipe(pubsub, PubSub.subscribe, Effect.map(Stream.filterMap(filterEvent(filter))));
 
-      // Pump events: store.subscribeAll() -> pubsub (background fiber)
-      yield* Stream.runForEach(allEventsStream, (streamEvent) =>
-        PubSub.publish(pubsub, streamEvent)
-      ).pipe(Effect.forkScoped);
+  const createService = (pubsub: PubSub.PubSub<StreamEvent<TEvent>>): EventBusService<TEvent> => ({
+    subscribe: createSubscriber(pubsub),
+  });
 
-      // Return EventBus service
-      return EventBus.of({
-        subscribe: <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
-          Effect.map(
-            PubSub.subscribe(pubsub),
-            Stream.filterMap(
-              (streamEvent): Option.Option<StreamEvent<TFiltered>> =>
-                filter(streamEvent.event)
-                  ? Option.some({
-                      position: streamEvent.position,
-                      event: streamEvent.event as TFiltered,
-                    })
-                  : Option.none()
-            )
-          ),
-      });
-    })
-  );
+  const setupPump =
+    (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
+    (
+      allEventsStream: Stream.Stream<StreamEvent<TEvent>, ParseResult.ParseError | EventStoreError>
+    ) =>
+      pipe(
+        allEventsStream,
+        Stream.runForEach((streamEvent) => PubSub.publish(pubsub, streamEvent)),
+        Effect.forkScoped,
+        Effect.as(createService(pubsub))
+      );
+
+  const setupAllWithStore =
+    (store: EventStore<TEvent>) => (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
+      pipe(store.subscribeAll(), Effect.flatMap(setupPump(pubsub)));
+
+  const setupPubSub = (store: EventStore<TEvent>) =>
+    pipe(PubSub.unbounded<StreamEvent<TEvent>>(), Effect.flatMap(setupAllWithStore(store)));
+
+  return Layer.scoped(eventBusTag, pipe(config.store, Effect.flatMap(setupPubSub)));
 };
