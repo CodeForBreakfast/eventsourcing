@@ -113,7 +113,7 @@ export const EventBusLive = <TEvent>(config: {
       pipe(store.subscribeAll(), Effect.flatMap(setupPump(pubsub)));
 
   const setupPubSub = (store: EventStore<TEvent>) =>
-    pipe(PubSub.unbounded<StreamEvent<TEvent>>(), Effect.flatMap(setupAllWithStore(store)));
+    pipe(PubSub.bounded<StreamEvent<TEvent>>(1024), Effect.flatMap(setupAllWithStore(store)));
 
   return Layer.scoped(eventBusTag, pipe(config.store, Effect.flatMap(setupPubSub)));
 };

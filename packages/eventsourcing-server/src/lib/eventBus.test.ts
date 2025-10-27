@@ -205,7 +205,7 @@ describe('EventBus', () => {
     );
   });
 
-  it.skip('distributes same events to multiple subscribers independently', () => {
+  it.effect('distributes same events to multiple subscribers independently', () => {
     // BUG: EventBus has an issue with multiple concurrent subscribers.
     // Even without filtering, when two subscribers are created, the second subscriber
     // receives partial or no events. This suggests a fundamental issue with how
