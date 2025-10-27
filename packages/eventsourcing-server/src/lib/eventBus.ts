@@ -9,6 +9,7 @@ import {
   ParseResult,
   pipe,
   PubSub,
+  Queue,
   Scope,
   Stream,
 } from 'effect';
@@ -87,10 +88,15 @@ export const EventBusLive = <TEvent>(config: {
         Match.exhaustive
       );
 
+  const convertDequeueToFilteredStream =
+    <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
+    (dequeue: Queue.Dequeue<StreamEvent<TEvent>>) =>
+      Stream.filterMap(Stream.fromQueue(dequeue, { shutdown: true }), filterEvent(filter));
+
   const createSubscriber =
     (pubsub: PubSub.PubSub<StreamEvent<TEvent>>) =>
     <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
-      pipe(pubsub, PubSub.subscribe, Effect.map(Stream.filterMap(filterEvent(filter))));
+      pipe(PubSub.subscribe(pubsub), Effect.map(convertDequeueToFilteredStream(filter)));
 
   const createService = (pubsub: PubSub.PubSub<StreamEvent<TEvent>>): EventBusService<TEvent> => ({
     subscribe: createSubscriber(pubsub),
