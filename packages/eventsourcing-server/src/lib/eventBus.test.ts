@@ -69,19 +69,20 @@ const writeEvents = (
   events: readonly TodoEvent[]
 ) => pipe(events, Stream.fromIterable, Stream.run(store.append(position)));
 
+const verifySingleTodoCreated =
+  (expectedTitle: string) => (eventsChunk: ReadonlyArray<{ readonly event: TodoEvent }>) => {
+    const events = Array.from(eventsChunk);
+    expect(events.length).toBe(1);
+    const first = events[0];
+    expect(isTodoCreated(first.event)).toBe(true);
+    if (isTodoCreated(first.event)) {
+      expect(first.event.title).toBe(expectedTitle);
+    }
+  };
+
 describe('EventBus', () => {
   it.effect('distributes events from EventStore.subscribeAll() to subscribers', () => {
     const TodoEventBus = EventBus<TodoEvent>();
-
-    const verifyEvents = (eventsChunk: ReadonlyArray<{ readonly event: TodoEvent }>) => {
-      const events = Array.from(eventsChunk);
-      expect(events.length).toBe(1);
-      const first = events[0];
-      expect(isTodoCreated(first.event)).toBe(true);
-      if (isTodoCreated(first.event)) {
-        expect(first.event.title).toBe('Test Todo');
-      }
-    };
 
     const writeAndCollect = (
       store: EncodedStore,
@@ -111,7 +112,7 @@ describe('EventBus', () => {
       [TestEventStore, TodoEventBus, makeStreamStart('todo-123')] as const,
       Effect.all,
       Effect.flatMap(subscribeAndCollect),
-      Effect.map(verifyEvents),
+      Effect.map(verifySingleTodoCreated('Test Todo')),
       Effect.scoped,
       Effect.provide(makeCombinedLayer())
     );
@@ -119,16 +120,6 @@ describe('EventBus', () => {
 
   it.effect('only distributes events committed AFTER subscription (live-only)', () => {
     const TodoEventBus = EventBus<TodoEvent>();
-
-    const verifyEvents = (eventsChunk: ReadonlyArray<{ readonly event: TodoEvent }>) => {
-      const events = Array.from(eventsChunk);
-      expect(events.length).toBe(1);
-      const first = events[0];
-      expect(isTodoCreated(first.event)).toBe(true);
-      if (isTodoCreated(first.event)) {
-        expect(first.event.title).toBe('After Subscription');
-      }
-    };
 
     const writeBeforeEvents = ([store, positionBefore]: readonly [
       EncodedStore,
@@ -178,7 +169,7 @@ describe('EventBus', () => {
       Effect.all,
       Effect.flatMap(writeBeforeEvents),
       Effect.flatMap(subscribeAndWriteAfter),
-      Effect.map(verifyEvents),
+      Effect.map(verifySingleTodoCreated('After Subscription')),
       Effect.scoped,
       Effect.provide(makeCombinedLayer())
     );
