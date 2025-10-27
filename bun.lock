@@ -152,7 +152,7 @@
     },
     "packages/eventsourcing-server": {
       "name": "@codeforbreakfast/eventsourcing-server",
-      "version": "0.1.0",
+      "version": "0.2.0",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
       },
