@@ -1,0 +1,82 @@
+{
+  "name": "@codeforbreakfast/eventsourcing-server",
+  "version": "0.1.0",
+  "description": "Server-side building blocks for event sourcing applications",
+  "type": "module",
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist",
+    "src"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node --format esm --external effect --external @effect/* --external @codeforbreakfast/* && bun x tsc",
+    "test": "bun test",
+    "test:watch": "bun test --watch",
+    "lint": "eslint . --ext .ts,.tsx",
+    "typecheck": "tsc --noEmit",
+    "clean": "rm -rf dist",
+    "publish:package": "npm publish --access public",
+    "validate:pack": "bun pm pack --dry-run",
+    "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
+  },
+  "keywords": [
+    "event-sourcing",
+    "event-store",
+    "cqrs",
+    "effect",
+    "effect-ts",
+    "functional-programming",
+    "fp",
+    "typescript",
+    "type-safe",
+    "server-side",
+    "event-bus",
+    "domain-driven-design",
+    "ddd",
+    "composable",
+    "resilient"
+  ],
+  "author": "Code for Breakfast",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/CodeForBreakfast/eventsourcing",
+    "directory": "packages/eventsourcing-server"
+  },
+  "bugs": {
+    "url": "https://github.com/codeforbreakfast/eventsourcing/issues"
+  },
+  "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
+  "peerDependencies": {
+    "effect": "^3.17.0"
+  },
+  "dependencies": {
+    "@codeforbreakfast/eventsourcing-store": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "24.9.1",
+    "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
+    "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
+    "@codeforbreakfast/buntest": "workspace:*",
+    "effect": "3.18.4",
+    "typescript": "5.9.3",
+    "eslint": "9.38.0"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "sideEffects": false,
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
