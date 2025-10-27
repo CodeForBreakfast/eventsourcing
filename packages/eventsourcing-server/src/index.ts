@@ -1,1 +1,1 @@
-// EventBus will be exported here
+export { EventBus } from './lib/eventBus';
