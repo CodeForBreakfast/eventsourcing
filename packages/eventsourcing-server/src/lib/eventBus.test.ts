@@ -206,17 +206,6 @@ describe('EventBus', () => {
   });
 
   it.effect('distributes same events to multiple subscribers independently', () => {
-    // BUG: EventBus has an issue with multiple concurrent subscribers.
-    // Even without filtering, when two subscribers are created, the second subscriber
-    // receives partial or no events. This suggests a fundamental issue with how
-    // PubSub.subscribe creates Dequeues or how Stream.filterMap interacts with them.
-    //
-    // Investigation needed:
-    // 1. Verify PubSub.subscribe creates independent Dequeues for each subscriber
-    // 2. Check if Stream.filterMap on Dequeue maintains proper backpressure
-    // 3. Test if multiple PubSub.subscribe calls work correctly with unbounded PubSub
-    //
-    // Simplified test without filtering still fails - second sub gets 1 event instead of 2
     const TodoEventBus = EventBus<TodoEvent>();
     const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
 
