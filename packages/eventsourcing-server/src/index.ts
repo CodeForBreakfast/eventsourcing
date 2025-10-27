@@ -1,1 +1,1 @@
-export { EventBus } from './lib/eventBus';
+export { EventBus, EventBusLive } from './lib/eventBus';
