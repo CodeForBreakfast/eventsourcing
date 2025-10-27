@@ -1,4 +1,4 @@
-/* eslint-disable effect/no-intermediate-effect-variables, effect/no-nested-pipe, effect/no-nested-pipes, effect/no-pipe-first-arg-call, effect/no-eta-expansion, effect/no-curried-calls -- Test code legitimately needs these patterns for readability */
+/* eslint-disable effect/no-intermediate-effect-variables, effect/no-eta-expansion, effect/no-curried-calls, effect/no-pipe-first-arg-call, effect/no-nested-pipe, effect/no-nested-pipes -- Test code legitimately needs these patterns for readability */
 
 import { describe, it, expect } from '@codeforbreakfast/buntest';
 import { Effect, Layer, Schema, Stream, pipe, Context } from 'effect';
@@ -51,48 +51,63 @@ describe('EventBus', () => {
       eventNumber: 0,
     } as EventStreamPosition);
 
-    const testProgram = pipe(
-      Effect.all([TestEventStore, TodoEventBus]),
-      Effect.flatMap(([store, eventBus]) =>
-        pipe(
-          eventBus.subscribe(isTodoCreated),
-          Effect.flatMap((subscription) =>
-            pipe(
-              makePosition,
-              Effect.flatMap((position) =>
-                pipe(
-                  Stream.make<TodoEvent>(
-                    { _tag: 'TodoCreated', id: 'todo-123', title: 'Test Todo' },
-                    { _tag: 'TodoCompleted', id: 'todo-123' }
-                  ),
-                  Stream.run(store.append(position)),
-                  Effect.andThen(
-                    pipe(
-                      subscription,
-                      Stream.take(1),
-                      Stream.timeout('1 second'),
-                      Stream.runCollect
-                    )
-                  )
-                )
-              )
-            )
-          )
-        )
-      ),
-      Effect.map((events) => {
-        expect(events.length).toBe(1);
-        const first = events[0];
-        expect(isTodoCreated(first.event)).toBe(true);
-        if (isTodoCreated(first.event)) {
-          expect(first.event.title).toBe('Test Todo');
-        }
-      })
-    );
+    const writeEvents = (
+      store: ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      position: EventStreamPosition
+    ) =>
+      pipe(
+        Stream.make<TodoEvent>(
+          { _tag: 'TodoCreated', id: 'todo-123', title: 'Test Todo' },
+          { _tag: 'TodoCompleted', id: 'todo-123' }
+        ),
+        Stream.run(store.append(position))
+      );
+
+    const collectEvents = (subscription: Stream.Stream<{ readonly event: TodoEvent }>) =>
+      pipe(subscription, Stream.take(1), Stream.timeout('1 second'), Stream.runCollect);
+
+    const verifyEvents = (eventsChunk: ReadonlyArray<{ readonly event: TodoEvent }>) => {
+      const events = Array.from(eventsChunk);
+      expect(events.length).toBe(1);
+      const first = events[0];
+      expect(isTodoCreated(first.event)).toBe(true);
+      if (isTodoCreated(first.event)) {
+        expect(first.event.title).toBe('Test Todo');
+      }
+    };
+
+    const subscribeAndGetPosition = ([store, eventBus, position]: readonly [
+      ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      ReturnType<typeof EventBus<TodoEvent>>,
+      EventStreamPosition,
+    ]) =>
+      Effect.all([
+        Effect.succeed(store),
+        eventBus.subscribe(isTodoCreated),
+        Effect.succeed(position),
+      ]);
+
+    const writeAndCollect = ([store, subscription, position]: readonly [
+      ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>,
+      Stream.Stream<{ readonly event: TodoEvent }>,
+      EventStreamPosition,
+    ]) => Effect.all([writeEvents(store, position), Effect.succeed(subscription)]);
+
+    const collectFromSubscription = ([, subscription]: readonly [
+      unknown,
+      Stream.Stream<{ readonly event: TodoEvent }>,
+    ]) => collectEvents(subscription);
+
+    const eventBusWithStore = pipe(eventBusLayer, Layer.provide(testStoreLayer));
+    const combinedLayer = Layer.merge(testStoreLayer, eventBusWithStore);
 
     return pipe(
-      testProgram,
-      Effect.provide(Layer.merge(testStoreLayer, eventBusLayer)),
+      Effect.all([TestEventStore, TodoEventBus, makePosition]),
+      Effect.flatMap(subscribeAndGetPosition),
+      Effect.flatMap(writeAndCollect),
+      Effect.flatMap(collectFromSubscription),
+      Effect.map(verifyEvents),
+      Effect.provide(combinedLayer),
       Effect.scoped
     );
   });
