@@ -274,6 +274,33 @@ const verifySuccessResult = (streamId: string, eventNumber: number) => (result: 
   }
 };
 
+const verifyParsedErrorMatches =
+  (expectedErrorTag: string, expectedErrors?: readonly string[]) =>
+  (parsedError: { readonly _tag: string; readonly validationErrors?: readonly string[] }) =>
+    pipe(
+      parsedError,
+      Match.value,
+      Match.when({ _tag: expectedErrorTag }, (matched) => {
+        if (expectedErrors) {
+          expect(matched.validationErrors).toEqual(expectedErrors);
+        }
+        return matched;
+      }),
+      Match.orElse(() => {
+        throw new Error(`Expected error tag "${expectedErrorTag}"`);
+      })
+    );
+
+const parseAndVerifyError =
+  (expectedErrorTag: string, expectedErrors?: readonly string[]) =>
+  (error: { readonly message: string }) => {
+    const parsedError = JSON.parse(error.message) as {
+      readonly _tag: string;
+      readonly validationErrors?: readonly string[];
+    };
+    return pipe(parsedError, verifyParsedErrorMatches(expectedErrorTag, expectedErrors));
+  };
+
 const verifyFailureResult =
   (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) => {
     expect(isCommandFailure(result)).toBe(true);
@@ -281,17 +308,7 @@ const verifyFailureResult =
       pipe(
         result.error,
         Match.value,
-        Match.tag('UnknownError', (error) => {
-          const parsedError = JSON.parse(error.message) as {
-            readonly _tag: string;
-            readonly validationErrors?: readonly string[];
-          };
-          // eslint-disable-next-line effect/no-direct-tag-access -- Validating serialized error JSON structure
-          expect(parsedError._tag).toBe(expectedErrorTag);
-          if (expectedErrors) {
-            expect(parsedError.validationErrors).toEqual(expectedErrors);
-          }
-        }),
+        Match.tag('UnknownError', parseAndVerifyError(expectedErrorTag, expectedErrors)),
         Match.orElse(() => {
           throw new Error('Expected UnknownError');
         })
@@ -1039,13 +1056,6 @@ describe('Protocol Behavior Tests', () => {
       )
     );
 
-    const collectFirstBatch = pipe(
-      'persistent-stream',
-      subscribe,
-      Effect.flatMap(collectEventStream(2)),
-      Effect.map(Array.from<Event>)
-    );
-
     const verifyFirstBatch = (firstBatch: readonly Event[]) => {
       expect(firstBatch).toHaveLength(2);
       expect(firstBatch[0]!.type).toBe('EventBeforeResubscribe1');
@@ -1077,12 +1087,19 @@ describe('Protocol Behavior Tests', () => {
       return collectResubscribeBatch(firstBatch);
     };
 
+    const collectFirstBatchForResubscription = () =>
+      pipe(
+        'persistent-stream',
+        subscribe,
+        Effect.flatMap(collectEventStream(2)),
+        Effect.map(Array.from<Event>)
+      );
+
     const runResubscriptionTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test resubscription behavior across scope boundaries
-        collectFirstBatch,
+        collectFirstBatchForResubscription(),
         Effect.scoped,
         Effect.flatMap(verifyFirstBatchAndResubscribe),
         Effect.map(verifyResubscribeBatch),
@@ -1296,29 +1313,29 @@ describe('Protocol Behavior Tests', () => {
       expect(eventArray[0]!.type).toBe('TestEvent');
     };
 
-    const subscribeAndVerifyFirstConnection = pipe(
-      'test-stream',
-      subscribe,
-      Effect.flatMap(collectEventStream(1)),
-      Effect.map(verifyTestEventBeforeDisconnect)
-    );
+    const subscribeAndVerifyBeforeDisconnect = () =>
+      pipe(
+        'test-stream',
+        subscribe,
+        Effect.flatMap(collectEventStream(1)),
+        Effect.map(verifyTestEventBeforeDisconnect)
+      );
 
-    const subscribeAndVerifyAfterReconnection = pipe(
-      'test-stream',
-      subscribe,
-      Effect.flatMap(collectEventStream(1)),
-      Effect.map(verifyTestEventAfterReconnect)
-    );
+    const subscribeAndVerifyAfterReconnect = () =>
+      pipe(
+        'test-stream',
+        subscribe,
+        Effect.flatMap(collectEventStream(1)),
+        Effect.map(verifyTestEventAfterReconnect)
+      );
 
     const runSubscriptionCleanupTest = (
       clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
     ) =>
       pipe(
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify cleanup behavior between connection cycles
-        subscribeAndVerifyFirstConnection,
+        subscribeAndVerifyBeforeDisconnect(),
         Effect.scoped,
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify subscription works after reconnection
-        Effect.andThen(subscribeAndVerifyAfterReconnection),
+        Effect.andThen(subscribeAndVerifyAfterReconnect()),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -1604,17 +1621,6 @@ describe('Protocol Behavior Tests', () => {
       expect(receivedEvent.timestamp).toEqual(new Date('2024-01-15T14:30:00Z'));
     };
 
-    const subscribeAndVerifyProductEvents = (
-      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
-    ) =>
-      pipe(
-        'product-789',
-        subscribe,
-        Effect.flatMap(collectProductEvents),
-        Effect.map(verifyProductEvent),
-        Effect.provide(ProtocolLive(clientTransport))
-      );
-
     const productStreamHandler = (streamId: string) =>
       streamId === 'product-789'
         ? [
@@ -1634,6 +1640,17 @@ describe('Protocol Behavior Tests', () => {
             },
           ]
         : [];
+
+    const subscribeAndVerifyProductEvents = (
+      clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>
+    ) =>
+      pipe(
+        'product-789',
+        subscribe,
+        Effect.flatMap(collectProductEvents),
+        Effect.map(verifyProductEvent),
+        Effect.provide(ProtocolLive(clientTransport))
+      );
 
     const runPublishEventTest = (
       server: ReadonlyDeep<InMemoryServer>,
@@ -1981,25 +1998,17 @@ describe('Protocol Behavior Tests', () => {
     const drainEventStreamPipe = <E, R>(eventStream: Stream.Stream<Event, E, R>) =>
       pipe(eventStream, Stream.take(0), Stream.runDrain);
 
-    const subscribeAndDrainUser123 = pipe(
-      'user-123',
-      subscribe,
-      Effect.flatMap(drainEventStreamPipe)
-    );
+    const subscribeAndDrainUser123 = () =>
+      pipe('user-123', subscribe, Effect.flatMap(drainEventStreamPipe));
 
-    const subscribeAndDrainUser456 = pipe(
-      'user-456',
-      subscribe,
-      Effect.flatMap(drainEventStreamPipe)
-    );
+    const subscribeAndDrainUser456 = () =>
+      pipe('user-456', subscribe, Effect.flatMap(drainEventStreamPipe));
 
     const runCleanupTest = (clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>) =>
       pipe(
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to test subscription cleanup across scope boundaries
-        subscribeAndDrainUser123,
+        subscribeAndDrainUser123(),
         Effect.scoped,
-        // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to verify new subscription works after previous cleanup
-        Effect.andThen(subscribeAndDrainUser456),
+        Effect.andThen(subscribeAndDrainUser456()),
         Effect.provide(ProtocolLive(clientTransport))
       );
 
@@ -2117,12 +2126,13 @@ describe('Protocol Behavior Tests', () => {
           )
         );
 
-      const processFirstCommand = pipe(
-        Stream.take(serverProtocol.onWireCommand, 1),
-        Stream.runCollect,
-        Effect.flatMap(verifySpanAndSendResultForCommand),
-        Effect.fork
-      );
+      const processFirstCommand = () =>
+        pipe(
+          Stream.take(serverProtocol.onWireCommand, 1),
+          Stream.runCollect,
+          Effect.flatMap(verifySpanAndSendResultForCommand),
+          Effect.fork
+        );
 
       const sendCommandWithSpan = (clientSpan: Tracer.Span) =>
         pipe(
@@ -2135,14 +2145,14 @@ describe('Protocol Behavior Tests', () => {
           })
         );
 
-      const clientWork = pipe(
-        Effect.currentSpan,
-        Effect.flatMap(sendCommandWithSpan),
-        Effect.withSpan('client-test-span')
-      );
+      const clientWork = () =>
+        pipe(
+          Effect.currentSpan,
+          Effect.flatMap(sendCommandWithSpan),
+          Effect.withSpan('client-test-span')
+        );
 
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Test pattern: effect stored to fork server-side command processing
-      return pipe(processFirstCommand, Effect.andThen(clientWork));
+      return pipe(processFirstCommand(), Effect.andThen(clientWork()));
     };
 
     const runServerProtocolWithTraceId = (

@@ -1,6 +1,6 @@
 import { Effect, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
-import { describe, expect, expectTrue, it, silentLogger } from '@codeforbreakfast/buntest';
+import { describe, expectTrue, it, silentLogger } from '@codeforbreakfast/buntest';
 import {
   ConnectionManagerService,
   DefaultConnectionConfig,
@@ -16,9 +16,15 @@ const verifyApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
     Effect.flatMap((apiPort) => verifyApiPortIsNumber(typeof apiPort === 'number'))
   );
 
+const verifyManagerIsDefined = expectTrue('Expected manager to be defined');
+
 const verifyManagerAndApiPort = (manager: ReadonlyDeep<ConnectionManagerService>) =>
-  // eslint-disable-next-line effect/no-eta-expansion -- Thunk required for Effect.sync to defer execution
-  pipe(() => expect(manager).toBeDefined(), Effect.sync, Effect.andThen(verifyApiPort(manager)));
+  pipe(
+    manager,
+    (m) => m !== undefined,
+    verifyManagerIsDefined,
+    Effect.andThen(verifyApiPort(manager))
+  );
 
 describe('ConnectionManager', () => {
   // Single minimal test to ensure the module loads

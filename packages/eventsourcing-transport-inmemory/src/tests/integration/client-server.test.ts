@@ -205,13 +205,7 @@ describe('In-Memory Client-Server Specific Tests', () => {
   }) => pipe(client.connectionState, Stream.take(1), Stream.runHead);
 
   const collectServerConnections = (server: InMemoryServer) =>
-    pipe(
-      server.connections,
-      Stream.take(2),
-      Stream.runCollect,
-      // eslint-disable-next-line effect/no-eta-expansion -- Lambda preserves type information for TypeScript inference
-      Effect.map((chunk) => Array.from(chunk))
-    );
+    pipe(server.connections, Stream.take(2), Stream.runCollect, Effect.map(Array.from));
 
   const assertStateIsConnected = assertEqual('connected');
 
@@ -224,24 +218,23 @@ describe('In-Memory Client-Server Specific Tests', () => {
   const assertDifferentClientIds = expectTrue('Expected different clientIds');
 
   const verifyBothStatesConnected = (states: readonly [ConnectionState, ConnectionState]) =>
-    pipe(
-      states[0],
-      assertStateIsConnected,
-      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-      Effect.andThen(pipe(states[1], assertStateIsConnected))
-    );
+    pipe(states[0], assertStateIsConnected, Effect.andThen(assertStateIsConnected(states[1])));
 
   const verifyClientIdsAreDifferent = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
     pipe(connections[0]!.clientId !== connections[1]!.clientId, assertDifferentClientIds);
+
+  const assertFirstClientIdExists = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+    pipe(connections[0]!.clientId !== undefined, assertFirstClientIdDefined);
+
+  const assertSecondClientIdExists = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
+    pipe(connections[1]!.clientId !== undefined, assertSecondClientIdDefined);
 
   const verifyConnectionsArray = (connections: ReadonlyArray<{ readonly clientId: string }>) =>
     pipe(
       connections.length === 2,
       assertHasTwoConnections,
-      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-      Effect.andThen(pipe(connections[0]!.clientId !== undefined, assertFirstClientIdDefined)),
-      // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-      Effect.andThen(pipe(connections[1]!.clientId !== undefined, assertSecondClientIdDefined)),
+      Effect.andThen(assertFirstClientIdExists(connections)),
+      Effect.andThen(assertSecondClientIdExists(connections)),
       Effect.andThen(verifyClientIdsAreDifferent(connections))
     );
 
@@ -303,22 +296,27 @@ describe('In-Memory Client-Server Specific Tests', () => {
       messageStream,
       Stream.take(1),
       Stream.runCollect,
-      // eslint-disable-next-line effect/no-eta-expansion -- Lambda preserves type information for TypeScript inference
-      Effect.map((chunk) => Array.from(chunk)),
+      Effect.map(Array.from),
       Effect.timeout(100)
     );
 
   const assertHasOneMessage = expectTrue('Expected 1 message');
+
+  const assertMessageIdMatches = (expectedId: string, messages: ReadonlyArray<TransportMessage>) =>
+    pipe(messages[0]!.id, assertEqual(expectedId));
+
+  const assertMessageTypeMatches = (
+    expectedType: string,
+    messages: ReadonlyArray<TransportMessage>
+  ) => pipe(messages[0]!.type, assertEqual(expectedType));
 
   const verifyTestMessage =
     (testMessage: TransportMessage) => (messages: ReadonlyArray<TransportMessage>) =>
       pipe(
         messages.length === 1,
         assertHasOneMessage,
-        // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-        Effect.andThen(pipe(messages[0]!.id, assertEqual(testMessage.id))),
-        // eslint-disable-next-line effect/no-nested-pipes, effect/no-nested-pipe -- Nested pipe required to apply curried assertion function
-        Effect.andThen(pipe(messages[0]!.type, assertEqual(testMessage.type)))
+        Effect.andThen(assertMessageIdMatches(testMessage.id, messages)),
+        Effect.andThen(assertMessageTypeMatches(testMessage.type, messages))
       );
 
   const collectWithServerAndMessage =

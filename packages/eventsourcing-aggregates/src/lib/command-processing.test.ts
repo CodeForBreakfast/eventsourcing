@@ -13,7 +13,6 @@ import {
   type CommandFailure,
 } from '@codeforbreakfast/eventsourcing-commands';
 import { CommandProcessingError, CommandRoutingError } from './commandProcessingErrors';
-import { CommandProcessingService } from './commandProcessingService';
 import { CommandHandler, CommandRouter } from './commandHandling';
 import { createCommandProcessingService } from './commandProcessingFactory';
 
@@ -327,20 +326,16 @@ describe('Command Processing Service', () => {
 
   it.effect('should work as Effect service', () => {
     const handlers = new Map([['user:CreateUser', successHandler]]);
-    const router = createMockRouter(handlers);
-    /* eslint-disable effect/no-intermediate-effect-variables -- Effect and Layer variables needed to avoid nested pipes */
-    const serviceEffect = pipe(router, createCommandProcessingService(TestEventStore));
-    const ServiceLayer = Layer.effect(CommandProcessingService, serviceEffect);
 
     return pipe(
-      CommandProcessingService,
+      handlers,
+      createMockRouter,
+      createCommandProcessingService(TestEventStore),
       Effect.flatMap((service) => service.processCommand(testCommand)),
-      Effect.map((result) => {
+      Effect.tap((result) => {
         expect(isCommandSuccess(result)).toBe(true);
       }),
-      Effect.provide(ServiceLayer),
       Effect.provide(testLayer)
     );
-    /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable after test completes */
   });
 });

@@ -220,18 +220,15 @@ describe('Bridge notification publishing', () => {
     );
   });
 
-  /* eslint-disable effect/no-intermediate-effect-variables -- Test setup requires intermediate variable to avoid contradicting pipe-first-arg-call rule */
-  it('should publish events from different streams to all-events subscribers', () => {
-    const streamIds = Effect.all({
-      streamId1: decodeStreamId(randomId()),
-      streamId2: decodeStreamId(randomId()),
-    });
-    return pipe(
-      streamIds,
+  it('should publish events from different streams to all-events subscribers', () =>
+    pipe(
+      {
+        streamId1: decodeStreamId(randomId()),
+        streamId2: decodeStreamId(randomId()),
+      },
+      Effect.all,
       Effect.flatMap(({ streamId1, streamId2 }) => runMultiStreamTest(streamId1, streamId2)),
       Effect.provide(TestLayer),
       Effect.runPromise
-    );
-  });
-  /* eslint-enable effect/no-intermediate-effect-variables -- Re-enable rule after test */
+    ));
 });
