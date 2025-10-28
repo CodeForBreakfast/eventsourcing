@@ -23,6 +23,7 @@ import {
 import {
   WireCommand,
   CommandResult,
+  CommandFailure,
   isCommandSuccess,
   isCommandFailure,
 } from '@codeforbreakfast/eventsourcing-commands';
@@ -266,67 +267,117 @@ const createTestServerProtocol = (
 // Test Helper Functions
 // ============================================================================
 
-const verifySuccessResult = (streamId: string, eventNumber: number) => (result: CommandResult) => {
-  expect(isCommandSuccess(result)).toBe(true);
-  if (isCommandSuccess(result)) {
-    expect(result.position.streamId).toEqual(unsafeCreateStreamId(streamId));
-    expect(result.position.eventNumber).toBe(eventNumber);
-  }
-};
+const verifySuccessResult =
+  (streamId: string, eventNumber: number) =>
+  (result: CommandResult): Effect.Effect<void, Error> =>
+    pipe(
+      result,
+      Match.value,
+      Match.tag('Success', (success) => {
+        const expectedStreamId = unsafeCreateStreamId(streamId);
+        if (success.position.streamId !== expectedStreamId) {
+          return Effect.fail(
+            new Error(
+              `StreamId mismatch. Expected: ${expectedStreamId}, Got: ${success.position.streamId}`
+            )
+          );
+        }
 
-const verifyParsedErrorMatches =
+        if (success.position.eventNumber !== eventNumber) {
+          return Effect.fail(
+            new Error(
+              `EventNumber mismatch. Expected: ${eventNumber}, Got: ${success.position.eventNumber}`
+            )
+          );
+        }
+
+        return Effect.void;
+      }),
+      Match.orElse(() => Effect.fail(new Error('Expected command success but got failure')))
+    );
+
+const matchParsedError =
   (expectedErrorTag: string, expectedErrors?: readonly string[]) =>
-  (parsedError: { readonly _tag: string; readonly validationErrors?: readonly string[] }) =>
+  (parsedError: {
+    readonly _tag: string;
+    readonly validationErrors?: readonly string[];
+  }): Effect.Effect<void, Error> =>
     pipe(
       parsedError,
       Match.value,
-      Match.when({ _tag: expectedErrorTag }, (matched) => {
-        if (expectedErrors) {
-          expect(matched.validationErrors).toEqual(expectedErrors);
-        }
-        return matched;
-      }),
-      Match.orElse(() => {
-        throw new Error(`Expected error tag "${expectedErrorTag}"`);
-      })
+      Match.when({ _tag: expectedErrorTag }, (matched) =>
+        Effect.if(
+          Boolean(
+            expectedErrors &&
+              JSON.stringify(matched.validationErrors) !== JSON.stringify(expectedErrors)
+          ),
+          {
+            onTrue: () =>
+              Effect.fail(
+                new Error(
+                  `Validation errors mismatch. Expected: ${JSON.stringify(expectedErrors)}, Got: ${JSON.stringify(matched.validationErrors)}`
+                )
+              ),
+            onFalse: () => Effect.void,
+          }
+        )
+      ),
+      Match.orElse(() =>
+        Effect.fail(new Error(`Expected error tag "${expectedErrorTag}" but got different tag`))
+      )
     );
 
-const parseAndVerifyError =
+const parseErrorMessage = (
+  error: { readonly message: string },
+  expectedErrorTag: string,
+  expectedErrors?: readonly string[]
+): Effect.Effect<void, Error> =>
+  pipe(
+    error.message,
+    (message) =>
+      Effect.try({
+        try: () =>
+          JSON.parse(message) as {
+            readonly _tag: string;
+            readonly validationErrors?: readonly string[];
+          },
+        catch: (parseError) => new Error(`Failed to parse error message: ${String(parseError)}`),
+      }),
+    Effect.flatMap(matchParsedError(expectedErrorTag, expectedErrors))
+  );
+
+const matchFailureError =
   (expectedErrorTag: string, expectedErrors?: readonly string[]) =>
-  (error: { readonly message: string }) => {
-    const parsedError = JSON.parse(error.message) as {
-      readonly _tag: string;
-      readonly validationErrors?: readonly string[];
-    };
-    return pipe(parsedError, verifyParsedErrorMatches(expectedErrorTag, expectedErrors));
-  };
+  (failure: { readonly error: CommandFailure['error'] }): Effect.Effect<void, Error> =>
+    pipe(
+      failure.error,
+      Match.value,
+      Match.tag('UnknownError', (error) =>
+        parseErrorMessage(error, expectedErrorTag, expectedErrors)
+      ),
+      Match.orElse(() => Effect.fail(new Error('Expected UnknownError')))
+    );
 
 const verifyFailureResult =
-  (expectedErrorTag: string, expectedErrors?: readonly string[]) => (result: CommandResult) => {
-    expect(isCommandFailure(result)).toBe(true);
-    if (isCommandFailure(result)) {
-      pipe(
-        result.error,
-        Match.value,
-        Match.tag('UnknownError', parseAndVerifyError(expectedErrorTag, expectedErrors)),
-        Match.orElse(() => {
-          throw new Error('Expected UnknownError');
-        })
-      );
-    }
-  };
+  (expectedErrorTag: string, expectedErrors?: readonly string[]) =>
+  (result: CommandResult): Effect.Effect<void, Error> =>
+    pipe(
+      result,
+      Match.value,
+      Match.tag('Failure', matchFailureError(expectedErrorTag, expectedErrors)),
+      Match.orElse(() => Effect.fail(new Error('Expected command failure but got success')))
+    );
 
 const sendCommandWithVerification = (
   command: ReadonlyDeep<WireCommand>,
   clientTransport: ReadonlyDeep<Server.ClientConnection['transport']>,
-  verify: (result: CommandResult) => void
+  verify: (result: CommandResult) => Effect.Effect<void, Error>
 ) =>
   pipe(
     command,
     sendWireCommand,
-    Effect.map(verify),
-    Effect.provide(ProtocolLive(clientTransport)),
-    Effect.asVoid
+    Effect.flatMap(verify),
+    Effect.provide(ProtocolLive(clientTransport))
   );
 
 const sendMultipleCommands = (
