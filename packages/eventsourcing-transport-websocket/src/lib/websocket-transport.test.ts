@@ -47,9 +47,9 @@ const createMockWebSocket =
         listeners.forEach((listener) => {
           try {
             listener(event);
-          } catch (error) {
-            // eslint-disable-next-line effect/prefer-effect-platform -- Test helper mock uses console
-            console.error('Error in event listener:', error);
+          } catch {
+            // Silently ignore listener errors in test mock to prevent one failing listener
+            // from breaking others. Real WebSocket implementations handle this internally.
           }
         });
       }
