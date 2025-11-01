@@ -272,4 +272,77 @@ describe('EventBus', () => {
       Effect.map((result) => expect(result).toBe('subscribed'))
     );
   });
+
+  it.effect('late-arriving subscriber only receives events after subscription', () => {
+    const TodoEventBus = EventBus<TodoEvent>();
+    const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
+
+    const verifyLateSubscriber = (events: ReadonlyArray<{ readonly event: TodoEvent }>) => {
+      const arr = Array.from(events);
+      expect(arr.length).toBe(1);
+      const first = arr[0];
+      expect(isTodoCreated(first.event)).toBe(true);
+      if (isTodoCreated(first.event)) {
+        expect(first.event.title).toBe('After Late Subscription');
+      }
+    };
+
+    const writeEarlyEvents = (
+      store: EncodedStore,
+      position1: EventStreamPosition,
+      _sub1: Stream.Stream<{ readonly event: TodoEvent }>
+    ) =>
+      pipe(
+        writeEvents(store, position1, [
+          { _tag: 'TodoCreated', id: 'todo-early', title: 'Before Late Subscription' },
+        ]),
+        Effect.zipRight(Effect.yieldNow())
+      );
+
+    const writeLateEventsAndCollect = (
+      store: EncodedStore,
+      position2: EventStreamPosition,
+      sub2: Stream.Stream<{ readonly event: TodoEvent }>
+    ) =>
+      pipe(
+        writeEvents(store, position2, [
+          { _tag: 'TodoCreated', id: 'todo-late', title: 'After Late Subscription' },
+        ]),
+        Effect.zipRight(Effect.yieldNow()),
+        Effect.andThen(collectEvents(sub2))
+      );
+
+    const subscribeLateAndCollect = (
+      eventBus: ReturnType<typeof EventBus<TodoEvent>>,
+      store: EncodedStore,
+      position2: EventStreamPosition
+    ) =>
+      pipe(
+        acceptAll,
+        eventBus.subscribe,
+        Effect.flatMap((sub2) => writeLateEventsAndCollect(store, position2, sub2))
+      );
+
+    const subscribeEarlyAndWriteEvents = ([store, eventBus, position1, position2]: readonly [
+      EncodedStore,
+      ReturnType<typeof EventBus<TodoEvent>>,
+      EventStreamPosition,
+      EventStreamPosition,
+    ]) =>
+      pipe(
+        acceptAll,
+        eventBus.subscribe,
+        Effect.flatMap((sub1) => writeEarlyEvents(store, position1, sub1)),
+        Effect.andThen(subscribeLateAndCollect(eventBus, store, position2))
+      );
+
+    return pipe(
+      [TestEventStore, TodoEventBus, makeStreamStart('todo-early'), makeStreamStart('todo-late')] as const,
+      Effect.all,
+      Effect.flatMap(subscribeEarlyAndWriteEvents),
+      Effect.map(verifyLateSubscriber),
+      Effect.scoped,
+      Effect.provide(makeCombinedLayer())
+    );
+  });
 });
