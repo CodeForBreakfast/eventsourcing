@@ -71,7 +71,7 @@
     "@codeforbreakfast/eventsourcing-transport": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "24.9.1",
+    "@types/node": "24.9.2",
     "effect": "3.18.4",
     "typescript": "5.9.3",
     "eslint": "9.38.0"
