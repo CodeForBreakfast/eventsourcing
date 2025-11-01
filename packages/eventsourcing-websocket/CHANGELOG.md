@@ -1,5 +1,17 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.3.15
+
+### Patch Changes
+
+- [#337](https://github.com/CodeForBreakfast/eventsourcing/pull/337) [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4) Thanks [@GraemeF](https://github.com/GraemeF)! - Bump version for dependency update
+
+  Internal dependency `@codeforbreakfast/eventsourcing-protocol` was updated with test refactorings. No functional changes to this package.
+
+- Updated dependencies [[`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4), [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4)]:
+  - @codeforbreakfast/eventsourcing-protocol@0.4.7
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.5.5
+
 ## 0.3.14
 
 ### Patch Changes
