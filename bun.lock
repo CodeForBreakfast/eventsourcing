@@ -85,7 +85,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -103,7 +103,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -120,7 +120,7 @@
         "type-fest": "5.1.0",
       },
       "devDependencies": {
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -141,7 +141,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -160,7 +160,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -177,7 +177,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -197,7 +197,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.81.1",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -216,7 +216,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -240,7 +240,7 @@
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.81.1",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -259,7 +259,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -275,7 +275,7 @@
         "type-fest": "5.1.0",
       },
       "devDependencies": {
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -294,7 +294,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -314,7 +314,7 @@
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "bun-types": "1.3.1",
         "effect": "3.18.4",
         "eslint": "9.38.0",
@@ -333,7 +333,7 @@
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.9.1",
+        "@types/node": "24.9.2",
         "effect": "3.18.4",
         "eslint": "9.38.0",
         "typescript": "5.9.3",
@@ -630,7 +630,7 @@
 
     "@types/json5": ["@types/json5@0.0.29", "", {}, "sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ=="],
 
-    "@types/node": ["@types/node@24.9.1", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-QoiaXANRkSXK6p0Duvt56W208du4P9Uye9hWLWgGMDTEoKPhuenzNcC4vGUmrNkiOKTlIrBoyNQYNpSwfEZXSg=="],
+    "@types/node": ["@types/node@24.9.2", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-uWN8YqxXxqFMX2RqGOrumsKeti4LlmIMIyV0lgut4jx7KQBcBiW6vkDtIBvHnHIquwNfJhk8v2OtmO8zXWHfPA=="],
 
     "@types/react": ["@types/react@19.1.13", "", { "dependencies": { "csstype": "^3.0.2" } }, "sha512-hHkbU/eoO3EG5/MZkuFSKmYqPbSVk5byPFa3e7y/8TybHiLMACgI8seVYlicwk7H5K/rI2px9xrQp/C+AUDTiQ=="],
 
@@ -1501,6 +1501,8 @@
     "@typescript-eslint/typescript-estree/minimatch": ["minimatch@9.0.5", "", { "dependencies": { "brace-expansion": "^2.0.1" } }, "sha512-G6T0ZX48xgozx7587koeX9Ys2NYy6Gmv//P89sEte9V9whIapMNF4idKxnW2QtCcLiTWlb/wfCabAtAFWhhBow=="],
 
     "@typescript-eslint/typescript-estree/semver": ["semver@7.7.3", "", { "bin": { "semver": "bin/semver.js" } }, "sha512-SdsKMrI9TdgjdweUSR9MweHA4EJ8YxHn8DFaDisvhVlUOe4BF1tLD7GAj0lIqWVl+dPb/rExr0Btby5loQm20Q=="],
+
+    "bun-types/@types/node": ["@types/node@24.9.1", "", { "dependencies": { "undici-types": "~7.16.0" } }, "sha512-QoiaXANRkSXK6p0Duvt56W208du4P9Uye9hWLWgGMDTEoKPhuenzNcC4vGUmrNkiOKTlIrBoyNQYNpSwfEZXSg=="],
 
     "cli-truncate/string-width": ["string-width@8.1.0", "", { "dependencies": { "get-east-asian-width": "^1.3.0", "strip-ansi": "^7.1.0" } }, "sha512-Kxl3KJGb/gxkaUMOjRsQ8IrXiGW75O4E3RPjFIINOVH8AMl2SQ/yWdTzWwF3FevIX9LcMAjJW+GRwAlAbTSXdg=="],
 
