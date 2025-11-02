@@ -337,12 +337,95 @@ describe('EventBus', () => {
       );
 
     return pipe(
-      [TestEventStore, TodoEventBus, makeStreamStart('todo-early'), makeStreamStart('todo-late')] as const,
+      [
+        TestEventStore,
+        TodoEventBus,
+        makeStreamStart('todo-early'),
+        makeStreamStart('todo-late'),
+      ] as const,
       Effect.all,
       Effect.flatMap(subscribeEarlyAndWriteEvents),
       Effect.map(verifyLateSubscriber),
       Effect.scoped,
       Effect.provide(makeCombinedLayer())
+    );
+  });
+
+  it.effect('does not deliver historical events written before EventBus layer creation', () => {
+    const TodoEventBus = EventBus<TodoEvent>();
+    const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
+
+    const writeHistoricalEvents = (store: EncodedStore) => (position: EventStreamPosition) =>
+      pipe(
+        writeEvents(store, position, [
+          { _tag: 'TodoCreated', id: 'todo-historical', title: 'Historical Event' },
+        ]),
+        Effect.zipRight(Effect.yieldNow())
+      );
+
+    const writeNewEventAndCollect = (
+      store: EncodedStore,
+      position: EventStreamPosition,
+      subscription: Stream.Stream<{ readonly event: TodoEvent }>
+    ) =>
+      pipe(
+        writeEvents(store, position, [{ _tag: 'TodoCreated', id: 'todo-new', title: 'New Event' }]),
+        Effect.andThen(collectEvents(subscription))
+      );
+
+    const writeNewAfterSubscribe =
+      (store: EncodedStore) => (sub: Stream.Stream<{ readonly event: TodoEvent }>) =>
+        pipe(
+          'todo-new',
+          makeStreamStart,
+          Effect.flatMap((pos) => writeNewEventAndCollect(store, pos, sub))
+        );
+
+    const subscribeAndWriteNew = (
+      eventBus: ReturnType<typeof EventBus<TodoEvent>>,
+      store: EncodedStore
+    ) => pipe(acceptAll, eventBus.subscribe, Effect.flatMap(writeNewAfterSubscribe(store)));
+
+    const startBusAndSubscribe = (store: EncodedStore) =>
+      pipe(
+        TodoEventBus,
+        Effect.flatMap((eventBus) => subscribeAndWriteNew(eventBus, store)),
+        Effect.scoped,
+        Effect.provide(makeEventBusLayer()),
+        Effect.provide(Layer.succeed(TestEventStore, store))
+      );
+
+    const writeHistoricalThenStartBusAndSubscribe = (store: EncodedStore) =>
+      pipe(
+        'todo-historical',
+        makeStreamStart,
+        Effect.flatMap(writeHistoricalEvents(store)),
+        Effect.andThen(startBusAndSubscribe(store))
+      );
+
+    const runTestWithStore = (context: Context.Context<TestEventStore>) =>
+      pipe(
+        Context.get(context, TestEventStore),
+        writeHistoricalThenStartBusAndSubscribe,
+        Effect.provide(Layer.succeedContext(context))
+      );
+
+    const verifyOnlyNewEvent = (events: ReadonlyArray<{ readonly event: TodoEvent }>) => {
+      const arr = Array.from(events);
+      expect(arr.length).toBe(1);
+      const first = arr[0];
+      expect(isTodoCreated(first.event)).toBe(true);
+      if (isTodoCreated(first.event)) {
+        expect(first.event.title).toBe('New Event');
+      }
+    };
+
+    return pipe(
+      makeTestStoreLayer(),
+      Layer.build,
+      Effect.flatMap(runTestWithStore),
+      Effect.map(verifyOnlyNewEvent),
+      Effect.scoped
     );
   });
 });
