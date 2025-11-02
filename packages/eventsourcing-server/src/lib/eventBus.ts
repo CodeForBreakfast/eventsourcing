@@ -72,14 +72,20 @@ export const EventBusLive = <TEvent>(config: {
 
   const filterEvent =
     <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>
-    (streamEvent: StreamEvent<TEvent>): Option.Option<StreamEvent<TFiltered>> =>
-      // eslint-disable-next-line effect/prefer-match-over-ternary -- Simple boolean check for type guard, Match pattern would be unnecessarily verbose
-      filter(streamEvent.event)
-        ? Option.some({
-            position: streamEvent.position,
-            event: streamEvent.event as TFiltered,
-          })
-        : Option.none();
+    (streamEvent: StreamEvent<TEvent>): Option.Option<StreamEvent<TFiltered>> => {
+      try {
+        // eslint-disable-next-line effect/prefer-match-over-ternary -- Simple boolean check for type guard, Match pattern would be unnecessarily verbose
+        return filter(streamEvent.event)
+          ? Option.some({
+              position: streamEvent.position,
+              event: streamEvent.event as TFiltered,
+            })
+          : Option.none();
+      } catch {
+        // Filter threw an exception - return none to skip this event for this subscriber
+        return Option.none();
+      }
+    };
 
   const createQueueStream =
     <TFiltered extends TEvent>(filter: (event: TEvent) => event is TFiltered) =>

@@ -455,11 +455,59 @@ describe('EventBus', () => {
       );
     });
 
-    // TODO: Implement filter exception test
-    // When a subscriber's filter function throws, it should only affect that subscriber,
-    // not crash the entire EventBus or other subscribers.
-    // Currently, filterEvent in eventBus.ts line 73-82 has no error handling,
-    // so any exception in a filter will crash the stream.
+    it.effect('subscriber with throwing filter does not crash other subscribers', () => {
+      const TodoEventBus = EventBus<TodoEvent>();
+      const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
+
+      const throwingFilter = (_event: TodoEvent): _event is TodoEvent => {
+        throw new Error('Filter explosion');
+      };
+
+      const verifyNormalSubscriberWorks = (events: Chunk.Chunk<{ readonly event: TodoEvent }>) => {
+        expect(Chunk.size(events)).toBe(2);
+        const arr = Chunk.toReadonlyArray(events);
+        expect(isTodoCreated(arr[0].event)).toBe(true);
+        expect(isTodoCompleted(arr[1].event)).toBe(true);
+      };
+
+      const writeAndCollectNormalStream = (
+        store: EncodedStore,
+        position: EventStreamPosition,
+        normalSub: Stream.Stream<{ readonly event: TodoEvent }>
+      ) =>
+        pipe(
+          writeEvents(store, position, [
+            { _tag: 'TodoCreated', id: 'todo-filter-test', title: 'Filter Test' },
+            { _tag: 'TodoCompleted', id: 'todo-filter-test' },
+          ]),
+          Effect.andThen(collectEvents(normalSub, 2))
+        );
+
+      const setupSubscriptionsAndWrite = ([store, eventBus, position]: readonly [
+        EncodedStore,
+        ReturnType<typeof EventBus<TodoEvent>>,
+        EventStreamPosition,
+      ]) =>
+        pipe(
+          eventBus,
+          Effect.succeed,
+          Effect.flatMap((bus) =>
+            Effect.all([bus.subscribe(acceptAll), bus.subscribe(throwingFilter)])
+          ),
+          Effect.flatMap(([normalSub, _throwingSub]) =>
+            writeAndCollectNormalStream(store, position, normalSub)
+          )
+        );
+
+      return pipe(
+        [TestEventStore, TodoEventBus, makeStreamStart('todo-filter-test')] as const,
+        Effect.all,
+        Effect.flatMap(setupSubscriptionsAndWrite),
+        Effect.map(verifyNormalSubscriberWorks),
+        Effect.scoped,
+        Effect.provide(makeCombinedLayer())
+      );
+    });
 
     it.effect('subscribers complete gracefully when pump fiber dies', () => {
       const TodoEventBus = EventBus<TodoEvent>();
