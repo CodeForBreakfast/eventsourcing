@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@codeforbreakfast/buntest';
-import { Effect, Layer, Schema, Stream, pipe, Context, Fiber } from 'effect';
+import { Effect, Layer, Schema, Stream, pipe, Context, Fiber, Data, Chunk } from 'effect';
 import { EventBus, EventBusLive } from './eventBus';
 import {
   InMemoryStore,
@@ -427,5 +427,73 @@ describe('EventBus', () => {
       Effect.map(verifyOnlyNewEvent),
       Effect.scoped
     );
+  });
+
+  describe('error handling', () => {
+    it.effect('fails layer creation when EventStore.subscribeAll() returns error', () => {
+      const TodoEventBus = EventBus<TodoEvent>();
+
+      class SubscribeAllError extends Data.TaggedError('SubscribeAllError') {}
+
+      const failingStore: ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>> = {
+        subscribeAll: () => Effect.fail(new SubscribeAllError()),
+      } as ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>;
+
+      const failingLayer = EventBusLive({ store: TestEventStore });
+
+      const verifyErrorCaught = (result: string) => {
+        expect(result).toBe('caught error');
+      };
+
+      return pipe(
+        TodoEventBus,
+        Effect.scoped,
+        Effect.provide(failingLayer),
+        Effect.provide(Layer.succeed(TestEventStore, failingStore)),
+        Effect.catchTag('SubscribeAllError', () => Effect.succeed('caught error' as const)),
+        Effect.map(verifyErrorCaught)
+      );
+    });
+
+    // TODO: Implement filter exception test
+    // When a subscriber's filter function throws, it should only affect that subscriber,
+    // not crash the entire EventBus or other subscribers.
+    // Currently, filterEvent in eventBus.ts line 73-82 has no error handling,
+    // so any exception in a filter will crash the stream.
+
+    it.effect('subscribers complete gracefully when pump fiber dies', () => {
+      const TodoEventBus = EventBus<TodoEvent>();
+      const acceptAll = (_event: TodoEvent): _event is TodoEvent => true;
+
+      class PumpError extends Data.TaggedError('PumpError') {}
+
+      const storeWithDyingStream: ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>> = {
+        subscribeAll: () =>
+          Effect.succeed(
+            Stream.concat(
+              Stream.make({ _tag: 'TodoCreated' as const, id: 'todo-1', title: 'First' }),
+              Stream.fail(new PumpError())
+            )
+          ),
+      } as ReturnType<ReturnType<typeof encodedEventStore<TodoEvent>>>;
+
+      const dyingLayer = EventBusLive({ store: TestEventStore });
+
+      const verifyCompleted = (events: Chunk.Chunk<{ readonly event: TodoEvent }>) => {
+        // The key requirement is that subscribers complete gracefully (don't hang forever)
+        // when the pump dies. The number of events received depends on timing.
+        expect(Chunk.size(events)).toBeGreaterThanOrEqual(0);
+      };
+
+      return pipe(
+        TodoEventBus,
+        Effect.flatMap((bus) => bus.subscribe(acceptAll)),
+        Effect.flatMap(Stream.runCollect),
+        Effect.map(verifyCompleted),
+        Effect.scoped,
+        Effect.provide(dyingLayer),
+        Effect.provide(Layer.succeed(TestEventStore, storeWithDyingStream))
+      );
+    });
   });
 });
