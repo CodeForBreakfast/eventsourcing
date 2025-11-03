@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-store",
-  "version": "0.9.0",
+  "version": "0.9.1",
   "description": "Pure event streaming and storage with Effect integration - Core event store interfaces and implementations for building resilient, functional event-driven systems",
   "type": "module",
   "main": "./dist/index.js",
