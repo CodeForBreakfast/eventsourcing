@@ -71,7 +71,7 @@
     "@codeforbreakfast/buntest": "workspace:*",
     "@types/node": "24.9.2",
     "effect": "3.18.4",
-    "eslint": "9.38.0",
+    "eslint": "9.39.0",
     "typescript": "5.9.3"
   },
   "publishConfig": {
