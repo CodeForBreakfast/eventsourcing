@@ -1,5 +1,17 @@
 # @codeforbreakfast/eventsourcing-aggregates
 
+## 0.9.2
+
+### Patch Changes
+
+- [#337](https://github.com/CodeForBreakfast/eventsourcing/pull/337) [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4) Thanks [@GraemeF](https://github.com/GraemeF)! - Refactor test code to follow proper functional programming patterns
+
+  This is an internal refactoring of test code to eliminate ESLint rule violations by following proper Effect functional programming patterns. No public API changes.
+
+- Updated dependencies [[`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4), [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4)]:
+  - @codeforbreakfast/eventsourcing-commands@0.4.7
+  - @codeforbreakfast/eventsourcing-store@0.9.1
+
 ## 0.9.1
 
 ### Patch Changes

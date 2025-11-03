@@ -1,5 +1,24 @@
 # @codeforbreakfast/eventsourcing-server
 
+## 0.2.1
+
+### Patch Changes
+
+- [#337](https://github.com/CodeForBreakfast/eventsourcing/pull/337) [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4) Thanks [@GraemeF](https://github.com/GraemeF)! - Bump version for dependency updates
+
+  Internal dependencies were updated with test refactorings. No functional changes to this package.
+
+- [#354](https://github.com/CodeForBreakfast/eventsourcing/pull/354) [`3d61dac`](https://github.com/CodeForBreakfast/eventsourcing/commit/3d61dac5fde62ce278d5b85198b25252382e4c13) Thanks [@GraemeF](https://github.com/GraemeF)! - EventBus now handles exceptions thrown by subscriber filter functions gracefully
+
+  When a subscriber's filter function throws an exception, that subscriber will silently skip the event instead of crashing the entire EventBus. Other subscribers continue to receive events normally. This improves resilience and prevents one misbehaving subscriber from affecting the entire event distribution system.
+
+- [#351](https://github.com/CodeForBreakfast/eventsourcing/pull/351) [`fdf9e19`](https://github.com/CodeForBreakfast/eventsourcing/commit/fdf9e19b3bad31e396e8a000ae5ab1a91000b845) Thanks [@GraemeF](https://github.com/GraemeF)! - Add test coverage for historical events before EventBus layer creation. Verifies that events written to the store before the EventBus layer exists are not delivered to subscribers.
+
+- [#348](https://github.com/CodeForBreakfast/eventsourcing/pull/348) [`274486f`](https://github.com/CodeForBreakfast/eventsourcing/commit/274486f5b7b3935451f9e6aa782423b8259cc90d) Thanks [@GraemeF](https://github.com/GraemeF)! - Add integration test verifying EventBus correctly handles late-arriving subscribers. The test confirms that subscribers joining an already-running EventBus only receive events published after their subscription, not historical events from the PubSub.
+
+- Updated dependencies [[`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.1
+
 ## 0.2.0
 
 ### Minor Changes

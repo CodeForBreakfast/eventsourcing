@@ -1,5 +1,16 @@
 # @codeforbreakfast/eventsourcing-testing-contracts
 
+## 0.3.10
+
+### Patch Changes
+
+- [#337](https://github.com/CodeForBreakfast/eventsourcing/pull/337) [`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4) Thanks [@GraemeF](https://github.com/GraemeF)! - Bump version for dependency update
+
+  Internal dependency `@codeforbreakfast/eventsourcing-transport-inmemory` was updated with test refactorings. No functional changes to this package.
+
+- Updated dependencies [[`06235ad`](https://github.com/CodeForBreakfast/eventsourcing/commit/06235ad9ac3d06dc1d0b513d48f585cff696c6b4)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.1
+
 ## 0.3.9
 
 ### Patch Changes
