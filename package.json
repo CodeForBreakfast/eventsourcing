@@ -71,7 +71,7 @@
     "npm": "11.6.2",
     "only-allow": "1.2.1",
     "prettier": "3.6.2",
-    "turbo": "2.5.8",
+    "turbo": "2.6.0",
     "typescript": "5.9.3"
   }
 }
