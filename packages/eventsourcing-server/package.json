@@ -64,7 +64,7 @@
     "@codeforbreakfast/eventsourcing-store": "workspace:*"
   },
   "devDependencies": {
-    "@types/node": "24.9.2",
+    "@types/node": "24.10.0",
     "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@codeforbreakfast/buntest": "workspace:*",
