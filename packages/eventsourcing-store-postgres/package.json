@@ -78,7 +78,7 @@
     "@effect/platform-bun": "0.81.1",
     "@types/node": "24.10.0",
     "effect": "3.18.4",
-    "eslint": "9.39.0",
+    "eslint": "9.39.1",
     "typescript": "5.9.3"
   },
   "publishConfig": {
