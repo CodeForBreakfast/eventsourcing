@@ -76,6 +76,6 @@
     "node": ">=18.0.0"
   },
   "dependencies": {
-    "type-fest": "5.1.0"
+    "type-fest": "5.2.0"
   }
 }

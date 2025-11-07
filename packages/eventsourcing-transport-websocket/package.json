@@ -64,7 +64,7 @@
   "dependencies": {
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
     "@effect/platform": "0.92.1",
-    "type-fest": "5.1.0"
+    "type-fest": "5.2.0"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",

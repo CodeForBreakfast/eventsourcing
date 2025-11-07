@@ -80,7 +80,7 @@
       "dependencies": {
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -99,7 +99,7 @@
       "version": "0.4.7",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -117,7 +117,7 @@
       "version": "0.5.12",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@types/node": "24.10.0",
@@ -136,7 +136,7 @@
         "@codeforbreakfast/eventsourcing-commands": "workspace:*",
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -173,7 +173,7 @@
       "name": "@codeforbreakfast/eventsourcing-store",
       "version": "0.9.1",
       "dependencies": {
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -234,7 +234,7 @@
         "@effect/experimental": "0.56.0",
         "@effect/sql": "0.46.0",
         "@effect/sql-pg": "0.47.0",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -272,7 +272,7 @@
       "name": "@codeforbreakfast/eventsourcing-transport",
       "version": "0.3.7",
       "dependencies": {
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@types/node": "24.10.0",
@@ -289,7 +289,7 @@
       "version": "0.3.10",
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -309,7 +309,7 @@
       "dependencies": {
         "@codeforbreakfast/eventsourcing-transport": "workspace:*",
         "@effect/platform": "0.92.1",
-        "type-fest": "5.1.0",
+        "type-fest": "5.2.0",
       },
       "devDependencies": {
         "@codeforbreakfast/buntest": "workspace:*",
@@ -1390,7 +1390,7 @@
 
     "type-check": ["type-check@0.4.0", "", { "dependencies": { "prelude-ls": "^1.2.1" } }, "sha512-XleUoc9uwGXqjWwXaUTZAmzMcFZ5858QA2vvx1Ur5xIcixXIP+8LnFDgRplU30us6teqdlskFfu+ae4K79Ooew=="],
 
-    "type-fest": ["type-fest@5.1.0", "", { "dependencies": { "tagged-tag": "^1.0.0" } }, "sha512-wQ531tuWvB6oK+pchHIu5lHe5f5wpSCqB8Kf4dWQRbOYc9HTge7JL0G4Qd44bh6QuJCccIzL3bugb8GI0MwHrg=="],
+    "type-fest": ["type-fest@5.2.0", "", { "dependencies": { "tagged-tag": "^1.0.0" } }, "sha512-xxCJm+Bckc6kQBknN7i9fnP/xobQRsRQxR01CztFkp/h++yfVxUUcmMgfR2HttJx/dpWjS9ubVuyspJv24Q9DA=="],
 
     "typed-array-buffer": ["typed-array-buffer@1.0.3", "", { "dependencies": { "call-bound": "^1.0.3", "es-errors": "^1.3.0", "is-typed-array": "^1.1.14" } }, "sha512-nAYYwfY3qnzX30IkA6AQZjVbtK6duGontcQm1WSG1MD94YLqK0515GNApXkoxKOWMusVssAHWLh9SeaoefYFGw=="],
 
