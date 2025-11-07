@@ -71,7 +71,7 @@
     "@codeforbreakfast/eventsourcing-commands": "workspace:*",
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport": "workspace:*",
-    "type-fest": "5.1.0"
+    "type-fest": "5.2.0"
   },
   "devDependencies": {
     "@codeforbreakfast/buntest": "workspace:*",
