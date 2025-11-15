@@ -574,9 +574,9 @@ Effect.map(myEffect, (data) => processData('prefix', 'suffix', data));
 
 ### `no-intermediate-effect-variables`
 
-Forbids storing Effect/Stream/pipe results in intermediate variables **when they are only used once**. Variables that are genuinely reused multiple times are allowed as legitimate building blocks.
+Forbids storing Effect/Stream/pipe results in intermediate variables when they should be inlined into pipe chains. Configuration data like Schedule constants, retry policies, and Effect values passed as parameters are allowed.
 
-❌ Bad (single use - should inline):
+❌ Bad (should inline):
 
 ```typescript
 import { Effect, pipe, Schema } from 'effect';
@@ -607,7 +607,7 @@ const UserIdSchema = pipe(Schema.String, Schema.nonEmptyString());
 export const decodeUserId = Schema.decode(UserIdSchema); // Only usage
 ```
 
-✅ Good (inline single-use values):
+✅ Good (inline pipeline values):
 
 ```typescript
 import { Effect, pipe, Schema } from 'effect';
@@ -637,6 +637,28 @@ function processData() {
 
 // Schema inlined directly
 export const decodeUserId = Schema.decode(pipe(Schema.String, Schema.nonEmptyString()));
+```
+
+✅ Good (configuration data):
+
+```typescript
+import { Effect, pipe, Schedule } from 'effect';
+
+declare const operation: Effect.Effect<unknown>;
+
+// Schedule constants used as configuration
+const retrySchedule = pipe(
+  Schedule.exponential('100 millis'),
+  Schedule.union(Schedule.spaced('1 second'))
+);
+const result = pipe(operation, Effect.retry(retrySchedule));
+
+// Effect values used as parameters
+const defaultValue = Effect.succeed(42);
+const combined = pipe(
+  Effect.succeed(1),
+  Effect.zipWith(defaultValue, (a, b) => a + b)
+);
 ```
 
 ✅ Good (multiple uses - legitimate reuse):
@@ -690,9 +712,9 @@ function handleAuth() {
 }
 ```
 
-**Rationale**: Single-use intermediate variables break the flow of pipe composition and make code harder to follow. However, variables that are reused multiple times serve as legitimate building blocks for composition and should be kept. The rule also excludes execution methods (`runSync`, `runPromise`, `runFork`) which return plain values, and factory methods (`Schema.decode`) which return functions.
+**Rationale**: Intermediate pipeline variables break the flow of pipe composition. Configuration data like Schedule constants and Effect values used as parameters to Effect operations are legitimate building blocks and should be extracted. Multiple uses also justify variable extraction.
 
-**Note:** This is an aggressive rule included in the `pipeStrict` config. It enforces proper functional composition patterns while allowing genuine code reuse.
+**Note:** This is an aggressive rule included in the `pipeStrict` config.
 
 ## Rule Presets
 
