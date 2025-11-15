@@ -5,4 +5,3 @@ uv = "0.9.8"
 [env]
 _.path = ["./node_modules/.bin"]
 
-BEADS_NO_DAEMON = "1"
