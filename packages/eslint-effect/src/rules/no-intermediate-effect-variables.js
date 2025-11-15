@@ -93,7 +93,11 @@ export default {
     };
 
     const isSchemaComposition = (node) => {
-      if (node.type !== 'CallExpression' || node.callee.type !== 'Identifier' || node.callee.name !== 'pipe') {
+      if (
+        node.type !== 'CallExpression' ||
+        node.callee.type !== 'Identifier' ||
+        node.callee.name !== 'pipe'
+      ) {
         return false;
       }
 
@@ -154,13 +158,17 @@ export default {
       },
 
       CallExpression(node) {
-        for (const arg of node.arguments) {
-          if (arg.type === 'Identifier' && trackedVariables.has(arg.name)) {
-            const tracked = trackedVariables.get(arg.name);
+        // Only track when variable is used as FIRST arg to pipe()
+        // This distinguishes intermediate values (being transformed) from configuration data
+        if (node.callee.type === 'Identifier' && node.callee.name === 'pipe') {
+          const firstArg = node.arguments[0];
+          if (firstArg?.type === 'Identifier' && trackedVariables.has(firstArg.name)) {
+            const tracked = trackedVariables.get(firstArg.name);
             tracked.usageCount++;
-            tracked.usageNodes.push(arg);
+            tracked.usageNodes.push(firstArg);
           }
         }
+        // Don't count other positions - they're legitimate configuration/data being passed to operations
       },
 
       MemberExpression(node) {
