@@ -5,6 +5,7 @@
 *.db-shm
 
 # Daemon runtime files
+daemon.lock
 daemon.log
 daemon.pid
 bd.sock
@@ -13,5 +14,15 @@ bd.sock
 db.sqlite
 bd.db
 
-# Keep JSONL exports (source of truth for git)
-!*.jsonl
+# Merge artifacts
+*.left.jsonl
+*.left.meta.json
+*.right.jsonl
+*.right.meta.json
+*.base.jsonl
+*.base.meta.json
+
+# Keep JSONL exports and config (source of truth for git)
+!issues.jsonl
+!metadata.json
+!config.yaml
