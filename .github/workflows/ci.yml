@@ -12,7 +12,7 @@ concurrency:
 jobs:
   ci:
     name: Build, Lint and Test
-    runs-on: ubuntu-24.04
+    runs-on: [homelab-runners]
     services:
       postgres:
         image: postgres:18-alpine@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
