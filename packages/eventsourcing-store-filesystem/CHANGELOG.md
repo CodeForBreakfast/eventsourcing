@@ -1,5 +1,23 @@
 # @codeforbreakfast/eventsourcing-store-filesystem
 
+## 0.2.6
+
+### Patch Changes
+
+- [#381](https://github.com/CodeForBreakfast/eventsourcing/pull/381) [`9849132`](https://github.com/CodeForBreakfast/eventsourcing/commit/9849132e78732f795aa15d3d8053baae92e97d0b) Thanks [@GraemeF](https://github.com/GraemeF)! - Rename package from `@codeforbreakfast/buntest` to `@codeforbreakfast/bun-test-effect` and prepare for public npm release.
+
+  **Migration:** Update your imports from `@codeforbreakfast/buntest` to `@codeforbreakfast/bun-test-effect`.
+
+  This release makes the package publicly available on npm with:
+  - Effect-aware test runners (`it.effect`, `it.scoped`, `it.live`, `it.scopedLive`)
+  - Layer sharing across tests with `it.layer()`
+  - Effect-native assertions (`expectSome`, `expectNone`, `expectRight`, `expectLeft`, `assertEqual`)
+  - ESLint rules for Effect testing best practices
+  - Silent logger utility for suppressing test output
+
+- Updated dependencies [[`9849132`](https://github.com/CodeForBreakfast/eventsourcing/commit/9849132e78732f795aa15d3d8053baae92e97d0b)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.2
+
 ## 0.2.5
 
 ### Patch Changes
