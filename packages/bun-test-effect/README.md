@@ -50,12 +50,17 @@ describe('MyService', () => {
 All test runners support standard Bun test modifiers:
 
 ```typescript
+import { it } from '@codeforbreakfast/bun-test-effect';
+import { Effect } from 'effect';
+
+declare const condition: boolean;
+
 it.effect.skip('skipped test', () => Effect.void);
 it.effect.only('focused test', () => Effect.void);
 it.effect.skipIf(condition)('conditional skip', () => Effect.void);
 it.effect.runIf(condition)('conditional run', () => Effect.void);
 it.effect.fails('expected to fail', () => Effect.fail('error'));
-it.effect.each([1, 2, 3])('parameterized test', (n) => Effect.succeed(n));
+it.effect.each([1, 2, 3])('parameterized test', (n: number) => Effect.succeed(n));
 ```
 
 ### Live vs Test Environment
@@ -64,6 +69,9 @@ it.effect.each([1, 2, 3])('parameterized test', (n) => Effect.succeed(n));
 - `it.live` / `it.scopedLive` - Runs with real services (real clock, etc.)
 
 ```typescript
+import { it } from '@codeforbreakfast/bun-test-effect';
+import { Effect } from 'effect';
+
 it.live('uses real time', () =>
   Effect.gen(function* () {
     yield* Effect.sleep('100 millis'); // Actually waits 100ms
@@ -114,6 +122,7 @@ For testing within Effect pipelines, use the provided assertion utilities:
 
 ```typescript
 import {
+  it,
   expectSome,
   expectNone,
   expectRight,
@@ -151,7 +160,7 @@ it.effect('assertion examples', () =>
 Suppress log output during tests:
 
 ```typescript
-import { silentLogger } from '@codeforbreakfast/bun-test-effect';
+import { it, silentLogger } from '@codeforbreakfast/bun-test-effect';
 import { Effect, pipe } from 'effect';
 
 it.effect('quiet test', () =>
