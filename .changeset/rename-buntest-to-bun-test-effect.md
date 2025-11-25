@@ -11,6 +11,8 @@
 '@codeforbreakfast/eventsourcing-testing-contracts': patch
 '@codeforbreakfast/eventsourcing-store': patch
 '@codeforbreakfast/eventsourcing-store-postgres': patch
+'@codeforbreakfast/eventsourcing-websocket': patch
+'@codeforbreakfast/eventsourcing-projections': patch
 ---
 
 Rename package from `@codeforbreakfast/buntest` to `@codeforbreakfast/bun-test-effect` and prepare for public npm release.
