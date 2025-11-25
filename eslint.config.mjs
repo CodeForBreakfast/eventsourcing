@@ -6,7 +6,7 @@ import prettier from 'eslint-config-prettier';
 import functionalPlugin from 'eslint-plugin-functional';
 import eslintComments from '@eslint-community/eslint-plugin-eslint-comments';
 import effectPlugin from '@codeforbreakfast/eslint-effect';
-import buntestPlugin from '@codeforbreakfast/buntest/eslint';
+import buntestPlugin from '@codeforbreakfast/bun-test-effect/eslint';
 
 // Shared configuration pieces
 const commonLanguageOptions = {
@@ -70,7 +70,7 @@ const testFileImportRestrictions = {
         {
           group: ['bun:test'],
           message:
-            'Test files should prefer "@codeforbreakfast/buntest" over "bun:test" for better Effect integration. Use buntest unless you specifically need bun:test features.',
+            'Test files should prefer "@codeforbreakfast/bun-test-effect" over "bun:test" for better Effect integration. Use bun-test-effect unless you specifically need bun:test features.',
         },
       ],
     },

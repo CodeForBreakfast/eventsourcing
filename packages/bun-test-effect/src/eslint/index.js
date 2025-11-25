@@ -11,7 +11,7 @@ const rules = {
 const plugin = {
   rules,
   meta: {
-    name: '@codeforbreakfast/buntest/eslint',
+    name: '@codeforbreakfast/bun-test-effect/eslint',
     version: '0.2.3',
   },
 };

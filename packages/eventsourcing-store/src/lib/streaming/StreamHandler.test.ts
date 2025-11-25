@@ -1,4 +1,4 @@
-import { describe, it } from '@codeforbreakfast/buntest';
+import { describe, it } from '@codeforbreakfast/bun-test-effect';
 
 describe('StreamHandler', () => {
   // Note: StreamHandler factory functions removed to enforce domain-specific types

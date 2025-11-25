@@ -1,4 +1,4 @@
-import { describe, test, expect } from '@codeforbreakfast/buntest';
+import { describe, test, expect } from '@codeforbreakfast/bun-test-effect';
 import { Schema, Effect, pipe, Either } from 'effect';
 import { WireCommand, CommandResult, validateCommand, CommandValidationError } from './commands';
 

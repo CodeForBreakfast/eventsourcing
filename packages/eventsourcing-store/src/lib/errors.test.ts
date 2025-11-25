@@ -1,6 +1,6 @@
 import { Effect, pipe } from 'effect';
 
-import { describe, expect, it } from '@codeforbreakfast/buntest';
+import { describe, expect, it } from '@codeforbreakfast/bun-test-effect';
 import {
   EventStoreError,
   ProjectionError,

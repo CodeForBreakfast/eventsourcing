@@ -1,5 +1,5 @@
 import { Effect, Layer, pipe, Stream, Schema, Context, Brand } from 'effect';
-import { describe, expect, it } from '@codeforbreakfast/buntest';
+import { describe, expect, it } from '@codeforbreakfast/bun-test-effect';
 import { beginning, toStreamId, type EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {
   makeInMemoryEventStore,

@@ -1,7 +1,7 @@
 import { Effect, Layer, Schema, pipe } from 'effect';
 import { BunFileSystem, BunPath } from '@effect/platform-bun';
 import { Path } from '@effect/platform';
-import { silentLogger } from '@codeforbreakfast/buntest';
+import { silentLogger } from '@codeforbreakfast/bun-test-effect';
 import {
   runEventStoreTestSuite,
   FooEventStore,

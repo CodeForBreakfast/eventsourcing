@@ -73,7 +73,7 @@
     "type-fest": "5.2.0"
   },
   "devDependencies": {
-    "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@effect/platform-bun": "0.81.1",
     "@types/node": "24.10.0",

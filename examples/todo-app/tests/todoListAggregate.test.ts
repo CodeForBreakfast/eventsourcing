@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Option, pipe } from 'effect';
 import { TodoListAggregateRoot } from '../src/domain/todoListAggregate';
 import { TodoId } from '../src/domain/types';

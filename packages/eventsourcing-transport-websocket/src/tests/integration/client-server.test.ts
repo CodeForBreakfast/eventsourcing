@@ -8,7 +8,13 @@
  * All resources are properly managed through Effect Scope for deterministic cleanup.
  */
 
-import { describe, it, expectSome, assertEqual, expectLeft } from '@codeforbreakfast/buntest';
+import {
+  describe,
+  it,
+  expectSome,
+  assertEqual,
+  expectLeft,
+} from '@codeforbreakfast/bun-test-effect';
 import { Effect, Stream, pipe } from 'effect';
 import {
   TransportMessage,

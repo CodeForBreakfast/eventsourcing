@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Chunk, Schema, Option, pipe, Layer, Exit } from 'effect';
 import type { EventStore } from '@codeforbreakfast/eventsourcing-store';
 import {

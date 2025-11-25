@@ -2,7 +2,7 @@
  * Basic smoke tests for the transport testing contracts package
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Stream, pipe, Fiber, Duration } from 'effect';
 import { generateMessageId, makeTestTransportMessage, makeMockTransport } from '../index';
 

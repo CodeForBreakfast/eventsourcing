@@ -8,7 +8,7 @@
  * including connection management, message broadcasting, and resource cleanup.
  */
 
-import { describe, test, expect, beforeEach, afterEach } from '@codeforbreakfast/buntest';
+import { describe, test, expect, beforeEach, afterEach } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Stream, Scope, pipe, Option, Exit } from 'effect';
 import type { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 
@@ -566,7 +566,10 @@ export const runClientServerContractTests: ClientServerTestRunner = (
             Effect.flatMap(verifyDisconnectedState)
           );
 
-        const closeScopeAndVerify = (clientScope: Scope.CloseableScope, connection: ServerConnection) =>
+        const closeScopeAndVerify = (
+          clientScope: Scope.CloseableScope,
+          connection: ServerConnection
+        ) =>
           pipe(
             Scope.close(clientScope, Exit.void),
             Effect.flatMap(() => Effect.sleep(100)),
@@ -574,14 +577,18 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           );
 
         const handleServerConnection =
-          (clientScope: Scope.CloseableScope) => (serverConnection: Option.Option<ServerConnection>) => {
+          (clientScope: Scope.CloseableScope) =>
+          (serverConnection: Option.Option<ServerConnection>) => {
             if (!Option.isSome(serverConnection)) {
               return Effect.fail(new Error('Expected server connection to be available'));
             }
             return closeScopeAndVerify(clientScope, serverConnection.value);
           };
 
-        const getConnectionAndDisconnect = (server: ServerTransport, clientScope: Scope.CloseableScope) =>
+        const getConnectionAndDisconnect = (
+          server: ServerTransport,
+          clientScope: Scope.CloseableScope
+        ) =>
           pipe(
             server.connections,
             Stream.take(1),

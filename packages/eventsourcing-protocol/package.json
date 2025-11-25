@@ -74,7 +74,7 @@
     "type-fest": "5.2.0"
   },
   "devDependencies": {
-    "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
     "@types/node": "24.10.0",
     "effect": "3.18.4",

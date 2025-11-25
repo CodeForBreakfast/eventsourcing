@@ -1,5 +1,5 @@
 /* eslint-disable effect/no-nested-pipe, effect/no-pipe-first-arg-call, effect/no-direct-tag-access -- Integration tests with filesystem store require complex nested pipes */
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Layer, Chunk, pipe } from 'effect';
 import { BunFileSystem, BunPath } from '@effect/platform-bun';
 import { Path, FileSystem } from '@effect/platform';

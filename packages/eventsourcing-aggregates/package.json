@@ -70,7 +70,7 @@
   },
   "devDependencies": {
     "@types/node": "24.10.0",
-    "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
     "effect": "3.18.4",
     "typescript": "5.9.3",

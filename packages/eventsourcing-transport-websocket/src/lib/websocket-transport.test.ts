@@ -5,7 +5,7 @@
  * Generic transport behaviors are covered by contract tests.
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Duration, Effect, pipe, Stream, Layer, Option } from 'effect';
 import * as Socket from '@effect/platform/Socket';
 import { ConnectionError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';

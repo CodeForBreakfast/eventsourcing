@@ -1,6 +1,6 @@
 import { Effect, Layer, Schema, pipe } from 'effect';
 import { BunContext } from '@effect/platform-bun';
-import { it } from '@codeforbreakfast/buntest';
+import { it } from '@codeforbreakfast/bun-test-effect';
 import {
   runEventStoreTestSuite,
   FooEventStore,

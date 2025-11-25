@@ -148,7 +148,7 @@
  * ```
  */
 
-import { describe, it } from '@codeforbreakfast/buntest';
+import { describe, it } from '@codeforbreakfast/bun-test-effect';
 
 /**
  * Future transport behavior test placeholders.

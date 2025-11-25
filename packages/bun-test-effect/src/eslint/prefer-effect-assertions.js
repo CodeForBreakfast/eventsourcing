@@ -7,7 +7,7 @@ export default {
     type: 'suggestion',
     docs: {
       description:
-        'Forbid wrapping expect() or assert*() calls in Effect.sync(). Use Effect-native assertions like expectSome, assertEqual, expectLeft, etc. from @codeforbreakfast/buntest instead.',
+        'Forbid wrapping expect() or assert*() calls in Effect.sync(). Use Effect-native assertions like expectSome, assertEqual, expectLeft, etc. from @codeforbreakfast/bun-test-effect instead.',
       recommended: true,
     },
     messages: {

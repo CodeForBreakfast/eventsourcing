@@ -1,5 +1,5 @@
 import { Effect, Layer, pipe, Stream, Context } from 'effect';
-import { describe, expect, it } from '@codeforbreakfast/buntest';
+import { describe, expect, it } from '@codeforbreakfast/bun-test-effect';
 import { EventStreamId, EventStreamPosition } from './streamTypes';
 import type { EventStore, ProjectionStore, SnapshotStore } from './services';
 import { eventStoreError } from './errors';
