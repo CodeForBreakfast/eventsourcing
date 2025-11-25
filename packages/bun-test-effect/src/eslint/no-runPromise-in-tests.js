@@ -1,17 +1,17 @@
 /**
- * Forbid Effect.runSync() in test files
- * Tests should use it.effect() from @codeforbreakfast/buntest
+ * Forbid Effect.runPromise() in test files
+ * Tests should use it.effect() from @codeforbreakfast/bun-test-effect
  */
 export default {
   meta: {
     type: 'problem',
     docs: {
       description:
-        'Forbid Effect.runSync() in test files. Use it.effect() from @codeforbreakfast/buntest instead.',
+        'Forbid Effect.runPromise() in test files. Use it.effect() from @codeforbreakfast/bun-test-effect instead.',
     },
     messages: {
-      noRunSyncInTests:
-        'Use it.effect() from @codeforbreakfast/buntest instead of Effect.runSync() in tests.',
+      noRunPromiseInTests:
+        'Use it.effect() from @codeforbreakfast/bun-test-effect instead of Effect.runPromise() in tests.',
     },
     schema: [],
   },
@@ -24,11 +24,11 @@ export default {
           node.callee.object.type === 'Identifier' &&
           node.callee.object.name === 'Effect' &&
           node.callee.property.type === 'Identifier' &&
-          node.callee.property.name === 'runSync'
+          node.callee.property.name === 'runPromise'
         ) {
           context.report({
             node,
-            messageId: 'noRunSyncInTests',
+            messageId: 'noRunPromiseInTests',
           });
         }
       },

@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, Layer, Schema, Stream, pipe, Context, Fiber, Data, Chunk } from 'effect';
 import { EventBus, EventBusLive } from './eventBus';
 import {

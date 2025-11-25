@@ -1,4 +1,4 @@
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Schema, Effect, pipe, Match } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import type { EventStreamPosition } from '@codeforbreakfast/eventsourcing-store';

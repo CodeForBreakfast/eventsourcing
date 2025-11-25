@@ -1,6 +1,6 @@
 import { Effect, pipe } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
-import { describe, expectTrue, it, silentLogger } from '@codeforbreakfast/buntest';
+import { describe, expectTrue, it, silentLogger } from '@codeforbreakfast/bun-test-effect';
 import {
   ConnectionManagerService,
   DefaultConnectionConfig,

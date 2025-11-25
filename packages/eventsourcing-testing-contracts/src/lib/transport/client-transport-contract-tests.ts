@@ -7,7 +7,7 @@
  */
 
 import { Effect, Stream, pipe, Chunk, Duration, Fiber, Schema, Ref } from 'effect';
-import { describe, expect, it, beforeEach, afterEach } from '@codeforbreakfast/buntest';
+import { describe, expect, it, beforeEach, afterEach } from '@codeforbreakfast/bun-test-effect';
 import type {
   TransportMessage,
   TransportTestContext,

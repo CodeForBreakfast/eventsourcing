@@ -1,5 +1,5 @@
 import { Effect, Layer, Schema, pipe } from 'effect';
-import { silentLogger } from '@codeforbreakfast/buntest';
+import { silentLogger } from '@codeforbreakfast/bun-test-effect';
 import {
   runEventStoreTestSuite,
   FooEventStore,

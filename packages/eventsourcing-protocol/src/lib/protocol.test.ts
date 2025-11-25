@@ -1,4 +1,4 @@
-import { describe, expect, it } from '@codeforbreakfast/buntest';
+import { describe, expect, it } from '@codeforbreakfast/bun-test-effect';
 import {
   Effect,
   Stream,

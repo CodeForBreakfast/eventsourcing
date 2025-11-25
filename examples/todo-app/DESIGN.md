@@ -949,7 +949,7 @@ examples/todo-app/
     "effect": "^3.18.1"
   },
   "devDependencies": {
-    "@codeforbreakfast/buntest": "workspace:*",
+    "@codeforbreakfast/bun-test-effect": "workspace:*",
     "typescript": "^5.9.3"
   }
 }

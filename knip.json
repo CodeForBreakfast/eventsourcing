@@ -10,7 +10,7 @@
     "fast-check",
     "npm",
     "@codeforbreakfast/eslint-effect",
-    "@codeforbreakfast/buntest",
+    "@codeforbreakfast/bun-test-effect",
     "@codeforbreakfast/eventsourcing-testing-contracts",
     "type-fest",
     "@codeforbreakfast/eventsourcing-store",

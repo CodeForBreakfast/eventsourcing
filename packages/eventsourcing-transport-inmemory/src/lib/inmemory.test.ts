@@ -5,7 +5,7 @@
  * are covered by contract tests.
  */
 
-import { describe, it, expect } from '@codeforbreakfast/buntest';
+import { describe, it, expect } from '@codeforbreakfast/bun-test-effect';
 import { Effect, pipe } from 'effect';
 import { InMemoryAcceptor } from '../index';
 
