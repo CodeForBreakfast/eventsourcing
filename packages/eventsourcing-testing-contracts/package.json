@@ -72,7 +72,7 @@
   "devDependencies": {
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@types/node": "24.10.0",
-    "effect": "3.18.4",
+    "effect": "3.19.9",
     "typescript": "5.9.3",
     "eslint": "9.39.1"
   },
