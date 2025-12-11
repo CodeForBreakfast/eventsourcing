@@ -1,5 +1,26 @@
 # @codeforbreakfast/eventsourcing-store-inmemory
 
+## 0.2.14
+
+### Patch Changes
+
+- [#360](https://github.com/CodeForBreakfast/eventsourcing/pull/360) [`524e2b3`](https://github.com/CodeForBreakfast/eventsourcing/commit/524e2b36befc0239d661f60ae7b92f3f47f761ee) Thanks [@renovate](https://github.com/apps/renovate)! - Update Effect ecosystem dependencies to latest versions:
+  - effect: 3.18.4 -> 3.19.9
+  - @effect/platform: 0.92.1 -> 0.93.6
+  - @effect/platform-bun: 0.81.1 -> 0.86.0
+  - @effect/sql: 0.46.0 -> 0.48.6
+  - @effect/sql-pg: 0.47.0 -> 0.49.7
+  - @effect/cli: 0.71.0 -> 0.72.1
+  - @effect/experimental: 0.56.0 -> 0.57.11
+
+  Added new peer dependencies required by @effect/platform-bun:
+  - @effect/cluster: 0.55.0
+  - @effect/rpc: 0.72.2
+  - @effect/workflow: 0.15.0
+
+- Updated dependencies [[`524e2b3`](https://github.com/CodeForBreakfast/eventsourcing/commit/524e2b36befc0239d661f60ae7b92f3f47f761ee)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.3
+
 ## 0.2.13
 
 ### Patch Changes

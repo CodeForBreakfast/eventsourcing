@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-server",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Server-side building blocks for event sourcing applications",
   "type": "module",
   "main": "./dist/index.js",

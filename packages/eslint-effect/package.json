@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eslint-effect",
-  "version": "0.8.4",
+  "version": "0.8.5",
   "description": "ESLint rules and configurations for Effect projects enforcing functional programming best practices",
   "type": "module",
   "license": "MIT",
