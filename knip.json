@@ -3,9 +3,12 @@
   "ignore": ["packages/*/build.{js,ts,mjs}", "**/*.example.ts"],
   "ignoreDependencies": [
     "@commitlint/cli",
+    "@effect/cluster",
     "@effect/language-service",
     "@effect/platform",
     "@effect/platform-bun",
+    "@effect/rpc",
+    "@effect/workflow",
     "eslint-plugin-*",
     "fast-check",
     "npm",
