@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-projections",
-  "version": "0.5.13",
+  "version": "0.5.14",
   "description": "Functional event projections and read models with Effect - Transform event streams into queryable views with type-safe, composable projection builders",
   "type": "module",
   "main": "./dist/index.js",
