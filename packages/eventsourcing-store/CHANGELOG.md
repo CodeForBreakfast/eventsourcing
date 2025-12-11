@@ -1,5 +1,13 @@
 # @codeforbreakfast/eventsourcing-store
 
+## 0.9.4
+
+### Patch Changes
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
 ## 0.9.3
 
 ### Patch Changes

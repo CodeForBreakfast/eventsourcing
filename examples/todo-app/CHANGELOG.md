@@ -1,5 +1,15 @@
 # @codeforbreakfast/eventsourcing-example-todo
 
+## 0.1.9
+
+### Patch Changes
+
+- Updated dependencies [[`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.4
+  - @codeforbreakfast/eventsourcing-store-filesystem@0.2.8
+  - @codeforbreakfast/eventsourcing-aggregates@0.9.5
+  - @codeforbreakfast/eventsourcing-projections@0.5.15
+
 ## 0.1.8
 
 ### Patch Changes
