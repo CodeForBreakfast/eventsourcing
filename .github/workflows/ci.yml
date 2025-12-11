@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-24.04
     services:
       postgres:
-        image: postgres:18-alpine@sha256:48c8ad3a7284b82be4482a52076d47d879fd6fb084a1cbfccbd551f9331b0e40
+        image: postgres:18-alpine@sha256:eca6fb2d91fda290eb8cfb8ba53dd0dcbf3508a08011e30adb039ea7c8e1e9f2
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -30,7 +30,7 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@08c6903cd8c0fde910a37f88322edcfb5dd907a8 # v5
+        uses: actions/checkout@93cb6efe18208431cddfb8368fd83d5badbf9bfd # v5
         with:
           fetch-depth: 0
 
