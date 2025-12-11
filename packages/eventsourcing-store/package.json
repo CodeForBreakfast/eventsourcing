@@ -61,7 +61,7 @@
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
     "effect": "^3.17.0",
-    "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0 || ^0.93.0"
+    "@effect/platform": ">=0.90.0 <1.0.0"
   },
   "dependencies": {
     "type-fest": "5.2.0"
