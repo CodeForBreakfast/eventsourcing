@@ -3,6 +3,12 @@
 '@codeforbreakfast/eventsourcing-store-filesystem': patch
 '@codeforbreakfast/eventsourcing-store-inmemory': patch
 '@codeforbreakfast/eventsourcing-store-postgres': patch
+'@codeforbreakfast/eventsourcing-protocol': patch
+'@codeforbreakfast/eventsourcing-server': patch
+'@codeforbreakfast/eventsourcing-aggregates': patch
+'@codeforbreakfast/eventsourcing-commands': patch
+'@codeforbreakfast/eventsourcing-projections': patch
+'@codeforbreakfast/eventsourcing-testing-contracts': patch
 ---
 
 Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
