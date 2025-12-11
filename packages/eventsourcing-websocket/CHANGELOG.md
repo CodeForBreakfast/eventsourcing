@@ -1,5 +1,18 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.3.18
+
+### Patch Changes
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-protocol@0.4.10
+  - @codeforbreakfast/eventsourcing-transport@0.3.9
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.5.8
+
 ## 0.3.17
 
 ### Patch Changes
