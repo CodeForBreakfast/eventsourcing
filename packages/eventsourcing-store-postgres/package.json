@@ -77,7 +77,7 @@
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@effect/platform-bun": "0.86.0",
     "@types/node": "24.10.0",
-    "effect": "3.19.9",
+    "effect": "3.19.11",
     "eslint": "9.39.1",
     "typescript": "5.9.3"
   },

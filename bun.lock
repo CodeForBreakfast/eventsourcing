@@ -12,17 +12,17 @@
         "@commitlint/cli": "20.1.0",
         "@commitlint/config-conventional": "20.0.0",
         "@effect/cluster": "0.55.0",
-        "@effect/language-service": "0.60.0",
+        "@effect/language-service": "0.62.0",
         "@effect/platform": "0.93.6",
         "@effect/platform-bun": "0.86.0",
         "@effect/rpc": "0.72.2",
-        "@effect/workflow": "0.15.0",
+        "@effect/workflow": "0.15.2",
         "@eslint-community/eslint-plugin-eslint-comments": "4.5.0",
         "@types/bun": "1.3.1",
         "@typescript-eslint/eslint-plugin": "8.46.3",
         "@typescript-eslint/parser": "8.46.3",
         "dependency-cruiser": "17.2.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "eslint-config-prettier": "10.1.8",
         "eslint-plugin-compat": "6.0.2",
@@ -52,7 +52,7 @@
         "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
         "@effect/cli": "0.72.1",
         "@effect/platform-bun": "0.86.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -62,7 +62,7 @@
       "name": "@codeforbreakfast/bun-test-effect",
       "version": "0.4.1",
       "devDependencies": {
-        "effect": "3.19.9",
+        "effect": "3.19.11",
       },
       "peerDependencies": {
         "effect": ">=3.0.0",
@@ -73,7 +73,7 @@
       "version": "0.8.5",
       "devDependencies": {
         "@typescript-eslint/eslint-plugin": "8.46.3",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -93,7 +93,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -111,7 +111,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -128,7 +128,7 @@
       },
       "devDependencies": {
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -149,7 +149,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -168,7 +168,7 @@
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -185,12 +185,12 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0 || ^0.93.0",
+        "@effect/platform": ">=0.90.0 <1.0.0",
         "effect": "^3.17.0",
       },
     },
@@ -205,12 +205,12 @@
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.86.0",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0 || ^0.93.0",
+        "@effect/platform": ">=0.90.0 <1.0.0",
         "effect": "^3.17.0",
       },
     },
@@ -224,12 +224,12 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0 || ^0.93.0",
+        "@effect/platform": ">=0.90.0 <1.0.0",
         "effect": "^3.17.0",
       },
     },
@@ -248,12 +248,12 @@
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.86.0",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
       "peerDependencies": {
-        "@effect/platform": "^0.90.0 || ^0.91.0 || ^0.92.0 || ^0.93.0",
+        "@effect/platform": ">=0.90.0 <1.0.0",
         "effect": "^3.17.0",
       },
     },
@@ -267,7 +267,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -283,7 +283,7 @@
       },
       "devDependencies": {
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -302,7 +302,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -323,7 +323,7 @@
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.10.0",
         "bun-types": "1.3.2",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -341,7 +341,7 @@
       },
       "devDependencies": {
         "@types/node": "24.10.0",
-        "effect": "3.19.9",
+        "effect": "3.19.11",
         "eslint": "9.39.1",
         "typescript": "5.9.3",
       },
@@ -471,7 +471,7 @@
 
     "@effect/experimental": ["@effect/experimental@0.57.11", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.93.6", "effect": "^3.19.9", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-M5uug3Drs/gyTHLfA+XzcIZQGUEV/Jn5yi1POki4oZswhpzNmsVTHl4THpxAordRKwa5lFvTSlsRP684YH7pSw=="],
 
-    "@effect/language-service": ["@effect/language-service@0.60.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-elJDWHG5Naq3OkilPt9ZRn56JfSA3MhXUIlDx9RWJeScHm96kZ+HkZ3eFBxqROzXwD6Q2DTtFctFwOM0+QLZEA=="],
+    "@effect/language-service": ["@effect/language-service@0.62.0", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-E1OU/jMiSqgl26D8grU3ClI46fxCfICzC6vwuSrNjW56Vlb/fujIKp97mGfhOE97DC4UTk2I9tlqIGK5fwTTPA=="],
 
     "@effect/platform": ["@effect/platform@0.93.6", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.4", "multipasta": "^0.2.7" }, "peerDependencies": { "effect": "^3.19.8" } }, "sha512-I5lBGQWzWXP4zlIdPs7z7WHmEFVBQhn+74emr/h16GZX96EEJ6I1rjGaKyZF7mtukbMuo9wEckDPssM8vskZ/w=="],
 
@@ -491,7 +491,7 @@
 
     "@effect/typeclass": ["@effect/typeclass@0.31.12", "", { "peerDependencies": { "effect": "^3.12.12" } }, "sha512-iyg8EJgZ7PS4hFnkWFtyeaXIH4544tLprmerRYFjgGHMsqxoorTfHd2N01inXd3stUgcGiHoVy1DDAxWKLomkQ=="],
 
-    "@effect/workflow": ["@effect/workflow@0.15.0", "", { "peerDependencies": { "@effect/experimental": "^0.57.9", "@effect/platform": "^0.93.6", "@effect/rpc": "^0.72.2", "effect": "^3.19.8" } }, "sha512-0u9aO1Uwo5ZdYJL6jygBvNrYt7JKVEI3HKeiSj5c/PP2fXvtdKelADf7FVUZeGEM/cmiYfU/f4LXO+lBJY87HQ=="],
+    "@effect/workflow": ["@effect/workflow@0.15.2", "", { "peerDependencies": { "@effect/experimental": "^0.57.11", "@effect/platform": "^0.93.6", "@effect/rpc": "^0.72.2", "effect": "^3.19.10" } }, "sha512-UAo5QWEvyyKsnf4EQ7WL3zwiuZS4Wd5fmAxdpcpZSIxNOvsABp3DOuyRCiidD8l3sQhdPwES/UsVK4QOCQ7wew=="],
 
     "@emnapi/core": ["@emnapi/core@1.5.0", "", { "dependencies": { "@emnapi/wasi-threads": "1.1.0", "tslib": "^2.4.0" } }, "sha512-sbP8GzB1WDzacS8fgNPpHlp6C9VZe+SJP3F90W9rLemaQj2PzIuTEl1qDOYQf58YIpyjViI24y9aPWCjEzY2cg=="],
 
@@ -809,7 +809,7 @@
 
     "dunder-proto": ["dunder-proto@1.0.1", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.1", "es-errors": "^1.3.0", "gopd": "^1.2.0" } }, "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A=="],
 
-    "effect": ["effect@3.19.9", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-taMXnfG/p+j7AmMOHHQaCHvjqwu9QBO3cxuZqL2dMG/yWcEMw0ZHruHe9B49OxtfKH/vKKDDKRhZ+1GJ2p5R5w=="],
+    "effect": ["effect@3.19.11", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-UTEj3c1s41Ha3uzSPKKvFBZaDjZ8ez00Q2NYWVm2mKh2LXeX8j6LTg1HcQHnmdUhOjr79KHmhVWYB/zbegLO1A=="],
 
     "electron-to-chromium": ["electron-to-chromium@1.5.223", "", {}, "sha512-qKm55ic6nbEmagFlTFczML33rF90aU+WtrJ9MdTCThrcvDNdUHN4p6QfVN78U06ZmguqXIyMPyYhw2TrbDUwPQ=="],
 
