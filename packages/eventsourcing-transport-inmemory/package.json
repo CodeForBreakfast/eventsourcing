@@ -69,7 +69,7 @@
   "devDependencies": {
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@codeforbreakfast/bun-test-effect": "workspace:*",
-    "@types/node": "24.10.0",
+    "@types/node": "24.10.4",
     "effect": "3.19.9",
     "eslint": "9.39.1",
     "typescript": "5.9.3"

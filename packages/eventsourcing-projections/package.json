@@ -66,7 +66,7 @@
     "type-fest": "5.2.0"
   },
   "devDependencies": {
-    "@types/node": "24.10.0",
+    "@types/node": "24.10.4",
     "effect": "3.19.9",
     "typescript": "5.9.3",
     "eslint": "9.39.1"
