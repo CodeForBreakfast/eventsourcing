@@ -72,7 +72,7 @@
     "@types/node": "24.10.0",
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-    "effect": "3.19.9",
+    "effect": "3.19.13",
     "typescript": "5.9.3",
     "eslint": "9.39.1"
   },
