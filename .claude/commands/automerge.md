@@ -30,7 +30,7 @@ This command automates the entire process of getting changes merged into main:
    - Alert when merged successfully or if merge fails
 9. **Clean up** after successful merge:
 
-- Navigate back to repo root: `cd ../../` (from worktrees/{feature-name} to brownsauce/)
+- Navigate back to repo root: `cd ../../` (from worktrees/{feature-name} to eventsourcing/)
 - Pull latest changes to main: `git pull origin main`
 - Remove the feature worktree: `git worktree remove worktrees/{feature-name}`
 - Delete the local feature branch: `git branch -d feat/{feature-name}`
