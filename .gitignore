@@ -57,3 +57,10 @@ temp/
 worktrees/
 
 *.local.*
+
+# The maintainers' beads tracker is not part of this repository
+/.beads/
+/.beads.gate.lock
+.beads-credential-key
+.dolt/
+CLAUDE.local.md

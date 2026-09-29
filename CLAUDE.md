@@ -40,6 +40,13 @@ eventsourcing/            <- Repo root (main branch checkout)
 - Verify you're in correct worktree with `pwd` and `git branch`
 - Each worktree is a complete working copy with its own node_modules and mise config
 
+## The tracker
+
+The maintainers track work in a [bd (beads)](https://github.com/gastownhall/beads)
+tracker that is not part of this repository. External contributors don't need it
+and should use GitHub issues instead. `.beads/` is gitignored, and nothing
+tracked here names a bead.
+
 ## Releasing
 
 - Start each new piece of work in a new branch from the latest origin/main. Changes are always submitted via a PR.
