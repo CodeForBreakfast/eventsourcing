@@ -12,7 +12,7 @@ IMPORTANT: Always use worktrees for feature development to maintain clean separa
 1. **Ensure we're in the repo root and up to date:**
    - Run `pwd` to confirm current location
    - Run `git fetch origin main` to get latest from remote
-   - If not in repo root (brownsauce/), navigate back to it first
+   - If not in repo root (eventsourcing/), navigate back to it first
    - Run `git pull origin main` to update main branch
 
 2. **Create new worktree for feature branch:**
