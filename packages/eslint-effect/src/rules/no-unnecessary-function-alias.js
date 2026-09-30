@@ -26,7 +26,7 @@ export default {
 
   create(context) {
     const maxReferences = context.options[0]?.maxReferences ?? 2;
-    const sourceCode = context.getSourceCode();
+    const sourceCode = context.sourceCode;
 
     const getOriginalName = (node) => {
       if (node.type === 'Identifier') {

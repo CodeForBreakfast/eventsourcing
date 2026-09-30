@@ -270,8 +270,9 @@ const getChangesets = pipe(
 
 // Wrapper provides type safety for JSON.parse (returns any)
 // eslint-disable-next-line effect/no-eta-expansion -- JSON.parse is external and cannot be inlined
-const parsePackageDependencyOutput = (output: string): Record<string, readonly string[]> =>
-  JSON.parse(output);
+const parsePackageDependencyOutput = (
+  output: string
+): Readonly<Record<string, readonly string[]>> => JSON.parse(output);
 
 const handleDependencyCheckFailure = (terminal: Terminal.Terminal) => () =>
   pipe(
@@ -293,7 +294,7 @@ const getPackageDependencyMap = pipe(Terminal.Terminal, Effect.flatMap(runDepend
 
 const getBaseBranch = (): string => {
   const envVar = 'GITHUB_BASE_REF';
-  const proc: Record<string, unknown> = globalThis as never;
+  const proc: Readonly<Record<string, unknown>> = globalThis as never;
   const env = (proc['process'] as Record<string, Record<string, string>> | undefined)?.['env'];
   return (env?.[envVar] as string | undefined) ?? 'origin/main';
 };
@@ -349,7 +350,7 @@ const parseJsonSafely = (content: string): unknown => {
   }
 };
 
-const extractDependencies = (pkg: unknown, key: string): Record<string, string> => {
+const extractDependencies = (pkg: unknown, key: string): Readonly<Record<string, string>> => {
   const record = pkg as Record<string, unknown> | null;
   const deps = record?.[key];
   return (deps as Record<string, string> | undefined) || {};
@@ -749,7 +750,10 @@ const showDependencyValidationFailure = (
   );
 
 const buildDependencyError =
-  (changedPackages: ReadonlySet<string>, packageDependencyMap: Record<string, readonly string[]>) =>
+  (
+    changedPackages: ReadonlySet<string>,
+    packageDependencyMap: Readonly<Record<string, readonly string[]>>
+  ) =>
   (
     errors: readonly MissingDependentError[],
     changedPackage: string
@@ -769,7 +773,10 @@ const buildDependencyError =
   };
 
 const checkDependencyErrors =
-  (changedPackages: ReadonlySet<string>, packageDependencyMap: Record<string, readonly string[]>) =>
+  (
+    changedPackages: ReadonlySet<string>,
+    packageDependencyMap: Readonly<Record<string, readonly string[]>>
+  ) =>
   (terminal: Terminal.Terminal) => {
     const dependencyErrors = Array.from(changedPackages).reduce<readonly MissingDependentError[]>(
       buildDependencyError(changedPackages, packageDependencyMap),
@@ -799,7 +806,7 @@ const displaySuccess = (changesets: readonly ChangesetInfoInternal[]) =>
 
 const validateDependencies =
   (changedPackages: ReadonlySet<string>) =>
-  (packageDependencyMap: Record<string, readonly string[]>) =>
+  (packageDependencyMap: Readonly<Record<string, readonly string[]>>) =>
     pipe(
       Terminal.Terminal,
       Effect.flatMap(checkDependencyErrors(changedPackages, packageDependencyMap))

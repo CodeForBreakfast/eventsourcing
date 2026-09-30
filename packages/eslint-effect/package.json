@@ -42,11 +42,11 @@
     "check:publishable": "npm view $npm_package_name@$npm_package_version version >/dev/null 2>&1 && exit 1 || exit 0"
   },
   "peerDependencies": {
-    "eslint": ">=8.0.0"
+    "eslint": ">=8.40.0"
   },
   "devDependencies": {
-    "eslint": "9.39.5",
-    "@typescript-eslint/eslint-plugin": "8.70.1",
+    "eslint": "10.11.0",
+    "@typescript-eslint/eslint-plugin": "8.71.0",
     "typescript": "5.9.3",
     "effect": "3.22.2"
   }

@@ -156,7 +156,7 @@ export default {
       const functionName = getFunctionName(callExpr.callee);
       if (!functionName) return null;
 
-      const sourceCode = context.sourceCode || context.getSourceCode();
+      const sourceCode = context.sourceCode;
 
       const lastParamArgIndex = Math.max(...argsFromParams.map((item) => item.index));
       const lastNonParamIndex = Math.max(...argsNotFromParams.map((item) => item.index));

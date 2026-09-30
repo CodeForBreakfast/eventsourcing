@@ -242,7 +242,7 @@ const buildClientState =
     clientId: Server.ClientId,
     connectedAt: ReadonlyDeep<Date>,
     ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
-    authMetadata: Record<string, unknown>
+    authMetadata: Readonly<Record<string, unknown>>
   ) =>
   (resources: {
     readonly connectionStateQueue: Queue.Queue<ConnectionState>;
@@ -262,7 +262,7 @@ const createClientStateResources = (
   clientId: Server.ClientId,
   connectedAt: ReadonlyDeep<Date>,
   ws: ReadonlyDeep<ServerWebSocket<WebSocketData>>,
-  authMetadata: Record<string, unknown>
+  authMetadata: Readonly<Record<string, unknown>>
 ): Effect.Effect<ClientState, never, never> =>
   pipe(
     createClientResources(),
