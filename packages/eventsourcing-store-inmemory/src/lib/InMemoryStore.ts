@@ -21,9 +21,12 @@ interface EventStream<V> {
   readonly pubsub: PubSub.PubSub<V>;
 }
 
+const subscriberBufferCapacity = 256;
+
 const emptyStream = <V>(): Effect.Effect<EventStream<V>, never, never> =>
   pipe(
-    PubSub.unbounded<V>(),
+    subscriberBufferCapacity,
+    PubSub.bounded<V>,
     Effect.map((pubsub) => ({
       events: Chunk.empty<V>(),
       pubsub,

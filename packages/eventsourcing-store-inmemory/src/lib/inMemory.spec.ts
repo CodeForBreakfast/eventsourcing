@@ -99,7 +99,7 @@ describe('Subscriptions are live as soon as they return', () => {
     ));
 });
 
-const lagBehindEvents = 1000;
+const lagBehindEvents = 100;
 
 const appendOneEventAt = (store: EventStore<string>) => (eventNumber: number) =>
   pipe(
@@ -130,7 +130,7 @@ const runLaggingSubscriberTest = (store: EventStore<string>) =>
   );
 
 describe('A slow subscriber', () => {
-  it('should not stall appends however far it lags behind', () =>
+  it('should not stall appends while it lags behind by fewer events than the buffer holds', () =>
     pipe(
       StringEventStore,
       Effect.flatMap(runLaggingSubscriberTest),
