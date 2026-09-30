@@ -42,11 +42,15 @@ const appendEvents = (
   events: readonly string[]
 ) => pipe(events, Stream.fromIterable, Stream.run(store.append({ streamId, eventNumber: 0 })));
 
-const forkPerStreamSubscription = (store: EventStore<string>, streamId: EventStreamId) => {
+const forkPerStreamSubscription = (
+  store: EventStore<string>,
+  streamId: EventStreamId,
+  count: number
+) => {
   const subscription = store.subscribe({ streamId, eventNumber: 0 });
   return pipe(
     subscription,
-    Effect.flatMap((stream) => collectEvents(stream, 2))
+    Effect.flatMap((stream) => collectEvents(stream, count))
   );
 };
 
@@ -60,7 +64,7 @@ const forkAllEventsSubscription = (store: EventStore<string>, count: number) => 
 
 const setupDualSubscriptions = (store: EventStore<string>, streamId: EventStreamId) =>
   Effect.all({
-    perStreamFiber: forkPerStreamSubscription(store, streamId),
+    perStreamFiber: forkPerStreamSubscription(store, streamId, 2),
     allEventsFiber: forkAllEventsSubscription(store, 2),
   });
 
@@ -208,6 +212,63 @@ const runMultiStreamTest = (streamId1: EventStreamId, streamId2: EventStreamId) 
       expect(stream2Events.length).toBe(2);
     })
   );
+
+const appendImmediatelyAndJoin = <A>(
+  store: EventStore<string>,
+  streamId: EventStreamId,
+  fiber: Fiber.Fiber<Chunk.Chunk<A>, unknown>
+) =>
+  pipe(
+    appendEvents(store, streamId, ['immediate-event']),
+    Effect.andThen(Fiber.join(fiber)),
+    Effect.timeout('2 seconds')
+  );
+
+const runImmediatePerStreamTest = (streamId: EventStreamId) =>
+  pipe(
+    StringEventStore,
+    Effect.flatMap((store) =>
+      Effect.flatMap(forkPerStreamSubscription(store, streamId, 1), (fiber) =>
+        appendImmediatelyAndJoin(store, streamId, fiber)
+      )
+    ),
+    Effect.map((events) => {
+      expect(Array.from(events)).toEqual(['immediate-event']);
+    })
+  );
+
+const runImmediateAllEventsTest = (streamId: EventStreamId) =>
+  pipe(
+    StringEventStore,
+    Effect.flatMap((store) =>
+      Effect.flatMap(forkAllEventsSubscription(store, 1), (fiber) =>
+        appendImmediatelyAndJoin(store, streamId, fiber)
+      )
+    ),
+    Effect.map((events) => {
+      expect(Array.from(Chunk.map(events, (e) => e.event))).toEqual(['immediate-event']);
+    })
+  );
+
+describe('Subscriptions are live as soon as they return', () => {
+  it('should deliver an event appended as soon as subscribe returns', () =>
+    pipe(
+      randomId(),
+      decodeStreamId,
+      Effect.flatMap(runImmediatePerStreamTest),
+      Effect.provide(TestLayer),
+      Effect.runPromise
+    ));
+
+  it('should deliver an event appended as soon as subscribeAll returns', () =>
+    pipe(
+      randomId(),
+      decodeStreamId,
+      Effect.flatMap(runImmediateAllEventsTest),
+      Effect.provide(TestLayer),
+      Effect.runPromise
+    ));
+});
 
 describe('Bridge notification publishing', () => {
   it('should publish events to BOTH per-stream subscribers AND all-events subscribers', () => {
