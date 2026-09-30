@@ -122,7 +122,8 @@ const appendManyEvents = (store: EventStore<string>) =>
 
 const runLaggingSubscriberTest = (store: EventStore<string>) =>
   pipe(
-    startSubscriberThatNeverDrains(store),
+    store,
+    startSubscriberThatNeverDrains,
     Effect.andThen(Effect.yieldNow()),
     Effect.andThen(appendManyEvents(store)),
     Effect.timeout('2 seconds')
