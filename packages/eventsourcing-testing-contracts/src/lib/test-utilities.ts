@@ -5,7 +5,7 @@
  * and test data generators for transport testing scenarios.
  */
 
-import { Effect, Stream, pipe, Chunk, Ref, Duration, Scope } from 'effect';
+import { Cause, Effect, Stream, pipe, Chunk, Ref, Duration, Scope } from 'effect';
 import { TransportError, makeTransportMessage } from '@codeforbreakfast/eventsourcing-transport';
 import type {
   TransportMessage,
@@ -238,7 +238,7 @@ const flipAndFilterError = <A, E>(
   Effect.filterOrFail(
     Effect.flip(effect),
     errorPredicate,
-    () => new Error('Error did not match predicate')
+    () => new Cause.NoSuchElementException('Error did not match predicate')
   ) as Effect.Effect<E, Error, never>;
 
 /**
@@ -286,7 +286,7 @@ const filterTakeAndDrain = (
       ),
       timeoutMs
     ),
-    () => new Error(`Timeout waiting for connection state: ${expectedState}`)
+    () => new Cause.TimeoutException(`Timeout waiting for connection state: ${expectedState}`)
   );
 
 /**
@@ -310,7 +310,7 @@ const takeCollectAndTimeout = <T>(
       Effect.map(Stream.runCollect(Stream.take(stream, count)), (chunk) => Array.from(chunk)),
       timeoutMs
     ),
-    () => new Error(`Timeout collecting ${count} messages`)
+    () => new Cause.TimeoutException(`Timeout collecting ${count} messages`)
   );
 
 /**

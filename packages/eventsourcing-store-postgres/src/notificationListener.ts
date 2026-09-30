@@ -1,5 +1,18 @@
+import { SqlError } from '@effect/sql';
 import { PgClient } from '@effect/sql-pg';
-import { Effect, Layer, Stream, Ref, Queue, Schema, HashSet, pipe } from 'effect';
+import {
+  Deferred,
+  Effect,
+  Layer,
+  Match,
+  Stream,
+  Ref,
+  Queue,
+  Schedule,
+  Schema,
+  HashSet,
+  pipe,
+} from 'effect';
 import {
   EventStreamId,
   EventStoreError,
@@ -24,6 +37,14 @@ export const makeChannelName = (streamId: EventStreamId): string => `eventstore_
  * Global channel name for all events (used by subscribeAll)
  */
 export const ALL_EVENTS_CHANNEL = 'eventstore_events_all';
+
+/**
+ * Prefix of the payloads a listener sends to its own channel to learn that LISTEN is active.
+ * Every listener on the channel receives them, so every listener drops them.
+ */
+const LISTEN_PROBE_PREFIX = 'eventstore_listen_probe:';
+
+const LISTEN_PROBE_INTERVAL = '10 millis';
 
 /**
  * Parse notification payload from PostgreSQL trigger JSON
@@ -166,6 +187,73 @@ const processRawNotification =
       )
     );
 
+const handleUnlessProbe =
+  (
+    probe: string,
+    active: Deferred.Deferred<void, SqlError.SqlError>,
+    handleNotification: (rawPayload: string) => Effect.Effect<void>
+  ) =>
+  (rawPayload: string) =>
+    pipe(
+      rawPayload,
+      Match.value,
+      Match.when(probe, () => Deferred.succeed(active, undefined)),
+      Match.when(
+        (payload) => payload.startsWith(LISTEN_PROBE_PREFIX),
+        () => Effect.void
+      ),
+      Match.orElse(handleNotification),
+      Effect.asVoid
+    );
+
+const sendProbeUntilActive = (
+  client: PgClient.PgClient,
+  channelName: string,
+  probe: string,
+  active: Deferred.Deferred<void, SqlError.SqlError>
+) =>
+  pipe(
+    // Not client.notify: @effect/sql-pg 0.53 sends `NOTIFY channel, $1`, which Postgres rejects.
+    client`SELECT pg_notify(${channelName}, ${probe})`,
+    Effect.repeat(Schedule.spaced(LISTEN_PROBE_INTERVAL)),
+    Effect.raceFirst(Deferred.await(active))
+  );
+
+const listenInBackground = (
+  client: PgClient.PgClient,
+  channelName: string,
+  probe: string,
+  active: Deferred.Deferred<void, SqlError.SqlError>,
+  handleNotification: (rawPayload: string) => Effect.Effect<void>
+) =>
+  pipe(
+    channelName,
+    client.listen,
+    Stream.runForEach(handleUnlessProbe(probe, active, handleNotification)),
+    Effect.tapError((error) => Deferred.fail(active, error)),
+    Effect.fork
+  );
+
+/**
+ * Starts listening on a channel in the background and waits until LISTEN is active,
+ * so that no notification sent after this returns can be missed.
+ */
+const listenUntilActive = (
+  client: PgClient.PgClient,
+  channelName: string,
+  handleNotification: (rawPayload: string) => Effect.Effect<void>
+) =>
+  pipe(
+    Deferred.make<void, SqlError.SqlError>(),
+    Effect.flatMap((active) => {
+      const probe = `${LISTEN_PROBE_PREFIX}${crypto.randomUUID()}`;
+      return Effect.andThen(
+        listenInBackground(client, channelName, probe, active, handleNotification),
+        sendProbeUntilActive(client, channelName, probe, active)
+      );
+    })
+  );
+
 const startListeningOnChannel = (
   client: PgClient.PgClient,
   notificationQueue: Queue.Queue<{
@@ -175,13 +263,10 @@ const startListeningOnChannel = (
   }>,
   channelName: string
 ) =>
-  pipe(
+  listenUntilActive(
+    client,
     channelName,
-    client.listen,
-    Stream.tap(processRawNotification(notificationQueue, channelName, false)),
-    Stream.runDrain,
-    Effect.fork,
-    Effect.asVoid
+    processRawNotification(notificationQueue, channelName, false)
   );
 
 const activateChannelAndStartListening = (
@@ -345,15 +430,7 @@ const startListeningOnAllEventsChannel = (
     readonly payload: NotificationPayload;
     readonly isAllEvents: boolean;
   }>
-) =>
-  pipe(
-    ALL_EVENTS_CHANNEL,
-    client.listen,
-    Stream.tap(processAllEventsNotification(notificationQueue)),
-    Stream.runDrain,
-    Effect.fork,
-    Effect.asVoid
-  );
+) => listenUntilActive(client, ALL_EVENTS_CHANNEL, processAllEventsNotification(notificationQueue));
 
 const activateAllEventsChannel = (
   activeChannels: Ref.Ref<HashSet.HashSet<string>>,

@@ -1,8 +1,12 @@
 #!/usr/bin/env bun
 
-import { Effect, pipe, Array as EffectArray, Console, Option, Match } from 'effect';
+import { Data, Effect, pipe, Array as EffectArray, Console, Option, Match } from 'effect';
 import { Path, Command, Terminal, FileSystem } from '@effect/platform';
 import { BunContext, BunRuntime } from '@effect/platform-bun';
+
+class DocsValidationError extends Data.TaggedError('DocsValidationError')<{
+  readonly message: string;
+}> {}
 
 interface CodeBlock {
   readonly code: string;
@@ -263,7 +267,10 @@ const readDirectoryForProcessing = (currentDir: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.readDirectory(currentDir)),
-    Effect.mapError((error) => new Error(`Failed to read directory ${currentDir}: ${error}`))
+    Effect.mapError(
+      (error) =>
+        new DocsValidationError({ message: `Failed to read directory ${currentDir}: ${error}` })
+    )
   );
 
 const processDirectory = (
@@ -309,7 +316,9 @@ const writeFileStringToPath = (content: string) => (path: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.writeFileString(path, content)),
-    Effect.mapError((error) => new Error(`Failed to write tsconfig: ${error}`))
+    Effect.mapError(
+      (error) => new DocsValidationError({ message: `Failed to write tsconfig: ${error}` })
+    )
   );
 
 const writeTsConfig = (tempDir: string) =>
@@ -321,7 +330,9 @@ const writeBlockFileContent =
     pipe(
       FileSystem.FileSystem,
       Effect.andThen((fs) => fs.writeFileString(filepath, content)),
-      Effect.mapError((error) => new Error(`Failed to write ${filename}: ${error}`)),
+      Effect.mapError(
+        (error) => new DocsValidationError({ message: `Failed to write ${filename}: ${error}` })
+      ),
       Effect.as({ filename, block, headerLines })
     );
 
@@ -442,7 +453,9 @@ const cleanupTempDir = (tempDir: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.remove(tempDir, { recursive: true })),
-    Effect.mapError(() => new Error(`Failed to cleanup temp dir ${tempDir}`)),
+    Effect.mapError(
+      () => new DocsValidationError({ message: `Failed to cleanup temp dir ${tempDir}` })
+    ),
     Effect.orElseSucceed(() => undefined)
   );
 
@@ -475,7 +488,7 @@ const cleanTempDirectory = (tempDir: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.remove(tempDir, { recursive: true })),
-    Effect.mapError(() => new Error(`Failed to clean temp dir`)),
+    Effect.mapError(() => new DocsValidationError({ message: `Failed to clean temp dir` })),
     Effect.orElseSucceed(() => undefined)
   );
 
@@ -483,7 +496,9 @@ const createTempDirectory = (tempDir: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.makeDirectory(tempDir, { recursive: true })),
-    Effect.mapError((error) => new Error(`Failed to create temp dir: ${error}`))
+    Effect.mapError(
+      (error) => new DocsValidationError({ message: `Failed to create temp dir: ${error}` })
+    )
   );
 
 const getRelativePath = (from: string, to: string) =>
@@ -496,7 +511,9 @@ const readFileAsString = (file: string) =>
   pipe(
     FileSystem.FileSystem,
     Effect.andThen((fs) => fs.readFileString(file)),
-    Effect.mapError((error) => new Error(`Failed to read ${file}: ${error}`))
+    Effect.mapError(
+      (error) => new DocsValidationError({ message: `Failed to read ${file}: ${error}` })
+    )
   );
 
 const readAndExtractCodeBlocks =
@@ -534,7 +551,7 @@ const displayErrorsAndFail = (errors: readonly ValidationError[]) => {
     Effect.andThen(Console.log('   1. Update the code examples to match current APIs')),
     Effect.andThen(Console.log('   2. Add missing imports or type annotations')),
     Effect.andThen(Console.log('   3. Verify examples compile with: bun run validate:docs\n')),
-    Effect.andThen(Effect.fail(new Error('Validation failed')))
+    Effect.andThen(Effect.fail(new DocsValidationError({ message: 'Validation failed' })))
   );
 };
 

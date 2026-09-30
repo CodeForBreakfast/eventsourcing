@@ -1,4 +1,4 @@
-import { Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
+import { Data, Effect, Match, Option, ParseResult, Schema, pipe } from 'effect';
 import {
   makeAggregateRoot,
   defineAggregateEventStore,
@@ -91,20 +91,26 @@ const applyEvent =
       Match.orElse(() => handleNonCreatedEvent(state, event))
     );
 
+class TodoCommandError extends Data.TaggedError('TodoCommandError')<{
+  readonly message: string;
+}> {}
+
 const requireExistingTodo = <A, E, R>(
   operation: string,
   onSome: (state: TodoState) => Effect.Effect<A, E, R>
-): ((state: Readonly<Option.Option<TodoState>>) => Effect.Effect<A, E | Error, R>) =>
+): ((state: Readonly<Option.Option<TodoState>>) => Effect.Effect<A, E | TodoCommandError, R>) =>
   Option.match({
-    onNone: () => Effect.fail(new Error(`Cannot ${operation} non-existent TODO`)),
+    onNone: () =>
+      Effect.fail(new TodoCommandError({ message: `Cannot ${operation} non-existent TODO` })),
     onSome,
   });
 
 const failIfDeletedTodo =
   (operation: string) =>
-  (state: TodoState): Effect.Effect<TodoState, Error> =>
+  (state: TodoState): Effect.Effect<TodoState, TodoCommandError> =>
     Effect.if(state.deleted, {
-      onTrue: () => Effect.fail(new Error(`Cannot ${operation} deleted TODO`)),
+      onTrue: () =>
+        Effect.fail(new TodoCommandError({ message: `Cannot ${operation} deleted TODO` })),
       onFalse: () => Effect.succeed(state),
     });
 

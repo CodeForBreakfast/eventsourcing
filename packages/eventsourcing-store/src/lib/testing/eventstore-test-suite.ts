@@ -1,4 +1,15 @@
-import { Chunk, Duration, Effect, Layer, ParseResult, Schema, Stream, pipe, Ref } from 'effect';
+import {
+  Cause,
+  Chunk,
+  Duration,
+  Effect,
+  Layer,
+  ParseResult,
+  Schema,
+  Stream,
+  pipe,
+  Ref,
+} from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
 import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
 import { type EventStore, ConcurrencyConflictError } from '../eventstore';
@@ -625,7 +636,7 @@ export function runEventStoreTestSuite<E>(
               Effect.sleep,
               Effect.andThen(
                 Effect.fail(
-                  new Error(
+                  new Cause.TimeoutException(
                     `Subscription timed out. Received ${receivedEvents.length} events: ${JSON.stringify(receivedEvents)}`
                   )
                 )

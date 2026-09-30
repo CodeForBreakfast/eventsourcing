@@ -9,7 +9,19 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from 'bun:test';
-import { Effect, Stream, Scope, pipe, Option, Exit, Fiber, Duration, Chunk, Ref } from 'effect';
+import {
+  Cause,
+  Effect,
+  Stream,
+  Scope,
+  pipe,
+  Option,
+  Exit,
+  Fiber,
+  Duration,
+  Chunk,
+  Ref,
+} from 'effect';
 import type { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
@@ -288,7 +300,9 @@ export const runServerTransportContractTests: ServerTestRunner = (
                       Effect.flatMap((serverConnection) => {
                         if (!Option.isSome(serverConnection)) {
                           return Effect.fail(
-                            new Error('Expected server connection to be available')
+                            new Cause.NoSuchElementException(
+                              'Expected server connection to be available'
+                            )
                           );
                         }
 
@@ -581,7 +595,9 @@ export const runServerTransportContractTests: ServerTestRunner = (
                       Effect.flatMap((serverConnection) => {
                         if (!Option.isSome(serverConnection)) {
                           return Effect.fail(
-                            new Error('Expected server connection to be available')
+                            new Cause.NoSuchElementException(
+                              'Expected server connection to be available'
+                            )
                           );
                         }
 
@@ -796,7 +812,9 @@ export const runServerTransportContractTests: ServerTestRunner = (
                       Effect.flatMap((serverConnection) => {
                         if (!Option.isSome(serverConnection)) {
                           return Effect.fail(
-                            new Error('Expected server connection to be available')
+                            new Cause.NoSuchElementException(
+                              'Expected server connection to be available'
+                            )
                           );
                         }
 

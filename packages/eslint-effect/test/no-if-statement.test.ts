@@ -1,4 +1,4 @@
-import { Effect, Either, Option } from 'effect';
+import { Cause, Effect, Either, Option } from 'effect';
 
 const either = Either.right(42);
 const option = Option.some(42);
@@ -23,7 +23,7 @@ if (event.type === 'TodoCreated') {
 
 // eslint-disable-next-line effect/no-if-statement
 if (state.deleted) {
-  const _unused1 = Effect.fail(new Error('Cannot complete deleted TODO'));
+  const _unused1 = Effect.fail(new Cause.RuntimeException('Cannot complete deleted TODO'));
 } else {
   const _unused2 = Effect.succeed(state);
 }

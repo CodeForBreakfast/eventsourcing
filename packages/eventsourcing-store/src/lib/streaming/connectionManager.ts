@@ -76,7 +76,11 @@ export const ConnectionConfigLive = Layer.effect(
   ConnectionConfigTag,
   Effect.mapError(
     Config.unwrap(ConnectionConfigSchema),
-    (error) => new Error(`Failed to load connection configuration: ${JSON.stringify(error)}`)
+    (error) =>
+      new ConnectionError({
+        message: `Failed to load connection configuration: ${JSON.stringify(error)}`,
+        cause: error,
+      })
   )
 );
 
