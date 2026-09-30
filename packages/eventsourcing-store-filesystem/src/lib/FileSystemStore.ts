@@ -218,12 +218,6 @@ const getOrCreatePubSub =
       })
     );
 
-const ensurePubSubExists = <V>(
-  streamId: EventStreamId,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
-): Effect.Effect<PubSub.PubSub<V>, never, never> =>
-  pipe(state, SynchronizedRef.modifyEffect(getOrCreatePubSub(streamId)));
-
 const publishEventsToStream = <V>(
   pubsub: PubSub.PubSub<V>,
   events: Chunk.Chunk<V>
@@ -245,40 +239,29 @@ const tagEventsWithStreamId = <V>(
 const publishEventsToStreams = <V>(
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  allEventsStream: EventStream<StreamEvent<V>>,
-  newPosition: EventStreamPosition
-): Effect.Effect<EventStreamPosition, never, never> =>
+  currentState: FileSystemStoreState<V>
+): Effect.Effect<readonly [EventStreamPosition, FileSystemStoreState<V>], never, never> =>
   pipe(
-    ensurePubSubExists(streamEnd.streamId, state),
-    Effect.flatMap((pubsub) => publishEventsToStream(pubsub, newEvents)),
-    Effect.tap(() =>
+    currentState,
+    getOrCreatePubSub<V>(streamEnd.streamId),
+    Effect.tap(([pubsub]) => publishEventsToStream(pubsub, newEvents)),
+    Effect.tap(([, nextState]) =>
       publishEventsToStream(
-        allEventsStream.pubsub,
+        nextState.allEventsStream.pubsub,
         tagEventsWithStreamId(newEvents, streamEnd.streamId, streamEnd.eventNumber)
       )
     ),
-    Effect.as(newPosition)
-  );
-
-const publishAndReturnPosition = <V>(
-  streamEnd: EventStreamPosition,
-  newEvents: Chunk.Chunk<V>,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
-): Effect.Effect<EventStreamPosition, never, never> => {
-  const newPosition = {
-    ...streamEnd,
-    eventNumber: streamEnd.eventNumber + newEvents.length,
-  };
-  return pipe(
-    state,
-    SynchronizedRef.get,
-    Effect.flatMap(({ allEventsStream }) =>
-      publishEventsToStreams(streamEnd, newEvents, state, allEventsStream, newPosition)
+    Effect.map(
+      ([, nextState]) =>
+        [
+          { ...streamEnd, eventNumber: streamEnd.eventNumber + newEvents.length },
+          nextState,
+        ] as const
     )
   );
-};
 
+// A live stream reads its history and subscribes under this same lock, so each append lands
+// wholly in a subscriber's history or wholly in its live feed.
 const writeAndAppendEvents = <V>(
   streamDir: string,
   streamEnd: EventStreamPosition,
@@ -290,10 +273,12 @@ const writeAndAppendEvents = <V>(
   ConcurrencyConflictError,
   FileSystem.FileSystem | Path.Path
 > =>
-  pipe(
-    validateStreamVersion(streamDir, streamEnd, fs),
-    Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
-    Effect.andThen(publishAndReturnPosition(streamEnd, newEvents, state))
+  SynchronizedRef.modifyEffect(state, (currentState) =>
+    pipe(
+      validateStreamVersion(streamDir, streamEnd, fs),
+      Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
+      Effect.andThen(publishEventsToStreams(streamEnd, newEvents, currentState))
+    )
   );
 
 const appendEventsToStream =
@@ -432,36 +417,50 @@ const readEventsFromDirectory = <V>(
   );
 };
 
-const concatHistoricalWithQueue =
-  <V>(historical: Stream.Stream<V, never, never>) =>
-  (dequeue: Queue.Dequeue<V>): Stream.Stream<V, never, never> =>
-    pipe(historical, Stream.concat(Stream.fromQueue(dequeue)));
+const historyThenLive = <V>(
+  historical: Stream.Stream<V, never, never>,
+  liveEvents: Queue.Dequeue<V>
+): Stream.Stream<V, never, never> => pipe(historical, Stream.concat(Stream.fromQueue(liveEvents)));
 
-const createLiveStreamFromHistoricalAndPubSub =
-  <V>(historical: Stream.Stream<V, never, never>) =>
-  (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
-    const subscription = PubSub.subscribe(pubsub);
-    const subscriptionEffect = pipe(
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- PubSub.subscribe requires pubsub argument, cannot be piped differently
-      subscription,
-      Effect.map(concatHistoricalWithQueue(historical))
-    );
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Stream.unwrapScoped requires Effect argument, cannot be piped differently
-    return Stream.unwrapScoped(subscriptionEffect);
-  };
-
-const combineHistoricalWithPubSub = <V>(
-  streamId: EventStreamId,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  historical: Stream.Stream<V, never, never>
-): Effect.Effect<Stream.Stream<V, never, never>, never, never> => {
-  const pubsubEffect = ensurePubSubExists(streamId, state);
-  return pipe(
-    pubsubEffect,
-    Effect.map(createLiveStreamFromHistoricalAndPubSub(historical)),
-    Effect.flatMap(Effect.succeed)
+const subscribeAndReadHistory = <V>(
+  pubsub: PubSub.PubSub<V>,
+  nextState: FileSystemStoreState<V>,
+  streamDir: string,
+  fs: FileSystem.FileSystem,
+  path: Path.Path
+) =>
+  pipe(
+    pubsub,
+    PubSub.subscribe,
+    Effect.zipWith(
+      readEventsFromDirectoryWithServices<V>(streamDir, fs, path),
+      (liveEvents, historical) => [historyThenLive(historical, liveEvents), nextState] as const
+    )
   );
-};
+
+const subscribeThenReadHistory =
+  <V>(streamId: EventStreamId, streamDir: string, fs: FileSystem.FileSystem, path: Path.Path) =>
+  (currentState: FileSystemStoreState<V>) =>
+    pipe(
+      currentState,
+      getOrCreatePubSub<V>(streamId),
+      Effect.flatMap(([pubsub, nextState]) =>
+        subscribeAndReadHistory(pubsub, nextState, streamDir, fs, path)
+      )
+    );
+
+// Reading history and subscribing when the stream runs, not when subscribe returns, catches
+// events appended in the meantime without holding a subscription for a stream that never runs.
+const liveStreamWithHistory = <V>(
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
+  streamId: EventStreamId,
+  streamDir: string,
+  fs: FileSystem.FileSystem,
+  path: Path.Path
+): Stream.Stream<V, never, never> =>
+  Stream.unwrapScoped(
+    SynchronizedRef.modifyEffect(state, subscribeThenReadHistory(streamId, streamDir, fs, path))
+  );
 
 const getEventsForStream =
   <V>(
@@ -472,10 +471,17 @@ const getEventsForStream =
     streamId: EventStreamId
   ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> =>
     pipe(
-      Path.Path,
-      Effect.map((path) => getStreamDirectoryPath(config.baseDir, streamId, path)),
-      Effect.flatMap(readEventsFromDirectory<V>),
-      Effect.flatMap((historical) => combineHistoricalWithPubSub(streamId, state, historical))
+      [FileSystem.FileSystem, Path.Path] as const,
+      Effect.all,
+      Effect.map(([fs, path]) =>
+        liveStreamWithHistory(
+          state,
+          streamId,
+          getStreamDirectoryPath(config.baseDir, streamId, path),
+          fs,
+          path
+        )
+      )
     );
 
 const EventStreamIdSchema = pipe(Schema.String, Schema.brand('EventStreamId'));
