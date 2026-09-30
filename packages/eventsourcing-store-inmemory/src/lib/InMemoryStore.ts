@@ -1,4 +1,14 @@
-import { Chunk, Effect, HashMap, Option, PubSub, Stream, SynchronizedRef, pipe } from 'effect';
+import {
+  Chunk,
+  Effect,
+  HashMap,
+  Option,
+  PubSub,
+  Queue,
+  Stream,
+  SynchronizedRef,
+  pipe,
+} from 'effect';
 import {
   EventStreamId,
   EventStreamPosition,
@@ -214,8 +224,40 @@ export interface InMemoryStore<V = never> {
   >;
 }
 
-const createLiveEventStream = <V>(eventStream: EventStream<V>): Stream.Stream<V, never, never> =>
-  pipe(eventStream.events, Stream.fromChunk, Stream.concat(Stream.fromPubSub(eventStream.pubsub)));
+const snapshotThenLive =
+  <V>(eventStream: EventStream<V>, offset: number) =>
+  (liveEvents: Queue.Dequeue<V>): Stream.Stream<V, never, never> =>
+    pipe(
+      eventStream.events,
+      Chunk.drop(offset),
+      Stream.fromChunk,
+      Stream.concat(Stream.fromQueue(liveEvents))
+    );
+
+const subscribeFromOffset =
+  (offset: number) =>
+  <V>(eventStream: EventStream<V>) =>
+    pipe(eventStream.pubsub, PubSub.subscribe, Effect.map(snapshotThenLive(eventStream, offset)));
+
+// Append publishes while it holds this lock, so taking the snapshot and subscribing under the
+// same lock leaves no gap between them. Doing both when the stream runs, not when subscribe
+// returns, catches events appended in the meantime without holding a subscription for a stream
+// that is never run.
+const liveStreamFromOffset = <V, A>(
+  value: SynchronizedRef.SynchronizedRef<Value<V>>,
+  selectEventStream: (current: Value<V>) => Effect.Effect<EventStream<A>, never, never>,
+  offset: number
+): Stream.Stream<A, never, never> =>
+  Stream.unwrapScoped(
+    SynchronizedRef.modifyEffect(value, (current) =>
+      pipe(
+        current,
+        selectEventStream,
+        Effect.flatMap(subscribeFromOffset(offset)),
+        Effect.map((stream) => [stream, current] as const)
+      )
+    )
+  );
 
 const createHistoricalEventStream = <V>(
   eventStream: EventStream<V>
@@ -236,12 +278,6 @@ const findEventStreamOrDie = <V>(
       onSome: Effect.succeed,
     })
   );
-
-const getEventStreamAndCreateLive = <V>(
-  eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
-  streamId: EventStreamId
-): Effect.Effect<Stream.Stream<V, never, never>, never, never> =>
-  pipe(findEventStreamOrDie(eventStreamsById, streamId), Effect.map(createLiveEventStream));
 
 const getEventStreamAndCreateHistorical = <V>(
   eventStreamsById: HashMap.HashMap<EventStreamId, EventStream<V>>,
@@ -266,9 +302,13 @@ const getLiveStreamForId =
   (value: SynchronizedRef.SynchronizedRef<Value<V>>) =>
     pipe(
       value,
-      SynchronizedRef.updateAndGetEffect(ensureEventStream(streamId)),
-      Effect.flatMap(({ eventStreamsById }) =>
-        getEventStreamAndCreateLive(eventStreamsById, streamId)
+      SynchronizedRef.updateEffect(ensureEventStream(streamId)),
+      Effect.as(
+        liveStreamFromOffset(
+          value,
+          ({ eventStreamsById }) => findEventStreamOrDie(eventStreamsById, streamId),
+          0
+        )
       )
     );
 
@@ -283,14 +323,12 @@ const getHistoricalStreamForId =
       )
     );
 
+const selectAllEventsStream = <V>({ allEventsStream }: Value<V>) => Effect.succeed(allEventsStream);
+
 const getAllEventsStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
 ): Effect.Effect<Stream.Stream<StreamEvent<V>, never, never>, never, never> =>
-  pipe(
-    value,
-    SynchronizedRef.get,
-    Effect.map(({ allEventsStream }) => createLiveEventStream(allEventsStream))
-  );
+  Effect.succeed(liveStreamFromOffset(value, selectAllEventsStream, 0));
 
 const getAllEventsLiveOnlyStream = <V>(
   value: SynchronizedRef.SynchronizedRef<Value<V>>
@@ -298,7 +336,9 @@ const getAllEventsLiveOnlyStream = <V>(
   pipe(
     value,
     SynchronizedRef.get,
-    Effect.map(({ allEventsStream }) => Stream.fromPubSub(allEventsStream.pubsub))
+    Effect.map(({ allEventsStream }) =>
+      liveStreamFromOffset(value, selectAllEventsStream, allEventsStream.events.length)
+    )
   );
 
 const appendForStore =
@@ -326,13 +366,11 @@ export const make = <V>() =>
         allEventsStream,
       })
     ),
-    Effect.map(
-      (value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({
-        append: appendForStore(value),
-        get: getForStore(value),
-        getHistorical: getHistoricalForStore(value),
-        getAll: () => getAllEventsStream(value),
-        getAllLiveOnly: () => getAllEventsLiveOnlyStream(value),
-      })
-    )
+    Effect.map((value: SynchronizedRef.SynchronizedRef<Value<V>>): InMemoryStore<V> => ({
+      append: appendForStore(value),
+      get: getForStore(value),
+      getHistorical: getHistoricalForStore(value),
+      getAll: () => getAllEventsStream(value),
+      getAllLiveOnly: () => getAllEventsLiveOnlyStream(value),
+    }))
   );
