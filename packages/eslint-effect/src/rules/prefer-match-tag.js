@@ -52,7 +52,7 @@ export default {
                   tagValue,
                 },
                 fix(fixer) {
-                  const sourceCode = context.getSourceCode();
+                  const sourceCode = context.sourceCode;
                   const tagString = sourceCode.getText(prop.value);
                   const restArgs = node.arguments.slice(1);
                   const restArgsText = restArgs.map((arg) => sourceCode.getText(arg)).join(', ');
