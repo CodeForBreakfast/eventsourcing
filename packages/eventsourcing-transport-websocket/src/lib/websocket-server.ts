@@ -50,7 +50,7 @@ interface WebSocketData {
 
 interface ClientState {
   readonly id: Server.ClientId;
-  readonly socket: ServerWebSocket<WebSocketData>;
+  readonly socket: ReadonlyDeep<ServerWebSocket<WebSocketData>>;
   readonly connectionStateRef: Ref.Ref<ConnectionState>;
   readonly connectionStateQueue: Queue.Queue<ConnectionState>;
   readonly subscribersRef: Ref.Ref<HashSet.HashSet<Queue.Queue<TransportMessage>>>;
