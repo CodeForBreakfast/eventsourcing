@@ -98,3 +98,44 @@ describe('Subscriptions are live as soon as they return', () => {
       Effect.runPromise
     ));
 });
+
+const lagBehindEvents = 100;
+
+const appendOneEventAt = (store: EventStore<string>) => (eventNumber: number) =>
+  pipe(
+    ['event'],
+    Stream.fromIterable,
+    Stream.run(store.append({ streamId: decodeStreamId('lagging-stream'), eventNumber }))
+  );
+
+const stallOnEveryEvent = () => Effect.never;
+
+const startSubscriberThatNeverDrains = (store: EventStore<string>) =>
+  pipe(store.subscribeAll(), Effect.flatMap(Stream.runForEach(stallOnEveryEvent)), Effect.fork);
+
+const appendManyEvents = (store: EventStore<string>) =>
+  Effect.forEach(
+    Array.from({ length: lagBehindEvents }, (_, i) => i),
+    appendOneEventAt(store),
+    { discard: true }
+  );
+
+const runLaggingSubscriberTest = (store: EventStore<string>) =>
+  pipe(
+    store,
+    startSubscriberThatNeverDrains,
+    Effect.andThen(Effect.yieldNow()),
+    Effect.andThen(appendManyEvents(store)),
+    Effect.timeout('2 seconds')
+  );
+
+describe('A slow subscriber', () => {
+  it('should not stall appends while it lags behind by fewer events than the buffer holds', () =>
+    pipe(
+      StringEventStore,
+      Effect.flatMap(runLaggingSubscriberTest),
+      Effect.scoped,
+      Effect.provide(StringEventStoreLayer),
+      Effect.runPromise
+    ));
+});
