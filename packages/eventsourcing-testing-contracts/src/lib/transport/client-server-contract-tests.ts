@@ -9,7 +9,7 @@
  */
 
 import { describe, test, expect, beforeEach, afterEach } from '@codeforbreakfast/bun-test-effect';
-import { Effect, Stream, Scope, pipe, Option, Exit } from 'effect';
+import { Cause, Effect, Stream, Scope, pipe, Option, Exit } from 'effect';
 import type { TransportMessage, ConnectionState } from '@codeforbreakfast/eventsourcing-transport';
 
 // =============================================================================
@@ -209,7 +209,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                   if (Option.isSome(clientState)) {
                     return Effect.sync(() => expect(clientState.value).toBe('connected'));
                   } else {
-                    return Effect.fail(new Error('Expected client to reach connected state'));
+                    return Effect.fail(
+                      new Cause.NoSuchElementException('Expected client to reach connected state')
+                    );
                   }
                 }
               )
@@ -267,7 +269,11 @@ export const runClientServerContractTests: ClientServerTestRunner = (
                     Stream.runHead(Stream.take(server.connections, 1)),
                     (serverConnection) => {
                       if (!Option.isSome(serverConnection)) {
-                        return Effect.fail(new Error('Expected server connection to be available'));
+                        return Effect.fail(
+                          new Cause.NoSuchElementException(
+                            'Expected server connection to be available'
+                          )
+                        );
                       }
                       const connection = serverConnection.value;
                       return Effect.flatMap(connection.transport.subscribe(), (messageStream) =>
@@ -436,7 +442,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
         const handleServerConnection =
           (client: ClientTransport) => (serverConnection: Option.Option<ServerConnection>) => {
             if (!Option.isSome(serverConnection)) {
-              return Effect.fail(new Error('Expected server connection to be available'));
+              return Effect.fail(
+                new Cause.NoSuchElementException('Expected server connection to be available')
+              );
             }
             const connection = serverConnection.value;
             return subscribeAndCommunicate(client, connection);
@@ -552,7 +560,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           if (Option.isSome(finalClientState)) {
             return Effect.sync(() => expect(finalClientState.value).toBe('disconnected'));
           } else {
-            return Effect.fail(new Error('Expected final client state to be available'));
+            return Effect.fail(
+              new Cause.NoSuchElementException('Expected final client state to be available')
+            );
           }
         };
 
@@ -580,7 +590,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           (clientScope: Scope.CloseableScope) =>
           (serverConnection: Option.Option<ServerConnection>) => {
             if (!Option.isSome(serverConnection)) {
-              return Effect.fail(new Error('Expected server connection to be available'));
+              return Effect.fail(
+                new Cause.NoSuchElementException('Expected server connection to be available')
+              );
             }
             return closeScopeAndVerify(clientScope, serverConnection.value);
           };
@@ -646,7 +658,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
           if (Option.isSome(disconnectedState)) {
             return Effect.sync(() => expect(disconnectedState.value).toBe('disconnected'));
           } else {
-            return Effect.fail(new Error('Expected disconnected state to be available'));
+            return Effect.fail(
+              new Cause.NoSuchElementException('Expected disconnected state to be available')
+            );
           }
         };
 
@@ -778,7 +792,9 @@ export const runClientServerContractTests: ClientServerTestRunner = (
         const handleServerConnection =
           (client: ClientTransport) => (serverConnection: Option.Option<ServerConnection>) => {
             if (!Option.isSome(serverConnection)) {
-              return Effect.fail(new Error('Expected server connection to be available'));
+              return Effect.fail(
+                new Cause.NoSuchElementException('Expected server connection to be available')
+              );
             }
             const connection = serverConnection.value;
             return subscribeAndPublish(connection, client);

@@ -1,4 +1,4 @@
-import { pipe, Effect, Match, Option } from 'effect';
+import { pipe, Cause, Effect, Match, Option } from 'effect';
 
 // Should fail - ternary with Effect calls in return statement
 const ternaryWithEffect = (condition: boolean) => {
@@ -49,8 +49,10 @@ const ternaryInEffectSucceed = (condition: boolean) => Effect.succeed(condition 
 
 // Should fail - ternary inside Effect.fail (complex condition)
 const ternaryInEffectFail = (hasError: boolean) =>
-  // eslint-disable-next-line effect/prefer-match-over-ternary
-  Effect.fail(hasError ? new Error('Critical') : new Error('Warning'));
+  Effect.fail(
+    // eslint-disable-next-line effect/prefer-match-over-ternary
+    hasError ? new Cause.RuntimeException('Critical') : new Cause.RuntimeException('Warning')
+  );
 
 // Should NOT fail - simple literal equality INSIDE Effect.succeed (no duplication)
 const simpleLiteralInEffect = (id: string) => Effect.succeed(id === 'user-1' ? 'John' : 'Guest');

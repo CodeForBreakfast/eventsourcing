@@ -16,12 +16,7 @@ const isTodoCreated = (event: unknown): event is EventRecord<TodoCreated, UserId
 const isTodoDeleted = (event: unknown): event is EventRecord<TodoDeleted, UserId> =>
   typeof event === 'object' && event !== null && 'type' in event && event.type === 'TodoDeleted';
 
-const parseUserId = (userId: unknown): Effect.Effect<UserId, Error> =>
-  pipe(
-    userId,
-    Schema.decodeUnknown(UserIdSchema),
-    Effect.mapError(() => new Error(`Invalid UserId: ${String(userId)}`))
-  );
+const parseUserId = Schema.decodeUnknown(UserIdSchema);
 
 const provideInitiatorFromUserId =
   <TResult, TError>(effect: Effect.Effect<TResult, TError>) =>
@@ -49,12 +44,7 @@ const executeAndCommit = <TEvent extends EventRecord<unknown, UserId>, TError>(
 ) =>
   pipe(command, withCommandInitiator(event), Effect.flatMap(commitEvents(state.nextEventNumber)));
 
-const parseTodoId = (todoId: string): Effect.Effect<TodoId, Error> =>
-  pipe(
-    todoId,
-    Schema.decode(TodoIdSchema),
-    Effect.mapError(() => new Error(`Invalid TodoId: ${todoId}`))
-  );
+const parseTodoId = Schema.decode(TodoIdSchema);
 
 const handleCommand = <TEvent extends EventRecord<unknown, UserId>, TError>(
   event: TEvent,

@@ -48,7 +48,7 @@
     "@commitlint/cli": "20.5.3",
     "@commitlint/config-conventional": "20.5.3",
     "@effect/cluster": "0.60.2",
-    "@effect/language-service": "0.87.2",
+    "@effect/language-service": "0.87.3",
     "@effect/platform": "0.97.2",
     "@effect/platform-bun": "0.91.2",
     "@effect/rpc": "0.76.2",

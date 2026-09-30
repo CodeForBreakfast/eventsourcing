@@ -1,4 +1,5 @@
 import {
+  Cause,
   Chunk,
   Effect,
   Stream,
@@ -318,11 +319,8 @@ const appendEventsToStream =
     );
   };
 
-const parseJsonContent = <V>(content: string): Effect.Effect<V, Error, never> =>
-  Effect.try({
-    try: () => JSON.parse(content) as V,
-    catch: () => new Error('Failed to parse event'),
-  });
+const parseJsonContent = <V>(content: string): Effect.Effect<V, Cause.UnknownException, never> =>
+  Effect.try(() => JSON.parse(content) as V);
 
 const readEventFromFile = <V>(
   eventPath: string,
