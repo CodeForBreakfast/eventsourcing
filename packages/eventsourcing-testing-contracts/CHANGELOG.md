@@ -1,5 +1,27 @@
 # @codeforbreakfast/eventsourcing-testing-contracts
 
+## 0.3.13
+
+### Patch Changes
+
+- [#394](https://github.com/CodeForBreakfast/eventsourcing/pull/394) [`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537) Thanks [@GraemeF](https://github.com/GraemeF)! - Include the MIT licence text in each published package. The packages already declared MIT, but shipped without the licence file.
+
+- [#399](https://github.com/CodeForBreakfast/eventsourcing/pull/399) [`00f21c7`](https://github.com/CodeForBreakfast/eventsourcing/commit/00f21c7e47c008f29cd7492675056f45ee28daf8) Thanks [@GraemeF](https://github.com/GraemeF)! - Build and test against Effect 3.22.
+
+  `eventsourcing-store-postgres` now depends on `@effect/sql` 0.52, `@effect/sql-pg` 0.53 and `@effect/experimental` 0.61. `eventsourcing-transport-websocket` now depends on `@effect/platform` 0.97.
+
+  `eventsourcing-store-postgres` fixes lost events on new subscriptions. `subscribe` and `subscribeAll` used to return before Postgres `LISTEN` was active, so an event committed in that gap never reached the subscriber. They now wait until `LISTEN` is active. To detect that, the store sends probe notifications to the channel it is listening on, repeating every 10ms until one comes back. A probe payload starts with `eventstore_listen_probe:`, and every listener on that channel receives it. If your own code listens on the `eventstore_events_*` channels, ignore payloads with that prefix. Older versions of this package log a parse error for each probe they receive.
+
+  In `eventsourcing-testing-contracts`, the test helpers fail with Effect's tagged errors instead of a plain `Error`. `expectError` fails with `NoSuchElementException` when the error does not match the predicate. `waitForConnectionState` and `collectMessages` fail with `TimeoutException` when they time out. The declared error type is still `Error`, so existing code compiles unchanged, and you can now match these failures by `_tag`.
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537), [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613), [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.4
+  - @codeforbreakfast/eventsourcing-transport@0.3.9
+
 ## 0.3.12
 
 ### Patch Changes

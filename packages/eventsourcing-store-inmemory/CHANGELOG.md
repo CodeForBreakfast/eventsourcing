@@ -1,5 +1,22 @@
 # @codeforbreakfast/eventsourcing-store-inmemory
 
+## 0.2.15
+
+### Patch Changes
+
+- [#394](https://github.com/CodeForBreakfast/eventsourcing/pull/394) [`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537) Thanks [@GraemeF](https://github.com/GraemeF)! - Include the MIT licence text in each published package. The packages already declared MIT, but shipped without the licence file.
+
+- [#420](https://github.com/CodeForBreakfast/eventsourcing/pull/420) [`ead2ca2`](https://github.com/CodeForBreakfast/eventsourcing/commit/ead2ca275ab1279137aca342211afa2e09236a90) Thanks [@GraemeF](https://github.com/GraemeF)! - Fix lost events on new subscriptions. An event appended after `subscribe` or `subscribeAll` returned, but before the returned stream started running, never reached the subscriber. A subscription now delivers every event appended after the call returns, whenever you start running its stream.
+
+  `InMemoryStore.get`, `getAll` and `getAllLiveOnly` get the same fix.
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537), [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613), [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.4
+
 ## 0.2.14
 
 ### Patch Changes

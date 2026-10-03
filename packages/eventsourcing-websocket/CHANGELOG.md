@@ -1,5 +1,20 @@
 # @codeforbreakfast/eventsourcing-websocket
 
+## 0.3.18
+
+### Patch Changes
+
+- [#394](https://github.com/CodeForBreakfast/eventsourcing/pull/394) [`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537) Thanks [@GraemeF](https://github.com/GraemeF)! - Include the MIT licence text in each published package. The packages already declared MIT, but shipped without the licence file.
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537), [`9aea9a5`](https://github.com/CodeForBreakfast/eventsourcing/commit/9aea9a50e14cfb91d469fc74b46787981e37fad7), [`00f21c7`](https://github.com/CodeForBreakfast/eventsourcing/commit/00f21c7e47c008f29cd7492675056f45ee28daf8), [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613), [`5e4de40`](https://github.com/CodeForBreakfast/eventsourcing/commit/5e4de40b90c62ffe1db3a88cb4844be23bbe4d1f), [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-protocol@0.4.10
+  - @codeforbreakfast/eventsourcing-transport@0.3.9
+  - @codeforbreakfast/eventsourcing-transport-websocket@0.5.8
+
 ## 0.3.17
 
 ### Patch Changes
