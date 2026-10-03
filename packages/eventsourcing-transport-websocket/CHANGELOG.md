@@ -1,5 +1,32 @@
 # @codeforbreakfast/eventsourcing-transport-websocket
 
+## 0.5.8
+
+### Patch Changes
+
+- [#394](https://github.com/CodeForBreakfast/eventsourcing/pull/394) [`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537) Thanks [@GraemeF](https://github.com/GraemeF)! - Include the MIT licence text in each published package. The packages already declared MIT, but shipped without the licence file.
+
+- [#396](https://github.com/CodeForBreakfast/eventsourcing/pull/396) [`9aea9a5`](https://github.com/CodeForBreakfast/eventsourcing/commit/9aea9a50e14cfb91d469fc74b46787981e37fad7) Thanks [@GraemeF](https://github.com/GraemeF)! - Internal typing fix so the WebSocket server builds against `@types/bun` 1.4. There is nothing to change on your side: runtime behaviour and the public API are the same.
+
+- [#399](https://github.com/CodeForBreakfast/eventsourcing/pull/399) [`00f21c7`](https://github.com/CodeForBreakfast/eventsourcing/commit/00f21c7e47c008f29cd7492675056f45ee28daf8) Thanks [@GraemeF](https://github.com/GraemeF)! - Build and test against Effect 3.22.
+
+  `eventsourcing-store-postgres` now depends on `@effect/sql` 0.52, `@effect/sql-pg` 0.53 and `@effect/experimental` 0.61. `eventsourcing-transport-websocket` now depends on `@effect/platform` 0.97.
+
+  `eventsourcing-store-postgres` fixes lost events on new subscriptions. `subscribe` and `subscribeAll` used to return before Postgres `LISTEN` was active, so an event committed in that gap never reached the subscriber. They now wait until `LISTEN` is active. To detect that, the store sends probe notifications to the channel it is listening on, repeating every 10ms until one comes back. A probe payload starts with `eventstore_listen_probe:`, and every listener on that channel receives it. If your own code listens on the `eventstore_events_*` channels, ignore payloads with that prefix. Older versions of this package log a parse error for each probe they receive.
+
+  In `eventsourcing-testing-contracts`, the test helpers fail with Effect's tagged errors instead of a plain `Error`. `expectError` fails with `NoSuchElementException` when the error does not match the predicate. `waitForConnectionState` and `collectMessages` fail with `TimeoutException` when they time out. The declared error type is still `Error`, so existing code compiles unchanged, and you can now match these failures by `_tag`.
+
+- [#398](https://github.com/CodeForBreakfast/eventsourcing/pull/398) [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613) Thanks [@GraemeF](https://github.com/GraemeF)! - These packages now depend on `type-fest` 5.10.0 instead of 5.2.0. If your project also depends on `type-fest` 5.x, your package manager can share one copy. There is nothing to change on your side.
+
+- [#422](https://github.com/CodeForBreakfast/eventsourcing/pull/422) [`5e4de40`](https://github.com/CodeForBreakfast/eventsourcing/commit/5e4de40b90c62ffe1db3a88cb4844be23bbe4d1f) Thanks [@GraemeF](https://github.com/GraemeF)! - Internal typing fix so the WebSocket server passes the stricter immutability checks in `eslint-plugin-functional` 10. There is nothing to change on your side: runtime behaviour and the public API are the same.
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537), [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613), [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-transport@0.3.9
+
 ## 0.5.7
 
 ### Patch Changes
