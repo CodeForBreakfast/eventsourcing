@@ -2,6 +2,8 @@
 
 A comprehensive event sourcing library built on Effect for TypeScript applications.
 
+For an overview of what the libraries do and who they are for, see the [eventsourcing product page](https://codeforbreakfast.co/eventsourcing).
+
 ## Design Philosophy
 
 This library prioritizes leveraging Effect's existing APIs and patterns rather than creating new abstractions. We aim to expose event sourcing capabilities through familiar Effect constructs like `Stream`, `Effect`, `Layer`, and `Schema` - ensuring developers who know Effect can immediately be productive without learning proprietary APIs.
