@@ -1,5 +1,20 @@
 # @codeforbreakfast/eventsourcing-commands
 
+## 0.4.10
+
+### Patch Changes
+
+- [#394](https://github.com/CodeForBreakfast/eventsourcing/pull/394) [`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537) Thanks [@GraemeF](https://github.com/GraemeF)! - Include the MIT licence text in each published package. The packages already declared MIT, but shipped without the licence file.
+
+- [#398](https://github.com/CodeForBreakfast/eventsourcing/pull/398) [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613) Thanks [@GraemeF](https://github.com/GraemeF)! - These packages now depend on `type-fest` 5.10.0 instead of 5.2.0. If your project also depends on `type-fest` 5.x, your package manager can share one copy. There is nothing to change on your side.
+
+- [#389](https://github.com/CodeForBreakfast/eventsourcing/pull/389) [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271) Thanks [@GraemeF](https://github.com/GraemeF)! - Widen `@effect/platform` peer dependency range from explicit minor versions to `>=0.90.0 <1.0.0`.
+
+  This makes the packages more consumer-friendly by automatically supporting new Effect platform releases without requiring a library update, while still maintaining compatibility with versions 0.90.0 and above.
+
+- Updated dependencies [[`f982c43`](https://github.com/CodeForBreakfast/eventsourcing/commit/f982c433a106b9b6fc12cb625dc9223dabf8e537), [`e476aa7`](https://github.com/CodeForBreakfast/eventsourcing/commit/e476aa7336f3836ab9ad5c8d4ecb7cd891e8f613), [`12e788d`](https://github.com/CodeForBreakfast/eventsourcing/commit/12e788d7b7820a7e70fc8781dccb955fca84c271)]:
+  - @codeforbreakfast/eventsourcing-store@0.9.4
+
 ## 0.4.9
 
 ### Patch Changes

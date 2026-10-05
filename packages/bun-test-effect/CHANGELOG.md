@@ -1,5 +1,11 @@
 # @codeforbreakfast/buntest
 
+## 0.4.2
+
+### Patch Changes
+
+- [#395](https://github.com/CodeForBreakfast/eventsourcing/pull/395) [`c55e9c0`](https://github.com/CodeForBreakfast/eventsourcing/commit/c55e9c0709e61f8cb14d87e9eba75e517bb34eeb) Thanks [@GraemeF](https://github.com/GraemeF)! - Name Code For Breakfast Ltd as the copyright holder in the licence.
+
 ## 0.4.1
 
 ### Patch Changes
