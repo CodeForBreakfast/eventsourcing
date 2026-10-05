@@ -18,8 +18,6 @@ eventsourcing is a set of event sourcing libraries for TypeScript, built on Effe
 - **A deployment** belongs to whoever runs it. That covers the PostgreSQL database, its migrations as applied, the hosting, the credentials, and how a WebSocket server is exposed to a network.
 - **The events in a user's store** belong to that user. An agent here never needs real event data, and invents any example it uses.
 
-An agent may decline an ask that falls outside this remit, and should say which owner above the ask belongs to.
-
 ## Setup
 
 Tool versions are pinned in the mise config. Run `mise install`, then `bun install`. Use Bun, not node or npm.
