@@ -2,11 +2,10 @@
 
 **Date:** 2025-10-25
 **Status:** Approved
-**Related Issue:** hp-1
 
 ## Overview
 
-This design integrates the Effect Language Service CLI into the brownsauce monorepo to provide compile-time diagnostics for Effect-specific issues. The integration enables TypeScript's compiler to catch Effect problems (floating Effects, incorrect yield usage, missing service dependencies) during normal type-checking, with hard enforcement that fails builds on violations.
+This design integrates the Effect Language Service CLI into this monorepo to provide compile-time diagnostics for Effect-specific issues. The integration enables TypeScript's compiler to catch Effect problems (floating Effects, incorrect yield usage, missing service dependencies) during normal type-checking, with hard enforcement that fails builds on violations.
 
 ## Goals
 
@@ -187,4 +186,3 @@ High-level steps:
 
 - Effect Language Service: https://effect.website/docs/other/language-service
 - Current devDependency version: `@effect/language-service@0.47.1`
-- Related Beads issue: hp-1
