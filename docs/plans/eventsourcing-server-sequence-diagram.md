@@ -273,7 +273,7 @@ graph TB
 ### Critical Design Points
 
 1. **EventStore.subscribeAll() is required**
-   - New method added to EventStore interface (hp-8)
+   - New method added to EventStore interface
    - Live-only, no global event number
    - All EventStore implementations must support it
    - EventBus uses this exclusively

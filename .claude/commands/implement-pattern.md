@@ -23,7 +23,7 @@ Read `packages/eslint-effect/EFFECT_PATTERNS_TODO.md` and select the next unchec
 
 **CRITICAL:** Before implementing, verify your understanding of the pattern:
 
-1. **Check Effect source code** at `~/Development/effect/` to understand:
+1. **Check Effect source code** in the [Effect repository](https://github.com/Effect-TS/effect) to understand:
    - How the simplified function works
    - Its type signature and behavior
    - Edge cases and constraints

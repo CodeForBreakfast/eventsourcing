@@ -18,7 +18,7 @@ The spike created an `eventsourcing-server` package with working implementations
 
 We'll create `@codeforbreakfast/eventsourcing-server` with four discrete, composable components that eliminate boilerplate while maintaining flexibility.
 
-**Pre-requisite:** EventStore must support live cross-stream subscriptions via `subscribeAll()` (see hp-8).
+**Pre-requisite:** EventStore must support live cross-stream subscriptions via `subscribeAll()`.
 
 ### 1. EventBus
 
@@ -275,8 +275,7 @@ All EventStore implementations must support live cross-stream subscriptions via 
 
 **Implementation status:**
 
-- See hp-8 for implementation task
-- Must be completed before EventBus (hp-4) can be implemented
+- `subscribeAll()` must be in place before EventBus can be implemented
 
 **If process managers need guarantees:**
 Process managers that require guaranteed delivery, exactly-once processing, or replay capabilities should use external queues (SQS, RabbitMQ, etc.) instead of EventBus.

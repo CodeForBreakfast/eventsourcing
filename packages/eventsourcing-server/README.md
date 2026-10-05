@@ -43,6 +43,6 @@ const program = Effect.gen(function* () {
 
 ## Future Components
 
-- CommandDispatcher (hp-5)
-- StoreSubscriptionManager (hp-6)
+- CommandDispatcher
+- StoreSubscriptionManager
 - ProtocolBridge

@@ -1,7 +1,6 @@
 # subscribeAll() Design
 
 **Date:** 2025-10-25
-**Issue:** hp-8
 
 ## Purpose
 
@@ -163,4 +162,4 @@ const testSubscribeAll = <R>(
 - [ ] InMemory implementation using PubSub
 - [ ] Filesystem implementation using PubSub
 - [ ] Contract tests pass for all three stores
-- [ ] Unblocks hp-4 (EventBus) and hp-5 (CommandDispatcher)
+- [ ] Unblocks EventBus and CommandDispatcher
