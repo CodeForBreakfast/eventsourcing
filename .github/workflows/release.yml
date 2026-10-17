@@ -41,14 +41,11 @@ jobs:
 
       - name: Create Release Pull Request or Publish to npm
         id: changesets
-        uses: changesets/action@a45c4d594aa4e2c509dc14a9f2b3b67ba3780d0d # v1.9.0
+        uses: changesets/action@ae32849d5ba541f9ae29e40e22a623bc13562f51 # v2.1.2
         with:
           # This expects you to have a script called release which does a build for your packages and calls changeset publish
-          publish: bun run release
-          version: bun run version
-          commit: 'chore: version packages'
-          title: 'chore: version packages'
-          # Use GitHub API for verified commits
-          commitMode: 'github-api'
-        env:
-          GITHUB_TOKEN: ${{ steps.github-app-token.outputs.token }}
+          publish-script: bun run release
+          version-script: bun run version
+          commit-message: 'chore: version packages'
+          pr-title: 'chore: version packages'
+          github-token: ${{ steps.github-app-token.outputs.token }}
