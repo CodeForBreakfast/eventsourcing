@@ -70,7 +70,7 @@
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
     "@types/node": "24.19.0",
-    "bun-types": "1.4.2",
+    "bun-types": "1.4.3",
     "effect": "3.22.2",
     "eslint": "10.11.0",
     "typescript": "5.9.3"
