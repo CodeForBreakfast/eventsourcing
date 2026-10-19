@@ -44,6 +44,6 @@
     "effect": ">=3.0.0"
   },
   "devDependencies": {
-    "effect": "3.22.2"
+    "effect": "3.22.3"
   }
 }
