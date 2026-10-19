@@ -56,7 +56,7 @@
     "@types/bun": "1.4.3",
     "@typescript-eslint/eslint-plugin": "8.71.2",
     "@typescript-eslint/parser": "8.71.2",
-    "dependency-cruiser": "17.4.3",
+    "dependency-cruiser": "18.6.0",
     "effect": "3.22.3",
     "eslint": "10.12.0",
     "eslint-config-prettier": "10.1.8",
