@@ -18,7 +18,7 @@
         "@effect/rpc": "0.76.2",
         "@effect/workflow": "0.19.1",
         "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
-        "@types/bun": "1.4.2",
+        "@types/bun": "1.4.3",
         "@typescript-eslint/eslint-plugin": "8.71.0",
         "@typescript-eslint/parser": "8.71.0",
         "dependency-cruiser": "17.4.3",
@@ -89,7 +89,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -107,7 +107,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -124,7 +124,7 @@
         "type-fest": "5.10.0",
       },
       "devDependencies": {
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -145,7 +145,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -164,7 +164,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -181,7 +181,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -201,7 +201,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.91.3",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -220,7 +220,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -244,7 +244,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@effect/platform-bun": "0.91.3",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -263,7 +263,7 @@
       },
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -279,7 +279,7 @@
         "type-fest": "5.10.0",
       },
       "devDependencies": {
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -298,7 +298,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -318,7 +318,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "bun-types": "1.4.3",
         "effect": "3.22.3",
         "eslint": "10.11.0",
@@ -337,7 +337,7 @@
         "@codeforbreakfast/eventsourcing-transport-websocket": "workspace:*",
       },
       "devDependencies": {
-        "@types/node": "24.19.0",
+        "@types/node": "24.19.2",
         "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
@@ -644,7 +644,7 @@
 
     "@tybys/wasm-util": ["@tybys/wasm-util@0.10.4", "", { "dependencies": { "tslib": "^2.4.0" } }, "sha512-W3c4gRigFS0T/Ma4qIYF3GDAc5AQdHb1yL5znJT1Zv1YaD9Kitx656wBjvr19qbiosmZT8lWDM5BEMynUqX65A=="],
 
-    "@types/bun": ["@types/bun@1.4.2", "", { "dependencies": { "bun-types": "1.4.2" } }, "sha512-GimotNn7+ZV0uVArItBbriZsR1oNf0+WTzPkdcFrzShI7k2norL0uzEaJT8T33dWr7O/c9ZDuAFQrctKCi72oQ=="],
+    "@types/bun": ["@types/bun@1.4.3", "", { "dependencies": { "bun-types": "1.4.3" } }, "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw=="],
 
     "@types/esrecurse": ["@types/esrecurse@4.3.1", "", {}, "sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw=="],
 
@@ -654,7 +654,7 @@
 
     "@types/json5": ["@types/json5@0.0.29", "", {}, "sha512-dRLjCWHYg4oaA77cxO64oO+7JwCwnIzkZPdrrC71jQmQtlhM556pwKo5bUzqvZndkVbeFLIIi+9TC40JNF5hNQ=="],
 
-    "@types/node": ["@types/node@24.19.0", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-zY+5tKxXdhGh1PYI0ac+7juvEu4OI6vWtVVoj5i2m42jxAY1U+zHGt6QCyOFwykdP62sM3MJ9stoYYUw5aCWew=="],
+    "@types/node": ["@types/node@24.19.2", "", { "dependencies": { "undici-types": ">=7.24.0 <7.24.7" } }, "sha512-93d49wCWJkCyN87MxLpNN6KXPCwFw7bVUg79mGUV1OS40JGWwVCr8n61DXCSqz7CV6/VfPkb7xec7uP2M+QHWQ=="],
 
     "@typescript-eslint/eslint-plugin": ["@typescript-eslint/eslint-plugin@8.71.0", "", { "dependencies": { "@eslint-community/regexpp": "^4.12.2", "@typescript-eslint/scope-manager": "8.71.0", "@typescript-eslint/type-utils": "8.71.0", "@typescript-eslint/utils": "8.71.0", "@typescript-eslint/visitor-keys": "8.71.0", "ignore": "^7.0.5", "natural-compare": "^1.4.0", "ts-api-utils": "^2.5.0" }, "peerDependencies": { "@typescript-eslint/parser": "^8.71.0", "eslint": "^8.57.0 || ^9.0.0 || ^10.0.0", "typescript": ">=4.8.4 <6.1.0" } }, "sha512-pqcS9c1HxZTHt7End4nXqd0s5lJrrFzrgCkKFJrsbUnaL6M3+6oBFZaslg6Gjsl3argl2DDRFROnXARaZ2e4Nw=="],
 
@@ -1360,15 +1360,11 @@
 
     "@changesets/config/picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
 
-    "@codeforbreakfast/eventsourcing-example-todo/@types/bun": ["@types/bun@1.4.3", "", { "dependencies": { "bun-types": "1.4.3" } }, "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw=="],
-
     "@commitlint/config-validator/ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
     "@commitlint/resolve-extends/global-directory": ["global-directory@5.0.0", "", { "dependencies": { "ini": "6.0.0" } }, "sha512-1pgFdhK3J2LeM+dVf2Pd424yHx2ou338lC0ErNP2hPx4j8eW1Sp0XqSjNxtk6Tc4Kr5wlWtSvz8cn2yb7/SG/w=="],
 
     "@eslint-community/eslint-utils/eslint-visitor-keys": ["eslint-visitor-keys@3.4.3", "", {}, "sha512-wpc+LXeiyiisxPlEkUzU6svyS1frIO3Mgxj1fdy7Pm8Ygzguax2N3Fa/D/ag1WqbOprdI+uY6wMUl8/a2G+iag=="],
-
-    "@types/bun/bun-types": ["bun-types@1.4.2", "", { "dependencies": { "@types/node": "*" } }, "sha512-bxV1FgK7yBIzjRe5zBozIM4Bem11ZJcCXSrjWRG3YWLt8yFDePu4cLjpebO8OvPeIE9trbyPF4fuj3Cia4Fj3w=="],
 
     "chalk/supports-color": ["supports-color@7.2.0", "", { "dependencies": { "has-flag": "^4.0.0" } }, "sha512-qpCAvRl9stuOHveKsn7HncJRvv501qIacKzQlO/+Lwxc9+0q2wLyv4Dfvt80/DPn2pqOBsJdDiogXGR9+OvwRw=="],
 
