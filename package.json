@@ -58,7 +58,7 @@
     "@typescript-eslint/parser": "8.71.2",
     "dependency-cruiser": "18.6.0",
     "effect": "3.22.3",
-    "eslint": "10.12.0",
+    "eslint": "10.13.0",
     "eslint-config-prettier": "10.1.8",
     "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
     "eslint-plugin-functional": "10.0.1",
