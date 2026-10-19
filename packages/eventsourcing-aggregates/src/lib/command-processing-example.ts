@@ -1,4 +1,4 @@
-import { Effect, Layer, pipe, Schema, Context } from 'effect';
+import { Effect, Layer, pipe, Context } from 'effect';
 import type { ReadonlyDeep } from 'type-fest';
 import {
   CommandProcessingService,
@@ -20,24 +20,12 @@ import {
 // ============================================================================
 
 // Example: Define your domain-specific events
-const UserCreated = Schema.Struct({
-  type: Schema.Literal('UserCreated'),
-  data: Schema.Struct({
-    name: Schema.String,
-    email: Schema.String,
-  }),
-});
-
-const UserUpdated = Schema.Struct({
-  type: Schema.Literal('UserUpdated'),
-  data: Schema.Struct({
-    name: Schema.String,
-  }),
-});
-
-// Example: Union of all user events
-const UserEvent = Schema.Union(UserCreated, UserUpdated);
-type UserEvent = typeof UserEvent.Type;
+type UserEvent =
+  | {
+      readonly type: 'UserCreated';
+      readonly data: { readonly name: string; readonly email: string };
+    }
+  | { readonly type: 'UserUpdated'; readonly data: { readonly name: string } };
 
 // Example: Create a domain-specific event store tag
 const UserEventStore = Context.GenericTag<EventStore<UserEvent>, EventStore<UserEvent>>(

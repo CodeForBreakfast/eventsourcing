@@ -31,23 +31,12 @@ const isUnknownError: (
 ) => error is Extract<CommandFailure['error'], { readonly _tag: 'UnknownError' }> =
   Schema.is(UnknownErrorSchema);
 
-const UserCreated = Schema.Struct({
-  type: Schema.Literal('UserCreated'),
-  data: Schema.Struct({
-    name: Schema.String,
-    email: Schema.String,
-  }),
-});
-
-const OrderCreated = Schema.Struct({
-  type: Schema.Literal('OrderCreated'),
-  data: Schema.Struct({
-    orderId: Schema.String,
-  }),
-});
-
-const TestEvent = Schema.Union(UserCreated, OrderCreated);
-type TestEvent = typeof TestEvent.Type;
+type TestEvent =
+  | {
+      readonly type: 'UserCreated';
+      readonly data: { readonly name: string; readonly email: string };
+    }
+  | { readonly type: 'OrderCreated'; readonly data: { readonly orderId: string } };
 
 const TestEventStore = Context.GenericTag<EventStore<TestEvent>, EventStore<TestEvent>>(
   'TestEventStore'
