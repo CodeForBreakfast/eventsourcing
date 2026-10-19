@@ -22,8 +22,8 @@
     "@codeforbreakfast/eventsourcing-store": "workspace:*",
     "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
     "@effect/cli": "0.77.2",
-    "@effect/platform-bun": "0.91.3",
-    "effect": "3.22.3"
+    "@effect/platform-bun": "4.0.5",
+    "effect": "4.0.5"
   },
   "devDependencies": {
     "@types/bun": "latest"

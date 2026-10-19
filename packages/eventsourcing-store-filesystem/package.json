@@ -59,7 +59,7 @@
   },
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
-    "effect": "^3.17.0",
+    "effect": "^3.17.0 || ^4.0.0",
     "@effect/platform": ">=0.90.0 <1.0.0"
   },
   "dependencies": {
@@ -68,9 +68,9 @@
   "devDependencies": {
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-    "@effect/platform-bun": "0.91.3",
+    "@effect/platform-bun": "4.0.5",
     "@types/node": "26.6.5",
-    "effect": "3.22.3",
+    "effect": "4.0.5",
     "eslint": "10.13.0",
     "typescript": "5.9.3"
   },
