@@ -12,9 +12,9 @@
         "@commitlint/cli": "21.2.3",
         "@commitlint/config-conventional": "21.2.3",
         "@effect/cluster": "0.60.2",
-        "@effect/language-service": "0.87.3",
+        "@effect/language-service": "0.87.4",
         "@effect/platform": "0.97.2",
-        "@effect/platform-bun": "0.91.2",
+        "@effect/platform-bun": "0.91.3",
         "@effect/rpc": "0.76.2",
         "@effect/workflow": "0.19.1",
         "@eslint-community/eslint-plugin-eslint-comments": "4.8.1",
@@ -22,7 +22,7 @@
         "@typescript-eslint/eslint-plugin": "8.71.0",
         "@typescript-eslint/parser": "8.71.0",
         "dependency-cruiser": "17.4.3",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "eslint-config-prettier": "10.1.8",
         "eslint-plugin-functional": "10.0.1",
@@ -48,8 +48,8 @@
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-filesystem": "workspace:*",
         "@effect/cli": "0.77.2",
-        "@effect/platform-bun": "0.91.2",
-        "effect": "3.22.2",
+        "@effect/platform-bun": "0.91.3",
+        "effect": "3.22.3",
       },
       "devDependencies": {
         "@types/bun": "latest",
@@ -59,7 +59,7 @@
       "name": "@codeforbreakfast/bun-test-effect",
       "version": "0.4.1",
       "devDependencies": {
-        "effect": "3.22.2",
+        "effect": "3.22.3",
       },
       "peerDependencies": {
         "effect": ">=3.0.0",
@@ -70,7 +70,7 @@
       "version": "0.8.5",
       "devDependencies": {
         "@typescript-eslint/eslint-plugin": "8.71.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -90,7 +90,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -108,7 +108,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -125,7 +125,7 @@
       },
       "devDependencies": {
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -146,7 +146,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-transport-inmemory": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -165,7 +165,7 @@
         "@codeforbreakfast/eventsourcing-store-inmemory": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -182,7 +182,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -200,9 +200,9 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@effect/platform-bun": "0.91.2",
+        "@effect/platform-bun": "0.91.3",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -221,7 +221,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -237,15 +237,15 @@
         "@codeforbreakfast/eventsourcing-store": "workspace:*",
         "@effect/experimental": "0.61.1",
         "@effect/sql": "0.52.1",
-        "@effect/sql-pg": "0.53.0",
+        "@effect/sql-pg": "0.53.1",
         "type-fest": "5.10.0",
       },
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
-        "@effect/platform-bun": "0.91.2",
+        "@effect/platform-bun": "0.91.3",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -264,7 +264,7 @@
       "devDependencies": {
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -280,7 +280,7 @@
       },
       "devDependencies": {
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -299,7 +299,7 @@
         "@codeforbreakfast/bun-test-effect": "workspace:*",
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -320,7 +320,7 @@
         "@codeforbreakfast/eventsourcing-testing-contracts": "workspace:*",
         "@types/node": "24.19.0",
         "bun-types": "1.4.3",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -338,7 +338,7 @@
       },
       "devDependencies": {
         "@types/node": "24.19.0",
-        "effect": "3.22.2",
+        "effect": "3.22.3",
         "eslint": "10.11.0",
         "typescript": "5.9.3",
       },
@@ -472,11 +472,11 @@
 
     "@effect/experimental": ["@effect/experimental@0.61.1", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/platform": "^0.97.1", "effect": "^3.22.1", "ioredis": "^5", "lmdb": "^3" }, "optionalPeers": ["ioredis", "lmdb"] }, "sha512-+P+PgGQeE2fXmsm63YoyENNcQIc7OiCkY4/HLkEdTvq93syfGIpwDfQD8u3xODMHJhZ5ZtRZHH4+UedFO0tLiA=="],
 
-    "@effect/language-service": ["@effect/language-service@0.87.3", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-g1OmRBZF5chbW9QMNoirPo5Bb4zzU2HfP88tR7/VSZEUxHJ1/qVb8AQ0kUh2ggctLH1I715yCwP4gkw56PTjpQ=="],
+    "@effect/language-service": ["@effect/language-service@0.87.4", "", { "bin": { "effect-language-service": "cli.js" } }, "sha512-AfFn4K45l84LtbQSwoPWc06nrg7OzfV3uJOnIUqimSOWTCIsY1IKBXZfjSsVTq7jDuL9Jtoz8//bZp9+rkEihg=="],
 
     "@effect/platform": ["@effect/platform@0.97.2", "", { "dependencies": { "find-my-way-ts": "^0.1.6", "msgpackr": "^1.11.10", "multipasta": "^0.2.8" }, "peerDependencies": { "effect": "^3.22.2" } }, "sha512-fof9J+pId374/b1WAt0P1H8QmvulzpHTjS6SUHiG20U/sFjkBUS5vGMy1/XfdTAVKX1IY+Z87dFhi/RFDfgBPQ=="],
 
-    "@effect/platform-bun": ["@effect/platform-bun@0.91.2", "", { "dependencies": { "@effect/platform-node-shared": "^0.61.1", "multipasta": "^0.2.8" }, "peerDependencies": { "@effect/cluster": "^0.60.2", "@effect/platform": "^0.97.1", "@effect/rpc": "^0.76.2", "@effect/sql": "^0.52.1", "effect": "^3.22.1" } }, "sha512-lISuYdx54uX6BIu0AIwvIqG6mbFkT0UlqGWZm7Jn2V6Ni3nCumnaBfMxYrdGWJzkoGIi1xEkvmRRk5Ff7r6NEA=="],
+    "@effect/platform-bun": ["@effect/platform-bun@0.91.3", "", { "dependencies": { "@effect/platform-node-shared": "^0.61.1", "multipasta": "^0.2.8" }, "peerDependencies": { "@effect/cluster": "^0.60.4", "@effect/platform": "^0.97.2", "@effect/rpc": "^0.76.3", "@effect/sql": "^0.52.1", "effect": "^3.22.3" } }, "sha512-L9uz4rBuXql45rKSxnmT5k/wz+A7vQjxYJod0mNcQhM87LxvgsZG7WzOSifasyaOHOjY33Qk7KovYiY1oeQH+w=="],
 
     "@effect/platform-node-shared": ["@effect/platform-node-shared@0.61.1", "", { "dependencies": { "@parcel/watcher": "^2.5.1", "multipasta": "^0.2.8", "ws": "^8.18.2" }, "peerDependencies": { "@effect/cluster": "^0.60.1", "@effect/platform": "^0.97.1", "@effect/rpc": "^0.76.1", "@effect/sql": "^0.52.1", "effect": "^3.22.1" } }, "sha512-MJAJ1Nc43pYJb5ulFtdNID8klNyRLcbQ0zZ7XYRcBAlT/DrCyN4yAD89AzosmUyfOU+LMHdc8LTMt4rKNEMFaA=="],
 
@@ -488,7 +488,7 @@
 
     "@effect/sql": ["@effect/sql@0.52.1", "", { "dependencies": { "uuid": "^11.0.3" }, "peerDependencies": { "@effect/experimental": "^0.61.1", "@effect/platform": "^0.97.1", "effect": "^3.22.1" } }, "sha512-dUVPjlUgpga6sDa/MtYipHAqzHx2St41hxI00nXTBt4IBBJaf2lTGaOvlEoBg/q6PHVAgSoKnxe19pWUvabC9g=="],
 
-    "@effect/sql-pg": ["@effect/sql-pg@0.53.0", "", { "dependencies": { "pg": "^8.16.3", "pg-connection-string": "2.9.1", "pg-cursor": "^2.15.3", "pg-pool": "^3.10.1", "pg-types": "^4.1.0" }, "peerDependencies": { "@effect/experimental": "^0.61.0", "@effect/platform": "^0.97.0", "@effect/sql": "^0.52.0", "effect": "^3.22.0" } }, "sha512-E9LPkP3aB9RNPhAl9R19z6dcmleNyJJGatg0N/zpH3LyIg3dB/4Qhv543rNOGyQlox5ebUADbHUxWk5UzDfSCA=="],
+    "@effect/sql-pg": ["@effect/sql-pg@0.53.1", "", { "dependencies": { "pg": "^8.16.3", "pg-connection-string": "2.9.1", "pg-cursor": "^2.15.3", "pg-pool": "^3.10.1", "pg-types": "^4.1.0" }, "peerDependencies": { "@effect/experimental": "^0.61.1", "@effect/platform": "^0.97.2", "@effect/sql": "^0.52.1", "effect": "^3.22.3" } }, "sha512-9qn4ekEEQe412Fn7ebM+xOwD8ykKddKBvZT7M/vW8sjXqyzXWztTQttH0w9Oc26FK0Ws4PiRdWM+j/7o3NVdUw=="],
 
     "@effect/typeclass": ["@effect/typeclass@0.41.0", "", { "peerDependencies": { "effect": "^3.22.0" } }, "sha512-Tsv94iDPUWgmz/JsYUh7awx5mmFukEJZB+duyzlLRlCHxNUz5LHBBzTaEfUPNMzAE1s8FTUSVwdPSpL0DznXKg=="],
 
@@ -790,7 +790,7 @@
 
     "dunder-proto": ["dunder-proto@1.0.1", "", { "dependencies": { "call-bind-apply-helpers": "^1.0.1", "es-errors": "^1.3.0", "gopd": "^1.2.0" } }, "sha512-KIN/nDJBQRcXw0MLVhZE9iQHmG68qAVIBg9CqmUYjmQIhgij9U5MFvrqkUL5FbtyyzZuOeOt0zdeRe4UY7ct+A=="],
 
-    "effect": ["effect@3.22.2", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-fm1CQXCs7GTMwpadZxwU5rnAb2bN6mbQpknq/pXBGCzSKkosNYb9k0wsoL0TfB10rSa5xOEZJjo77u/KLXSANg=="],
+    "effect": ["effect@3.22.3", "", { "dependencies": { "@standard-schema/spec": "^1.0.0", "fast-check": "^3.23.1" } }, "sha512-pQU7KTFcqHCjCbhMsiv2vFLPtCfKMspA3ChglcRfAMt/h7KlGoEtRL4eaM5Bq5chTgIysITM+fUAW87HQFKl3A=="],
 
     "emoji-regex": ["emoji-regex@10.6.0", "", {}, "sha512-toUI84YS5YmxW219erniWD0CIVOo46xGKColeNQRgOzDorgBi1v4D71/OFzgD9GO2UGKIv1C3Sp8DAn0+j5w7A=="],
 
@@ -1359,6 +1359,8 @@
     "zod": ["zod@4.6.5", "", {}, "sha512-v5l/aFXZQeai4awLbOpSoHecE9UiMrnfx75tEXLjNonXVARxQ5mOeipTjROUchszUNCqnE+hqAMujRsRHsut2Q=="],
 
     "@changesets/config/picomatch": ["picomatch@4.0.7", "", {}, "sha512-qcJu88Q2IWqJsDD529JKMdwGm/dvInW4HvQnRwiH9JtihJvzGOscDtHE3x1pBKeUOTysQ8kVmLnJ2kJu7yhcGA=="],
+
+    "@codeforbreakfast/eventsourcing-example-todo/@types/bun": ["@types/bun@1.4.3", "", { "dependencies": { "bun-types": "1.4.3" } }, "sha512-N67Pqy8JXbAY/j0tNraS3V5mubGvc6rrrNDmDCtZLlFzccbUJPDb0tvgUBC5q4m8ybkP93Jcn1QB+RYQ6PvBhw=="],
 
     "@commitlint/config-validator/ajv": ["ajv@8.20.0", "", { "dependencies": { "fast-deep-equal": "^3.1.3", "fast-uri": "^3.0.1", "json-schema-traverse": "^1.0.0", "require-from-string": "^2.0.2" } }, "sha512-Thbli+OlOj+iMPYFBVBfJ3OmCAnaSyNn4M1vz9T6Gka5Jt9ba/HIR56joy65tY6kx/FCF5VXNB819Y7/GUrBGA=="],
 
