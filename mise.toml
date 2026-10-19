@@ -1,6 +1,6 @@
 [tools]
 bun = "1.4.3"
-uv = "0.12.19"
+uv = "0.13.1"
 
 [env]
 _.path = ["./node_modules/.bin"]
