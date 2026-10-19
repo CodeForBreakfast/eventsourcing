@@ -24,8 +24,7 @@ const Id = {
 export const newEventStreamId = () =>
   pipe(`stream_${Id.randomPart()}`, Schema.decode(EventStreamId));
 
-const FooEvent = Schema.Struct({ bar: Schema.String });
-type FooEvent = typeof FooEvent.Type;
+type FooEvent = { readonly bar: string };
 
 const readStreamFromBeginning =
   (streamId: Effect.Effect<EventStreamId, ParseResult.ParseError, never>) =>
