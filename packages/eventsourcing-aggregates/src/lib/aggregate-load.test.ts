@@ -23,18 +23,9 @@ interface TestAggregateState {
   readonly count: number;
 }
 
-const TestEventCreated = Schema.Struct({
-  type: Schema.Literal('TestCreated'),
-  data: Schema.Struct({ value: Schema.String }),
-});
-
-const TestEventIncremented = Schema.Struct({
-  type: Schema.Literal('TestIncremented'),
-  data: Schema.Struct({}),
-});
-
-const TestEvent = Schema.Union(TestEventCreated, TestEventIncremented);
-type TestEvent = Schema.Schema.Type<typeof TestEvent>;
+type TestEvent =
+  | { readonly type: 'TestCreated'; readonly data: { readonly value: string } }
+  | { readonly type: 'TestIncremented'; readonly data: Readonly<Record<string, never>> };
 
 const applyTestEvent =
   (state: Readonly<Option.Option<TestAggregateState>>) =>
