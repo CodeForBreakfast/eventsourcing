@@ -71,7 +71,7 @@
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "@types/node": "26.6.5",
     "effect": "3.22.3",
-    "eslint": "10.12.0",
+    "eslint": "10.13.0",
     "typescript": "5.9.3"
   },
   "publishConfig": {
