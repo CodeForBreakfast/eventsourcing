@@ -70,7 +70,7 @@
     "@types/node": "26.6.5",
     "@codeforbreakfast/bun-test-effect": "workspace:*",
     "effect": "3.22.3",
-    "typescript": "5.9.3",
+    "typescript": "7.0.2",
     "eslint": "10.13.0"
   },
   "publishConfig": {
