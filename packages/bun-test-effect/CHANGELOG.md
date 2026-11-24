@@ -1,5 +1,13 @@
 # @codeforbreakfast/buntest
 
+## 0.4.2
+
+### Patch Changes
+
+- [#438](https://github.com/CodeForBreakfast/eventsourcing/pull/438) [`46ee3ca`](https://github.com/CodeForBreakfast/eventsourcing/commit/46ee3cac786452c04ea4858f76f1b51f8296ef49) Thanks [@renovate](https://github.com/apps/renovate)! - The assertion helpers now type-check against `@types/node` 26, whose `node:assert` typings no longer accept an optional string message. Their behaviour is unchanged: a message you pass still becomes the assertion error's message, and leaving it out still gives Node's default.
+
+- [#395](https://github.com/CodeForBreakfast/eventsourcing/pull/395) [`c55e9c0`](https://github.com/CodeForBreakfast/eventsourcing/commit/c55e9c0709e61f8cb14d87e9eba75e517bb34eeb) Thanks [@GraemeF](https://github.com/GraemeF)! - Name Code For Breakfast Ltd as the copyright holder in the licence.
+
 ## 0.4.1
 
 ### Patch Changes

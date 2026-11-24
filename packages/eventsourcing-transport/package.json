@@ -1,6 +1,6 @@
 {
   "name": "@codeforbreakfast/eventsourcing-transport",
-  "version": "0.3.8",
+  "version": "0.3.9",
   "description": "Pure transport layer abstractions and contracts for event sourcing - Define transport interfaces that any implementation (WebSocket, HTTP, SSE) can implement",
   "type": "module",
   "main": "./dist/index.js",
