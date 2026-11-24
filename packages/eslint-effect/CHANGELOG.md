@@ -1,5 +1,15 @@
 # @codeforbreakfast/eslint-effect
 
+## 0.8.6
+
+### Patch Changes
+
+- [#422](https://github.com/CodeForBreakfast/eventsourcing/pull/422) [`5e4de40`](https://github.com/CodeForBreakfast/eventsourcing/commit/5e4de40b90c62ffe1db3a88cb4844be23bbe4d1f) Thanks [@GraemeF](https://github.com/GraemeF)! - The rules now run under ESLint 10. Before this, ESLint 10 stopped with "context.getSourceCode is not a function" as soon as it loaded one of them.
+
+  The `eslint` peer dependency is now `>=8.40.0` instead of `>=8.0.0`. ESLint 8.40 is the first release with `context.sourceCode`, which the rules now use. One rule already needed it, so the plugin did not fully work on older ESLint 8 releases anyway. If you are on ESLint 8.40 or later, there is nothing to change on your side.
+
+- [#395](https://github.com/CodeForBreakfast/eventsourcing/pull/395) [`c55e9c0`](https://github.com/CodeForBreakfast/eventsourcing/commit/c55e9c0709e61f8cb14d87e9eba75e517bb34eeb) Thanks [@GraemeF](https://github.com/GraemeF)! - Name Code For Breakfast Ltd as the copyright holder in the licence.
+
 ## 0.8.5
 
 ### Patch Changes
