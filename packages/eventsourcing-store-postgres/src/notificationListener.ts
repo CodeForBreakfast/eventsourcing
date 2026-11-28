@@ -6,11 +6,13 @@ import {
   Layer,
   Match,
   Stream,
-  Ref,
+  HashMap,
+  Option,
   Queue,
   Schedule,
   Schema,
-  HashSet,
+  Scope,
+  SynchronizedRef,
   pipe,
 } from 'effect';
 import {
@@ -219,7 +221,7 @@ const sendProbeUntilActive = (
     Effect.raceFirst(Deferred.await(active))
   );
 
-const listenInBackground = (
+const receiveNotifications = (
   client: PgClient.PgClient,
   channelName: string,
   probe: string,
@@ -229,110 +231,142 @@ const listenInBackground = (
   pipe(
     channelName,
     client.listen,
-    Stream.runForEach(handleUnlessProbe(probe, active, handleNotification)),
-    Effect.tapError((error) => Deferred.fail(active, error)),
-    Effect.fork
+    Stream.runForEach(handleUnlessProbe(probe, active, handleNotification))
   );
 
 /**
- * Starts listening on a channel in the background and waits until LISTEN is active,
- * so that no notification sent after this returns can be missed.
+ * The LISTEN running on each channel, keyed by channel name, with the Deferred that
+ * completes once that LISTEN is active.
  */
-const listenUntilActive = (
+type ListeningChannels = SynchronizedRef.SynchronizedRef<
+  HashMap.HashMap<string, Deferred.Deferred<void, SqlError.SqlError>>
+>;
+
+const forgetChannel = (
+  channels: ListeningChannels,
+  channelName: string,
+  active: Deferred.Deferred<void, SqlError.SqlError>
+) =>
+  SynchronizedRef.update(channels, (listening) =>
+    pipe(
+      HashMap.get(listening, channelName),
+      Option.filter((registered) => registered === active),
+      Option.match({
+        onNone: () => listening,
+        onSome: () => HashMap.remove(listening, channelName),
+      })
+    )
+  );
+
+const releaseChannel = (
+  channels: ListeningChannels,
+  channelName: string,
+  active: Deferred.Deferred<void, SqlError.SqlError>
+) => Effect.andThen(Deferred.interrupt(active), forgetChannel(channels, channelName, active));
+
+/**
+ * Receives a channel's notifications for as long as the listener's scope is open, and
+ * completes `active` once LISTEN is active. When it stops, the channel is forgotten so
+ * that the next caller starts LISTEN again.
+ */
+const runChannelListener = (
   client: PgClient.PgClient,
+  channels: ListeningChannels,
+  channelName: string,
+  active: Deferred.Deferred<void, SqlError.SqlError>,
+  handleNotification: (rawPayload: string) => Effect.Effect<void>
+) => {
+  const probe = `${LISTEN_PROBE_PREFIX}${crypto.randomUUID()}`;
+  return pipe(
+    receiveNotifications(client, channelName, probe, active, handleNotification),
+    Effect.zip(sendProbeUntilActive(client, channelName, probe, active), { concurrent: true }),
+    Effect.tapError((error) => Deferred.fail(active, error)),
+    Effect.ensuring(releaseChannel(channels, channelName, active))
+  );
+};
+
+const startChannelListener = (
+  scope: Scope.Scope,
+  client: PgClient.PgClient,
+  channels: ListeningChannels,
+  channelName: string,
+  handleNotification: (rawPayload: string) => Effect.Effect<void>,
+  listening: HashMap.HashMap<string, Deferred.Deferred<void, SqlError.SqlError>>
+) =>
+  pipe(
+    Deferred.make<void, SqlError.SqlError>(),
+    Effect.tap((active) =>
+      Effect.forkIn(
+        runChannelListener(client, channels, channelName, active, handleNotification),
+        scope
+      )
+    ),
+    Effect.map((active) => [active, HashMap.set(listening, channelName, active)] as const)
+  );
+
+const joinOrStartChannelListener =
+  (
+    scope: Scope.Scope,
+    client: PgClient.PgClient,
+    channels: ListeningChannels,
+    channelName: string,
+    handleNotification: (rawPayload: string) => Effect.Effect<void>
+  ) =>
+  (listening: HashMap.HashMap<string, Deferred.Deferred<void, SqlError.SqlError>>) =>
+    pipe(
+      listening,
+      HashMap.get(channelName),
+      Option.match({
+        onNone: () =>
+          startChannelListener(scope, client, channels, channelName, handleNotification, listening),
+        onSome: (active) => Effect.succeed([active, listening] as const),
+      })
+    );
+
+/**
+ * Makes sure one LISTEN runs on the channel and waits until it is active, so that no
+ * notification sent after this returns can be missed. Callers on a channel that is
+ * already listening share its LISTEN, so each notification is handled once.
+ */
+const listenOnceUntilActive = (
+  scope: Scope.Scope,
+  client: PgClient.PgClient,
+  channels: ListeningChannels,
   channelName: string,
   handleNotification: (rawPayload: string) => Effect.Effect<void>
 ) =>
   pipe(
-    Deferred.make<void, SqlError.SqlError>(),
-    Effect.flatMap((active) => {
-      const probe = `${LISTEN_PROBE_PREFIX}${crypto.randomUUID()}`;
-      return Effect.andThen(
-        listenInBackground(client, channelName, probe, active, handleNotification),
-        sendProbeUntilActive(client, channelName, probe, active)
-      );
-    })
+    channels,
+    SynchronizedRef.modifyEffect(
+      joinOrStartChannelListener(scope, client, channels, channelName, handleNotification)
+    ),
+    Effect.flatMap(Deferred.await)
   );
-
-const startListeningOnChannel = (
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-    readonly isAllEvents: boolean;
-  }>,
-  channelName: string
-) =>
-  listenUntilActive(
-    client,
-    channelName,
-    processRawNotification(notificationQueue, channelName, false)
-  );
-
-const activateChannelAndStartListening = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-    readonly isAllEvents: boolean;
-  }>,
-  channelName: string
-) =>
-  pipe(
-    Ref.update(activeChannels, HashSet.add(channelName)),
-    Effect.tap(() => startListeningOnChannel(client, notificationQueue, channelName))
-  );
-
-const activateAndListen = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-    readonly isAllEvents: boolean;
-  }>,
-  streamId: EventStreamId
-) => {
-  const channelName = makeChannelName(streamId);
-  return activateChannelAndStartListening(activeChannels, client, notificationQueue, channelName);
-};
 
 const startListenForStream =
   (
-    activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+    scope: Scope.Scope,
     client: PgClient.PgClient,
+    channels: ListeningChannels,
     notificationQueue: Queue.Queue<{
       readonly streamId: EventStreamId;
       readonly payload: NotificationPayload;
       readonly isAllEvents: boolean;
     }>
   ) =>
-  (streamId: EventStreamId) =>
-    pipe(
-      activateAndListen(activeChannels, client, notificationQueue, streamId),
+  (streamId: EventStreamId) => {
+    const channelName = makeChannelName(streamId);
+    return pipe(
+      listenOnceUntilActive(
+        scope,
+        client,
+        channels,
+        channelName,
+        processRawNotification(notificationQueue, channelName, false)
+      ),
       Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to listen to stream'))
     );
-
-const removeChannelFromActive = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  channelName: string
-) => pipe(activeChannels, Ref.update(HashSet.remove(channelName)), Effect.asVoid);
-
-const removeChannelForStream = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  streamId: EventStreamId
-) => {
-  const channelName = makeChannelName(streamId);
-  return removeChannelFromActive(activeChannels, channelName);
-};
-
-const stopListenForStream =
-  (activeChannels: Ref.Ref<HashSet.HashSet<string>>) => (streamId: EventStreamId) =>
-    pipe(
-      removeChannelForStream(activeChannels, streamId),
-      Effect.mapError(eventStoreError.subscribe(streamId, 'Failed to unlisten from stream'))
-    );
+  };
 
 const createNotificationsStream = (
   notificationQueue: Queue.Queue<{
@@ -353,16 +387,6 @@ const startListenerService = pipe(
   Effect.logInfo,
   Effect.asVoid
 );
-
-const clearActiveChannels = Ref.set(HashSet.empty<string>());
-
-const stopListenerService = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
-  pipe(
-    'PostgreSQL notification listener stopped',
-    Effect.logInfo,
-    Effect.andThen(clearActiveChannels(activeChannels)),
-    Effect.asVoid
-  );
 
 const parseStreamIdFromPayload = (payload: NotificationPayload) =>
   pipe(
@@ -423,32 +447,10 @@ const processAllEventsNotification =
       )
     );
 
-const startListeningOnAllEventsChannel = (
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-    readonly isAllEvents: boolean;
-  }>
-) => listenUntilActive(client, ALL_EVENTS_CHANNEL, processAllEventsNotification(notificationQueue));
-
-const activateAllEventsChannel = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
-  client: PgClient.PgClient,
-  notificationQueue: Queue.Queue<{
-    readonly streamId: EventStreamId;
-    readonly payload: NotificationPayload;
-    readonly isAllEvents: boolean;
-  }>
-) =>
-  pipe(
-    Ref.update(activeChannels, HashSet.add(ALL_EVENTS_CHANNEL)),
-    Effect.tap(() => startListeningOnAllEventsChannel(client, notificationQueue))
-  );
-
 const listenAllEvents = (
-  activeChannels: Ref.Ref<HashSet.HashSet<string>>,
+  scope: Scope.Scope,
   client: PgClient.PgClient,
+  channels: ListeningChannels,
   notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
@@ -456,55 +458,55 @@ const listenAllEvents = (
   }>
 ) =>
   pipe(
-    activeChannels,
-    Ref.get,
-    Effect.flatMap((channels) =>
-      Effect.if(HashSet.has(channels, ALL_EVENTS_CHANNEL), {
-        onTrue: () => Effect.succeed(undefined),
-        onFalse: () => activateAllEventsChannel(activeChannels, client, notificationQueue),
-      })
+    listenOnceUntilActive(
+      scope,
+      client,
+      channels,
+      ALL_EVENTS_CHANNEL,
+      processAllEventsNotification(notificationQueue)
     ),
     Effect.mapError(eventStoreError.subscribe('*', 'Failed to listen to all events'))
   );
 
-const unlistenAllEvents = (activeChannels: Ref.Ref<HashSet.HashSet<string>>) =>
-  pipe(
-    removeChannelFromActive(activeChannels, ALL_EVENTS_CHANNEL),
-    Effect.mapError(eventStoreError.subscribe('*', 'Failed to unlisten from all events'))
-  );
-
 const buildNotificationListener = ({
+  scope,
   client,
-  activeChannels,
+  channels,
   notificationQueue,
 }: {
+  readonly scope: Scope.Scope;
   readonly client: PgClient.PgClient;
-  readonly activeChannels: Ref.Ref<HashSet.HashSet<string>>;
+  readonly channels: ListeningChannels;
   readonly notificationQueue: Queue.Queue<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
     readonly isAllEvents: boolean;
   }>;
 }) => ({
-  listen: startListenForStream(activeChannels, client, notificationQueue),
+  listen: startListenForStream(scope, client, channels, notificationQueue),
 
-  unlisten: stopListenForStream(activeChannels),
+  listenAll: listenAllEvents(scope, client, channels, notificationQueue),
 
-  listenAll: listenAllEvents(activeChannels, client, notificationQueue),
+  // A LISTEN runs until the listener's scope closes. Its channel stays registered
+  // meanwhile, so that a later listen shares it rather than starting a second one.
+  unlisten: (_streamId: EventStreamId) => Effect.void,
 
-  unlistenAll: unlistenAllEvents(activeChannels),
+  unlistenAll: Effect.void,
 
   notifications: createNotificationsStream(notificationQueue),
 
   // eslint-disable-next-line effect/no-intermediate-effect-variables -- Module-level Effect used once as service property
   start: startListenerService,
 
-  stop: stopListenerService(activeChannels),
+  stop: Effect.logInfo('PostgreSQL notification listener stopped'),
 });
 
 const createNotificationListenerDependencies = {
+  scope: Effect.scope,
   client: PgClient.PgClient,
-  activeChannels: Ref.make(HashSet.empty<string>()),
+  channels: SynchronizedRef.make(
+    HashMap.empty<string, Deferred.Deferred<void, SqlError.SqlError>>()
+  ),
   notificationQueue: Queue.unbounded<{
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
@@ -512,7 +514,7 @@ const createNotificationListenerDependencies = {
   }>(),
 };
 
-export const NotificationListenerLive = Layer.effect(
+export const NotificationListenerLive = Layer.scoped(
   NotificationListener,
   // eslint-disable-next-line effect/no-pipe-first-arg-call -- Effect.all needs an object argument, cannot be piped differently
   pipe(Effect.all(createNotificationListenerDependencies), Effect.map(buildNotificationListener))
