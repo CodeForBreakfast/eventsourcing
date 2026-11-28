@@ -3,6 +3,7 @@ import {
   Chunk,
   Duration,
   Effect,
+  Fiber,
   Layer,
   ParseResult,
   Schema,
@@ -145,6 +146,29 @@ const subscribeFromBeginningAndTake =
       eventstore,
       subscribeFromBeginning(streamId),
       Effect.flatMap(subscribeAndTakeEvents(count, receivedEventsRef))
+    );
+
+const collectEventsFor =
+  (window: Duration.Duration) => (stream: Stream.Stream<FooEvent, unknown, never>) =>
+    pipe(stream, Stream.interruptAfter(window), Stream.runCollect, Effect.map(toArraySafely));
+
+const forkSubscriptionCollectingFor = (
+  store: EventStore<FooEvent>,
+  position: EventStreamPosition,
+  window: Duration.Duration
+) => pipe(position, store.subscribe, Effect.flatMap(collectEventsFor(window)), Effect.fork);
+
+const subscribeTwiceThenAppend =
+  (events: readonly FooEvent[], position: EventStreamPosition) => (store: EventStore<FooEvent>) =>
+    pipe(
+      [
+        forkSubscriptionCollectingFor(store, position, Duration.seconds(1)),
+        forkSubscriptionCollectingFor(store, position, Duration.seconds(1)),
+      ],
+      Effect.all,
+      Effect.tap(() => pipe(100, Duration.millis, Effect.sleep)),
+      Effect.tap(() => appendEventsToStream(events, position)(store)),
+      Effect.flatMap(Fiber.joinAll)
     );
 
 export class FooEventStore extends Effect.Tag('FooEventStore')<
@@ -534,6 +558,17 @@ export function runEventStoreTestSuite<E>(
         );
         expect(subscriber1Events).toEqual([{ bar: 'multi-subscriber-event' }]);
         expect(subscriber2Events).toEqual([{ bar: 'multi-subscriber-event' }]);
+      });
+
+      it('should deliver each event exactly once to each subscriber sharing one store', async () => {
+        const events = [{ bar: 'shared-store-event-1' }, { bar: 'shared-store-event-2' }];
+
+        const [subscriber1Events, subscriber2Events] = await runPromiseWithEventStore(
+          pipe(FooEventStore, Effect.flatMap(subscribeTwiceThenAppend(events, streamBeginning)))
+        );
+
+        expect(subscriber1Events).toEqual(events);
+        expect(subscriber2Events).toEqual(events);
       });
 
       it('should handle subscription to non-existent stream', async () => {
