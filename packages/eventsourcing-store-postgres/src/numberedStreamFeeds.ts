@@ -20,30 +20,62 @@ export interface NumberedStreamFeeds {
   ) => Effect.Effect<Queue.Dequeue<NumberedEvent>, never, Scope.Scope>;
 }
 
-type Feeds = HashMap.HashMap<EventStreamId, PubSub.PubSub<NumberedEvent>>;
+interface Feed {
+  readonly pubsub: PubSub.PubSub<NumberedEvent>;
+  readonly subscribers: number;
+}
+
+export type Feeds = HashMap.HashMap<EventStreamId, Feed>;
 
 const FEED_CAPACITY = 256;
 
 const addFeed = (streamId: EventStreamId, feeds: Feeds) =>
   Effect.map(
     PubSub.bounded<NumberedEvent>(FEED_CAPACITY),
-    (pubsub) => [pubsub, HashMap.set(feeds, streamId, pubsub)] as const
+    (pubsub) => [pubsub, HashMap.set(feeds, streamId, { pubsub, subscribers: 1 })] as const
   );
 
-const getOrAddFeed = (streamId: EventStreamId) => (feeds: Feeds) =>
+const joinFeed = (streamId: EventStreamId) => (feeds: Feeds) =>
   pipe(
     feeds,
     HashMap.get(streamId),
     Option.match({
-      onSome: (pubsub) => Effect.succeed([pubsub, feeds] as const),
+      onSome: (feed) =>
+        Effect.succeed([
+          feed.pubsub,
+          HashMap.set(feeds, streamId, { ...feed, subscribers: feed.subscribers + 1 }),
+        ] as const),
       onNone: () => addFeed(streamId, feeds),
+    })
+  );
+
+const hasOtherSubscribers = (feed: Feed) => feed.subscribers > 1;
+
+const withoutOneSubscriber = (streamId: EventStreamId, feeds: Feeds) => (feed: Feed) =>
+  pipe(
+    feed,
+    Option.liftPredicate(hasOtherSubscribers),
+    Option.match({
+      onSome: (shared) =>
+        HashMap.set(feeds, streamId, { ...shared, subscribers: shared.subscribers - 1 }),
+      onNone: () => HashMap.remove(feeds, streamId),
+    })
+  );
+
+const leaveFeed = (streamId: EventStreamId) => (feeds: Feeds) =>
+  pipe(
+    feeds,
+    HashMap.get(streamId),
+    Option.match({
+      onSome: withoutOneSubscriber(streamId, feeds),
+      onNone: () => feeds,
     })
   );
 
 const publishIfFeedExists = (event: NumberedEvent) =>
   Option.match({
     onNone: () => Effect.void,
-    onSome: (pubsub: PubSub.PubSub<NumberedEvent>) => Effect.asVoid(PubSub.publish(pubsub, event)),
+    onSome: (feed: Feed) => Effect.asVoid(PubSub.publish(feed.pubsub, event)),
   });
 
 const publishToFeed =
@@ -60,15 +92,20 @@ const subscribeToFeed =
   (ref: SynchronizedRef.SynchronizedRef<Feeds>) =>
   (streamId: EventStreamId): Effect.Effect<Queue.Dequeue<NumberedEvent>, never, Scope.Scope> =>
     pipe(
-      ref,
-      SynchronizedRef.modifyEffect(getOrAddFeed(streamId)),
+      Effect.acquireRelease(SynchronizedRef.modifyEffect(ref, joinFeed(streamId)), () =>
+        SynchronizedRef.update(ref, leaveFeed(streamId))
+      ),
       Effect.flatMap(PubSub.subscribe)
     );
 
+export const numberedStreamFeedsOver = (
+  ref: SynchronizedRef.SynchronizedRef<Feeds>
+): NumberedStreamFeeds => ({
+  publish: publishToFeed(ref),
+  subscribe: subscribeToFeed(ref),
+});
+
 export const makeNumberedStreamFeeds: Effect.Effect<NumberedStreamFeeds> = Effect.map(
   SynchronizedRef.make<Feeds>(HashMap.empty()),
-  (ref) => ({
-    publish: publishToFeed(ref),
-    subscribe: subscribeToFeed(ref),
-  })
+  numberedStreamFeedsOver
 );
