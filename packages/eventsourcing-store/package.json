@@ -60,7 +60,7 @@
   },
   "homepage": "https://github.com/codeforbreakfast/eventsourcing#readme",
   "peerDependencies": {
-    "effect": "^3.17.0",
+    "effect": "^3.17.0 || ^4.0.0",
     "@effect/platform": ">=0.90.0 <1.0.0"
   },
   "dependencies": {
@@ -69,7 +69,7 @@
   "devDependencies": {
     "@types/node": "26.6.5",
     "@codeforbreakfast/bun-test-effect": "workspace:*",
-    "effect": "3.22.3",
+    "effect": "4.0.5",
     "typescript": "5.9.3",
     "eslint": "10.13.0"
   },
