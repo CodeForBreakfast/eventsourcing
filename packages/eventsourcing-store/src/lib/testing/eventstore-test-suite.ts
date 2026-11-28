@@ -175,7 +175,7 @@ const runAndAppendOnceGapEventArrives =
       Stream.take(expectedCount),
       Stream.runCollect,
       Effect.map(Chunk.toReadonlyArray),
-      Effect.timeout('5 seconds')
+      Effect.timeout('2 seconds')
     );
 
 const subscribeAppendInGapThenRun = (streamId: EventStreamId) =>
