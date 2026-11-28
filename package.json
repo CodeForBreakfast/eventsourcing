@@ -72,6 +72,6 @@
     "only-allow": "1.2.2",
     "prettier": "3.9.10",
     "turbo": "2.11.8",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   }
 }

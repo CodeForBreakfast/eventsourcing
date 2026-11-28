@@ -72,7 +72,7 @@
     "@types/node": "26.6.5",
     "effect": "3.22.3",
     "eslint": "10.13.0",
-    "typescript": "5.9.3"
+    "typescript": "7.0.2"
   },
   "publishConfig": {
     "access": "public"
