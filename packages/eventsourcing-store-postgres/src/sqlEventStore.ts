@@ -1,5 +1,17 @@
 import { SqlClient, SqlResolver } from '@effect/sql';
-import { Effect, Layer, Match, ParseResult, Schema, Sink, Stream, identity, pipe } from 'effect';
+import {
+  Effect,
+  Layer,
+  Match,
+  Option,
+  ParseResult,
+  Queue,
+  Schema,
+  Sink,
+  Stream,
+  identity,
+  pipe,
+} from 'effect';
 import {
   EventNumber,
   EventStreamId,
@@ -12,6 +24,11 @@ import {
 } from '@codeforbreakfast/eventsourcing-store';
 import { ConnectionManagerLive } from './connectionManager';
 import { EventStreamTrackerLive } from './eventStreamTracker';
+import {
+  makeNumberedStreamFeeds,
+  type NumberedEvent,
+  type NumberedStreamFeeds,
+} from './numberedStreamFeeds';
 import {
   NotificationListener,
   NotificationListenerLive,
@@ -121,35 +138,26 @@ export const EventSubscriptionServicesLive = Layer.mergeAll(
   pipe(NotificationListenerLive, Layer.provide(ConnectionManagerLive))
 );
 
-const concatStreams =
-  (liveStream: Stream.Stream<string, EventStoreError, never>) =>
-  (historicalStream: Stream.Stream<string, EventStoreError | ParseResult.ParseError, never>) =>
-    Stream.concat(historicalStream, liveStream);
+const eventsFrom = (events: readonly EventRow[], from: EventStreamPosition): readonly EventRow[] =>
+  // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
+  events.filter((event: EventRow) => event.event_number >= from.eventNumber);
 
-const getHistoricalEventsAndConcatWithLive =
-  (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
-  (liveStream: Stream.Stream<string, EventStoreError, never>) =>
-    pipe(
-      from.streamId,
-      eventRows.selectAllEventsInStream,
-      Effect.map((events: readonly EventRow[]) => {
-        const filteredEvents = events
-          // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-          .filter((event: EventRow) => event.event_number >= from.eventNumber)
-          // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-          .map((event: EventRow) => event.event_payload);
-        return Stream.fromIterable(filteredEvents);
-      }),
-      Effect.map(concatStreams(liveStream))
-    );
+const payloadsOf = (events: readonly EventRow[]): readonly string[] =>
+  // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
+  events.map((event: EventRow) => event.event_payload);
 
 const bridgeStreamNotification = (
   subscriptionManager: SubscriptionManagerService,
+  numberedFeeds: NumberedStreamFeeds,
   streamId: EventStreamId,
   payload: NotificationPayload
 ) =>
   pipe(
-    subscriptionManager.publishEvent(streamId, payload.event_payload),
+    numberedFeeds.publish(streamId, {
+      eventNumber: payload.event_number,
+      payload: payload.event_payload,
+    }),
+    Effect.andThen(subscriptionManager.publishEvent(streamId, payload.event_payload)),
     Effect.catchAll((error) =>
       Effect.logError(`Failed to bridge stream notification for stream ${streamId}`, {
         error,
@@ -175,7 +183,7 @@ const bridgeAllEventsNotification = (
   );
 
 const bridgeNotificationEvent =
-  (subscriptionManager: SubscriptionManagerService) =>
+  (subscriptionManager: SubscriptionManagerService, numberedFeeds: NumberedStreamFeeds) =>
   (notification: {
     readonly streamId: EventStreamId;
     readonly payload: NotificationPayload;
@@ -192,7 +200,12 @@ const bridgeNotificationEvent =
         )
       ),
       Match.when(false, () =>
-        bridgeStreamNotification(subscriptionManager, notification.streamId, notification.payload)
+        bridgeStreamNotification(
+          subscriptionManager,
+          numberedFeeds,
+          notification.streamId,
+          notification.payload
+        )
       ),
       Match.exhaustive
     );
@@ -209,11 +222,12 @@ const consumeNotifications = (
       never
     >;
   }>,
-  subscriptionManager: SubscriptionManagerService
+  subscriptionManager: SubscriptionManagerService,
+  numberedFeeds: NumberedStreamFeeds
 ) =>
   pipe(
     notificationListener.notifications,
-    Stream.mapEffect(bridgeNotificationEvent(subscriptionManager)),
+    Stream.mapEffect(bridgeNotificationEvent(subscriptionManager, numberedFeeds)),
     Stream.runDrain,
     Effect.fork,
     Effect.asVoid
@@ -232,25 +246,21 @@ const startNotificationListener = (
       never
     >;
   }>,
-  subscriptionManager: SubscriptionManagerService
+  subscriptionManager: SubscriptionManagerService,
+  numberedFeeds: NumberedStreamFeeds
 ) =>
   pipe(
     notificationListener.start,
-    Effect.andThen(consumeNotifications(notificationListener, subscriptionManager))
+    Effect.andThen(consumeNotifications(notificationListener, subscriptionManager, numberedFeeds))
   );
 
 const readHistoricalEvents = (eventRows: EventRowServiceInterface) => (from: EventStreamPosition) =>
   pipe(
     from.streamId,
     eventRows.selectAllEventsInStream,
-    Effect.map((events: readonly EventRow[]) => {
-      const filteredEvents = events
-        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-        .filter((event: EventRow) => event.event_number >= from.eventNumber)
-        // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
-        .map((event: EventRow) => event.event_payload);
-      return Stream.fromIterable(filteredEvents);
-    }),
+    Effect.map((events: readonly EventRow[]) =>
+      Stream.fromIterable(payloadsOf(eventsFrom(events, from)))
+    ),
     Effect.map((stream) =>
       Stream.mapError(
         stream,
@@ -260,15 +270,78 @@ const readHistoricalEvents = (eventRows: EventRowServiceInterface) => (from: Eve
     Effect.mapError(eventStoreError.read(from.streamId, 'Failed to read historical events'))
   );
 
-const subscribeToLiveStream = (
-  subscriptionManager: SubscriptionManagerService,
-  streamId: EventStreamId
-) => subscriptionManager.subscribeToStream(streamId);
+const isAfter =
+  (lastDelivered: number) =>
+  (event: NumberedEvent): boolean =>
+    event.eventNumber > lastDelivered;
+
+const deliverOnce = (
+  lastDelivered: number,
+  event: NumberedEvent
+): readonly [number, Option.Option<NumberedEvent>] => [
+  Math.max(lastDelivered, event.eventNumber),
+  Option.liftPredicate(event, isAfter(lastDelivered)),
+];
+
+const payloadOf = (event: NumberedEvent): string => event.payload;
+
+const liveEventsAfter = (
+  live: Queue.Dequeue<NumberedEvent>,
+  lastDelivered: number
+): Stream.Stream<string, never> =>
+  pipe(
+    live,
+    Stream.fromQueue,
+    Stream.mapAccum(lastDelivered, deliverOnce),
+    Stream.filterMap(Option.map(payloadOf))
+  );
+
+const lastEventNumber = (history: readonly EventRow[], from: EventStreamPosition): number =>
+  history.reduce(
+    // eslint-disable-next-line functional/prefer-immutable-types -- EventRow type comes from Postgres library and cannot be made immutable
+    (last: number, event: EventRow) => Math.max(last, event.event_number),
+    from.eventNumber - 1
+  );
+
+const historyThenLive =
+  (from: EventStreamPosition, live: Queue.Dequeue<NumberedEvent>) =>
+  (events: readonly EventRow[]): Stream.Stream<string, never> => {
+    const history = eventsFrom(events, from);
+    return pipe(
+      history,
+      payloadsOf,
+      Stream.fromIterable,
+      Stream.concat(liveEventsAfter(live, lastEventNumber(history, from)))
+    );
+  };
+
+const readHistoryThenLive =
+  (eventRows: EventRowServiceInterface, from: EventStreamPosition) =>
+  (live: Queue.Dequeue<NumberedEvent>) =>
+    Effect.map(eventRows.selectAllEventsInStream(from.streamId), historyThenLive(from, live));
+
+// Subscribing to the live feed before reading history means every event reaches one or the
+// other, and the live feed's event numbers drop what history already delivered. Doing both when
+// the stream runs, not when subscribe returns, avoids holding a subscription for a stream that is
+// never run.
+const historyThenLiveWhenRun = (
+  eventRows: EventRowServiceInterface,
+  numberedFeeds: NumberedStreamFeeds,
+  from: EventStreamPosition
+): Stream.Stream<string, EventStoreError> =>
+  Stream.unwrapScoped(
+    pipe(
+      from.streamId,
+      numberedFeeds.subscribe,
+      Effect.flatMap(readHistoryThenLive(eventRows, from)),
+      Effect.mapError(eventStoreError.read(from.streamId, 'Failed to subscribe to stream'))
+    )
+  );
 
 const subscribeToStreamWithHistory =
   (
     eventRows: EventRowServiceInterface,
-    subscriptionManager: SubscriptionManagerService,
+    numberedFeeds: NumberedStreamFeeds,
     notificationListener: Readonly<{
       readonly listen: (streamId: EventStreamId) => Effect.Effect<void, EventStoreError, never>;
     }>
@@ -277,14 +350,7 @@ const subscribeToStreamWithHistory =
     pipe(
       from.streamId,
       notificationListener.listen,
-      Effect.andThen(subscribeToLiveStream(subscriptionManager, from.streamId)),
-      Effect.flatMap(getHistoricalEventsAndConcatWithLive(eventRows, from)),
-      Effect.map((stream) =>
-        Stream.mapError(
-          stream,
-          eventStoreError.read(from.streamId, 'Failed to subscribe to stream')
-        )
-      ),
+      Effect.as(historyThenLiveWhenRun(eventRows, numberedFeeds, from)),
       Effect.mapError(eventStoreError.read(from.streamId, 'Failed to subscribe to stream'))
     );
 
@@ -361,15 +427,18 @@ export const makeSqlEventStoreWithSubscriptionManager = (
 ): Effect.Effect<EventStore<string>, EventStoreError, EventRowService> => {
   return pipe(
     EventRowService,
-    Effect.map((eventRowService) => ({
-      eventRows: eventRowService,
-      subscriptionManager,
-      notificationListener,
-    })),
-    Effect.tap(({ notificationListener, subscriptionManager }) =>
-      startNotificationListener(notificationListener, subscriptionManager)
+    Effect.flatMap((eventRowService) =>
+      Effect.map(makeNumberedStreamFeeds, (numberedFeeds) => ({
+        eventRows: eventRowService,
+        numberedFeeds,
+        subscriptionManager,
+        notificationListener,
+      }))
     ),
-    Effect.map(({ eventRows, subscriptionManager, notificationListener }) => {
+    Effect.tap(({ notificationListener, subscriptionManager, numberedFeeds }) =>
+      startNotificationListener(notificationListener, subscriptionManager, numberedFeeds)
+    ),
+    Effect.map(({ eventRows, numberedFeeds, subscriptionManager, notificationListener }) => {
       const eventStore: EventStore<string> = {
         append: (to: EventStreamPosition) => {
           const sink = Sink.foldEffect(to, () => true, appendEventToStream(eventRows));
@@ -382,11 +451,7 @@ export const makeSqlEventStoreWithSubscriptionManager = (
           >;
         },
         read: readHistoricalEvents(eventRows),
-        subscribe: subscribeToStreamWithHistory(
-          eventRows,
-          subscriptionManager,
-          notificationListener
-        ),
+        subscribe: subscribeToStreamWithHistory(eventRows, numberedFeeds, notificationListener),
         subscribeAll: () => subscribeToAllStreams(subscriptionManager, notificationListener),
       };
 
@@ -463,7 +528,6 @@ const SqlEventStoreEffect = Layer.effect(
 export const SqlEventStoreLive = pipe(
   // eslint-disable-next-line effect/no-intermediate-effect-variables -- SqlEventStoreEffect is the base layer being composed with dependencies
   SqlEventStoreEffect,
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- EventSubscriptionServicesLive and EventRowServiceLive are module-level layers that provide required context
   Layer.provide(Layer.mergeAll(EventSubscriptionServicesLive, EventRowServiceLive))
 );
 

@@ -51,13 +51,24 @@ export interface FileSystemStore<V = never> {
   >;
 }
 
-interface EventStream<V> {
-  readonly pubsub: PubSub.PubSub<V>;
+/**
+ * How many of the most recent all-events publishes the store keeps, so that an all-events
+ * stream started after its subscribe call still receives what was published in between.
+ */
+const RECENT_ALL_EVENTS_LIMIT = 1024;
+
+/**
+ * The all-events feed, with a count of everything published to it and the most recent events
+ */
+interface AllEventsFeed<V> {
+  readonly pubsub: PubSub.PubSub<StreamEvent<V>>;
+  readonly published: number;
+  readonly recent: Chunk.Chunk<StreamEvent<V>>;
 }
 
 interface FileSystemStoreState<V> {
   readonly pubSubsByStreamId: HashMap.HashMap<EventStreamId, PubSub.PubSub<V>>;
-  readonly allEventsStream: EventStream<StreamEvent<V>>;
+  readonly allEvents: AllEventsFeed<V>;
 }
 
 const getStreamDirectoryPath = (
@@ -197,8 +208,8 @@ const createPubSubWithState = <V>(
         [
           pubsub,
           {
+            ...currentState,
             pubSubsByStreamId: HashMap.set(currentState.pubSubsByStreamId, streamId, pubsub),
-            allEventsStream: currentState.allEventsStream,
           },
         ] as const
     )
@@ -218,12 +229,6 @@ const getOrCreatePubSub =
       })
     );
 
-const ensurePubSubExists = <V>(
-  streamId: EventStreamId,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
-): Effect.Effect<PubSub.PubSub<V>, never, never> =>
-  pipe(state, SynchronizedRef.modifyEffect(getOrCreatePubSub(streamId)));
-
 const publishEventsToStream = <V>(
   pubsub: PubSub.PubSub<V>,
   events: Chunk.Chunk<V>
@@ -242,43 +247,72 @@ const tagEventsWithStreamId = <V>(
     }))
   );
 
+const recordPublished = <V>(
+  feed: AllEventsFeed<V>,
+  events: Chunk.Chunk<StreamEvent<V>>
+): AllEventsFeed<V> => ({
+  ...feed,
+  published: feed.published + Chunk.size(events),
+  recent: pipe(feed.recent, Chunk.appendAll(events), Chunk.takeRight(RECENT_ALL_EVENTS_LIMIT)),
+});
+
+const publishToAllEvents = <V>(
+  current: FileSystemStoreState<V>,
+  events: Chunk.Chunk<StreamEvent<V>>
+): Effect.Effect<FileSystemStoreState<V>, never, never> =>
+  Effect.as(publishEventsToStream(current.allEvents.pubsub, events), {
+    ...current,
+    allEvents: recordPublished(current.allEvents, events),
+  });
+
+const publishToStreamThenAllEvents =
+  <V>(streamEnd: EventStreamPosition, newEvents: Chunk.Chunk<V>) =>
+  ([pubsub, withPubSub]: readonly [PubSub.PubSub<V>, FileSystemStoreState<V>]) =>
+    Effect.andThen(
+      publishEventsToStream(pubsub, newEvents),
+      publishToAllEvents(
+        withPubSub,
+        tagEventsWithStreamId(newEvents, streamEnd.streamId, streamEnd.eventNumber)
+      )
+    );
+
 const publishEventsToStreams = <V>(
   streamEnd: EventStreamPosition,
   newEvents: Chunk.Chunk<V>,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  allEventsStream: EventStream<StreamEvent<V>>,
-  newPosition: EventStreamPosition
-): Effect.Effect<EventStreamPosition, never, never> =>
+  current: FileSystemStoreState<V>
+): Effect.Effect<FileSystemStoreState<V>, never, never> =>
   pipe(
-    ensurePubSubExists(streamEnd.streamId, state),
-    Effect.flatMap((pubsub) => publishEventsToStream(pubsub, newEvents)),
-    Effect.tap(() =>
-      publishEventsToStream(
-        allEventsStream.pubsub,
-        tagEventsWithStreamId(newEvents, streamEnd.streamId, streamEnd.eventNumber)
+    current,
+    getOrCreatePubSub<V>(streamEnd.streamId),
+    Effect.flatMap(publishToStreamThenAllEvents(streamEnd, newEvents))
+  );
+
+const writeAndPublishEvents =
+  <V>(
+    streamDir: string,
+    streamEnd: EventStreamPosition,
+    newEvents: Chunk.Chunk<V>,
+    fs: FileSystem.FileSystem
+  ) =>
+  (
+    current: FileSystemStoreState<V>
+  ): Effect.Effect<
+    readonly [EventStreamPosition, FileSystemStoreState<V>],
+    ConcurrencyConflictError,
+    FileSystem.FileSystem | Path.Path
+  > =>
+    pipe(
+      validateStreamVersion(streamDir, streamEnd, fs),
+      Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
+      Effect.andThen(publishEventsToStreams(streamEnd, newEvents, current)),
+      Effect.map(
+        (next) =>
+          [{ ...streamEnd, eventNumber: streamEnd.eventNumber + newEvents.length }, next] as const
       )
-    ),
-    Effect.as(newPosition)
-  );
+    );
 
-const publishAndReturnPosition = <V>(
-  streamEnd: EventStreamPosition,
-  newEvents: Chunk.Chunk<V>,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
-): Effect.Effect<EventStreamPosition, never, never> => {
-  const newPosition = {
-    ...streamEnd,
-    eventNumber: streamEnd.eventNumber + newEvents.length,
-  };
-  return pipe(
-    state,
-    SynchronizedRef.get,
-    Effect.flatMap(({ allEventsStream }) =>
-      publishEventsToStreams(streamEnd, newEvents, state, allEventsStream, newPosition)
-    )
-  );
-};
-
+// A subscription lists a stream's history and subscribes to its live events under this lock, so
+// an append that writes and publishes under the same lock reaches it exactly once.
 const writeAndAppendEvents = <V>(
   streamDir: string,
   streamEnd: EventStreamPosition,
@@ -291,9 +325,8 @@ const writeAndAppendEvents = <V>(
   FileSystem.FileSystem | Path.Path
 > =>
   pipe(
-    validateStreamVersion(streamDir, streamEnd, fs),
-    Effect.andThen(writeEventsToFiles(streamDir, streamEnd.eventNumber, newEvents)),
-    Effect.andThen(publishAndReturnPosition(streamEnd, newEvents, state))
+    state,
+    SynchronizedRef.modifyEffect(writeAndPublishEvents(streamDir, streamEnd, newEvents, fs))
   );
 
 const appendEventsToStream =
@@ -426,7 +459,6 @@ const readEventsFromDirectory = <V>(
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
   return pipe(
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     services,
     Effect.flatMap(([fs, path]) => readEventsFromDirectoryWithServices<V>(streamDir, fs, path))
   );
@@ -437,31 +469,48 @@ const concatHistoricalWithQueue =
   (dequeue: Queue.Dequeue<V>): Stream.Stream<V, never, never> =>
     pipe(historical, Stream.concat(Stream.fromQueue(dequeue)));
 
-const createLiveStreamFromHistoricalAndPubSub =
-  <V>(historical: Stream.Stream<V, never, never>) =>
-  (pubsub: PubSub.PubSub<V>): Stream.Stream<V, never, never> => {
-    const subscription = PubSub.subscribe(pubsub);
-    const subscriptionEffect = pipe(
-      // eslint-disable-next-line effect/no-intermediate-effect-variables -- PubSub.subscribe requires pubsub argument, cannot be piped differently
-      subscription,
-      Effect.map(concatHistoricalWithQueue(historical))
-    );
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Stream.unwrapScoped requires Effect argument, cannot be piped differently
-    return Stream.unwrapScoped(subscriptionEffect);
-  };
-
-const combineHistoricalWithPubSub = <V>(
-  streamId: EventStreamId,
-  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
-  historical: Stream.Stream<V, never, never>
-): Effect.Effect<Stream.Stream<V, never, never>, never, never> => {
-  const pubsubEffect = ensurePubSubExists(streamId, state);
-  return pipe(
-    pubsubEffect,
-    Effect.map(createLiveStreamFromHistoricalAndPubSub(historical)),
-    Effect.flatMap(Effect.succeed)
+const subscribeWithHistory = <V>(
+  pubsub: PubSub.PubSub<V>,
+  streamDir: string,
+  fs: FileSystem.FileSystem,
+  path: Path.Path
+) =>
+  pipe(
+    readEventsFromDirectoryWithServices<V>(streamDir, fs, path),
+    Effect.flatMap((historical) =>
+      Effect.map(PubSub.subscribe(pubsub), concatHistoricalWithQueue(historical))
+    )
   );
-};
+
+const subscribeAfterListingHistory =
+  <V>(streamId: EventStreamId, streamDir: string, fs: FileSystem.FileSystem, path: Path.Path) =>
+  (current: FileSystemStoreState<V>) =>
+    pipe(
+      current,
+      getOrCreatePubSub<V>(streamId),
+      Effect.flatMap(([pubsub, next]) =>
+        Effect.map(
+          subscribeWithHistory(pubsub, streamDir, fs, path),
+          (stream) => [stream, next] as const
+        )
+      )
+    );
+
+// Doing this when the stream runs, not when subscribe returns, catches events appended in the
+// meantime without holding a subscription for a stream that is never run.
+const liveStreamWithHistory = <V>(
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
+  streamId: EventStreamId,
+  streamDir: string,
+  fs: FileSystem.FileSystem,
+  path: Path.Path
+): Stream.Stream<V, never, never> =>
+  Stream.unwrapScoped(
+    SynchronizedRef.modifyEffect(
+      state,
+      subscribeAfterListingHistory<V>(streamId, streamDir, fs, path)
+    )
+  );
 
 const getEventsForStream =
   <V>(
@@ -470,13 +519,22 @@ const getEventsForStream =
   ) =>
   (
     streamId: EventStreamId
-  ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> =>
-    pipe(
-      Path.Path,
-      Effect.map((path) => getStreamDirectoryPath(config.baseDir, streamId, path)),
-      Effect.flatMap(readEventsFromDirectory<V>),
-      Effect.flatMap((historical) => combineHistoricalWithPubSub(streamId, state, historical))
+  ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
+    const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
+    return pipe(
+      // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
+      services,
+      Effect.map(([fs, path]) =>
+        liveStreamWithHistory(
+          state,
+          streamId,
+          getStreamDirectoryPath(config.baseDir, streamId, path),
+          fs,
+          path
+        )
+      )
     );
+  };
 
 const EventStreamIdSchema = pipe(Schema.String, Schema.brand('EventStreamId'));
 
@@ -585,19 +643,68 @@ const getHistoricalEventsForStream =
       Effect.flatMap(readEventsFromDirectory<V>)
     );
 
-const wrapPubSubInEventStream = <V>(pubsub: PubSub.PubSub<V>): EventStream<V> => ({ pubsub });
-
 const createBoundedPubSub = <V>() => PubSub.bounded<V>(256);
 
-const createAllEventsStream = <V>(): Effect.Effect<EventStream<StreamEvent<V>>, never, never> =>
-  pipe(createBoundedPubSub<StreamEvent<V>>(), Effect.map(wrapPubSubInEventStream));
+const createAllEventsFeed = <V>(): Effect.Effect<AllEventsFeed<V>, never, never> =>
+  pipe(
+    createBoundedPubSub<StreamEvent<V>>(),
+    Effect.map((pubsub) => ({ pubsub, published: 0, recent: Chunk.empty<StreamEvent<V>>() }))
+  );
 
-const createInitialStateWithAllEventsStream = <V>(
-  allEventsStream: EventStream<StreamEvent<V>>
+const createInitialStateWithAllEventsFeed = <V>(
+  allEvents: AllEventsFeed<V>
 ): FileSystemStoreState<V> => ({
   pubSubsByStreamId: HashMap.empty(),
-  allEventsStream,
+  allEvents,
 });
+
+const warnOfMissedAllEvents = (lost: number) =>
+  Effect.logWarning(
+    'An all-events subscription started too late to receive every event published since it was made',
+    { lost }
+  );
+
+const eventsPublishedSince = <V>(
+  feed: AllEventsFeed<V>,
+  publishedAtSubscribe: number
+): Effect.Effect<Chunk.Chunk<StreamEvent<V>>, never, never> => {
+  const missed = feed.published - publishedAtSubscribe;
+  const lost = missed - Chunk.size(feed.recent);
+  return Effect.as(
+    Effect.when(warnOfMissedAllEvents(lost), () => lost > 0),
+    Chunk.takeRight(feed.recent, missed)
+  );
+};
+
+const replayThenLive =
+  <V>(live: Queue.Dequeue<StreamEvent<V>>) =>
+  (missed: Chunk.Chunk<StreamEvent<V>>): Stream.Stream<StreamEvent<V>, never, never> =>
+    pipe(missed, Stream.fromChunk, Stream.concat(Stream.fromQueue(live)));
+
+const replayMissedThenLive =
+  <V>(feed: AllEventsFeed<V>, publishedAtSubscribe: number) =>
+  (live: Queue.Dequeue<StreamEvent<V>>) =>
+    Effect.map(eventsPublishedSince(feed, publishedAtSubscribe), replayThenLive(live));
+
+const subscribeAndReplayMissed =
+  (publishedAtSubscribe: number) =>
+  <V>(current: FileSystemStoreState<V>) =>
+    pipe(
+      current.allEvents.pubsub,
+      PubSub.subscribe,
+      Effect.flatMap(replayMissedThenLive(current.allEvents, publishedAtSubscribe)),
+      Effect.map((stream) => [stream, current] as const)
+    );
+
+// Appending publishes to all-events under this lock, so replaying what was published since the
+// subscribe call and subscribing under the same lock leaves no gap between them.
+const liveAllEventsSince = <V>(
+  state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>,
+  publishedAtSubscribe: number
+): Stream.Stream<StreamEvent<V>, never, never> =>
+  Stream.unwrapScoped(
+    SynchronizedRef.modifyEffect(state, subscribeAndReplayMissed(publishedAtSubscribe))
+  );
 
 const getAllEventsLiveOnlyStream = <V>(
   state: SynchronizedRef.SynchronizedRef<FileSystemStoreState<V>>
@@ -605,7 +712,7 @@ const getAllEventsLiveOnlyStream = <V>(
   pipe(
     state,
     SynchronizedRef.get,
-    Effect.map(({ allEventsStream }) => Stream.fromPubSub(allEventsStream.pubsub))
+    Effect.map(({ allEvents }) => liveAllEventsSince(state, allEvents.published))
   );
 
 const createStoreFromState =
@@ -618,12 +725,12 @@ const createStoreFromState =
     getAllLiveOnly: () => getAllEventsLiveOnlyStream(state),
   });
 
-const createStoreWithAllEventsStream =
+const createStoreWithAllEventsFeed =
   <V>(config: FileSystemStoreConfig) =>
-  (allEventsStream: EventStream<StreamEvent<V>>): Effect.Effect<FileSystemStore<V>, never, never> =>
+  (allEvents: AllEventsFeed<V>): Effect.Effect<FileSystemStore<V>, never, never> =>
     pipe(
-      allEventsStream,
-      createInitialStateWithAllEventsStream<V>,
+      allEvents,
+      createInitialStateWithAllEventsFeed<V>,
       SynchronizedRef.make<FileSystemStoreState<V>>,
       Effect.map(createStoreFromState(config))
     );
@@ -631,4 +738,4 @@ const createStoreWithAllEventsStream =
 export const make = <V>(
   config: FileSystemStoreConfig
 ): Effect.Effect<FileSystemStore<V>, never, never> =>
-  pipe(createAllEventsStream<V>(), Effect.flatMap(createStoreWithAllEventsStream(config)));
+  pipe(createAllEventsFeed<V>(), Effect.flatMap(createStoreWithAllEventsFeed(config)));
