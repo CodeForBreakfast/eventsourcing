@@ -11,7 +11,7 @@ import {
   Ref,
 } from 'effect';
 import { beforeAll, beforeEach, describe, expect, it } from 'bun:test';
-import { EventStreamId, EventStreamPosition, beginning } from '../streamTypes';
+import { EventStreamId, EventStreamPosition, type StreamEvent, beginning } from '../streamTypes';
 import { type EventStore, ConcurrencyConflictError } from '../eventstore';
 
 // Helper functions for converting stream events
@@ -146,6 +146,73 @@ const subscribeFromBeginningAndTake =
       subscribeFromBeginning(streamId),
       Effect.flatMap(subscribeAndTakeEvents(count, receivedEventsRef))
     );
+
+const eventBeforeSubscribe = { bar: 'appended-before-subscribe' };
+const eventInGap = { bar: 'appended-after-subscribe-before-run' };
+const eventWhileRunning = { bar: 'appended-while-running' };
+
+/**
+ * Long enough for a store that delivers appends asynchronously, such as by database
+ * notification, to have finished delivering the gap event before the stream runs.
+ */
+const gapBeforeRunning = Duration.millis(200);
+
+const appendOneEvent =
+  (eventstore: EventStore<FooEvent>, streamId: EventStreamId, eventNumber: number) =>
+  (event: FooEvent) =>
+    pipe(eventstore, appendEventsToStream([event], { streamId, eventNumber }));
+
+/**
+ * Runs a subscription that was taken before an event was appended in the gap, appends one more
+ * event once the gap event arrives, and collects until that last event or a duplicate shows up.
+ */
+const runAndAppendOnceGapEventArrives =
+  (appendWhileRunning: Effect.Effect<unknown, unknown, never>, expectedCount: number) =>
+  (stream: Stream.Stream<FooEvent, unknown, never>) =>
+    pipe(
+      stream,
+      Stream.tap((event) => (event.bar === eventInGap.bar ? appendWhileRunning : Effect.void)),
+      Stream.take(expectedCount),
+      Stream.runCollect,
+      Effect.map(Chunk.toReadonlyArray),
+      Effect.timeout('5 seconds')
+    );
+
+const subscribeAppendInGapThenRun = (streamId: EventStreamId) =>
+  Effect.gen(function* () {
+    const eventstore = yield* FooEventStore;
+    const append = (eventNumber: number) => appendOneEvent(eventstore, streamId, eventNumber);
+    yield* append(0)(eventBeforeSubscribe);
+    const subscription = yield* eventstore.subscribe({ streamId, eventNumber: 0 });
+    yield* append(1)(eventInGap);
+    yield* Effect.sleep(gapBeforeRunning);
+    return yield* pipe(
+      subscription,
+      runAndAppendOnceGapEventArrives(append(2)(eventWhileRunning), 3)
+    );
+  });
+
+const eventsOfStream =
+  (streamId: EventStreamId) => (stream: Stream.Stream<StreamEvent<FooEvent>, unknown, never>) =>
+    pipe(
+      stream,
+      Stream.filter(({ position }) => position.streamId === streamId),
+      Stream.map(({ event }) => event)
+    );
+
+const subscribeAllAppendInGapThenRun = (streamId: EventStreamId) =>
+  Effect.gen(function* () {
+    const eventstore = yield* FooEventStore;
+    const append = (eventNumber: number) => appendOneEvent(eventstore, streamId, eventNumber);
+    const subscription = yield* eventstore.subscribeAll();
+    yield* append(0)(eventInGap);
+    yield* Effect.sleep(gapBeforeRunning);
+    return yield* pipe(
+      subscription,
+      eventsOfStream(streamId),
+      runAndAppendOnceGapEventArrives(append(1)(eventWhileRunning), 2)
+    );
+  });
 
 export class FooEventStore extends Effect.Tag('FooEventStore')<
   FooEventStore,
@@ -534,6 +601,22 @@ export function runEventStoreTestSuite<E>(
         );
         expect(subscriber1Events).toEqual([{ bar: 'multi-subscriber-event' }]);
         expect(subscriber2Events).toEqual([{ bar: 'multi-subscriber-event' }]);
+      });
+
+      it('should deliver every event appended after subscribe returns exactly once, even before the stream runs', async () => {
+        const received = await runPromiseWithEventStore(
+          pipe(streamId, Effect.flatMap(subscribeAppendInGapThenRun))
+        );
+
+        expect(received).toEqual([eventBeforeSubscribe, eventInGap, eventWhileRunning]);
+      });
+
+      it('should deliver every event appended after subscribeAll returns exactly once, even before the stream runs', async () => {
+        const received = await runPromiseWithEventStore(
+          pipe(streamId, Effect.flatMap(subscribeAllAppendInGapThenRun))
+        );
+
+        expect(received).toEqual([eventInGap, eventWhileRunning]);
       });
 
       it('should handle subscription to non-existent stream', async () => {
