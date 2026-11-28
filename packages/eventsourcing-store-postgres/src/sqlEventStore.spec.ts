@@ -24,11 +24,7 @@ const JsonFooEvent = Schema.parseJson(FooEvent);
 
 const encodeFooEvents = Effect.map(encodedEventStore(JsonFooEvent));
 
-const FooEventStoreEffect = Layer.effect(
-  FooEventStore,
-  // eslint-disable-next-line effect/no-intermediate-effect-variables -- encodeFooEvents is a reusable transformation function
-  pipe(sqlEventStore, encodeFooEvents)
-);
+const FooEventStoreEffect = Layer.effect(FooEventStore, pipe(sqlEventStore, encodeFooEvents));
 
 // Complete test layer with all dependencies
 const TestLayer = pipe(

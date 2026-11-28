@@ -459,7 +459,6 @@ const readEventsFromDirectory = <V>(
 ): Effect.Effect<Stream.Stream<V, never, never>, never, FileSystem.FileSystem | Path.Path> => {
   const services = Effect.all([FileSystem.FileSystem, Path.Path] as const);
   return pipe(
-    // eslint-disable-next-line effect/no-intermediate-effect-variables -- Effect.all requires an object argument, cannot be piped differently
     services,
     Effect.flatMap(([fs, path]) => readEventsFromDirectoryWithServices<V>(streamDir, fs, path))
   );
