@@ -1,10 +1,12 @@
 import {
+  Chunk,
   Duration,
   Effect,
   HashMap,
   Layer,
   Option,
   PubSub,
+  Queue,
   Schedule,
   Stream,
   SynchronizedRef,
@@ -27,11 +29,26 @@ interface SubscriptionData<T> {
 }
 
 /**
+ * How many of the most recent all-events publishes the manager keeps, so that an all-events
+ * stream started after its subscribe call still receives what was published in between.
+ */
+const RECENT_ALL_EVENTS_LIMIT = 1024;
+
+/**
+ * The all-events feed, with a count of everything published to it and the most recent events
+ */
+interface AllEventsFeed {
+  readonly pubsub: PubSub.PubSub<StreamEvent<string>>;
+  readonly published: number;
+  readonly recent: Chunk.Chunk<StreamEvent<string>>;
+}
+
+/**
  * State for the subscription manager
  */
 interface SubscriptionManagerState {
   readonly streams: HashMap.HashMap<EventStreamId, SubscriptionData<string>>;
-  readonly allEventsPubSub: PubSub.PubSub<StreamEvent<string>>;
+  readonly allEvents: AllEventsFeed;
 }
 
 /**
@@ -245,10 +262,53 @@ const publishEventWithErrorHandling =
       Effect.mapError(eventStoreError.write(streamId, 'Failed to publish event to subscribers'))
     );
 
-const createAllEventsStreamFromPubSub = (
-  pubsub: PubSub.PubSub<StreamEvent<string>>
+const warnOfMissedAllEvents = (lost: number) =>
+  Effect.logWarning(
+    'An all-events subscription started too late to receive every event published since it was made',
+    { lost }
+  );
+
+const eventsPublishedSince = (
+  feed: AllEventsFeed,
+  publishedAtSubscribe: number
+): Effect.Effect<Chunk.Chunk<StreamEvent<string>>, never, never> => {
+  const missed = feed.published - publishedAtSubscribe;
+  const lost = missed - Chunk.size(feed.recent);
+  return Effect.as(
+    Effect.when(warnOfMissedAllEvents(lost), () => lost > 0),
+    Chunk.takeRight(feed.recent, missed)
+  );
+};
+
+const replayThenLive =
+  (live: Queue.Dequeue<StreamEvent<string>>) =>
+  (missed: Chunk.Chunk<StreamEvent<string>>): Stream.Stream<StreamEvent<string>, never> =>
+    pipe(missed, Stream.fromChunk, Stream.concat(Stream.fromQueue(live)));
+
+const replayMissedThenLive =
+  (feed: AllEventsFeed, publishedAtSubscribe: number) =>
+  (live: Queue.Dequeue<StreamEvent<string>>) =>
+    Effect.map(eventsPublishedSince(feed, publishedAtSubscribe), replayThenLive(live));
+
+const subscribeAndReplayMissed =
+  (publishedAtSubscribe: number) => (state: SubscriptionManagerState) =>
+    pipe(
+      state.allEvents.pubsub,
+      PubSub.subscribe,
+      Effect.flatMap(replayMissedThenLive(state.allEvents, publishedAtSubscribe)),
+      Effect.map((stream) => [stream, state] as const)
+    );
+
+// Publishing to all-events holds this lock, so replaying what was published since the subscribe
+// call and subscribing under the same lock leaves no gap between them. Doing both when the stream
+// runs, not when subscribe returns, avoids holding a subscription for a stream that never runs.
+const liveAllEventsSince = (
+  ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>,
+  publishedAtSubscribe: number
 ): Stream.Stream<StreamEvent<string>, never> =>
-  Stream.retry(Stream.fromPubSub(pubsub), createRetrySchedule());
+  Stream.unwrapScoped(
+    SynchronizedRef.modifyEffect(ref, subscribeAndReplayMissed(publishedAtSubscribe))
+  );
 
 const subscribeToAllEventsStream =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
@@ -256,37 +316,28 @@ const subscribeToAllEventsStream =
     pipe(
       ref,
       SynchronizedRef.get,
-      Effect.map((state) => createAllEventsStreamFromPubSub(state.allEventsPubSub)),
-      Effect.mapError(eventStoreError.subscribe('*', 'Failed to subscribe to all events'))
+      Effect.map((state) => liveAllEventsSince(ref, state.allEvents.published))
     );
 
-const publishToAllEventsPubSub =
-  (position: EventStreamPosition, event: string) =>
-  (pubsub: PubSub.PubSub<StreamEvent<string>>): Effect.Effect<void, never, never> =>
+const recordPublished = (feed: AllEventsFeed, event: StreamEvent<string>): AllEventsFeed => ({
+  ...feed,
+  published: feed.published + 1,
+  recent: pipe(feed.recent, Chunk.append(event), Chunk.takeRight(RECENT_ALL_EVENTS_LIMIT)),
+});
+
+const publishAndRecord =
+  (event: StreamEvent<string>) =>
+  (state: SubscriptionManagerState): Effect.Effect<SubscriptionManagerState, never, never> =>
     pipe(
-      pubsub,
-      PubSub.publish({ position, event }),
-      Effect.tapError((error) =>
-        Effect.logError('Failed to publish to all-events', { error, streamId: position.streamId })
-      )
+      state.allEvents.pubsub,
+      PubSub.publish(event),
+      Effect.as({ ...state, allEvents: recordPublished(state.allEvents, event) })
     );
-
-const publishEventToAllEventsPubSub =
-  (position: EventStreamPosition, event: string) =>
-  (state: SubscriptionManagerState): Effect.Effect<void, never, never> =>
-    pipe(state.allEventsPubSub, publishToAllEventsPubSub(position, event));
 
 const publishToAllEventsWithErrorHandling =
   (ref: ReadonlyDeep<SynchronizedRef.SynchronizedRef<SubscriptionManagerState>>) =>
   (position: EventStreamPosition, event: string): Effect.Effect<void, EventStoreError, never> =>
-    pipe(
-      ref,
-      SynchronizedRef.get,
-      Effect.flatMap(publishEventToAllEventsPubSub(position, event)),
-      Effect.mapError(
-        eventStoreError.write(position.streamId, 'Failed to publish to all-events subscribers')
-      )
-    );
+    SynchronizedRef.updateEffect(ref, publishAndRecord({ position, event }));
 
 const createSubscriptionManagerService = (
   ref: SynchronizedRef.SynchronizedRef<SubscriptionManagerState>
@@ -302,7 +353,7 @@ const makeSubscriptionManagerState = (
   allEventsPubSub: PubSub.PubSub<StreamEvent<string>>
 ): SubscriptionManagerState => ({
   streams: HashMap.empty(),
-  allEventsPubSub,
+  allEvents: { pubsub: allEventsPubSub, published: 0, recent: Chunk.empty() },
 });
 
 const createManagerFromState = (
